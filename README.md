@@ -22,14 +22,14 @@ ODDRIN was designed, developed, made operational and is managed by Dr. Hamish Pa
 ___
 ## Code Layout
 
-The code can be decomposed into several sections:
+**The code can be decomposed into several sections:**
 
-  1. Main
-  2. Model
-  3. Method
-  4. Data
-  5. Object Orientated Programming (OOP) class formation
-  6. Additional functions
+  1. **Main**
+  2. **Model**
+  3. **Method**
+  4. **Data**
+  5. **Object Orientated Programming (OOP) class formation**
+  6. **Additional functions**
 
 The majority of the programming was spent on number 4: extracting all the necessary data. Here we try to explain without too much detail the most important files from each section.
 
@@ -155,7 +155,7 @@ Before doing anything, please change the directory location environment variable
 
 ```
 
-In order to install the full ODDRIN package, I can only guide you through Linux and possibly Mac distributions (sorry!). For Macs, this should, in theory, be the same, but I can't say for sure. The problem is getting the R package `rJava` to work. For Linux and Mac distributions, open a terminal and run the following:
+**This will error if you have not already installed the necessary data** (see the end of installation instructions - *'Data to be downloaded manually'*). In order to install the full ODDRIN package, I can only guide you through Linux and possibly Mac distributions (sorry!). For Macs, this should, in theory, be the same, but I can't say for sure. The problem is getting the R package `rJava` to work. For Linux and Mac distributions, open a terminal and run the following:
 
 ```bash
 
@@ -194,6 +194,8 @@ Finally, with `packred<-F` in the file `GetEnv.R`, run the following:
 
 ```
 
+##### Data to be Downloaded Manually
+
 Furthermore, you will also be required to download the following datasets:
 
   - Download the [sub-national GDP dataset](https://datadryad.org/stash/dataset/doi:10.5061/dryad.dk1j0) - Taken from the article by [Kummu, et al, 2020](https://www.nature.com/articles/sdata20184). Once downloaded, place the file called `GDP_per_capita_PPP_1990_2015_v2.nc` in the folder `Demography_Data/SocioEconomic/KUMMU/` which you must create inside the ODDRIN folder such that, from the console, `file.exists(paste0(dir,"Demography_Data/SocioEconomic/KUMMU/GDP_per_capita_PPP_1990_2015_v2.nc"))==TRUE`.
@@ -203,11 +205,15 @@ Furthermore, you will also be required to download the following datasets:
 
 ## Environment Variables
 
-To run this software, you will need to add the following environment variables to the *GetEnv.R* file:
+To run this software, you will need to add the following environment variables to the `GetEnv.R` file:
 
 `directory` = `dir` (for the lazy writers), `FBdirectory`, `packred`
 
 Note that `FBdirectory` is optional, but is important when using data extracted from the Facebook Data for Good platform.
+
+## Installation Checks
+
+Please run the `InstallationChecks.R` file.
 
 ## Usage/Examples
 

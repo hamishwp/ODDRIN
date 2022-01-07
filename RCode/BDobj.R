@@ -329,15 +329,15 @@ setMethod("ExtractOSMbuildVol", "BD", function(BD,ODD){
 })
 
 # Code that calculates/predicts the total human displacement 
-setGeneric("BDX", function(BD,Omega,center,Method,LL)
+setGeneric("BDX", function(BD,Omega,Model,Method,LL)
   standardGeneric("BDX") )
-setMethod("BDX", "BD", function(BD,Omega,center,Method=list(Np=20,cores=8),LL=T){
+setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T){
   # Only calculate buildings with all key parameters
   notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$GDP) | 
                      is.na(BD@data$grading)))
   BD<-BD[notnans,] ;notnans<-1:nrow(BD)
   # Get parameters for model
-  Params<-FormParams(BD,list(Np=Method$Np,center=center))
+  Params<-FormParams(BD,list(Np=Method$Np,center=Model$center))
   # Income distribution percentiles & extract income percentile  
   SincN<-seq(20,90,by = 10); Sinc<-ExtractCIndy(BD,var = paste0("p",SincN,"p100"))
   # Load buildings file
@@ -385,7 +385,10 @@ setMethod("BDX", "BD", function(BD,Omega,center,Method=list(Np=20,cores=8),LL=T)
   }
   # classified<-t(matrix(unlist(mclapply(X = notnans,FUN = predBD,mc.cores = Method$cores)),ncol=length(notnans)))
   classified<-t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans)))
-  return(names(BD_params$functions)[round(classified)])
+  # Save into the file
+  BD$ClassPred<-names(Model$BD_params$functions)[round(classified)]
+  
+  return(BD)
   
 })
 

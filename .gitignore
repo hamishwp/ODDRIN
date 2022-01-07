@@ -1,3 +1,6 @@
+Literature
+
+COPERNICUS_Damage
 
 Demography_Data
 
@@ -10,10 +13,6 @@ FBdata
 GRID
 
 Helix
-
-IIDIPUS_Input
-
-IIDIPUS_Results
 
 OSM_Buildings_Objects
 
@@ -53,20 +52,3 @@ tmp
 
 *.R~
 
-Literature
-
-Demography_Data/Age/
-
-Demography_Data/RWI/
-
-Demography_Data/UNUSED_DATA/
-
-Demography_Data/.~lock.INFORM2020_TREND_2010_2020_v039_ALL_1.xlsx#
-
-COPERNICUS_Damage/EQ201*
-
-COPERNICUS_Damage/EQ2020*
-
-COPERNICUS_Damage/EQ20210115IDN
-
-COPERNICUS_Damage/VC20210409VCT

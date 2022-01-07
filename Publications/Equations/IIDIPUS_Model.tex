@@ -1,0 +1,785 @@
+\documentclass[10pt,a4paper]{article}
+
+%\usepackage[english]{babel}
+%\usepackage[utf8]{inputenc}
+%\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amsfonts,amssymb,algorithm,algorithmic,setspace}
+\usepackage{graphicx}
+%\graphicspath{ {./Figures/} }
+\usepackage{cite}
+\usepackage{authblk}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{subcaption}
+%\usepackage{subfig}
+\usepackage{color}
+\usepackage{bm}
+\usepackage{epstopdf}
+\usepackage{hyperref}
+\usepackage{fixltx2e} % fix ordering of figures!
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{multicol,xparse}
+\usepackage{hyperref}
+%\usepackage[T1]{fontenc}
+\usepackage{underscore}
+%\usepackage{siunitx}
+%\usepackage{cleveref}
+%======================= Titlepage =========================================================
+
+\title{Oxford Postdoctoral Research - IIDIPUS}
+\date{}				%activate to remove date
+%========================================================================================
+
+\author[1]{H.W. Patten}
+\author[1]{D. Steinsaltz}
+%\author[1]{M.D. Christodoulou}
+%\author[2]{S. Ponserre}
+%\author[2]{M.T.M. Espinoza}
+\affil[1]{Department of Statistics, Oxford University, UK}
+%\affil[2]{Internal Displacement Monitoring Centre (IDMC), Geneva, CH}
+\renewcommand\Authands{ and }
+\let\oldref\ref
+%\renewcommand{\ref}[1]{(\oldref{#1})}
+\renewcommand{\vec}{\bm}
+\newcommand{\rhopar}{\rho_{\parallel}}
+%\newcommand{\he3}{}
+%\usepackage{natbib}
+%\renewcommand{\bibsection}{ }
+\DeclareGraphicsExtensions{.jpg, .eps,.pdf,.png}
+
+\topmargin=-0.45in      %
+%\evensidemargin=0in     %
+\oddsidemargin=-0.1in      %
+\textwidth=6.8in        %
+\textheight=9.0in       %
+%\headsep=0.25in         %
+
+% Default fixed font does not support bold face
+%\DeclareFixedFont{\ttb}{T1}{txtt}{bx}{n}{10} % for bold
+%\DeclareFixedFont{\ttm}{T1}{txtt}{m}{n}{10}  % for normal
+
+% Custom colors
+\usepackage{color}
+\definecolor{deepblue}{rgb}{0,0,0.5}
+\definecolor{deepred}{rgb}{0.6,0,0}
+\definecolor{deepgreen}{rgb}{0,0.5,0}
+
+\usepackage{listings}
+
+% Python style for highlighting
+\newcommand\pythonstyle{\lstset{
+language=Python,
+basicstyle=\ttm,
+otherkeywords={self},             % Add keywords here
+keywordstyle=\ttb\color{deepblue},
+emph={MyClass,__init__},          % Custom highlighting
+emphstyle=\ttb\color{deepred},    % Custom highlighting style
+stringstyle=\color{deepgreen},
+frame=tb,                         % Any extra options here
+showstringspaces=false            % 
+}}
+
+
+% Python environment
+\lstnewenvironment{python}[1][]
+{
+\pythonstyle
+\lstset{#1}
+}
+{}
+
+\let\multicolmulticols\multicols
+\let\endmulticolmulticols\endmulticols
+\RenewDocumentEnvironment{multicols}{mO{}}
+ {%
+  \ifnum#1=1
+    #2%
+  \else % More than 1 column
+    \multicolmulticols{#1}[#2]
+  \fi
+ }
+ {%
+  \ifnum#1=1
+  \else % More than 1 column
+    \endmulticolmulticols
+  \fi
+ }
+
+\begin{document}
+  \cfoot{\vspace*{1.5\baselineskip}\thepage}
+\begin{multicols}{1}
+    \maketitle
+    %=========================================================================================
+    \begin{abstract}
+Presented here is the first global attempt at building a data-driven damage function for multiple natural hazards to include the influence of local vulnerability, developed in a Bayesian framework for real-time human displacement prediction. By combining historical disaster displacement and building damage data with expert knowledge on damage functions from disaster risk literature, country specific indicators can be used to infer spatio-temporal vulnerability of a population to a particular hazard. The advantage of this approach is that building quality data is not required, which permits a more reliable country to country comparison of disaster risk. In the research presented in this article, a focus is made on earthquakes and cyclones, but could be generalised to other natural hazards.
+\vspace{10pt}
+    \end{abstract}
+\end{multicols}
+\begin{multicols}{1}
+
+\section{Introduction}\label{sec:intro}
+If a town of a given population is exposed to a Modified Mercalli Intensity (MMI) VI earthquake, what percentage of the town is likely to be displaced? Estimates in the literature rely on the so-called damage function, which predicts the damage based on the hazard intensity experienced at that spatial location. Note that this function is also often referred to as the `fragility curve'. The form of such is based on deterministic models that combine approximate estimates of building quality with post-disaster damage, but almost always focussing on a spatially localised region, e.g. San Francisco. Figure \ref{fig:damagefn} illustrates an example of a deterministic damage function for earthquakes. At earthquake intensities above 9, the percentage of the house likely to be damaged approaches 100\%.
+\begin{figure}[H]
+  \includegraphics[width=0.45\textwidth]{Figures/damagefn1d}
+ 	\caption{An example of a damage function likely to be used by NGO's to assess the percentage of damage a building is likely to sustain after experiencing any given earthquake intensity.}
+ 	\label{fig:damagefn}
+\end{figure}
+  
+Such approaches cannot be mapped onto other countries: the 2008 earthquake in Italy was of VI MMI and displaced approximately 70,000 people, whereas displacement from a comparable earthquake intensity in Chile, Japan or the Philippines has been considerably lower. Furthermore, building quality data is not readily available for each country, and mapping the measurements made from one country to another introduces noise and bias into the calculation. When building quality data is not available, alternative methods must be sought, which act to modify the traditional damage function which is based on hazard intensity alone.
+\section{Data}\label{sec:data}
+This section describes the open access data that has been included in the computational tool in a semi or fully automated way. The data implemented includes human displacement, building damage, hazard intensity, population, GDP and national indicator variables.
+\subsection{Displacement}\label{sec:Disp}
+The sources used for the displacement data are numerous, and have been verified by specialists in displacement and disaster management. Almost all human displacement used in this research has been verified by IDMC, the collaborators on this project, since 2008. The top-20 sources of information triangulated for the measurements is as follows:
+\begin{table}[H]
+  \begin{centering}
+  \caption{Top 20 most commonly used sources of information for the human disaster displacement data used in the calculations presented in this article.}
+  \label{tab:IDMCsources}
+  \begin{tabular}{|l|l|}
+    \hline
+    Source                                                              & Frequency \\
+    \hline
+    National Emergency Response Centre (NERC)                               & 3,102      \\
+    Local Authorities                                                       & 2,287      \\
+    National Disaster Relief Services Centre                                & 1,945      \\
+    International Organization for Migration (IOM)                          & 1,390      \\
+    National Agency for Disaster Management (BNPB)                          & 1,110      \\
+    Disaster Response Operations Monitoring and Information Center (DROMIC) & 1,038      \\
+    Federal Emergency Management Agency (FEMA)                              & 800       \\
+    International Federation of the Red Cross (IFRC)                        & 528       \\
+    Office for the Coordination of Humanitarian Affairs (OCHA)              & 517       \\
+    IOM Displacement Tracking Matrix (IOM DTM)                              & 499       \\
+    Nepal Disaster Risk Reduction Portal                                    & 399       \\
+    Red Cross/Red Crescent Movement                                         & 375       \\
+    Government                                                              & 324       \\
+    State Disaster Management Authority                                     & 318       \\
+    Cabinet Office                                                          & 280       \\
+    National Disaster Management Authority (NDMA)                           & 264       \\
+    Disaster Management Centre                                              & 251       \\
+    Local Media                                                             & 221       \\
+    Ministry of Civil Affairs                                               & 212       \\
+    Unnamed                                                                   & 2,228      \\
+    \hline
+  \end{tabular}
+  \end{centering}
+\end{table}
+The maximum total human displacement measurement over all spatio-temporal measurements will be used in the log-likelihood model, to be described in section \ref{sec:model}.
+\subsubsection{IDMC - Helix}\label{sec:helix}
+The displacement data is heavily reliant on having automated access to the database of the collaborators of this project: IDMC. The name of the database is Helix, and contains approximately 30,000 human displacement measurements. Table \ref{tab:IDMCdis} shows the number of human displacement measurements stored in Helix by hazard type. Note that tropical cyclones come under the hazard type `Storm'.
+\begin{table}[H]
+  \begin{centering}
+  \caption{Number of natural hazard events present in the human disaster displacement data used in this article, separated by natural hazard.}
+  \label{tab:IDMCdis}
+  \begin{tabular}{|l|l|}
+    \hline
+    Hazard & Frequency  \\
+    \hline    
+    Flood &               13,008 \\
+    Storm &              11,605 \\
+    Mass movement &        1,692\\
+    Wildfire &             1,592\\
+    Earthquake &           1,077\\
+    Drought &               401\\
+    Volcanic eruption &     315\\
+    Extreme temperature &   232\\
+    \hline
+  \end{tabular}
+  \end{centering}
+\end{table}
+Additionally, since 2016, for some entries in the Helix database, the monitoring experts at IDMC also input a `qualifier', which indicates whether the figure stated for the number of displaced persons is estimated to be more than, less than or approximately equal to the actual value. Table \ref{tab:qualifier} shows the number of earthquakes which have this qualifier variable. Note that `total' refers to values input before the qualifier variable was created. This is taken as `approximately'.
+\begin{table}[H] 
+  \caption{The frequency of use of each qualifier term in the human disaster displacement data used in this article.}
+  \label{tab:qualifier}
+  \begin{tabular}{|l|l|}
+    \hline
+    Qualifier & Frequency  \\
+    \hline    
+    Approximately & 32 \\
+    More than & 33 \\
+    Less than & 6 \\
+    Total & 98 \\
+    \hline    
+  \end{tabular}
+\end{table}
+\subsubsection{IDMC - GIDD}\label{sec:GIDD}
+Additionally, there is the Global Internal Displacement Database (GIDD), which is used for measurements made before 2017. This is a publicly available dataset which is updated every year, and therefore contains annual summaries of Helix, in addition to events recorded before 2017. Note that the GIDD publishes the Internal Displaced Person stock around the date of the GIDD publication, not the number of people displaced in total from any single event. The difference being that the IDP stock is the number of people still displaced on the publication date of the GIDD, as measured by the most recent data point.
+\subsubsection{Earthquake Displacement Data}\label{sec:dispvis}
+Bar charts of the number of earthquake events used in the research presented in this article is shown in figure \ref{fig:HelixEQ}. The number of events per continent illustrates a measurement bias for events that occured in Asia or the Americas, with very few events recorded in Europe, Africa or Oceania. Most earthquake events used in this study are between 2013-2019.
+\begin{figure}[H]
+  a) \includegraphics[width=0.45\textwidth]{Figures/EQContinents2}
+  b) \includegraphics[width=0.45\textwidth]{Figures/EQYear}
+ 	\caption{Extracted earthquake events from the Helix and GIDD databases, the measurements of which have been triangulated by the Internal Displacement Monitoring Centre (IDMC). a) The earthquake events per year and b) per continent.}
+ 	\label{fig:HelixEQ}
+\end{figure}
+\subsubsection{Displacement Data Issues/Criticisms}\label{sec:dispcrit}
+There are very few measurements made of earthquakes that occurred in the US or Europe, which therefore creates bias. Additionally, due to human error in inputting measurements into Helix, further validation was necessary for some events. No events prior to 2013 were used as the triangulation process used by the IDMC monitoring experts was not rigorous enough and have been deemed inaccurate. To adjust for this in the future, access to historical USA earthquake displacement measurements would be particularly useful.
+\subsection{Building Damage}\label{sec:BD}
+Building damage is usually assessed by government or insurance agencies, thus not open access. However, there are a few International Non-Governmental Agencies (INGO) that analyse the building damage whenever large amounts of humanitarian aid is involved. The building damage data used in the research presented in this article is based on analysing satellite images of the worst affected areas before and after the event, and identifying buildings that appear to be damaged. Note that both COPERNICUS and UNOSAT assess damage according to the EMS-98 classification definitions, which can be found in \cite{JRC_BD}. In total, there are 87,333 building damage assessment data points. Table \ref{tab:BD} shows the number of data points per earthquake event. The amount of data points for
+\begin{table}[ht]
+      \caption{Contingency table for the building damage assessment data per earthquake event, for the COPERNICUS and UNOSAT data combined.}
+  \label{tab:BD}
+\centering
+\begin{tabular}{rlrr}
+  \hline
+  Country & Date & Frequency \\ 
+  \hline
+  Pakistan & 24th September 2013 & 18,449 \\
+  Nepal & 25th April 2015 & 38,463 \\ 
+  Afghanistan & 26th October 2015 & 1,007 \\ 
+  Ecuador & 16th April 2016 & 16,144 \\
+  Italy & 24th August 2016 & 308 \\ 
+  Italy & 26th October 2016 &   9 \\
+  Mexico & 19th September 2017 & 6,838 \\ 
+  Iraq & 12th November 2017 & 4,395 \\   
+  Indonesia & 5th August 2018 & 1,509 \\
+  Pakistan & 24th September 2019 & 188 \\   
+  Indonesia & 25th September 2019 &  23 \\ 
+  \hline
+  Total & & 87,333 \\
+  \hline
+\end{tabular}
+\end{table}
+The damage levels are explained in \cite{unspider} as follows:
+\begin{itemize}
+  \item Destroyed: houses with more than 50\% damage, or if part of the building has collapsed to the ground floor.
+  \item Major damage (severe or moderate) - partial roof collapse or wall failure
+  \item Minor damage (possible or slight) - roof largely in tact but with evidence of potential damage to roof tiles, chimneys, etc.
+\end{itemize}
+\begin{figure}[H]
+  \includegraphics[width=0.8\textwidth]{Figures/EMS98DamageAssessement}
+ 	\caption{EMS-98 building damage assessment classification, image taken from the Master Degree thesis `Building damage assessment after earthquake events: Damage scale proposal based on vertical imagery', Cotrufo, S. (2017).}
+ 	\label{fig:EMS98}
+\end{figure}
+Note that accurate differentiation of the minor and major levels in the `damaged' category rely on high quality satellite imagery, which is not always possible. Table \ref{tab:BDfreq} shows a contingency table of the building damage assessment gradings of the extracted data.
+\begin{table}[ht]
+      \caption{Contingency table for the building damage assessment gradings for the COPERNICUS and UNOSAT data.}
+  \label{tab:BDfreq}
+  \centering
+\begin{tabular}{rlr}
+  \hline
+  Classification & Freqency \\ 
+  \hline
+  Completely Destroyed & 5,102 \\ 
+  Severe Damage & 1,953 \\ 
+  Moderate Damage & 1,957 \\ 
+  Possible Damage & 7,006 \\
+  Not Affected & 62,919 \\   
+  Damaged & 8,395 \\ 
+   \hline
+\end{tabular}
+\end{table}
+\subsubsection{UNOSAT (UNITAR)}\label{sec:UNOSAT}
+The UNOSAT damage assessment is the most abundant data source for spatially located building damage. Figure \ref{fig:UNOSAT} is the extracted building damage data of Kathmandu after the VIII MMI Nepal earthquake of April 2015.
+\begin{figure}[H]
+   \includegraphics[width=0.7\textwidth]{Figures/BDNepal}
+ 	\caption{Example of the extracted UNOSAT building damage data for the 2015 Nepal earthquake, with the different levels of damage severity plotted in different colours.}
+ 	\label{fig:UNOSAT}
+\end{figure}
+The classification `affected' is for a binary distinction between buildings that are expected to have sustained any damage during the event. The building area is also a value provided in the dataset for each observation.
+\subsubsection{COPERNICUS}\label{sec:COPER}
+COPERNICUS tends to focus on European events, and includes evaluating which buildings are expected to have no building damage, which ensures more reliable calculation of the damage function. There are four earthquake events present in the COPERNICUS data, for the countries Ecuador, Italy and Nepal.
+\subsection{Hazards}\label{sec:hazard}
+This sub-section is split into two components: hazard information systems and hazard intensity mapping systems. Both have historical databases but provide real-time information. The hazard information systems used in this research are Global Disaster Alerting Coordination System (GDACS), Pacific Disaster Centre (PDC) and United States Geological Survey (USGS). The advantages of GDACS are the accessibility and usability of the API service, but the advantages of the PDC and USGS are the high quality hazard intensity maps.
+\subsubsection{GDACS}\label{sec:GDACS}
+GDACS is a real-time alert system that covers many different hazards, including the recent update to handle wildfires. The API access is open, and allows users to access past historical hazard intensity polygons with relative ease. Figure \ref{fig:GDACS} shows an example of the shakemap for the Philippines December 2019 earthquake. Note that GDACS generates poylgons from the USGS earthquake data. GDACS generates and stores all hazard intensity maps as polygon shakefiles, not as gridded datasets.
+\begin{figure}[H]
+   \includegraphics[width=0.5\textwidth]{Figures/PHLEQGDACS}
+ 	\caption{Example of the extracted GDACS earthquake shakemap for the December 2019 Philippines earthquake. The contour colour reflects the earthquake intensity experienced.}
+ 	\label{fig:GDACS}
+\end{figure}
+\subsubsection{PDC}\label{sec:PDC}
+PDC is similar to GDACS, but is US backed. The important difference for this work is the significantly improved quality of the cyclone map compared to that of GDACS.
+\subsubsection{USGS}\label{sec:USGS}
+USGS is used in this research for high quality earthquake intensity shakemaps. GDACS will first be accessed due to the usability of the API system to search for historical events, and then USGS will be accessed for the detailed hazard mapping. Figure \ref{fig:USGS} illustrates the gridded and pixelated nature of the USGS hazard intensity maps.
+\begin{figure}[H]
+   \includegraphics[width=0.7\textwidth]{Figures/TUREQ301020zoom}
+ 	\caption{Example of the extracted USGS high quality earthquake shakemap for the October 2020 Turkey earthquake. The surface colour reflects the earthquake intensity experienced.}
+ 	\label{fig:USGS}
+\end{figure}
+\subsection{Population}\label{sec:Population}
+There are two different population datasets used in this research: NASA - Socioeconomic Data and Applications Center (SEDAC) and the Facebook Data for Good Population Density Maps.
+\subsubsection{SEDAC}\label{sec:SEDAC}
+The SEDAC population data is a global database based on sub-national census data. The resolution is lower than the Facebook population data, but the reason why it is used in this research is because the dataset was generated using census data from between 2005 to 2014, which is before any of the events studied in this article. Using the SEDAC population maps prevents erroneous population estimates originating from the map being generated after the hazard occurred and thus after building damage and large-scale human displacement from a region. Note that this could result in an over and underestimation of the local population: in suburban areas gentrification often occurs in the aftermath of disasters \cite{EQgent}. Figure \ref{fig:Pop} illustrates an example of the population count data over Turkey and the surrounding area.
+
+\begin{figure}[H]
+   \includegraphics[width=0.7\textwidth]{Figures/PopTUR}
+ 	\caption{Example of the extracted SEDAC population count data over Turkey and the surrounding area}
+ 	\label{fig:Pop}
+\end{figure}
+
+\subsubsection{Facebook}\label{sec:facebookpop}
+The Facebook maps are based on the SEDAC maps, but apply AI to satellite imaging systems to enhance the quality and resolution of the SEDAC maps. The algorithm detects buildings, detects the building size and then predicts the number of people living in that building. An iterative process then ensures that the total number of people matches the region/national aggregated values.
+\subsection{GDP - Kummu, et al}\label{sec:GDP}
+There is also sub-national GDP-PPP data openly available, produced by Kummu {\it et al}, 2018. Although the resolution of the sub-national data is low compared to the population data, the sub-national GDP data permits an adjustment of income or other economic variables as compared to a national estimate. Figure \ref{fig:GDP} shows an example of the dataset over Turkey and the surrounding area.
+\begin{figure}[H]
+   \includegraphics[width=0.7\textwidth]{Figures/TURGDP}
+ 	\caption{Example of the extracted GDP-PPP per capita dataset produced in \cite{Kummu}.}
+ 	\label{fig:GDP}
+\end{figure}
+\subsection{National Indicator Variables}\label{sec:nationalind}
+National indicator variables are used in this work to try to find a method of comparing multiple events that occurred in one country to those in another, to find the correlation with variables such as the quality of physical infrastructure or the vulnerability index. Additionally, the national indicator variables will be used to scale the values of population count and GDP. This scaling is performed because the temporal resolution of these two spatial datasets is every five years, which could mean a difference of millions of people in China, for example.
+\subsubsection{World Bank}\label{sec:WB}
+The world bank variables that are extracted for this work is the population count (`SP.POP.TOTL'); $P_{count}$, density (`EN.POP.DNST'); $P_{dens}$, GDP-PPP (`NY.GDP.MKTP.PP.KD'); $E$, physical infrastructure (`GCI.2NDPILLAR.XQ'); $Q_{phys}$, gross national income; $\$_{GNI}$, and the income distribution related indicators (`SI.DST.04TH.20', `SI.DST.10TH.10', `SI.DST.05TH.20', `SI.DST.FRST.10', `SI.DST.FRST.20', `SI.DST.02ND.20', `SI.DST.03RD.20'); $S_{inc}$. The income distributions will be used as discrete classes, assigning 10\% of the population the salary given by the value of `SI.DST.FRST.10' multiplied by the normalised (in time to time of event) local GDP from section \ref{sec:GDP}.
+\begin{figure}[H]
+   \includegraphics[width=0.6\textwidth]{Figures/NonEmptyIncEntries}
+ 	\caption{A histogram of the percentage of non-empty entries in the World Bank data for the income distribution variables.}
+ 	\label{fig:WBinc}
+\end{figure}
+\subsubsection{INFORM}\label{sec:INFORM}
+The INFORM index variables used in this study are the coping capacity (`CC'); $Q_{CC}$, socioeconomic vulnerability (`VU.SEV'); $Q_V$, government effectiveness (`GovernmentEffectiveness'); $Q_{gov}$, physical infrastructure (`CC.INF.PHY'); $Q_{phys}$, physical exposure to earthquakes (`HA.NAT.EQ'); $Q_{exp}^{EQ}$, and physical exposure to tropical cyclones (`HA.NAT.TC'); $Q_{exp}^{TC}$.
+\subsubsection{OpenStreetMaps}\label{sec:OSM}
+\begin{figure}[H]
+   \includegraphics[width=\textwidth]{Figures/OSMvsBD2Ddensityplots}
+ 	\caption{Comparison of the 2D-spatial density for the building damage assessment data against the sampled OpenStreetMap data for the Nepal 2015 earthquake.}
+ 	\label{fig:OSMvsBD2D}
+\end{figure}
+As explained in section \ref{sec:BD}, the satellite image building damage assessment data provides a categorical estimation of the building damage. The UNOSAT data provides three categories: destroyed, major damage and minor damage. It is physically intuitive that the building surface area and number of floors will also influence the survivability when exposed to natural hazards. Unfortunately, almost all of the building damage data does not include information on either the building surface area, nor the number of floors. However, using OpenStreetMaps (OSM) \cite{OSM}, we can sample buildings. Figure \ref{fig:OSMvsBD2D} illustrates the importance of sampling the buildings by population density as opposed to the spatial location of the buildings. The large number of buildings estimated as damaged located at $(84.40,27.67)$ have minimal OSM building data. This may be because many of the buildings in this area still have not been reconstructed since the earthquake. Instead of sampling by spatial location, sampling is instead performed with respect to population density interpolated at the location in physical space of the damaged/OSM building. This involves binning the buildings (both OSM and damaged) by their local population density, and sample with replacement from the OSM buildings in the local area. The surface area and height of the OSM building will be assigned to the damaged building. This sampling will repeat for every iteration in the Metropolis algorithm.
+\begin{figure}[H]
+   \includegraphics[width=0.6\textwidth]{Figures/CDFpdensOSMBD}
+ 	\caption{Comparison of the population density Cumulative Distribution Functions for the building damage assessment data against the sampled OpenStreetMap data for the Nepal 2015 earthquake.}
+ 	\label{fig:OSMvsBD}
+\end{figure}
+As shown in figure \ref{fig:OSMvsBD}, the number of buildings in the OSM database seems to resemble the number of buildings evaluated as damaged in the 2015 Nepal earthquake. At a population density of approximately 500 people per kilometre, which coincidentally is also the criteria for an 'urban city' by the World Bank, there is a large difference in the two histograms. This concludes that the OSM building sampling must also use replacement. Additionally, any bins which have a number of OSM buildings less than 10\% of the damage data, the bin will be merged with a neighbouring bin. This will prevent bias in the building sampling for low-resolution areas.
+\section{Model}\label{sec:model}
+Different models are implemented in this research to predict if a house will be damaged during a short-term disaster. Each model will use different variables and parameterisations, and the most successful (in terms of predictive performance) will be used in combination, via weighted bagging.
+\subsection{Damage Functions}\label{sec:damagefn}
+As mentioned in the introduction, the damage function is the most important and fundamental component of disaster risk modelling. Without an understanding of the severity of the hazard on a given region, inference on damaged buildings or displaced population is not possible. The simplest baseline univariate damage function, $F_D :\mathbb{R}^+ \rightarrow [0,1] $ can be written as
+\begin{equation}\label{eq:fdamage}
+  F_D(I|\boldsymbol{\theta},\boldsymbol{\zeta})=\sigma\big(h_0(I|\boldsymbol{\theta})\;|\;\boldsymbol{\zeta}\big),
+\end{equation}
+with $\sigma :\mathbb{R}^+ \rightarrow [0,1]$ the positive-valued binary regression function with parameterisation $\boldsymbol{\zeta}$, and $h_0 :\mathbb{R}^+ \rightarrow \mathbb{R}^+$ the baseline hazard function with parameterisation $\boldsymbol{\theta}$, which relates the hazard intensity to an indication of severity via an exponential relationship
+\begin{equation}\label{eq:h0}
+h_0(I|\theta)=\mathbb{I}(I>I_0)(e^{\theta_e(I-I_0)}-1) \;\;\;\;\;\;\;\;\;\; \theta_e\geq 0,
+\end{equation}
+where $I_0$ is the minimum hazard severity that would result in any observed damage or displacement, for any country or region, and $\mathbb{I} : \mathbb{R} \rightarrow \{0,1\}$ is the indicator function. For example, in earthquakes, $I_0\sim 4.5 MMI$. Equation \ref{eq:h0} ensures that any hazard intensity below the threshold gives a zero probability of displacement/damage. This simple damage function relates the hazard intensity deterministically to the expected probability of damage or displacement (either percentage or as a proportion of the total exposed assets). In this research, a more intricate damage function is used, including a stochastic component to avoid an overly-simplified deterministic model.
+\subsection{Vulnerability}\label{sec:survmodel}
+The models presented in this article are based on the assumption that a baseline damage function exists for each hazard. The effect of the covariates, such as economic factors, is to modify the baseline damage function (Eqn. \ref{eq:fdamage}). The most important part of the models are the functions that dictate the deviation from the baseline damage of a local region, at a given hazard intensity. Including the vulnerability ad-hoc into the model ensures that for each spatial grid-point, the local vulnerability directly increases or decreases the expected level of damage or displacement. It is worth noting that post-hoc vulnerability inclusion is where the prediction of the damage or displacement is first calculated for the entire affected region, and then this value is scaled by the vulnerability. The issue with post-hoc vulnerability is that the predicted damage or displacement is not even first order continuously differentiable with respect to the hazard intensity. This differentiability is important when comparing the impact severity between areas of differing vulnerability: e.g. the impact of a specific hazard intensity on two different countries. The baseline hazard function can then be modified by a local vulnerability before applying the binary regression function, $\sigma$:  
+\begin{equation}\label{eq:h}
+  h(t|\theta_e,\boldsymbol{l_p})=h_0\left(t|\theta_e\right)f(\boldsymbol{l_p}),
+\end{equation}
+with $\boldsymbol{l_p}$ the risk ratio, which formulates the impact of the covariates to modify the baseline hazard function and $f:\mathbb{R}\rightarrow\mathbb{R}$ is the mapping of the country-specific indicator values via the parameterisation $\boldsymbol{\gamma}$. The risk ratio function is taken to be of exponential form $f(\boldsymbol{l_p})=\exp(\boldsymbol{\gamma}\mathbf{X})$, for the covariate vector $\mathbf{X}$. The predicted building damage proportion for any spatial (longitude, latitude) location $(x,y)$ in country $k$ is calculated by equations \ref{eq:damprobPH},
+\begin{equation}\label{eq:damprobPH}
+  \mathbb{D}^{B}_k(x,y|\boldsymbol{\Omega}_p,\mathbb{S})=\sigma\left(F_D\big(I(x,y)|\boldsymbol{\theta}\big)f\big(\boldsymbol{l}_p|\boldsymbol{\gamma}\big)\mathbb{S}\bigg|\;\boldsymbol{\zeta}\right),\;\;\;\;\;\;\;\;\;\; \mathbb{D}^{B}_k(x,y) \in (0,1) \;\;\; \forall x,y,k,
+\end{equation}
+where $\sigma:\mathbb{R}\rightarrow [0,1)$ is the binary regression function, $I(x,y)$ is the hazard intensity, $\boldsymbol{l}_p$ the country-specific indicators (e.g. GDP or average household income) and $\mathbb{S}$ is the stochastic error term. The likelihood is therefore the expectation over a set of i.i.d. random variables that are distributed via $\Gamma^*(1,\tau)$. Note that a stochastic component, $\mathbb{S}$, is integrated into the equation via sampling from a modified-Gamma distribution $\Gamma^*$. The modified Gamma distribution is defined as
+\begin{equation}
+ \mathbb{S}\sim \Gamma^*(\mu,\tau)=\Gamma\left(k=\frac{\mu^2}{\sqrt{\tau}},\theta=\frac{1}{\mu\sqrt{\tau}}\right),
+\end{equation}
+whereby $\mu=1$ and $\tau$ are the mean and precision of the stochastic component, respectively. Use of the modified-Gamma distribution facilitates a more intuitive understanding of the hyperparameters than directly using the $\{k,\theta\}$ of the standard Gamma distribution. The predicted displacement proportion (of the total local population at x,y) is a quadratic transform of the building damage function
+\begin{equation}\label{eq:dispprobPH}
+  \mathbb{D}^{D}_k(x,y|\boldsymbol{\Omega}_p,\mathbb{S})=\sigma\left(\kappa\left(\sigma^{-1}\left(\mathbb{D}^{B}_k(x,y|\boldsymbol{\Omega}_p)\Big| \boldsymbol{\zeta}\right)\right)^2 + \nu\sigma^{-1}\left(\mathbb{D}^{B}_k(x,y|\boldsymbol{\Omega}_p)\Big| \boldsymbol{\zeta}\right)+\omega\;\bigg|\; \boldsymbol{\zeta}\right),\;\;\;\;\;\;\;\;\;\; \mathbb{D}^{D}_k(x,y) \in (0,1) \;\;\; \forall x,y,k,
+\end{equation}
+Note that, conditioned on the stochastic value $\mathbb{S}$, that both $\mathbb{D}^{D}$ and $\mathbb{D}^{B}$ are independent of one another. In the research presented in this article, the sigma binary regression function will be assumed to follow the cumulative Weibull distribution
+\begin{equation}\label{eq:weibull}
+  \sigma_W(x|k,\lambda) = 1-\exp\left(-(x/\lambda)^k\right), \;\;\;\;\;\;\;\;\;\; \lambda, k \geq 0,
+\end{equation}
+%% or the cumulative Gompertz distribution
+%% \begin{equation}\label{eq:gompertz}
+%%   \sigma_G(x|\varrho,\eta) = 1-\exp\left(-\frac{\eta}{\varrho}(e^{\varrho x}-1)\right), \;\;\;\;\;\;\;\;\;\; \eta, \varrho \geq 0.
+%% \end{equation}
+The equation that infers the effect of the country-specific covariates is
+\begin{equation}
+  f(\mathbf{X}|\boldsymbol{\gamma},\hat{\mathbf{X}})=e^{\boldsymbol{\gamma}(\mathbf{X}-\hat{\mathbf{X}})},
+\end{equation}
+where $\mathbf{X}$ is $P\times K$ dimensional, with $P$ the number events (disasters), $K$ the number of country-specific indicators, and $\boldsymbol{\gamma}(\mathbf{X}-\hat{\mathbf{X}})$ the centered risk ratio. Note that for each event, the values of $X_p$ may change depending on if the variable is time dependent. The centering values $\hat{\mathbf{X}}$ are constrained by
+\begin{equation}\label{eq:linpredcent}
+  \log\left(\frac{1}{K}\sum_{k=1}^K e^{\boldsymbol{\gamma}_k(X_{kp}-\hat{X}_{kp})}\right)=1,
+\end{equation}
+for each country-specific variable, p.
+\subsection{Risk Ratio}\label{sec:linpred}
+The purpose of this research is to build an accurate and reliable global damage function. Therefore, the risk ratio models will be chosen with respect to their predictive performance.
+\subsubsection{Scaled Variables}\label{sec:scalings}
+Variables such as the population of a country are constantly evolving, and the spatial maps described in sections \ref{sec:Population} and \ref{sec:GDP} must therefore be scaled for accuracy. The scaling method chosen here first normalises the variable by the national-level variable at the date of the spatial data set, $t_d$, and then multiplies the population value by an interpolated national value on the date of the disaster, $t$. The local population density, $P^*$, and GDP-PPP per capita, $E^*$, value at a given spatial grid cell ${i,j}$ are therefore
+\begin{equation}
+  P^*_{i,j}(t)=P_{i,j}(t_d)\frac{\bar{P}_{\text{WB}}(t)}{\bar{P}_{\text{WB}}(t_d)}
+\end{equation}
+and
+\begin{equation}\label{eq:centGDP}
+  E^*_{i,j}(t)=E_{i,j}(t_d)\frac{\bar{E}_{\text{WB}}(t)}{\bar{E}_{\text{WB}}(t_d)}
+\end{equation}
+where the subscript WB indicates the World Bank total population, $\bar{P}$, and average GDP-PPP per capita, $\bar{E}$,  estimates. Natural (second derivatives are forced to zero) cubic spline interpolation is used to calculate the value at the event date. Note that $t_d$ is 1st January 2015 for both $P$ and $E$.
+\subsubsection{Centered Variables}\label{sec:centerings}
+As described in section \ref{sec:survmodel}, the indicator variables will require centering in order to satisfy eqn. \ref{eq:linpredcent}. This includes all variables described in sections \ref{sec:WB} and \ref{sec:INFORM}, except for the total population, density and GDP-PPP per capita. The centering values, $\hat{\mathbf{X}}$, will be iterated during the calculations, with initial values calculated by eqn. \ref{eq:linpredcent} with the initial values of the parameterisation vector $\boldsymbol{\gamma}$.
+%% \subsubsection{Full Formulation}\label{sec:linmodel}
+%% The entire formulation of the risk ratio is
+%% \begin{equation}\label{eq:linpred}
+%%   f(\boldsymbol{Q_k}|\boldsymbol{\beta},\bar{X})=\exp\Bigg(\beta_{\$}S_{inc}(E^*_{i,j}(t) - \bar{E}^*_{i,j}(t)) + \beta_{exp}(Q_{exp}-\bar{Q}_{exp})^2  + \beta_{CC}(Q_{CC}-\bar{Q}_{CC})
+%% \notag
+%% \end{equation}
+%% \begin{equation}
+%% + \beta_{V}(Q_V-\bar{Q}_V)   + \beta_{phys}(Q_{phys}-\bar{Q}_{phys})   + \beta_{gov}(Q_{gov}-\bar{Q}_{gov})\Bigg).
+%% \end{equation}
+%% Note that $E^*_{i,j}(t)/\bar{E}_{WB}(t)=E_{i,j}(t_d)/\bar{E}_{WB}(t_d)$ from equation \ref{eq:centGDP}, and that the hazard exposure has a quadratic form to reflect that the countries that are exposed to more or less than the average are those most at risk of large displacements. This quadratic form would be completely incorrect if applied to countries where the concerned hazard is not present, but each country present in the displacement or building damage data has experienced this hazard. Furthermore, the income is the only parameter in the risk ratio to be modified by spatial components (the GDP-PPP from sec. \ref{sec:GDP}), and corresponds to distributional income from sec. \ref{sec:WB}.
+\subsubsection{Bayesian Information Criterion}\label{sec:BIC}
+The Bayesian Information Criterion (BIC) will be used to reduce the number of parameters included in the risk ratio, to minimise the BIC and prevent overfitting. The BIC is defined as
+\begin{equation}\label{eq:BIC}
+  \text{BIC}=k_p\log(N) - 2\log\left(\hat{\mathbb{\pi}}(\boldsymbol{\Omega}_p|Y)\right),
+\end{equation}
+where $k_p$ is the dimension of the parameter space, $N$ the number of data points/observations and $\hat{\mathbb{\pi}}$ the target posterior density, shown in equation \ref{eqn:posterior}. To further reduce overfitting in the model, the centering values for all national indicator values, $\bar{\boldsymbol{Q}}$, will be tied to the scaling parameter, $\boldsymbol{\gamma}$ via equation \ref{eq:linpredcent}. This also includes the GDP centering parameter, $\bar{E}^*_{i,j}$, which adds some more computation due to the spatio-temporal dependency.
+\subsection{Likelihood Functions}\label{sec:likelihoods}
+The likelihood functions to be maximised over utilise the building damage and displacement data described in sections \ref{sec:BD} and \ref{sec:Disp}. The global likelihood function, $l$, is a product of the likelihood functions for the building damage and displacement
+\begin{equation}
+  l=\left(\prod_{v=1}^{N_{BD}}\prod_{c=1}^{P_{BD}(v)}\mathbb{L}_{BD}(b_{v,c},b_{v,c}^*|\boldsymbol{\Omega}_p)\right)\cdot\left(\prod_{e=1}^{N_D}\mathbb{L}_D(Y_e,Y_e^*|\boldsymbol{\Omega}_p)\right),
+\end{equation}
+where $N_{BD}$ and $N_D$ are the number of hazard events with building damage and displacement observations respectively, and $P_{BD}$ is the number of buildings with damage assessments per hazard. $b$ and $Y$ refer to building damage and total displacement observation data, with `$^*$' the estimated quantity by the model. The two likelihood functions $\mathbb{L}_{BD}$ and $\mathbb{L}_D$ are described in the following sections \ref{sec:dispLL} and \ref{sec:BDLL} respectively.
+\subsubsection{Building Damage Likelihood}\label{sec:BDLL}
+The equation representing the influence of the building height and surface area on the survivability is 
+\begin{equation}\label{eq:BD}
+  b=\mathbb{B}(d)=de^{-\rho_A A_b-\rho_HH_b},
+\end{equation}
+with $A_b$ the building roof surface area. This equation acts to reduce the risk of high building damage percentage of buildings with a large roof surface area.\\
+
+To compare the damage risk model using equation \ref{eq:damprobPH} with the data, a calculation is made of the probability of the estimated building damage existing within the category observed by the satellite data. The beta distribution function is applied, defined according to the definition of each classification given in section \ref{sec:UNOSAT}. Given the predicted building damage value $b^*$, the probability of being in each class is then given by:
+\begin{equation}\label{eq:lbdest}
+  l_{\text{destroyed}}(b^*)=\mathbb{B}\text{eta}(b^*|40,2),
+\end{equation}
+\begin{equation}\label{eq:lbmaj}
+  l_{\text{severe}}(b^*)=\mathbb{B}\text{eta}(b^*|40,25),
+\end{equation}
+\begin{equation}\label{eq:lbmin}
+  l_{\text{moderate}}(b^*)=\mathbb{B}\text{eta}(b^*|15,30),
+\end{equation}
+\begin{equation}\label{eq:lbmin}
+  l_{\text{possible}}(b^*)=\mathbb{B}\text{eta}(b^*|3,100),
+\end{equation}
+\begin{equation}\label{eq:lbnone}
+  l_{\text{unaffected}}(b^*)=\mathbb{B}\text{eta}(b^*|0.05,100),
+\end{equation}
+\begin{equation}\label{eq:lbnone}
+  l_{\text{damaged}}(b^*)=\sum_i l_i(b^*)\;\;\;\;\;\; i\in \{\text{destroyed, severe, moderate, possible}\}
+\end{equation}
+where the beta probability distribution function is
+\begin{equation}\label{eq:betadist}
+  \text{Pr}(x|\alpha_{\beta},\beta_{\beta})=\mathbb{B}\text{eta}(x|\alpha_{\beta},\beta_{\beta})
+  =\frac{\Gamma(\alpha_{\beta}+\beta_{\beta})}{\Gamma(\alpha_{\beta})\Gamma(\beta_{\beta})}x^{\alpha_{\beta}-1}(1-x)^{\beta_{\beta}-1},
+\end{equation}
+with $\Gamma(x)$ the Gamma function. Notice that the damaged category summates the probabilities from all categories that imply some damage occurred or potentially occurred. Figure \ref{fig:LLbeta} shows the probability distribution function for each of these classification categories, using equations \ref{eq:lbdest} - \ref{eq:lbnone}. For each building marked by the UNOSAT data, the likelihood is given by the probability of the actual category $l_{\text{class}}$ relative to the sum of probabilities for all the categories
+\begin{equation}\label{eq:LLBD}
+  l_{BD}=\mathbb{L}_{BD}(b^*|\text{class},\boldsymbol{\Omega}_p)=\frac{l_{\text{\text{class}}}}{\sum_i l_i}, \;\;\;\;\;\; i\in \{\text{destroyed, severe, moderate, possible, unaffected, damaged}\}
+\end{equation}
+where `class' refers to the observed damage classification of the building in the building damage data.
+\begin{figure}[H]
+   \includegraphics[width=0.6\textwidth]{Figures/ProbBetaDF4}
+ 	\caption{Log-likelihood functions for building damage from the UNOSAT data (sec. \ref{sec:UNOSAT}). The probability distribution functions are given by the beta distribution.}
+ 	\label{fig:LLbeta}
+\end{figure}
+\subsubsection{Displacement Likelihood}\label{sec:dispLL}
+Equation \ref{eq:damprobPH} is used to generate the housing damage of the people living at the grid point $\{i,j\}$ of country $k$. To determine the total number of people displaced in country $k$ by the hazard, $X_{k}$, out of a total of $N_{ijk}$ living at that gridpoint, the housing damage predicted per individual is used,
+\begin{equation}\label{eq:bindisp}
+  X_{k}\sim\sum_i^{N_i}\sum_j^{N_j}\sum_l^{N_l}\mathbb{B}\text{inomial}\left(N_{ijk},\sigma\left(\kappa(\sigma^{-1}(d_{ijk}))^2 + \nu\sigma^{-1}(d_{ijk})+\omega\right)\right)
+\end{equation}
+where $\sigma$ is, again, the binary regression given by equation \ref{eq:weibull}. The likelihood function is then evaluated via the standard Laplacian distribution, which is used to minimise the absolute error, which is equivalent to minimising the median error,
+\begin{equation}\label{eq:LLD}
+  l_D=\mathbb{L}_{D}(Y,Y^*|\boldsymbol{\Omega}_p)\sim \mathbb{L}\text{aplace}(\mu = log(Y)-log(Y^*), b=1),
+%  l_D=\mathbb{L}_{D}(Y,Y^*|\boldsymbol{\Omega}_p)=-\log(1+|Y-Y^*|)
+\end{equation}
+with $Y^*$ the estimated observed total displaced population. The total observed population is an additional parameter in our model, which also requires a model formulation. The simplest model is $Y^*=X$. It is also possible to create a model which assumes a correlation between the number of people not measured as displaced and other factors. Such a model could be used to explore the validity of statements such as that rural areas (defined by the World Bank as less than 300 people per $\text{km}^2$) are often neglected by government and humanitarian aid. With a single extra parameter, $p_{obs}$, the probability of a person being observed as displaced is
+\begin{equation}\label{eq:binomY}
+  Y^*\sim\mathbb{B}\text{inomial}(X,p_{obs}).
+\end{equation}
+The observation probability could be correlated with GDP and population density
+\begin{equation}\label{eq:pobs}
+  p_{obs}=\sigma\left(\varphi \;\frac{\log(\$_{\text{GDP}})}{\log(P_{dens})}+\iota\right).
+\end{equation}
+For the research presented here, three equations are used for the relationship between $Y^*$ and $X$, defined as $Y^*=g(X)$, using the information given by table \ref{tab:qualifier}
+\begin{equation}\label{eq:YstarT}
+  Y^*=X, \;\;\;\;\;\;\;\;\;\; \text{if qualifier = `approximately' or `total'},
+\end{equation}
+\begin{equation}\label{eq:YstarM}
+  Y^*\sim\left(1+\Gamma^*(\mu_{obs}^+,\sigma_{obs}^+)\right)X, \;\;\;\;\;\;\;\;\;\; \text{if qualifier = `more than'},
+\end{equation}
+\begin{equation}\label{eq:YstarL}  
+  Y^*\sim\left(1-\Gamma^*(\mu_{obs}^-,\sigma_{obs}^-)\right)X, \;\;\;\;\;\;\;\;\;\; \text{if qualifier = `less than'},
+\end{equation}
+with $\mu_{obs}^{\{+,-\}}$ and $\sigma_{obs}^{\{+,-\}}$ hyperparameters to be evaluated.
+\subsection{Parameter Space Summary}\label{sec:parameters}
+Many different parameters have been introduced in the previous sections, and a summary is made here to facilite comprehension of the model. The model parameterisation consists of the following:
+\begin{itemize}
+\item The exponential damage scaling parameter, $\boldsymbol{\theta}$, of one component: $\{\theta_{e}\}$,
+\item The binary regression parameters, $\boldsymbol{\zeta}$, of two components: either $\{k,\lambda\}$ or $\{\varrho,\eta\}$,
+\item The two-dimensional stochastic damage dispersion parameters: $\{\epsilon, \xi_{\epsilon}\}$,
+\item The risk ratio scaling parameters, $\boldsymbol{\beta}$, of six components: $\{\beta_{\{\$, exp, CC, V, phys, gov\}}\}$,
+\item The displacement likelihood linear regression parameterisation of two components: $\{\nu,\omega\}$,
+\item The added/reduced percentage value, and dispersion, for `more than' or `less than' total displacement qualifier values (see tab. \ref{tab:qualifier}): $\{\mu_{obs}^{\{+,-\}},\sigma_{obs}^{\{+,-\}}\}$,
+\item The building roof area and number of floors parameters $\rho$ of the building damage risk model: $\{\rho_A,\rho_H\}$.
+\end{itemize}
+The maximum model parameter space dimension is therefore 19. The risk ratio terms will be reduced to minimise the BIC, as described in section \ref{sec:linmodel}.
+\subsection{Bayesian Priors}\label{sec:priors}
+In Bayesian computation, expert or prior knowledge of a scenario or the physical interpretation of the hyperparameters can be incorporated into the likelihood. This is done using Bayes' theorem, which in it's simplest form is written as
+\begin{equation}\label{eq:bayes}
+  \pi(M|D)=\frac{\pi(D|M)\pi(M)}{\pi(D)},
+\end{equation}
+where $M$ is the statistical model and $D$ the data used. The term $\pi(M|D)$ is referred to as the posterior density, $\pi(D|M)$ the likelihood, $\pi(M)$ the prior probability and $\pi(D)$ the evidence. The prior distributions used for the hyperparameters elaborated in section \ref{sec:parameters} depend on the expected range of values for each term.
+\subsection{Hyperparameter Priors}\label{sec:hyperpriors}
+Many parameters are assumed to be uniform, and the probability is therefore one. The non-uniform prior term are the risk ratio scaling terms for the country-specific indicator terms that are in percentage form
+\begin{equation}\label{eq:priorbeta}
+  \pi(\beta_{\{exp, CC, V, phys, gov\}})\sim\mathbb{B}\text{eta}(0.01\beta,2,2).
+\end{equation}
+\subsubsection{Approximate Bayesian Computation}\label{sec:highpriors}
+In the research presented in this article, most of the priors on the hyperparameters are non-informative. However, the combination of some parameters through functions such as the risk ratio or baseline hazard function must meet certain criteria defined by the maximum and minimum possible values of the output. An example of this would be to ensure that the risk ratio will not result in some countries having zero or little damage for very high hazard intensities (such as IX MMI earthquakes). This can be handled by implementing a hybrid Approximate Bayesian Computation (ABC) - high level priors method on the outputs of certain functions or combinations of the parameters. This consists of creating high-level priors for the parameterisation, whereby a cost value is assigned if the damage expected for the best prepared countries for the minimum hazard intensities, and the same with respect to the worst prepared countries and maximum hazard intensities, is too low or too high, respectively. If the cost value exceeds a given threshold, then the computational tool will automatically reject the proposed parameters of the current iteration and move on to the next proposed parameters. This is evaluated by first finding the two countries with the minimum and maximum risk ratio value, respectively
+\begin{equation}
+  l_p^{\{\min,\max\}}=\left\{\text{argmin}_k\left(f(X_{1:N_k}|\boldsymbol{\beta},\hat{X}_{1:N_k})\right),\text{argmax}_k\left(f(X_{1:N_k}|\boldsymbol{\beta},\hat{X}_{1:N_k})\right)\right\},
+\end{equation}
+then evaluating the damage function (without the stochastic component) at the minimum and maximum  hazard intensity values. When the value of the maximum hazard intensity does not exist, a very large, but still plausible, value is used:
+\begin{equation}
+  \mathbb{H}_{\text{priors}}^{\min}(I_{\min}|\boldsymbol{\Omega}^*_p)=500\sigma_W(\mathbb{E}[\mathbb{D}^B_{l_p^{\min}}(I_{\min}|\boldsymbol{\Omega}^*_p)]\;|\;\lambda,k)\; +
+\end{equation}
+\begin{equation}
+\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;500\sigma_W(\mathbb{E}[\mathbb{D}^D_{l_p^{\min}}(I_{\min}|\boldsymbol{\Omega}^*_p)]\;|\;\lambda,k)
+  \;\;\;\;\;\;\; \lambda=3,k=0.001,
+\end{equation}
+and
+\begin{equation}
+  \mathbb{H}_{\text{priors}}^{\max}(I_{\max}|\boldsymbol{\Omega}^*_p)=500(1-\sigma_W(\mathbb{E}[\mathbb{D}^B_{l_p^{\max}}(I_{\max}|\boldsymbol{\Omega}^*_p)]\;|\;\lambda,k))\;+
+  \end{equation}
+\begin{equation}
+\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;500(1-\sigma_W(\mathbb{E}[\mathbb{D}^D_{l_p^{\max}}(I_{\max}|\boldsymbol{\Omega}^*_p)]\;|\;\lambda,k))
+  \;\;\;\;\;\;\; \lambda=30,k=0.85,
+\end{equation}
+noting the difference between the symbols used to refer to the probability of damage, $\mathbb{D}^B$, and the probability of displacement, $\mathbb{D}^D$. For the cumulative weibull function parameters, $\lambda,k$ were chosen to ensure that close to the minimum hazard intensity ($\lambda=3,k=0.001$) the likelihood of building damage and displacement is negligible, and close to the maximum hazard intensity, $\lambda=30,k=0.85$ were chosen to ensure that the likelihood of building damage and displacement is close to 100\%. 
+\subsection{Posterior Density}\label{sec:posterior}
+Missing out the evidence (a normalisation term) from Bayes' theorem (eqn. \ref{eq:bayes}), and re-writing in logarithmic form for computational precision, the posterior density for each statistical model, $M$, is
+\begin{equation}
+  \log\left(\pi^{M}(\boldsymbol{\Omega}_p^M|\boldsymbol{D})\right)=\left(\sum_{i=1}^{N_{BD}}\sum_{c=1}^{P(i)}\mathbb{LL}_{BD}(\boldsymbol{D}|\boldsymbol{\Omega}^M_p)\right) + \left(\sum_{j=1}^{N_D}\mathbb{LL}_D(\boldsymbol{D}|\boldsymbol{\Omega}^M_p)\right)+
+\end{equation}
+\begin{equation}\label{eqn:posterior}
+  \sum_{p=1}^{N_P}\log\left(\pi(\boldsymbol{\Omega}_p^M)\right) + \mathbb{H}_{\text{priors}}^{\min}(I_{\min}|\boldsymbol{\Omega}^*_p) + \mathbb{H}_{\text{priors}}^{\max}(I_{\max}|\boldsymbol{\Omega}^*_p)
+\end{equation}
+for $\boldsymbol{D}$ the data used in the model.
+\section{Methodology}\label{sec:methodology}
+This section explains the statistical and computational techniques used to resolve the model parameters to fit best with the displacement and building damage equations described in section \ref{sec:model}. For single or near-to single event hazards such as earthquakes and tropical cyclones, the damage occurs over a relatively short time frame. This permits the use of Monte Carlo simulations to estimate the parameter space. For longer time-frame hazards such as floods, Markov Chain Monte Carlo techniques such as particle filters can be applied. The model evaluates the log-likelihoods and thus the global posterior density using any given parameter space $\boldsymbol{\Omega}_p$, described first in section \ref{sec:MC}. The parameter space is evolved and unbiased samples of the parameter space are generated using the adaptative Metropolis-Hastings (aMH) algorithm with a global scaling factor, described in section \ref{sec:GSFMH}.
+\subsubsection{Monte Carlo Simulation - Log-Likelihood}\label{sec:MC}
+Calculating the log-likelihood for the displacement data is shown in algorithm \ref{alg:LD}. To facilitate the understanding of this algorithm, a worded explanation of each line in the algorithm is given as follows
+\begin{enumerate}
+\item Set the number of MC particles, p, used to produce the estimate,
+\item For each country affected by the hazard and with observed displacement data,
+\item For each income class,
+\item For each Monte Carlo particle,
+\item Sample the damage and predict number of displacements for the number of individuals in the subset (country, longitude, latitude, income class, MC particle),
+\item -
+\item -
+\item Sum predicted number of displacements per income class,
+\item Calculate total number of displacements (per MC particle, per country),
+\item Calculate the log-likelihood between total displacements predicted and observed,
+\item Offset maximum log-likelihood of MC particles for numerical accuracy,
+\item Country likelihood calculations,
+\item Country log-likelihood is then the maximum log-likelihood plus the log-mean of all other likelihood values,
+\item -
+\item Offset max LL (as above),
+\item likelihood calculations (as above),
+\item Calculation of the global displacement log-likelihood for this hazard event,
+\item Return global displacement log-likelihood.
+\end{enumerate}  
+\begin{algorithm}[H]
+\caption{\label{alg:LD} Monte Carlo simulation to estimate displacement log-likelihood $\log(l_D)$}
+    \hspace*{\algorithmicindent} \textbf{Input:} parameter space $\boldsymbol{\Omega}_p$, log-likelihood function $\mathbb{LL}_D$, total displacement observations $\boldsymbol{Y}$, data (hazard, population, ...).  \\
+    \hspace*{\algorithmicindent} \textbf{Result:} unbiased mean estimate of the log-likelihood.
+    
+\begin{algorithmic}[1]
+\begin{spacing}{1.5}
+%1
+\STATE $\text{Set} \ N_p $
+\FOR{$k \in 1:N_{k}$}
+
+\FOR{$\$ \in 1:N_{\$}$}
+       \FOR{$p \in 1:N_{p}$}
+              \STATE $\ X_{ijk}^{\$,p} \sim D_{ijk}(\$,\boldsymbol{\Omega}_p) \ \forall \ \{i,j,k\} \in \{1:N_{i},1:N_{j},1:N_{k}\} $
+       \ENDFOR
+\ENDFOR
+%3
+\STATE $ \ X_{ijk}^p = \sum_1^{N_{\$}} X_{ijk}^{\$,p}$
+%4
+\STATE $ \ Y^*_{p,k} = g\left(\sum_1^{N_{i}}\sum_1^{N_{j}}X_{ijk}^p\right)$
+%5
+\STATE $ \ \log{w_{p,k}} = \mathbb{LL}_D(Y^*_{p,k},Y_{p,k})\  \forall \ p \in 1:N_p$
+%6
+\STATE $ \ r_{p,k} = \log{w_{p,k}} - \max{(\log{w_{\{1:N_p\},k}})} \  \forall \ p \in 1:N_p $
+%7
+\STATE $ \ s_{p,k} = \exp{(r_{p,k})} \  \forall \ p \in 1:N_p $
+%8
+\STATE $\log(l_{D,k}) = \max{(\log{w_{\{1:N_p\},k}})} + \log{(\frac{1}{N_p}\sum_{i=1}^{N_p} s_{p,k})}$
+\ENDFOR
+\STATE $ \ r_{k} = \log{l_{D,k}} - \max{(\log{l_{D,\{1:N_k\}}})} \  \forall \ k \in 1:N_k $
+%7
+\STATE $ \ s_{k} = \exp{(r_{k})} \  \forall \ k \in 1:N_k $
+%8
+\STATE $\log(l_{D,k}) = \max{(\log{w_{D,\{1:N_k\}}})} + \log{(\frac{1}{N_k}\sum_{i=1}^{N_k} s_{k})}$
+%9
+\RETURN $\log(l_D)$
+\end{spacing}
+\end{algorithmic}
+\end{algorithm}
+Calculating the log-likelihood for the building damage data is shown in algorithm \ref{alg:LBD}. To facilitate the understanding of this algorithm, a worded explanation of each line in the algorithm is given as follows
+\begin{enumerate}
+\item Set the number of MC particles, p, used to produce the estimate,
+\item For each building damage observation,
+\item Sample from the income classes,
+\item For each Monte Carlo particle,
+\item Sample the damage probability at the building location,
+\item Calculate the building damage by scaling with building roof-area,
+\item Calculate the log-likelihood between predicted and observed building damage,
+\item -
+\item Offset maximum log-likelihood of MC particles for numerical accuracy,
+\item Likelihood calculations of MC particles,
+\item Log-likelihood is then the maximum log-likelihood plus the log-mean of all other likelihood values,
+\item -
+\item Offset max LL (as above),
+\item likelihood calculations (as above),
+\item Calculation of the total building damage log-likelihood,
+\item Return total building damage log-likelihood.
+\end{enumerate}
+\begin{algorithm}[H]
+\caption{\label{alg:LBD} Monte Carlo simulation to estimate building damage log-likelihood $\log(l_{BD})$}
+    \hspace*{\algorithmicindent} \textbf{Input:} parameter space $\boldsymbol{\Omega}_p$, log-likelihood function $\mathbb{LL}_{BD}$, building damage observations $\boldsymbol{b}$, data (hazard, population, ...).  \\
+    \hspace*{\algorithmicindent} \textbf{Result:} unbiased mean estimate of the log-likelihood.
+    
+\begin{algorithmic}[1]
+\begin{spacing}{1.5}
+%1
+\STATE $\text{Set} \ N_p $
+\FOR{$c \in 1:P_{BD}$}
+    \STATE $\$\sim S_{inc}$.
+    \FOR{$p \in 1:N_{p}$}
+         \STATE $\ d_{ij}^{p} \sim \mathbb{D}_{ijk}(...,\$|\boldsymbol{\Omega}_p) \ \forall \ \{i,j,k\} \in \{1:N_{i},1:N_{j},1:N_{k}\} $
+         \STATE $\ b_{ij}^{*p} = \mathbb{B}(d_{ij}^{p}) $      
+         \ENDFOR
+     \STATE $\ \log{w^c_{p}}= \log\left(\mathbb{LL}_{BD}(b_{ij}^{*p}|b_{ij}^{p},\boldsymbol{\Omega}_p)\right)\  \forall \ p \in 1:N_p$      
+     \STATE $ \ r^c_p = \log{w^c_p} - \max{(\log{w^c_{\{1:N_p\}}})} \  \forall \ p \in 1:N_p $
+     \STATE $ \ s^c_p = \exp{(r^c_p)} \  \forall \ p \in 1:N_p $
+     \STATE $\log{l^c_{BD}} = \max{(\log{w^c_{\{1:N_p\}}})} + \log{(\frac{1}{N_p}\sum_{i=1}^{N_p} s^c_p)}$ 
+\ENDFOR
+\STATE $ \ r_c = \log{l^C_{BD}} - \max{(\log{l^C_{BD,{\{1:P_{BD}\}}}})} \  \forall \ c \in 1:P_{BD} $
+     \STATE $ \ s_c = \exp{(r_c)} \  \forall \ c \in 1:P_{BD} $
+     \STATE $\log(l_{BD}) = \max{(\log{l^c_{BD,\{1:P_{BD}\}}})} + \log{(\frac{1}{P_{BD}}\sum_{i=1}^{P_{BD}} s_c)}$ 
+\RETURN $\log(l_{BD})$
+\end{spacing}
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Parameter Space Sampling and Convergence}\label{sec:GSFMH}
+The algorithm used to sample unbiased parameter space values and thus evaluate the posterior distribution is the Global Scaling Factor (GSF) Metropolis-Hastings (MH) Markov Chain Monte Carlo (MCMC) algorithm. This algorithm also utilises the Early Rejection (ER) approach, which also slightly modifies the MH acceptance. To facilitate the understanding of this algorithm, a worded explanation of each line in the algorithm is given as follows
+\begin{enumerate}
+\item Set the number of MC iterations (desired number of samples from the posterior density) to be made,
+\item For each MC iteration,
+\item Sample the proposal distribution for the parameter space, given the previous value,
+\item Calculate the high level prior values,
+\item If the high level prior values are respected, continue into loop:
+\item Use algorithms \ref{alg:LD} and \ref{alg:LBD} to estimate the posterior density,
+\item Calculate the MH acceptance probability,
+\item Generate i.i.d uniformly distributed parameter, $w$,
+\item If the MH acceptance probability is more than the uniformly generated parameter:
+\item Accept the proposed set of parameters,
+\item Else:
+\item Reject the proposed set of parameters and keep the previous set,
+\item -
+\item Else the proposed set of parameters does not respect the high level priors:
+\item Keep the previous set of parameters,
+\item Set the acceptance probability to zero to respect the proposal probability distribution asymmetry,
+\item -
+\item Update the global scaling factor,
+\item Update the mean of the proposed parameters,
+\item Update the covariance of the proposed parameters,
+\item -
+\item Return the unbiased samples from parameter space,
+\end{enumerate}
+\begin{algorithm}[H]
+\caption{\label{alg:GSFMH} Generalised Metropolis Hastings MCMC algorithm with a global scaling factor to obtain unbiased samples from the parameter space through the model posterior distribution}
+    \hspace*{\algorithmicindent} \textbf{Input:} parameter space $\boldsymbol{\Omega}_p$, log-likelihood function $\mathbb{LL}_{BD}$, building damage obs. $\boldsymbol{b}$, data (hazard, pop., ...).  \\
+    \hspace*{\algorithmicindent} \textbf{Require:} $\boldsymbol{\Omega}_p^0 \ \text{; the initial proposed model parameters}$ \\
+    \hspace*{\algorithmicindent} \textbf{Result:} unbiased sample $\boldsymbol{\Omega}^1_p,...,\boldsymbol{\Omega}^{N_{its}}_p$ from the target distribution $\pi(\boldsymbol{\Omega}_p)$
+\begin{algorithmic}[1]
+\begin{spacing}{1.5} 
+\STATE $\text{Set} \ N_{its} $
+\FOR{$g \in 1:N_{its}$}
+\STATE $\boldsymbol{\Omega}_p^{*}\sim\mathbb{N}(\boldsymbol{\Omega}_p,(R^g)^2\boldsymbol{\mathbb{C}}) $
+\STATE $\mathbb{H}_{\text{priors}}^{\{\max,\min\}}=\mathbb{E}[...]$
+\IF{\NOT $\mathbb{H}_{\text{priors}}^{\min}$ \OR \NOT $\mathbb{H}_{\text{priors}}^{\max}$}
+    \STATE $\pi^*_g\sim\pi(\boldsymbol{\Omega}_p^{*}|Y)$
+    \STATE $\ \alpha = \min\left(1,\frac{\pi^*_g}{\pi^*_{g-1}}\right)$
+    \STATE $w\sim \mathbb{U}(0,1)$
+    \IF{$\alpha>w$}
+    \STATE $\boldsymbol{\Omega}_p^{g} = \boldsymbol{\Omega}_p^{*}$
+    \ELSE
+    \STATE $\boldsymbol{\Omega}_p^{g} = \boldsymbol{\Omega}_p^{g-1} $
+    \ENDIF
+    \ELSE
+    \STATE $\boldsymbol{\Omega}_p^{g} = \boldsymbol{\Omega}_p^{g-1} $
+    \STATE $\alpha=0$
+    \ENDIF
+    \STATE $\log(R^g)=\log(R^{g-1})+\varepsilon^g(\alpha-p^*)$
+    \STATE $\boldsymbol{m}^g=\boldsymbol{m}^{g-1}+\varepsilon^g(\boldsymbol{\Omega}_p^g-\boldsymbol{m}^{g-1})$
+    \STATE $\boldsymbol{\mathbb{C}}^g=\boldsymbol{\mathbb{C}}^{g-1}+\varepsilon^g\left((\boldsymbol{\Omega}_p^g-\boldsymbol{m}^{g-1})(\boldsymbol{\Omega}_p^g-\boldsymbol{m}^{g-1})^T-\boldsymbol{\mathbb{C}}^{g-1}\right)$    
+\ENDFOR
+\RETURN $\boldsymbol{\Omega}_p^{1:N_{its}}$
+\end{spacing}
+\end{algorithmic}
+\end{algorithm}
+
+Noting that the term $g\left(\boldsymbol{\Omega}_p^{g-1}|\boldsymbol{\Omega}_p^{*}\right)/g\left(\boldsymbol{\Omega}_p^{*}|\boldsymbol{\Omega}_p^{g-1}\right)=1$ for normal proposal distributions ($g=\mathbb{N}$), $p^*=0.234$ the ideal MH-acceptance ratio, and the global scaling factor parameter
+\begin{equation}
+  \varepsilon^g=\varepsilon^0/g^{N_{its}/(g+\upsilon)},
+\end{equation}
+where $\varepsilon^0=1$ and $\upsilon=2$.
+\subsubsection{National Vulnerability Variables}\label{sec:vulnmethod}
+The methodology section up until now has focused on ensuring that predictions of the levels of building damage and the displaced population rely on models that are parameterised by unbiased estimates of the target density. For computational efficiency, parameterisation of the national vulnerability values is done by benefiting from the formulation of the risk ratio term (equation \ref{eq:linpredcent}). At first, no national vulnerability covariates are included in the risk ratio term, only gridded sub-national values. The model is then parameterised using the adaptive MCMC approach described above. Once convergence is achieved, predictions are made for each event, producing a given $Y*$. An optimisation process is then applied to resolve a value for $\boldsymbol{l}_p$ that reduces the expected median error between the prediction $Y*$ and the observed value, $Y$. Parameterisation of $\boldsymbol{l}_p$ involves the parameterisation of (a function of) a convex function, and therefore it is reasonable to parameterise by applying the frequentist uni-dimensional optimisation algorithm from \cite{Jorge Nocedal and Stephen J. Wright, 1999. Numerical optimization. Springer series in operations research. Springer-Verlag, New York, NY, USA}. Once $\boldsymbol{l}_p$ is calculated for each event, then regression can be performed between the national variables as the independent variables and with $\boldsymbol{l}_p$ as the dependent variable. The regression method chosen depends on the number of covariates to be included in the risk ratio term. If the number of features is larger than the number of events, then a feature reduction method that uses the BIC-based cost function must be used, in combination with feature reduction using the Variance Inflation Factor (VIF). For low feature size compared to the number of events, the parameterisation only needs to be based on minimising the BIC only. The regression itself could be composed of linear models, supervised neural networks, Directed Acyclical Graphs (DAG) or using Gaussian Process Regression (GPR). In this article, we present the results using all four different methods.
+
+%% \begin{equation}
+%%   IDP=\max\left\{ \text{logit}\left(d^i(t)B^i\right), \text{logit}\left(d^L(t)M_x\right) \right\}
+%% \end{equation}
+
+%% \begin{equation}
+%%   B^i=\alpha\text{logit}(p_H^i)+1
+%% \end{equation}
+
+%% \begin{equation}
+%%   B^L=\beta\text{logit}(E_{GDP}^L)+1
+%% \end{equation}
+
+%% \begin{equation}
+%%   M_x=\max{B^i,B^L}
+%% \end{equation}
+
+%% \begin{equation}
+%%   d^i(t+1)=d^i(t)+\frac{F^i(t)}{d^i(t=0)C_H^iT_{rep}^i}
+%% \end{equation}
+
+%% \begin{equation}
+%%   F^i\sim N(\max{\$^i,\$_{min}}+I^i(t)\text{logit}(p_I^i),\sigma_{\$}^i)
+%% \end{equation}
+
+%% \begin{equation}
+%%   d^L(t+1)=d^L(t)+\frac{F^L(t)}{d^L(t=0)E_{GDP}^LT_{rep}^L}
+%% \end{equation}
+
+%% \begin{equation}
+%%   F^L\sim N\left(\text{INFORM}(\text{GDP}+\text{AAL}^{\*}+AID\dot),\sigma_{\$}^L\right)
+%% \end{equation}
+
+%% \begin{equation}
+%%   \text{AAL}^{\*}=\text{AAL}/365
+%% \end{equation}
+
+%% \begin{equation}
+%% \end{equation}
+
+%% \begin{equation}
+%% \end{equation}
+
+%% \section{Technical Papers}
+%% \begin{itemize}
+%% \item A. Finke, \textit{et al}, Journal of Agricultural, Biological, and Environmental Statistics, 24(2) 204–224, 2019. https://doi.org/10.1007/s13253-018-00349-9
+%% \end{itemize}
+\subsection{Initial Values}\label{sec:x0}
+\section{Results}\label{sec:results}
+\section{Discussion}\label{sec:discussion}
+\section{Conclusion}\label{sec:conclusion}
+
+\section*{Acknowledgments}
+My mother dearest.
+
+%  \bibliographystyle{unsrt}
+%    \bibliography{bibliography}
+\end{multicols}
+\end{document}  
+

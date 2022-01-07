@@ -217,11 +217,44 @@ Please run the `InstallationChecks.R` file.
 
 ## Usage/Examples
 
-In the folders ``
+In the folder `IIDIPUS_Input`, there are a few example files, which contain the three differen objects used by ODDRIN: HAZARD, ODD and BD, corresponding to the object containing hazard information and raster data, then the principal ODDRIN object that is used to predict population displacement, and the building damage object, respectively. You can have a basic explore using the following:
 
 ```R
 
-output<-IIDIPUSModelTraining(haz="Earthquake", extractedData=T)
+# Extract Environment Variables
+source('RCode/GetEnv.R')
+# Download and install the necessary packages:
+source('RCode/GetODDPackages.R')
+# Extract model functions and priors
+source('RCode/Model.R')
+# Extract the model parameterisation algorithm, default = Adaptive MCMC
+source('RCode/Method.R')
+
+# This file holds all the required data - hazard, exposure, vulnerability, as well as event information and observed displacement estimates in the 'ODD' class format
+ODDy<-readRDS(paste0(dir,"IIDIPUS_Input/ODDobjects/EQ20210814HTI_10919_example"))
+# This is the model parameterisation, currently trained only on earthquakes on a global level
+Omega<-readRDS(paste0(dir,"IIDIPUS_Results/Omega_v2_20210828.Rdata"))
+# Test to see if the displacement prediction calculations are working
+ODDy%<>%DispX(Omega = Omega,center = Model$center,LL=F,Method = AlgoParams)
+# Plot the ODD object using base R functions:
+plot(ODDy) # default plots the CIESIN population data
+plot(ODDy["hazMean1"]) # plots the principle hazard intensity
+# Or you can use some of the ODD class methods
+p<-MakeODDPlots(ODDy) # plots hazard and population side-by-side
+p<-plotODDy(ODDy) # plots hazard contour lines ontop of displaced population surface plot
+# Then we can also tune the plot to our greatest desires
+p<-plotODDy(ODDy,breakings = c(0,10,50,100,500,1000,5000,10000),bbox=c(-74.5,17.9,-72.5,19),zoomy = 9)
+
+
+```
+
+To run the model parameter training algorithm, use the `Main.R` file:
+
+
+```R
+
+source('RCode/Main.R')
+output<-IIDIPUSModelTraining()
 
 
 ```

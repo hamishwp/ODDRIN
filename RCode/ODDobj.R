@@ -553,27 +553,21 @@ ExtractDispData_ODD<-function(haz){
   
 }
 
-plotODDy<-function(ODDy){
-  # ODDy@data$Disp<-rowMeans(predictDisp)*ODDy@gmax$gmax/mean(colSums(predictDisp))  
+GetVarName<-function(varname){
   
-  mad_map <- get_stamenmap(ODDy@bbox,source = "stamen",maptype = "terrain",zoom=7)
-  p<-ggmap(mad_map) + xlab("Longitude") + ylab("Latitude")
+  lookup<-list("Population"="CIESIN Population Data",
+               "Disp" = "Displaced Population",
+               "GDP" = "GDP [USD-2015]",
+               "FBPop" = "HRSL Population",
+               "RWI" = "FB Relative Wealth Index",
+               "DamBDosm" = "Damaged Buildings (OSM)",
+               "DamBDFB" = "Damaged Buildings (HRSL)")
   
-  p+geom_contour_filled(data = as.data.frame(ODDy),
-                        mapping = aes(Longitude,Latitude,z=Disp),
-                        # breaks = c(0.1,1,5,10,50,300),alpha=0.5)+
-                        breaks = c(0.1,1,5,10),alpha=0.5)+
-    labs(fill = "Number of Displaced People")
-    # geom_contour(data = as.data.frame(ODDy),
-    #              mapping = aes(Longitude,Latitude,z=hazMean1,colour=..level..),alpha=1,bins = 5) +
-    # scale_colour_gradient(low = "grey",high = "red",na.value = "transparent") + 
-    # labs(colour = "Hazard Intensity")
-  return(p)
+  as.character(lookup[varname])
   
 }
 
-plotODDyBG<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.5,map="terrain"){
-  # ODDy@data$Disp<-rowMeans(predictDisp)*ODDy@gmax$gmax/mean(colSums(predictDisp))  
+plotODDy<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.5,map="terrain"){
   
   if(is.null(breakings) & (var=="Population" | var=="Disp")) breakings<-c(0,1,5,10,50,100,500,1000)
   
@@ -597,7 +591,7 @@ plotODDyBG<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alph
     p<-p+geom_contour_filled(data = as.data.frame(ODDy),
                              mapping = aes(Longitude,Latitude,z=ODDy@data[[var]]),
                              breaks=breakings,alpha=alpha)+ 
-        labs(fill = "Displacement")
+        labs(fill = GetVarName(var))
     p<-p+geom_contour(data = as.data.frame(ODDy),
                       mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
                         alpha=1.0,breaks = brks) +
@@ -628,7 +622,7 @@ plotODDyBG<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alph
   
 }
 
-MakeODDPlots<-function(ODDy, input){
+MakeODDPlots<-function(ODDy, input=NULL){
   
     ODDy@data$Disp[ODDy@data$Disp<1]<-0
   
@@ -640,7 +634,7 @@ MakeODDPlots<-function(ODDy, input){
                            # breaks=c(0,1,10,100),
                            na.value = "transparent")+#,limits=c(0,100)) +
       # labs(fill = "Displaced Pop. / Total Pop.")+xlab("Longitude") + ylab("Latitude");p
-      labs(fill = "IDP Stock")+xlab("Longitude") + ylab("Latitude");p1
+      labs(fill = "Displaced Population")+xlab("Longitude") + ylab("Latitude");p1
 
     p2<-q+ geom_raster(data = as.data.frame(ODDy),
                                mapping = aes(Longitude,Latitude,fill=hazMean1),
@@ -656,6 +650,8 @@ MakeODDPlots<-function(ODDy, input){
     #   labs(fill = "Hazard Intensity")+xlab("Longitude") + ylab("Latitude");p2
     
     plotty<-gridExtra::grid.arrange(p1,p2,nrow=1); plotty
+    
+    if(is.null(input)) return(plotty)
         
     ggsave(paste0(input$datadir,input$plotdir,ODDy@hazard,input$sdate,input$iso3,".png"), plotty)
     

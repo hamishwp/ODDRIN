@@ -1,8 +1,8 @@
 
 ExtractCentering<-function(dir,haz="EQ",saver=T){
   
-  if(saver & file.exists(paste0(dir,"IIDIPUS_Input/centerings_V2"))) 
-        return(readRDS(paste0(dir,"IIDIPUS_Input/centerings_V2")))
+  if(saver & file.exists(paste0(dir,"IIDIPUS_Input/centerings"))) 
+        return(readRDS(paste0(dir,"IIDIPUS_Input/centerings")))
   
   path<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
   ufiles<-list.files(path=path,pattern=haz,recursive = T,ignore.case = T)
@@ -21,7 +21,7 @@ ExtractCentering<-function(dir,haz="EQ",saver=T){
   # center<-list(Gov=98.7,Vuln=51,CC=44,MPI=53.7,Pinf=103,Pexp=112,Sinc=0.2152956,Ik=0.4,A=3.6,H=1.65)
   print(unlist(center))
   
-  saveRDS(center,paste0(dir,"IIDIPUS_Input/centerings_V2"))
+  saveRDS(center,paste0(dir,"IIDIPUS_Input/centerings"))
   
   return(center)
 }

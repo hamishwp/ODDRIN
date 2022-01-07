@@ -10,6 +10,7 @@ library(gstat)
 ExtractParams<-function(haz="EQ"){
   if(haz=="EQ") return(list(I0=4.5,minmag=5))
   if(haz=="TC") return(list(I0=3))
+  if(haz=="FL") return(list(I0=0))
   stop("Hazard type not recognised")
 }
 

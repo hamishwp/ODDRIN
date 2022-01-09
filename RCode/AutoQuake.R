@@ -11,12 +11,8 @@
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-# Set the working directory
-dir<-directory<-"/home/patten/Documents/Coding/Oxford/AutoQuake/" ; setwd(dir)
 # Download and install the necessary packages, and load source files & data:
 source('RCode/GetODDPackages.R')
-# Check that background data exists - Population & GDP (GetData.R)
-CheckBGData(input$datadir)
 
 #%%%%%%%%%%%%% User defined input - bare minimum required %%%%%%%%%%%%%%%#
 input<-list(

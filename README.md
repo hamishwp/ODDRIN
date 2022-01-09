@@ -108,6 +108,7 @@ The majority of the programming was spent on number 4: extracting all the necess
   - `InterpPopWB` and `InterpGDPWB` - These functions extract the population and GDP nationally aggregated values, respecitively, from the World Bank exactly on the date provided (through interpolation/extrapolation techniques), which are used to make sure that the CIESIN and Kummu pop & GDP values are updated to reflect the value on the day of the hazard.
   - `ExtractBDfiles` - Provided the location of the folder where the satellite image-based building damage assessment data is kept, this function will extract all UNOSAT and all Copernicus data ready to create an instance of the `BD` class.
   - `GetDisaster` - This is the function that, provided with only minimal input (bounding box, start and end date, hazard type), can extract hazard intensity raster data, and output HAZARD objects made from the data.
+  - `GetEarthquake` - Automated extraction for earthquakes from USGS, forming a list of `HAZARD` objects.  
   - `FilterGDACS` - Extract data from GDACS through their API, then filter it to get only what we need.
   - `GetUSGS` - For earthquakes, `GetDisaster` depends entirely on this function, which accesses the USGS database, given minimal input, and extracts the important data and forms a HAZARD class instance from it.
   
@@ -213,11 +214,19 @@ Note that `FBdirectory` is optional, but is important when using data extracted 
 
 ## Installation Checks
 
-Please run the `InstallationChecks.R` file.
+Please run the `InstallationChecks.R` file:
+
+```R
+
+  source('RCode/InstallationChecks.R')
+  
+
+```
+
 
 ## Usage/Examples
 
-In the folder `IIDIPUS_Input`, there are a few example files, which contain the three differen objects used by ODDRIN: HAZARD, ODD and BD, corresponding to the object containing hazard information and raster data, then the principal ODDRIN object that is used to predict population displacement, and the building damage object, respectively. You can have a basic explore using the following:
+In the folder `IIDIPUS_Input`, there are a few example files, which contain the three different objects used by ODDRIN: `HAZARD`, `ODD` and `BD`, corresponding to the object containing hazard information and raster data, then the principal ODDRIN object that is used to predict population displacement, and the building damage object, respectively. You can have a basic explore using the following:
 
 ```R
 
@@ -244,6 +253,36 @@ p<-MakeODDPlots(ODDy) # plots hazard and population side-by-side
 p<-plotODDy(ODDy) # plots hazard contour lines ontop of displaced population surface plot
 # Then we can also tune the plot to our greatest desires
 p<-plotODDy(ODDy,breakings = c(0,10,50,100,500,1000,5000,10000),bbox=c(-74.5,17.9,-72.5,19),zoomy = 9)
+
+
+```
+
+Additionally, you can try extracting earthquake information directly from USGS through their API via the in-built ODDRIN functions written up in `AutoQuake.R`, where an example is given. Note that the USGS ID of an earthquake can be seen in the website name, e.g. `https://earthquake.usgs.gov/earthquakes/eventpage/at00qxtxcn/executive` is for the HTI 2021 earthquake, and the USGS ID is `at00qxtxcn`.
+
+
+```R
+
+# Download and install the necessary packages, and load source files & data:
+source('RCode/GetODDPackages.R')
+# Search for an earthquake by providing a date range and longitude-latitude bounding box
+input<-list(
+  sdate=as.Date("2019-12-13"), # "YYYY-MM-DD"
+  fdate=as.Date("2019-12-17"), # "YYYY-MM-DD"
+  iso3="PHL", # Country code in ISO-3C form
+  datadir=dir, # Location of the main folder to access the data 
+  plotdir="Plots/" # Location for plots as paste0(datadir,plotdir)
+)
+# Or extract the data purely based on the USGS id number
+input<-list(USGSid="at00qxtxcn",
+            datadir=dir, # Location of the main folder to access the data 
+            plotdir="Plots/" # Location for plots as paste0(datadir,plotdir)
+)
+#%%%%%%%%%%%%% Variables and functions from ODDRIN files %%%%%%%%%%%%%%%#
+input%<>%append(list(Model=Model, # Model parameters - equations, parameters, ... (Model.R)
+                     Omega=Omega, # Parameterisation of the model (GetInitialValues.R)
+                     Method=AlgoParams)) # Number of CPUs, particles in SMC, etc. (Method.R)
+
+ODDy<-AutoQuake(input)
 
 
 ```

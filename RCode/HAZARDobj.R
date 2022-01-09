@@ -54,7 +54,7 @@ setMethod(f="initialize", signature="HAZARD",
                       min(obj@bbox[4],max(inI0[,2])+5*obj@grid@cellsize[2]))
               # Crop that barnet!
               e <- as(raster::extent(c(bbox[c(1,3,2,4)])), 'SpatialPolygons')
-              crs(e) <- "+proj=longlat +datum=WGS84 +ellps=WGS84"
+              proj4string(e) <- "+proj=longlat +datum=WGS84 +ellps=WGS84"
               obj%<>%raster::crop(e)
               # Allocate the spatial data from a SpatialPixelsDataFrame object
               .Object@data <- obj@data
@@ -64,7 +64,7 @@ setMethod(f="initialize", signature="HAZARD",
               .Object@coords <-obj@coords
               .Object@bbox <-obj@bbox
             }
-            .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            .Object@proj4string <-CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
             names(.Object)<-c("mean","sd")
             

@@ -61,3 +61,4 @@ UNOSAT_Damage
 *.Rproj*
 
 .gitignore~
+.Rproj.user

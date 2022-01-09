@@ -14,7 +14,7 @@ ExtractParams<-function(haz="EQ"){
   stop("Hazard type not recognised")
 }
 
-GetDisaster<-function(DispData,dfGDACS=NULL){
+GetDisaster<-function(DispData){
   if(all(DispData$hazard=="EQ")) {
     
     # Just in case multiple hazards are run simultaneously
@@ -24,7 +24,7 @@ GetDisaster<-function(DispData,dfGDACS=NULL){
     # Extract bounding box of affected countries
     bbox<-countriesbbox(unique(tDisp$iso3))
     # Extract all earthquakes from USGS:
-    return(GetUSGS(bbox=bbox,sdate=min(tDisp$sdate),fdate = max(tDisp$sdate),I0=EQparams$I0,minmag=EQparams$minmag,dfGDACS=dfGDACS))
+    return(GetUSGS(bbox=bbox,sdate=min(tDisp$sdate),fdate = max(tDisp$sdate),I0=EQparams$I0,minmag=EQparams$minmag))
     
   } else if(all(DispData$hazard=="TC")) {
     
@@ -47,6 +47,28 @@ GetDisaster<-function(DispData,dfGDACS=NULL){
     stop(paste0("Hazard type",unique(DispData$hazard) ,"not recognised"))
   }
 }
+
+# Auto extract specifically for earthquakes
+GetEarthquake<-function(input){
+  # Extract standard (or user modified) EQ parameters
+  EQparams<-ExtractParams("EQ")
+  
+  if(!is.null(input$USGSid)) {
+    out<-GetUSGS(USGSid=input$USGSid,
+                 I0=EQparams$I0,minmag=EQparams$minmag)
+  } else {
+    # Extract bounding box of affected countries
+    bbox<-countriesbbox(input$iso3)
+    # Extract all earthquakes from USGS:
+    out<-GetUSGS(bbox=bbox,sdate=input$sdate,fdate = input$fdate,
+                 I0=EQparams$I0,minmag=EQparams$minmag)
+  }
+  if(is.null(out)) stop("Earthquake not found, try giving a broader/narrower range of dates")
+  return(out)
+}
+
+
+
 
 
 

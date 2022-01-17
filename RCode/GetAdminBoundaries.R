@@ -11,7 +11,7 @@ GetNatBnd<-function(iso="ALL",admLev=1,sf_out=T){
   # Extract metadata (note that this includes the boundary data source location)
   infos<-jsonlite::fromJSON(url)
   # Extract only the shapefile data, preferring sf format as output
-  if(sf_out) return(geojsonsf::geojson_sf(infos$gjDownloadURL))
+  if(sf_out) return(sf::as_Spatial(geojsonsf::geojson_sf(infos$gjDownloadURL)))
   return(jsonlite::fromJSON(infos$gjDownloadURL))
   
 }

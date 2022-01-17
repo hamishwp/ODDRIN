@@ -257,7 +257,7 @@ p<-plotODDy(ODDy,breakings = c(0,10,50,100,500,1000,5000,10000),bbox=c(-74.5,17.
 
 ```
 
-Additionally, you can try extracting earthquake information directly from USGS through their API via the in-built ODDRIN functions written up in `AutoQuake.R`, where an example is given. Note that the USGS ID of an earthquake can be seen in the website name, e.g. `https://earthquake.usgs.gov/earthquakes/eventpage/at00qxtxcn/executive` is for the HTI 2021 earthquake, and the USGS ID is `at00qxtxcn`.
+Additionally, you can try extracting earthquake information directly from USGS through their API via the in-built ODDRIN functions written up in `AutoQuake.R`, where an example is given. Note that the USGS ID of an earthquake can be seen in the website name, e.g. [https://earthquake.usgs.gov/earthquakes/eventpage/at00qxtxcn/executive](https://earthquake.usgs.gov/earthquakes/eventpage/at00qxtxcn/executive) is for the HTI 2021 earthquake, and the USGS ID is `at00qxtxcn`.
 
 
 ```R

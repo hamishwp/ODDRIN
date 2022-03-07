@@ -322,6 +322,7 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
 
 # Get the log-likelihood for the displacement data
 LL_IDP<-function(Y){
+  #dlaplace((log(Y$gmax)-log(Y$predictor))/log(Y$predictor), 0, 0.0333)
   -log(1+abs(Y$gmax-Y$predictor)) 
   # -log(1+(Y$gmax-Y$predictor)^2/Y$gmax)
   # -((Y$gmax-Y$predictor)^2/Y$gmax)

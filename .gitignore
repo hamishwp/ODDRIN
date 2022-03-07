@@ -28,6 +28,12 @@ tmp
 
 UNOSAT_Damage
 
+RCode/GetHelix.R
+
+RCode/GetEnv.R
+
+RCode/Examples.R
+
 *.txt
 
 *.eps

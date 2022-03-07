@@ -4,7 +4,7 @@ library(magrittr)
 ExtractData<-function(haz="EQ",dir="./",extractedData=T){
   
   if(extractedData) return(paste0(dir,"IIDIPUS_Input/ODDobjects/"))
-
+  
   # Get the human displacement data from IDMC Helix & GIDD databases and other sources filtered by hazard
   DispData<-GetDisplacements(haz, saved=T)
   # Extract GDACS database on the event for further validation & alertscore benchmarking
@@ -25,8 +25,9 @@ ExtractData<-function(haz="EQ",dir="./",extractedData=T){
     # Match displacement and hazard data and extract hazard maps
     # HazSDF includes SpatialPixelDataFrame object of hazmean & hazsd per date 
     # (list of each, bbox-cropped to remove M < minmag)
-    lhazSDF<-tryCatch(GetDisaster(miniDisp,miniDACS),error=function(e) NULL)
-    if(is.null(lhazSDF)) {
+    #lhazSDF<-tryCatch(GetDisaster(miniDisp,miniDACS),error=function(e) NULL)
+    lhazSDF<-tryCatch(GetDisaster(miniDisp),error=function(e) NULL)
+    if(!is.null(lhazSDF)) {
       print(paste0("Warning: no hazard data found for event ", unique(miniDisp$iso3),
                    " ",unique(miniDisp$hazard), " ", min(miniDisp$sdate) ))
       next

@@ -148,7 +148,7 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     else fdate=min(Sys.Date(),as.Date(fdate)+1)
     # Search through the USGS events
     USGS<-SearchUSGSbbox(bbox,sdate,fdate,minmag)  
-    length(USGS$features)
+    lenny<-length(USGS$features)
   }
   
   # if no events are found:

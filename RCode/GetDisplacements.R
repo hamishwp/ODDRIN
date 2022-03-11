@@ -22,7 +22,7 @@ GetDisplacements<-function(haz, saved=T, reduce=T, GIDD=T, EMDAT=F, dir="./"){
     sdate = as.Date(sdate),
     fdate = as.Date(fdate),
     eventid = event_id,
-    qualifier = 'total')
+    qualifierDisp = 'total')
   
   if(GIDD){
     # Ensure we don't access anything before 2018
@@ -42,6 +42,7 @@ GetDisplacements<-function(haz, saved=T, reduce=T, GIDD=T, EMDAT=F, dir="./"){
     EMDAT %<>% transmute(
       iso3 = ISO,
       mortality = ifelse(is.na(Total.Deaths), 0, Total.Deaths), #assume blank cells correspond to 0 deaths ??? 
+      qualifierMort = 'total',
       hazard = ifelse(Disaster.Type == 'Earthquake', 'EQ', 'UK'), #Earthquake or Unknown
       sdate = as.Date(paste(Start.Day,Start.Month,Start.Year, sep='-'), format='%d-%m-%Y'),
       eventid = paste(Year, Seq, sep='-'), 
@@ -74,6 +75,7 @@ mergeEMDAT_Helix <- function(EMDAT, CM){
       match_eventids = which(EMDAT[,'eventid'] == EMDAT[match_index,'eventid'])
       EMDAT[match_eventids, 'eventid'] = CM[i,'eventid'] #change event id for all events in EMDAT with the same id
       CM[i,'mortality'] = EMDAT[match_index, 'mortality']
+      CM[i, 'qualifierMort'] = EMDAT[match_index, 'qualifierMort']
       #need to think about which start date we use if they clash.
       CM[i,'fdate'] = if_else(CM[i,'sdate'] == EMDAT[match_index, 'sdate'], EMDAT[match_index, 'fdate'], CM[i,'fdate'])
     }
@@ -82,12 +84,13 @@ mergeEMDAT_Helix <- function(EMDAT, CM){
   CM %<>% rbind(EMDAT %>% filter(inHelix == FALSE) %>% transmute(
     iso3 = iso3, 
     gmax = NA,
+    qualifierDisp = NULL,
     hazard = hazard, 
     sdate = sdate, 
     fdate = fdate, 
     mortality = mortality,
     eventid = gsub("-", "", eventid) %>% as.numeric(),
-    qualifier = 'total'))
+    qualifierMort = qualifierMort))
   
   return(CM)
 }

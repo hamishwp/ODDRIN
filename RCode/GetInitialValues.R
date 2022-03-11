@@ -28,7 +28,8 @@ ExtractCentering<-function(dir,haz="EQ",saver=T){
 
 GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   Omega<-list(
-    Lambda=list(kappa=0.03786569,nu=0.19768294,omega=0.09954531),
+    Lambda1=list(kappa=0.03786569,nu=0.19768294,omega=0.09954531),
+    Lambda2=list(kappa=0.03786569,nu=0.19768294,omega=0.09954531), #LOOSEEND
     zeta=list(k=2.02265867,lambda=5.40390699), # zeta=list(k=2.5,lambda=1.6),
     # beta=list(CC.INS.GOV.GE=0,VU.SEV.AD=0,CC.INS.DRR=0,VU.SEV.PD=0,CC.INF.PHY=0,HA.NAT.EQ=0),
     Pdens=list(M=0.05,k=1.),

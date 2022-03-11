@@ -275,7 +275,7 @@ SplitSamplePop<-function(Pop,n=1){
   k<-length(Pop)
   return(array(vapply(Pop,function(tPop) rmultinom(n=n,
                                                    size=(tPop + rbernoulli(n=1,p=tPop%%1)),
-                                                   prob=rep(1/10,9)),FUN.VALUE = numeric(9L*n)),dim = c(9,k*n)))
+                                                   prob=rep(1/9,9)),FUN.VALUE = numeric(9L*n)),dim = c(9,k*n)))
 }
 
 rgammaM<-function(n,mu,sig_percent){

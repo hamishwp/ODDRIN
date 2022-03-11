@@ -66,7 +66,8 @@ Model$modifiers$WID<-    T
   
 # Link functions (MUST BE SAME LENGTH AS OMEGA)
 Model$links<-list(
-  Lambda=list(kappa='exp',nu='exp',omega='exp'),
+  Lambda1=list(kappa='exp',nu='exp',omega='exp'),
+  Lambda2=list(kappa='exp',nu='exp',omega='exp'),
   zeta=list(k='exp',lambda='exp'), # zeta=list(k=2.5,lambda=1.6),
   # beta=list(xxx='exp',CC.INS.GOV.GE='exp',VU.SEV.AD='exp',CC.INS.DRR='exp',VU.SEV.PD='exp',CC.INF.PHY='exp'),
   Pdens=list(M='exp',k='exp'),
@@ -80,7 +81,8 @@ Model$links<-list(
 
 # And to go the other way....
 Model$unlinks<-list(
-  Lambda=list(kappa='log',nu='log',omega='log'),
+  Lambda1=list(kappa='log',nu='log',omega='log'),
+  Lambda2=list(kappa='log',nu='log',omega='log'),
   zeta=list(k='log',lambda='log'), # zeta=list(k=2.5,lambda=1.6),
   # beta=list(xxx='log',CC.INS.GOV.GE='log',VU.SEV.AD='log',CC.INS.DRR='log',VU.SEV.PD='log',CC.INF.PHY='log'),
   Pdens=list(M='log',k='log'),
@@ -93,7 +95,8 @@ Model$unlinks<-list(
 # names(Model$unlinks$beta)[1]<-paste0("HA.NAT.",haz)
 # Skeleton
 Model$skeleton <- list(
-  Lambda=list(kappa=NA,nu=NA,omega=NA),
+  Lambda1=list(kappa=NA,nu=NA,omega=NA),
+  Lambda2=list(kappa=NA,nu=NA,omega=NA),
   zeta=list(k=NA,lambda=NA), # zeta=list(k=2.5,lambda=1.6),
   # beta=list(xxx=NA,CC.INS.GOV.GE=NA,VU.SEV.AD=NA,CC.INS.DRR=NA,VU.SEV.PD=NA,CC.INF.PHY=NA),
   Pdens=list(M=NA,k=NA),
@@ -270,6 +273,9 @@ qualifierDisp<-function(Disp,qualifier,mu) {
 rbiny<-function(size,p) rbinom(n = 1,size,p); 
 Fbdisp<-function(lPopS,Dprime) mapply(rbiny,lPopS,Dprime)
 
+rmultinomy<-function(size, D_Disp, D_Mort, D_Rem) rmultinom(n=1, size, c(D_Disp,D_Mort,D_Rem))
+Fbdam<-function(PopRem, D_Disp, D_Mort, D_Rem) mapply(rmultinomy, PopRem, D_Disp, D_Mort, D_Rem)
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 # Log likelihood, posterior and prior distribution calculations
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -283,7 +289,7 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
   if(Model$haz=="EQ"){
     
     Dfun<-function(I_ij) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
-    Dispfun<-function(I_ij) BinR(Dfun(I_ij)*Dfun(I_ij)*Omega$Lambda$kappa+Omega$Lambda$nu*Dfun(I_ij) + Omega$Lambda$omega,Omega$zeta)
+    Dispfun<-function(I_ij) BinR(Dfun(I_ij)*Dfun(I_ij)*Omega$Lambda1$kappa+Omega$Lambda1$nu*Dfun(I_ij) + Omega$Lambda1$omega,Omega$zeta)
     Damfun<-function(I_ij) BinR(Dfun(I_ij),Omega$zeta)
 
     adder<-rep(0,length(lp))
@@ -301,7 +307,7 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
   } else if(Model$haz=="TC"){
     
     Dfun<-function(I_ij) h_0(I = I_ij,I0 = 3,theta = Omega$theta) 
-    Dispfun<-function(I_ij) c(BinR(Dfun(I_ij)*Dfun(I_ij)*Omega$Lambda$kappa+Omega$Lambda$nu*Dfun(I_ij) + Omega$Lambda$omega,Omega$zeta)%o%lp)
+    Dispfun<-function(I_ij) c(BinR(Dfun(I_ij)*Dfun(I_ij)*Omega$Lambda1$kappa+Omega$Lambda1$nu*Dfun(I_ij) + Omega$Lambda1$omega,Omega$zeta)%o%lp)
     Damfun<-function(I_ij) c(BinR(Dfun(I_ij),Omega$zeta)%o%lp)
     
     # Add lower bound priors:
@@ -320,10 +326,21 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
   
 }
 
+
 # Get the log-likelihood for the displacement data
-LL_IDP<-function(Y){
-  #dlaplace((log(Y$gmax)-log(Y$predictor))/log(Y$predictor), 0, 0.0333)
-  -log(1+abs(Y$gmax-Y$predictor)) 
+LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalise over missing measurements?
+  LL = 0
+  if(is.numeric(Y$gmax)){
+    LL = LL + log(dLaplace((log(Y$gmax)-log(Y$disp_predictor))/log(Y$disp_predictor), 0, 0.0333))
+  }
+  if(is.numeric(Y$mortality)){
+    LL = LL + log(dLaplace((log(Y$mortality)-log(Y$mort_predictor))/log(Y$mort_predictor), 0, 0.00333))
+  }
+  if(is.numeric(Y$buildDestroyed)){
+    LL = LL + log(dlaplace((log(Y$buildDestroyed)-log(Y$bd_predictor))/log(Y$bd_predictor), 0, 0.0167))
+  }
+  return(LL)
+  
   # -log(1+(Y$gmax-Y$predictor)^2/Y$gmax)
   # -((Y$gmax-Y$predictor)^2/Y$gmax)
   # dnorm((log(max(Ystar,1))-log(Y)), mean = 0, sd = log(Y), log = T)

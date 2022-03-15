@@ -276,6 +276,16 @@ Fbdisp<-function(lPopS,Dprime) mapply(rbiny,lPopS,Dprime)
 rmultinomy<-function(size, D_Disp, D_Mort, D_Rem) rmultinom(n=1, size, c(D_Disp,D_Mort,D_Rem))
 Fbdam<-function(PopRem, D_Disp, D_Mort, D_Rem) mapply(rmultinomy, PopRem, D_Disp, D_Mort, D_Rem)
 
+lBD<-function(D_B, BD_params){
+  #input: probability of Building Damage D^B
+  #output: probability of Building Destruction D^BD
+  relative_probs = BDprob(D_B, BD_params) %>% mutate('damaged' = rowSums(.[1:4]))
+  D_BD = (relative_probs[['destroyed']] + relative_probs[['severe']])/rowSums(relative_probs)
+  return(D_BD)
+}
+
+fBD<-function(nbuildings, D_BD) sapply(D_BD, function(i) rbiny(size=nbuildings, p=D_BD))
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 # Log likelihood, posterior and prior distribution calculations
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#

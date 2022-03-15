@@ -91,8 +91,6 @@ setClass("ODD",
                    fIndies="list",
                    IDPs="data.frame", # includes measurement dates
                    gmax="list",
-                   mortality="list",
-                   buildDestroyed="list",
                    alerts="data.frame",
                    I0="numeric",
                    hazdates="Date",
@@ -252,7 +250,7 @@ setMethod(f="initialize", signature="ODD",
               .Object@gmax<-DamageData%>%group_by(iso3)%>%
                 summarise(gmax=max(gmax),qualifier=qualifierDisp[which.max(gmax)], #LOOSEEND change to be displacement specific
                           mortality=max(mortality),qualifierMort=qualifierMort[which.max(mortality)],
-                          buildDestroyed=max(buildDestroyed), qualifierBD=qualifierBD[which.max(buildDestroyed)])
+                          buildDestroyed=max(buildDestroyed), qualifierBD = qualifierBD[which.max(buildDestroyed)])
               .Object@IDPs<-DamageData[,c("sdate","gmax","qualifier")]%>%
                 transmute(date=sdate,IDPs=gmax,qualifier=qualifier)
             } else {
@@ -277,6 +275,8 @@ setMethod(f="initialize", signature="ODD",
             .Object@coords <-obj@coords
             .Object@bbox <-obj@bbox
             .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            
+            .Object@data$nBuildings <- ExtractOSMnBuildings(bbox=bbox)
             
             print("Adding hazard events")
             # Including minshake polygon per hazard event using getcontour from adehabitatMA package
@@ -382,10 +382,10 @@ FormParams<-function(ODD,listy){
   return(Params)
 }
 
-setGeneric("DispX", function(ODD,Omega,center,LL,Method)
+setGeneric("DispX", function(ODD,Omega,center, BD_params, LL,Method)
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
-setMethod("DispX", "ODD", function(ODD,Omega,center,LL=F,
+setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
                                    Method=list(Np=20,cores=8,cap=-300)
 ){
   # Extract 0D parameters & speed up loop
@@ -395,7 +395,10 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,LL=F,
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
   if(!LL) {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$GDP)))
   } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$GDP) |
-                          !ODD$ISO3C%in%ODD@gmax$iso3)) #LOOSEEND
+                          !ODD$ISO3C%in%ODD@gmax$iso3))
+  
+  BD_data_present <- F
+
   # Calculate non-local linear predictor values
   LP<-GetLP(ODD,Omega,Params,Sinc,notnans)
   # Speed things up a little
@@ -452,10 +455,18 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,LL=F,
     }
     #ensure the total displaced, deceased or remaining does not exceed total population
     tPop[tPop>ODD@data$Population[ij]]<-ODD@data$Population[ij]
-    return(tPop[1:2,]) #return total displacement and mortality
+    
+    #if no building destruction data:
+    if(!BD_data_present) return(rbind(tPop[1:2,], rep(NA, Method$Np))) #return total displacement and mortality, set number of buildings destroyed to NA
+    
+    #otherwise, sample from the model for the number of buildings destroyed:
+    D_B = BinR(Damage,Omega$zeta)
+    D_BD = lBD(D_B, BD_params)
+    BD = fBD(ODD@data$nBuildings[ij], D_BD)
+    return(rbind(tPop[1:2,], BD))
   }
   
-  Dam<-array(0,c(nrow(ODD),Method$Np,2)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality
+  Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Destroyed
   if(Method$cores>1) { Dam[notnans,,]<-aperm(simplify2array(mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$cores)), perm=c(3,2,1))
   } else  Dam[notnans,,]<- aperm(simplify2array(lapply(X = notnans,FUN = CalcDam)), perm=c(3,2,1))
 
@@ -501,6 +512,15 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,LL=F,
   return(ODD)
   
 })
+
+ExtractOSMnBuildings <- function(bbox){
+  #Input: Bounding box of hazard
+  #Output: Number of buildings in each of the population grid cells (denoted using ij)
+  buildings<-GetOSMbuildings(bbox) #retrieve number of buildings using OpenStreetMaps
+  nBuildings = rasterize(buildings@coords, raster(ODD["Population"]), fun='count')@data@values #LOOSEEND: ensure same rasterization as population
+  nBuildings[is.na(nBuildings)] = 0
+  return(nBuildings)
+}
 
 GroupODDyBoundaries<-function(ODDy,boundaries){
   
@@ -696,15 +716,15 @@ OutputODDyFile<-function(ODDy,filer=NULL){
   ODDy$ISO3C<-NULL
   
   ODDy@modifier$HTI<- -0.16
-  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams)
+  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
   ODDy@predictDisp
   ODDy$LowCIDisp<-ODDy$Disp
   ODDy@modifier$HTI<- 0.4
-  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams)
+  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
   ODDy@predictDisp
   ODDy$HiCIDisp<-ODDy$Disp
   ODDy@modifier$HTI<- 0
-  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams)
+  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
   ODDy@predictDisp
   ODDy$ExpDisp<-ODDy$Disp
   ODDy$Disp<-NULL

@@ -323,10 +323,10 @@ setMethod("ExtractOSMbuildVol", "BD", function(BD,ODD){
   
   print(paste0("Saving the buildings samples out to the file ",BD@buildingsfile))
   saveRDS(buildings,BD@buildingsfile)
-  
   # BD%<>%SampleBuildings(buildings)
   
 })
+
 
 # Code that calculates/predicts the total human displacement 
 setGeneric("BDX", function(BD,Omega,Model,Method,LL)

@@ -89,7 +89,7 @@ FormODDyOmega<-function(dir,Model,proposed,AlgoParams){
     ODDy@fIndies<-Model$fIndies
     if(class(ODDy@gmax)=="list") ODDy@gmax%<>%as.data.frame.list()
     # Apply DispX
-    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center,LL = F,Method = AlgoParams),
+    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                    error=function(e) NA)
     # if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate Disp LL of ",ufiles[i]));next}
     if(is.na(ODDy)) stop(paste0("Failed to calculate Disp LL of ",ufiles[i]))
@@ -139,7 +139,7 @@ ODDypreds<-function(dir,haz,Model,Omega,AlgoParams){
     GDP<-ODDy@data%>%group_by(ISO3C)%>%summarise(meany=mean(GDP,na.rm=T),.groups="keep")%>%na.omit()%>%transmute(iso3=ISO3C,GDP=meany)
     ttt%<>%merge(GDP,by="iso3")
     
-    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams),
+    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                    error=function(e) NA)
     if(is.na(ODDy)|nrow(ODDy@predictDisp)<1) {print(paste0("no information found for ",ufiles[i])) ; next}
     

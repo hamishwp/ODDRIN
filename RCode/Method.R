@@ -312,7 +312,7 @@ SingleEventsModifierCalc<-function(dir,Model,Omega,AlgoParams){
     names(linp)<-unique(ODDy@gmax$iso3)
     ODDy@modifier<-linp
       
-    tLL<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams),
+    tLL<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                   error=function(e) NA)
     
     if(is.na(tLL)) stop(ufiles[i])
@@ -346,7 +346,7 @@ SingleEventsModifierCalc<-function(dir,Model,Omega,AlgoParams){
     names(fin)<-as.character(ODDy@gmax$iso3)
     ODDy@modifier<-fin
     
-    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams),
+    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                   error=function(e) NA)
     if(is.na(ODDy)) stop(ufiles[i])
     

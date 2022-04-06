@@ -90,7 +90,8 @@ mergeEMDAT_Helix <- function(EMDAT, CM){
     fdate = fdate, 
     mortality = mortality,
     eventid = gsub("-", "", eventid) %>% as.numeric(),
-    qualifierMort = qualifierMort))
+    qualifierMort = qualifierMort, 
+    qualifierDisp=NA))
   
   return(CM)
 }

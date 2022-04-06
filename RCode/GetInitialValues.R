@@ -1,10 +1,10 @@
 
-ExtractCentering<-function(dir,haz="EQ",saver=T){
+ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/'){
   
-  if(saver & file.exists(paste0(dir,"IIDIPUS_Input/centerings"))) 
-        return(readRDS(paste0(dir,"IIDIPUS_Input/centerings")))
+  if(saver & file.exists(paste0(dir, input_folder, "centerings"))) 
+        return(readRDS(paste0(dir, input_folder, "centerings")))
   
-  path<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+  path<-paste0(dir, input_folder, "ODDobjects/")
   ufiles<-list.files(path=path,pattern=haz,recursive = T,ignore.case = T)
   ufiles<-ufiles[grepl(ufiles,pattern = haz)]
   GDP<-nGDP<-0
@@ -21,27 +21,47 @@ ExtractCentering<-function(dir,haz="EQ",saver=T){
   # center<-list(Gov=98.7,Vuln=51,CC=44,MPI=53.7,Pinf=103,Pexp=112,Sinc=0.2152956,Ik=0.4,A=3.6,H=1.65)
   print(unlist(center))
   
-  saveRDS(center,paste0(dir,"IIDIPUS_Input/centerings"))
+  saveRDS(center,paste0(dir,input_folder, "centerings"))
   
   return(center)
 }
 
 GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
-  Omega<-list(
-    Lambda1=list(kappa=0.03786569,nu=0.19768294,omega=0.09954531),
-    Lambda2=list(kappa=0.03786569,nu=0.19768294,omega=0.09954531), #LOOSEEND
-    zeta=list(k=2.02265867,lambda=5.40390699), # zeta=list(k=2.5,lambda=1.6),
-    # beta=list(CC.INS.GOV.GE=0,VU.SEV.AD=0,CC.INS.DRR=0,VU.SEV.PD=0,CC.INF.PHY=0,HA.NAT.EQ=0),
-    Pdens=list(M=0.05,k=1.),
-    dollar=list(M=0.05,k=1.),
-    theta=list(e=0.67431138), #list(e=0.25),
-    # rho=list(A=0,H=0),
-    eps=list(eps=0.12709657)#,xi=3.52269924)
-    # mu=list(muplus=1,muminus=1,sigplus=0.001,sigminus=0.001)
-  )
+  # Omega<-list(
+  #   Lambda1=list(kappa=0.2141987,nu=0.5677207,omega=0.1),
+  #   Lambda2= list(kappa=0.2, nu= -0.4253, omega=1.1), 
+  #   Lambda3= list(nu=0.9,omega=-0.1), 
+  #   zeta=list(k=1.091486,lambda=0.3404209), # zeta=list(k=2.5,lambda=1.6),
+  #   # beta=list(CC.INS.GOV.GE=0,VU.SEV.AD=0,CC.INS.DRR=0,VU.SEV.PD=0,CC.INF.PHY=0,HA.NAT.EQ=0),
+  #   Pdens=list(M=-3.51036,k=1.054248),
+  #   dollar=list(M=0.05,k=1.867706),
+  #   theta=list(e=-1.444013), #list(e=0.25),
+  #   # rho=list(A=0,H=0),
+  #   eps=list(eps=-4.339465)#,xi=3.52269924)
+  #   # mu=list(muplus=1,muminus=1,sigplus=0.001,sigminus=0.001)
+  # )
+  
+  Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=1.4,omega=0.5),
+    Lambda2 = list(nu= 0.5, omega=0.3),
+    Lambda3 = list(nu=1.4,omega=0.1),
+    zeta = list(k=4.5, lambda=1.8),
+    Pdens = list(M=0.02988616, k = 6.473428),
+    dollar = list(M = -1.051271, k = 6.473428),
+    theta = list(e=0.3),
+    eps = list(eps=0.3))),Model)
+  
+  # Omega <- Physical2Proposed(unlist(list(#Lambda1 = list(nu=1.4,omega=0.01),
+  #                     #Lambda2 = list(nu= 0.9, omega=0.1),
+  #                     Lambda3 = list(nu=3,omega=1),
+  #                     zeta = list(k=4,lambda=2),
+  #                     Pdens = list(M=0.03,k=2.5),
+  #                     dollar = list(M=-1.16, k=6.3),
+  #                     theta = list(e=0.2),
+  #                     eps = list(eps=0.01))), Model)
 
   lenny<-length(unlist(Omega))
   # Note that this is in proposal space, not physical space, hence the logarithms
+  #propCOV <- diag(c(rep(0.1,lenny)))
   propCOV<-diag(rep(lenny/60,lenny))
   # propCOV<-diag(abs(c(log(0.17/0.12),log(0.04/0.02),log(0.09/0.055),
   #                     log(2/1.5),log(5.5/4.5),

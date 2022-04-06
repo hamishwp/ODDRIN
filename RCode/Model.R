@@ -63,11 +63,13 @@ if(haz%in%c("EQ","TC","FL")) {
 Model$modifiers$INFORM<- T
 Model$modifiers$WB<-     T
 Model$modifiers$WID<-    T
-  
+
+
 # Link functions (MUST BE SAME LENGTH AS OMEGA)
 Model$links<-list(
-  Lambda1=list(kappa='exp',nu='exp',omega='exp'),
-  Lambda2=list(kappa='exp',nu='exp',omega='exp'),
+  Lambda1=list(nu='exp',omega='exp'),
+  Lambda2=list(nu='exp',omega='exp'),
+  Lambda3=list(nu='exp',omega='exp'),
   zeta=list(k='exp',lambda='exp'), # zeta=list(k=2.5,lambda=1.6),
   # beta=list(xxx='exp',CC.INS.GOV.GE='exp',VU.SEV.AD='exp',CC.INS.DRR='exp',VU.SEV.PD='exp',CC.INF.PHY='exp'),
   Pdens=list(M='exp',k='exp'),
@@ -81,8 +83,9 @@ Model$links<-list(
 
 # And to go the other way....
 Model$unlinks<-list(
-  Lambda1=list(kappa='log',nu='log',omega='log'),
-  Lambda2=list(kappa='log',nu='log',omega='log'),
+  Lambda1=list(nu='log',omega='log'),
+  Lambda2=list(nu='log',omega='log'),
+  Lambda3=list(nu='log',omega='log'),
   zeta=list(k='log',lambda='log'), # zeta=list(k=2.5,lambda=1.6),
   # beta=list(xxx='log',CC.INS.GOV.GE='log',VU.SEV.AD='log',CC.INS.DRR='log',VU.SEV.PD='log',CC.INF.PHY='log'),
   Pdens=list(M='log',k='log'),
@@ -95,8 +98,9 @@ Model$unlinks<-list(
 # names(Model$unlinks$beta)[1]<-paste0("HA.NAT.",haz)
 # Skeleton
 Model$skeleton <- list(
-  Lambda1=list(kappa=NA,nu=NA,omega=NA),
-  Lambda2=list(kappa=NA,nu=NA,omega=NA),
+  Lambda1=list(nu=NA,omega=NA),
+  Lambda2=list(nu=NA,omega=NA),
+  Lambda3=list(nu=NA,omega=NA),
   zeta=list(k=NA,lambda=NA), # zeta=list(k=2.5,lambda=1.6),
   # beta=list(xxx=NA,CC.INS.GOV.GE=NA,VU.SEV.AD=NA,CC.INS.DRR=NA,VU.SEV.PD=NA,CC.INF.PHY=NA),
   Pdens=list(M=NA,k=NA),
@@ -172,8 +176,8 @@ locpred<-function(x,params){
 
 GDPlinp<-function(ODD,Sinc,beta,center,notnans){
   
-  iGDP<-as.numeric(factor(ODD$GDP,levels=unique(ODD$GDP)))
-  dGDP<-data.frame(ind=iGDP[notnans],GDP=ODD$GDP[notnans],iso=ODD$ISO3C[notnans])
+  iGDP<-as.numeric(factor(ODD@data$GDP,levels=unique(ODD@data$GDP)))
+  dGDP<-data.frame(ind=iGDP[notnans],GDP=ODD@data$GDP[notnans],iso=ODD@data$ISO3C[notnans])
   dGDP%<>%group_by(ind)%>%summarise(value=log(unique(GDP)*(Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"value"]/
                                       Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]) & Sinc$variable=="p50p100","value"])),
                               income=Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"variable"],
@@ -299,20 +303,42 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
   if(Model$haz=="EQ"){
     
     Dfun<-function(I_ij) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
-    Dispfun<-function(I_ij) BinR(Dfun(I_ij)*Dfun(I_ij)*Omega$Lambda1$kappa+Omega$Lambda1$nu*Dfun(I_ij) + Omega$Lambda1$omega,Omega$zeta)
-    Damfun<-function(I_ij) BinR(Dfun(I_ij),Omega$zeta)
+    Damfun<-function(I_ij, type) {
+      D <- Dfun(I_ij)
+      if (type=='Damage'){
+        return(BinR(D,Omega$zeta))
+      }
+      if (type=='Buildings Destroyed'){
+        return(BinR(Omega$Lambda3$nu * D + Omega$Lambda3$omega, Omega$zeta))
+      }
+      DispMort <- BinR(Omega$Lambda1$nu * D + Omega$Lambda1$omega,Omega$zeta)
+      Mort <- BinR(Omega$Lambda2$nu * D + Omega$Lambda2$omega,Omega$zeta) * DispMort
+      if (type=='Displacement'){
+        return(DispMort - Mort)
+      }
+      else if (type=='Mortality'){
+        return(Mort)
+      }
+    }
 
     adder<-rep(0,length(lp))
     for(i in 1:length(adder)){
       # Add lower bound priors:
-      adder[i]<-sum(500*pweibull(c(Dispfun(4.6)*lp[i],Damfun(4.6)*lp[i]),3,0.001))
+      adder[i]<-sum(pweibull(Damfun(4.6, type='Displacement')*lp[i],3,0.01), pweibull(Damfun(4.6, type='Mortality')*lp[i],3,0.01),
+                    pweibull(Damfun(4.6, type='Buildings Destroyed')*lp[i],3,0.01), pweibull(Damfun(4.6, type='Damage')*lp[i],3,0.01))
+                    pweibull(Damfun(4.6, type='Buildings Destroyed')*lp[i],3,0.01)
       # Middle range priors:
-      adder[i]<-adder[i]+sum(150*pweibull(c(Dispfun(6)*lp[i],Damfun(6)*lp[i]),15,0.8) + 
-                               150*(1- pweibull(c(Dispfun(6)*lp[i],Damfun(6)*lp[i]),3,0.005)))
+      adder[i]<-adder[i]+sum(pweibull(Damfun(6, type='Displacement')*lp[i],15,0.8), 1- pweibull(Damfun(6, type='Displacement')*lp[i],3,0.005),
+                             pweibull(Damfun(6, type='Mortality')*lp[i],15,0.8), 1- pweibull(Damfun(6, type='Mortality')*lp[i],3,0.005),
+                             pweibull(Damfun(6, type='Buildings Destroyed')*lp[i],15,0.8), 1- pweibull(Damfun(6, type='Buildings Destroyed')*lp[i],3,0.005),
+                             pweibull(Damfun(6, type='Damage')*lp[i],15,0.8), 1- pweibull(Damfun(6, type='Damage')*lp[i],3,0.005)
+                             )
       # Upper bound priors:
-      adder[i]<-adder[i]+sum(500*(1-pweibull(c(Dispfun(9)*lp[i],Damfun(9)*lp[i]),30,0.85)))
+      adder[i]<-adder[i]+sum(1-pweibull(Damfun(9, type='Displacement')*lp[i],5,0.3), 1-pweibull(Damfun(9, type='Mortality')*lp[i],5,0.2),
+                             1-pweibull(Damfun(9, type='Buildings Destroyed')*lp[i],5,0.5), 1-pweibull(Damfun(9, type='Damage')*lp[i],30,0.85)) 
+                             1-pweibull(Damfun(9, type='Buildings Destroyed')*lp[i],5,0.5)
     }
-    return(-1*adder)
+    return(adder)
     
   } else if(Model$haz=="TC"){
     
@@ -338,16 +364,23 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
 
 
 # Get the log-likelihood for the displacement data
-LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalise over missing measurements?
+LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measurements? 
   LL = 0
   if(is.numeric(Y$gmax)){
-    LL = LL + log(dLaplace((log(Y$gmax)-log(Y$disp_predictor))/log(Y$disp_predictor), 0, 0.0333))
+    #LL = LL + dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.1, log=TRUE)
+    #LL = LL + log(dLaplace((log(Y$gmax+1)-log(Y$disp_predictor+1))/log(Y$disp_predictor+1), 0, 0.0333)) #LOOSEEND +1 to avoid log issues
+    LL = LL + log(dLaplace(log(Y$gmax+1), log(Y$disp_predictor+1), 0.1))
   }
   if(is.numeric(Y$mortality)){
-    LL = LL + log(dLaplace((log(Y$mortality)-log(Y$mort_predictor))/log(Y$mort_predictor), 0, 0.00333))
+    #LL = LL + dnorm(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1, log=TRUE)
+    LL = LL + log(dLaplace(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1))
+    #LL = LL + log(dLaplace((log(Y$mortality+1)-log(Y$mort_predictor+1))/log(Y$mort_predictor+1), 0, 0.00333))
   }
   if(is.numeric(Y$buildDestroyed)){
-    LL = LL + log(dlaplace((log(Y$buildDestroyed)-log(Y$bd_predictor))/log(Y$bd_predictor), 0, 0.0167))
+    #LL = LL + dnorm(Y$buildDestroyed, Y$nBD_predictor, 100, log=TRUE)
+    #LL = LL + dnorm(log(Y$buildDestroyed+1), log(Y$nBD_predictor+1), 0.1, log=TRUE)
+    LL = LL + log(dLaplace(log(Y$buildDestroyed+1), log(Y$nBD_predictor+1), 0.1))
+    #LL = LL + log(dLaplace(log(Y$buildDestroyed+1)-log(Y$nBD_predictor+1), 0, 0.2)) 
   }
   return(LL)
   
@@ -414,6 +447,7 @@ GetIsoWeights<-function(dir){
 }
 
 Model$IsoWeights<-GetIsoWeights(dir)
+Model$IsoWeights %<>% add_row(iso3='ABC', weights=1)
 
 # Log-likelihood for displacement (ODD) objects
 LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
@@ -438,7 +472,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       ODDy@fIndies<-Model$fIndies
       ODDy@gmax%<>%as.data.frame.list()
       # Apply DispX
-      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center,LL = T,Method = AlgoParams),
+      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams),
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate Disp LL of ",filer));return(-Inf)}
@@ -463,7 +497,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       ODDy@fIndies<-Model$fIndies
       ODDy@gmax%<>%as.data.frame.list()
       # Apply DispX
-      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center,LL = T,Method = AlgoParams),
+      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams),
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate Disp LL of ",ufiles[i]));return(-Inf)}
@@ -472,8 +506,8 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
       maxLL<-max(tLL,na.rm = T)
       # Add the likelihood to the list of all events.
-      if(expLL) LL<-LL+cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL)
-      else LL<-LL+cWeight*mean(tLL,na.rm=T)
+      if(expLL) {LL<-LL+cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL)
+      } else LL<-LL+cWeight*mean(tLL,na.rm=T)
     }
     
     return(LL)
@@ -551,17 +585,17 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
   }
   
   # Approximate Bayesian Computation rejection
-  if(HP<=AlgoParams$ABC) return(-5000000) # Cannot be infinite, but large (& negative) to not crash the Adaptive MCMC algorithm
+  if(HP>AlgoParams$ABC) return(-5000000) # Cannot be infinite, but large (& negative) to not crash the Adaptive MCMC algorithm
   
   # Add the log-likelihood values from the ODD (displacement) objects
   LL<-LL_Displacement(0,dir,Model,proposed,AlgoParams,expLL=T)
   print(paste0("LL Displacements = ",LL)) ; sLL<-LL
   
   # Add the log-likelihood values from the BD (building damage) objects
-  LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
-  print(paste0("LL Building Damages = ",LL-sLL))
+  #LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
+  #print(paste0("LL Building Damages = ",LL-sLL))
   
-  posterior<-LL+HP
+  posterior<-LL #+HP
   # Add Bayesian priors
   if(!is.null(Model$priors)){
     posterior<-posterior+sum(Priors(proposed,Model$priors),na.rm=T)
@@ -583,7 +617,7 @@ logTargetSingle<-function(ODDy,Model,Omega,AlgoParams){
   # 
   # LL<-HP
   
-  tLL<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center,
+  tLL<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params,
                       LL = T,Method = AlgoParams),
                 error=function(e) NA)
   

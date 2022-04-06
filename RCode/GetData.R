@@ -6,7 +6,7 @@ ExtractData<-function(haz="EQ",dir="./",extractedData=T){
   if(extractedData) return(paste0(dir,"IIDIPUS_Input/ODDobjects/"))
   
   # Get the human displacement data from IDMC Helix & GIDD databases and other sources filtered by hazard
-  DamageData<-GetDisplacements(haz, saved=T)
+  DamageData<-GetDisplacements(haz, saved=F, GIDD=F, EMDAT=T)
   # Extract GDACS database on the event for further validation & alertscore benchmarking
   dfGDACS<-FilterGDACS(haz=haz,syear=min(AsYear(DamageData$sdate)),fyear=max(AsYear(DamageData$sdate)),red=T)
   # Extract all building damage points

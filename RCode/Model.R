@@ -67,34 +67,41 @@ Model$modifiers$WID<-    T
 
 # Link functions (MUST BE SAME LENGTH AS OMEGA)
 Model$links<-list(
-  Lambda1=list(nu='exp',omega='exp'),
-  Lambda2=list(nu='exp',omega='exp'),
-  Lambda3=list(nu='exp',omega='exp'),
-  zeta=list(k='exp',lambda='exp'), # zeta=list(k=2.5,lambda=1.6),
+  Lambda1=list(nu='returnX',omega='returnX'),
+  Lambda2=list(nu='returnX',omega='returnX'),
+  Lambda3=list(nu='returnX',omega='returnX'),
+  zeta=list(k='returnX',lambda='returnX'), # zeta=list(k=2.5,lambda=1.6),
+  #zeta1=list(k='exp',lambda='exp'),
+  #zeta2=list(k='exp',lambda='exp'),
+  #zeta3=list(k='exp',lambda='exp'),
   # beta=list(xxx='exp',CC.INS.GOV.GE='exp',VU.SEV.AD='exp',CC.INS.DRR='exp',VU.SEV.PD='exp',CC.INF.PHY='exp'),
-  Pdens=list(M='exp',k='exp'),
-  dollar=list(M='negexp',k='exp'),
-  theta=list(e='exp'), #list(e=0.25),
+  Pdens=list(M='returnX',k='returnX'),
+  dollar=list(M='returnX',k='returnX'),
+  theta=list(e='returnX'), #list(e=0.25),
   # rho=list(A='exp',H='exp'),
-  eps=list(eps='exp')#,xi='exp')
+  eps=list(eps='returnX')#,xi='exp')
   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
 )
 # names(Model$links$beta)[1]<-paste0("HA.NAT.",haz)
 
 # And to go the other way....
 Model$unlinks<-list(
-  Lambda1=list(nu='log',omega='log'),
-  Lambda2=list(nu='log',omega='log'),
-  Lambda3=list(nu='log',omega='log'),
-  zeta=list(k='log',lambda='log'), # zeta=list(k=2.5,lambda=1.6),
+  Lambda1=list(nu='returnX',omega='returnX'),
+  Lambda2=list(nu='returnX',omega='returnX'),
+  Lambda3=list(nu='returnX',omega='returnX'),
+  zeta=list(k='returnX',lambda='returnX'), # zeta=list(k=2.5,lambda=1.6),
+  #zeta1=list(k='log',lambda='log'),
+  #zeta2=list(k='log',lambda='log'),
+  #zeta3=list(k='log',lambda='log'),
   # beta=list(xxx='log',CC.INS.GOV.GE='log',VU.SEV.AD='log',CC.INS.DRR='log',VU.SEV.PD='log',CC.INF.PHY='log'),
-  Pdens=list(M='log',k='log'),
-  dollar=list(M='logneg',k='log'),
-  theta=list(e='log'), #list(e=0.25),
+  Pdens=list(M='returnX',k='returnX'),
+  dollar=list(M='returnX',k='returnX'),
+  theta=list(e='returnX'), #list(e=0.25),
   # rho=list(A='log',H='log'),
-  eps=list(eps='log')#,xi='log')
+  eps=list(eps='returnX')#,xi='log')
   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
 )
+
 # names(Model$unlinks$beta)[1]<-paste0("HA.NAT.",haz)
 # Skeleton
 Model$skeleton <- list(
@@ -102,6 +109,9 @@ Model$skeleton <- list(
   Lambda2=list(nu=NA,omega=NA),
   Lambda3=list(nu=NA,omega=NA),
   zeta=list(k=NA,lambda=NA), # zeta=list(k=2.5,lambda=1.6),
+  #zeta1=list(k=NA,lambda=NA),
+  #zeta2=list(k=NA,lambda=NA),
+  #zeta3=list(k=NA,lambda=NA),
   # beta=list(xxx=NA,CC.INS.GOV.GE=NA,VU.SEV.AD=NA,CC.INS.DRR=NA,VU.SEV.PD=NA,CC.INF.PHY=NA),
   Pdens=list(M=NA,k=NA),
   dollar=list(M=NA,k=NA),
@@ -111,6 +121,13 @@ Model$skeleton <- list(
   # mu=list(muplus=NA,muminus=NA,sigplus=NA,sigminus=NA)
 )
 # names(Model$skeleton$beta)[1]<-paste0("HA.NAT.",haz)
+
+#Set lower and upper bounds for the parameters
+Model$par_lb <- c(-Inf,-Inf,-Inf,-Inf,-Inf,-Inf,   0,   0,   0,   0, -Inf,   0,   0,   0)
+Model$par_ub <- c( Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf,    0, Inf, Inf, Inf)
+
+#Group the parameters based on correlation. These groups will be used to perform the MCMC in blocks. 
+Model$par_blocks <- list(c(1,2,3,4), c(5,6), c(7,8), c(9,10,11,12), 13, 14)
 
 # Get the binary regression function
 Model$BinR<-"weibull" # "gompertz"
@@ -245,6 +262,8 @@ fDamUnscaled<-function(I,Params,Omega){
     (h_0(I,Params$I0,Omega$theta)*
        stochastic(Params$Np,Omega$eps))%>%return()
 }
+
+
 # Baseline hazard function h_0
 h_0<-function(I,I0,theta){
   ind<-I>I0
@@ -288,7 +307,7 @@ lBD<-function(D_B, BD_params){
   return(D_BD)
 }
 
-fBD<-function(nbuildings, D_BD) sapply(D_BD, function(i) rbiny(size=nbuildings, p=D_BD))
+fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 # Log likelihood, posterior and prior distribution calculations
@@ -326,7 +345,6 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
       # Add lower bound priors:
       adder[i]<-sum(pweibull(Damfun(4.6, type='Displacement')*lp[i],3,0.01), pweibull(Damfun(4.6, type='Mortality')*lp[i],3,0.01),
                     pweibull(Damfun(4.6, type='Buildings Destroyed')*lp[i],3,0.01), pweibull(Damfun(4.6, type='Damage')*lp[i],3,0.01))
-                    pweibull(Damfun(4.6, type='Buildings Destroyed')*lp[i],3,0.01)
       # Middle range priors:
       adder[i]<-adder[i]+sum(pweibull(Damfun(6, type='Displacement')*lp[i],15,0.8), 1- pweibull(Damfun(6, type='Displacement')*lp[i],3,0.005),
                              pweibull(Damfun(6, type='Mortality')*lp[i],15,0.8), 1- pweibull(Damfun(6, type='Mortality')*lp[i],3,0.005),
@@ -335,8 +353,7 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
                              )
       # Upper bound priors:
       adder[i]<-adder[i]+sum(1-pweibull(Damfun(9, type='Displacement')*lp[i],5,0.3), 1-pweibull(Damfun(9, type='Mortality')*lp[i],5,0.2),
-                             1-pweibull(Damfun(9, type='Buildings Destroyed')*lp[i],5,0.5), 1-pweibull(Damfun(9, type='Damage')*lp[i],30,0.85)) 
-                             1-pweibull(Damfun(9, type='Buildings Destroyed')*lp[i],5,0.5)
+                             1-pweibull(Damfun(9, type='Buildings Destroyed')*lp[i],5,0.5), 1-pweibull(Damfun(9, type='Damage')*lp[i],30,0.85))
     }
     return(adder)
     
@@ -367,21 +384,30 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
 LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measurements? 
   LL = 0
   if(is.numeric(Y$gmax)){
-    #LL = LL + dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.1, log=TRUE)
+    #LL = LL + log(dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.1))
+    #LL = LL + log(dnorm(Y$gmax, Y$disp_predictor, 50))
+    #LL = LL + log(1/(1+abs(Y$gmax - Y$disp_predictor)^2))
+    #print(paste(Y$gmax, Y$disp_predictor, dnorm(abs(Y$gmax - Y$disp_predictor) / (0.000004 * Y$gmax^2 + Y$gmax*0.1+10), 0.5, log=TRUE)))
+    LL = LL + dnorm(abs(Y$gmax - Y$disp_predictor) / (0.00001 * Y$gmax^2 + Y$gmax*0.09+10), 0.25, log=TRUE)
     #LL = LL + log(dLaplace((log(Y$gmax+1)-log(Y$disp_predictor+1))/log(Y$disp_predictor+1), 0, 0.0333)) #LOOSEEND +1 to avoid log issues
-    LL = LL + log(dLaplace(log(Y$gmax+1), log(Y$disp_predictor+1), 0.1))
+    #LL = LL + log(dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.5))
   }
   if(is.numeric(Y$mortality)){
     #LL = LL + dnorm(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1, log=TRUE)
-    LL = LL + log(dLaplace(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1))
+    #LL = LL + log(dnorm(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1))
+    #LL =  LL + log(1/(1+abs(Y$mortality - Y$mort_predictor)^2))
+    #print(paste(Y$mortality, Y$mort_predictor, dnorm(abs(Y$mortality - Y$mort_predictor) / (0.000004 * Y$mortality^2 + Y$mortality*0.1+10), 0.5, log=TRUE)))
+    LL = LL + dnorm(abs(Y$mortality - Y$mort_predictor) / (0.00001 * Y$mortality^2 + Y$mortality*0.09+10), 0.05, log=TRUE)
     #LL = LL + log(dLaplace((log(Y$mortality+1)-log(Y$mort_predictor+1))/log(Y$mort_predictor+1), 0, 0.00333))
   }
   if(is.numeric(Y$buildDestroyed)){
-    #LL = LL + dnorm(Y$buildDestroyed, Y$nBD_predictor, 100, log=TRUE)
+    LL = LL + dnorm(abs(Y$buildDestroyed - Y$nBD_predictor) / (0.00001 * Y$buildDestroyed^2 + Y$buildDestroyed*0.09+10), 0.25, log=TRUE)
     #LL = LL + dnorm(log(Y$buildDestroyed+1), log(Y$nBD_predictor+1), 0.1, log=TRUE)
-    LL = LL + log(dLaplace(log(Y$buildDestroyed+1), log(Y$nBD_predictor+1), 0.1))
+    #LL = LL + log(1/(1+abs(Y$buildDestroyed - Y$nBD_predictor))^2)
+    #LL = LL + log(dLaplace((Y$buildDestroyed-Y$nBD_predictor)/(Y$nBD_predictor+1),0,0.025))
     #LL = LL + log(dLaplace(log(Y$buildDestroyed+1)-log(Y$nBD_predictor+1), 0, 0.2)) 
   }
+  #print(LL)
   return(LL)
   
   # -log(1+(Y$gmax-Y$predictor)^2/Y$gmax)
@@ -585,7 +611,8 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
   }
   
   # Approximate Bayesian Computation rejection
-  if(HP>AlgoParams$ABC) return(-5000000) # Cannot be infinite, but large (& negative) to not crash the Adaptive MCMC algorithm
+  #if(HP>AlgoParams$ABC) return(-5000000) # Cannot be infinite, but large (& negative) to not crash the Adaptive MCMC algorithm
+  if (HP> AlgoParams$ABC) return(-Inf)
   
   # Add the log-likelihood values from the ODD (displacement) objects
   LL<-LL_Displacement(0,dir,Model,proposed,AlgoParams,expLL=T)

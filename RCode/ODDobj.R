@@ -407,8 +407,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
   CalcDam<-function(ij){
     iso3c<-ODD@data$ISO3C[ij]
     # Calculate local linear predictor (NOTE: is a vector due to income distribution)
-    #locallinp<-LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] #LOOSEEND
-    locallinp<-rep(1,10) #reducing parameter space while I'm figuring out the MCMC
+    locallinp<-LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] #LOOSEEND
+    #locallinp<-rep(1,10) #reducing parameter space while I'm figuring out the MCMC
 
     # Sample population per income distribution (Assumes 9 percentiles):
     lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) 
@@ -438,19 +438,25 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
       for (s in 1:length(SincN)){
         if(all(lPopS[s,]==0)) next
         # Predict damage at coordinate {i,j} (vector with MC particles)
-        Damage<-tryCatch(fDamUnscaled(I_ij,Params[c("I0","Np")],Omega)*locallinp[s], error=function(e) NA)
-        if(any(is.na(Damage))) print(ij)
+        #Damage1 <-tryCatch(fDamUnscaled(I_ij * Omega$Lambda1$nu,list(I0=Omega$Lambda1$nu*Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
+        #Damage2 <-tryCatch(fDamUnscaled(I_ij * Omega$Lambda2$nu,list(I0=Omega$Lambda2$nu*Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
+        Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
+        if(is.na(Damage)) print(ij)
         # Scaled damage
         D_MortDisp<-BinR(#Omega$Lambda1$kappa*Damage*Damage + 
-                       Omega$Lambda1$nu*Damage +
-                       Omega$Lambda1$omega,Omega$zeta)
+                       Omega$Lambda1$nu*Damage + Omega$Lambda1$omega,Omega$zeta)
+                       # Damage, Omega$zeta1)
+                       #Damage1+Omega$zeta$lambda*(log(2)^(1/Omega$zeta$k)) - h_0(Omega$Lambda1$nu * Omega$Lambda1$omega,Params$I0 * Omega$Lambda1$nu, Omega$theta), Omega$zeta)
+        #D_Disp <- BinR(Damage, Omega$zeta1)
         D_Mort<-BinR(#Omega$Lambda2$kappa*Damage*Damage + 
-                       Omega$Lambda2$nu*Damage +
-                       Omega$Lambda2$omega, Omega$zeta) * D_MortDisp #NEED TO PARAMETERISE DIFFERENTLY
+                     Omega$Lambda2$nu*Damage + Omega$Lambda2$omega, Omega$zeta) * D_MortDisp 
+                    #  Damage, Omega$zeta2) * D_MortDisp
+                     #   Damage2+Omega$zeta$lambda*(log(2)^(1/Omega$zeta$k)) - h_0(Omega$Lambda2$nu * Omega$Lambda2$omega,Params$I0 * Omega$Lambda2$nu, Omega$theta), Omega$zeta) * D_MortDisp
+        #D_Disp <- ifelse(D_Disp+D_Mort<1, D_Disp, 1- D_Mort)
         D_Disp<-D_MortDisp - D_Mort
         # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
         tPop[3,ind]<-0
-        tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_Disp[ind], D_Mort[ind], (1-D_MortDisp)[ind])
+        tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_Disp[ind], D_Mort[ind], (1-D_Mort-D_Disp)[ind])
       } 
     }
     #ensure the total displaced, deceased or remaining does not exceed total population
@@ -470,10 +476,14 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
       }
 
       I_ij<-ODD@data[ij,h]
-      Damage<-tryCatch(fDamUnscaled(I_ij,Params[c("I0","Np")],Omega)*locallinp[5], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[5], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      #Damage3 <-tryCatch(fDamUnscaled(Omega$Lambda3$nu * I_ij,list(I0=Omega$Lambda3$nu*Params$I0, Np=Params$Np),Omega)*locallinp[5], error=function(e) NA) #calculate unscaled damage (excluding GDP)
       D_BD = BinR(Omega$Lambda3$nu * Damage + Omega$Lambda3$omega, Omega$zeta)
+      #D_BD = BinR(Damage3+Omega$zeta$lambda*(log(2)^(1/Omega$zeta$k)) - h_0(Omega$Lambda3$nu * Omega$Lambda3$omega,Params$I0 * Omega$Lambda3$nu, Omega$theta), Omega$zeta)
+      #D_BD = BinR(Damage, Omega$zeta3)
       #D_BD = lBD(D_B, BD_params)
       nBD = nBD + fBD(nBuildings, D_BD)
+  
       nBuildings = nBuildings - nBD
     }
     return(rbind(tPop[1:2,,drop=FALSE], nBD))
@@ -499,6 +509,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
                                  .groups = 'drop_last')
     tmp<-tmp[!is.na(tmp$iso3) & tmp$iso3%in%ODD@gmax$iso3,]
     tmp%<>%merge(ODD@gmax,by="iso3")%>%arrange(desc(gmax))
+    #print(paste(tmp$nBD_predictor, tmp$buildDestroyed))
+    #print(tmp)
     if(LLout) {
       return(LL_IDP(tmp))
     }

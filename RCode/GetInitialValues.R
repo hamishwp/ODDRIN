@@ -40,15 +40,26 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   #   eps=list(eps=-4.339465)#,xi=3.52269924)
   #   # mu=list(muplus=1,muminus=1,sigplus=0.001,sigminus=0.001)
   # )
-  
-  Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=1.4,omega=0.5),
-    Lambda2 = list(nu= 0.5, omega=0.3),
-    Lambda3 = list(nu=1.4,omega=0.1),
-    zeta = list(k=4.5, lambda=1.8),
-    Pdens = list(M=0.02988616, k = 6.473428),
-    dollar = list(M = -1.051271, k = 6.473428),
-    theta = list(e=0.3),
-    eps = list(eps=0.3))),Model)
+  Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=0.8,omega=0.15),
+                                         Lambda2 = list(nu= 0.4, omega=0.9),
+                                         Lambda3 = list(nu=0.7,omega=0.2),
+                                         zeta = list(k=3.5, lambda=1),
+                                         Pdens = list(M=0.02988616, k = 6.473428),
+                                         dollar = list(M = -1.051271, k = 6.473428),
+                                         theta = list(e=0.2359788),
+                                         eps = list(eps=0.01304351))), Model)
+                
+   # Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=0.9,omega=7),
+   #   Lambda2 = list(nu= 0.9, omega=8),
+   #   Lambda3 = list(nu=1.2,omega=7.5),
+   #   zeta = list(k=4.5, lambda=1.8),
+   #   #zeta1 = list(k=4.5, lambda=1.5),
+   #   #zeta2 = list(k=4.5, lambda=3),
+   #   #zeta3 = list(k=4.5, lambda=1.8),
+   #   Pdens = list(M=0.02988616, k = 6.473428),
+   #   dollar = list(M = -1.051271, k = 6.473428),
+   #   theta = list(e=0.3),
+   #   eps = list(eps=0.01))),Model)
   
   # Omega <- Physical2Proposed(unlist(list(#Lambda1 = list(nu=1.4,omega=0.01),
   #                     #Lambda2 = list(nu= 0.9, omega=0.1),

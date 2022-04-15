@@ -37,7 +37,7 @@ if(is.null(AlgoParams$AllParallel)){
   } else AlgoParams$AllParallel<-F
 }
 # Choose the parameterisation algorithm - the string must match the function name exactly
-Algorithm<-"AMCMC" # "NelderMeadOptim"
+Algorithm<-"SCAM" # "NelderMeadOptim", "AMCMC"
 
 # Metropolis-Hastings proposal distribution, given old values and covariance matrix
 multvarNormProp <- function(xt, propPars){
@@ -106,375 +106,6 @@ AMCMC<-function(dir,Model,iVals,AlgoParams){
   ###### Initialisations ######
   Lgsf<-0
   # NOTE: WE APPLY LINK FUNCTIONS TO INITIAL GUESS (VALUES ARE IN PARAMETER SPACE, NOT PHYSICAL SPACE)
-  xPrev<-unlist(iVals$x0)
-  propMu<- unlist(iVals$x0) #rep(0, length(unlist(iVals$x0)))
-  #if(!is.null(Model$links)) iVals$x0%<>%unlist()%>%Proposed2Physical(Model) LOOSEEND
-  # NOTE: COVARIANCE MATRIX IS ALSO IN PARAMETER SPACE, NOT PHYSICAL SPACE
-  propCOV<-iVals$COV
-  #normCOV<-sum(propCOV*t(propCOV))
-  n <- length(xPrev) + 1
-  output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n+1)
-  xNew <- rep(NA,n-1)
-  lTargNew<-alpha<-c()
-  # Create file names with unique names for storage reasons
-  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
-  
-  # Generate Adaptive Metropolis Global Scaling Factor iterative vector
-  #gamzy <- GenerateGamzy(AlgoParams)
-  #generate gamzy sequence for first itermax iterations as though there is 2000. 
-  gamzy <- AlgoParams$gamzy0/(1:2000)^(seq(from=1/(1+AlgoParams$epsilon),to=1,length.out=2000)) 
-  gamzy <- gamzy[1:AlgoParams$itermax]
-  ##############################
-  print(unlist(iVals$x0))
-  # Find first log-target value using initial values
-  output[1, ] <- c(TRUE,logTarget(dir = dir,Model = Model,
-                             proposed = xPrev %>%Proposed2Physical(Model),AlgoParams = AlgoParams),
-                   xPrev)
-  lTargOld<-output[1,2]
-  # print(output[1,])
-  # Start the iterations!
-  it <- 2
-  while (it <= AlgoParams$itermax){
-    print(it)
-    # Parameter proposal
-    xNew<-multvarNormProp(xt=xPrev, propPars=exp(Lgsf)*propCOV)#exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))
-    # Convert parameters to physical/useable values
-    if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
-    # Calculate log-target value
-    lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
-                                   AlgoParams = AlgoParams), error=function(e) NA)
-    print(lTargNew)
-    # Check if we have a NaN
-    if(is.na(lTargNew)|is.infinite(lTargNew)) {
-      output[it,] <- c(FALSE, lTargNew, xNew)
-      it <- it + 1 
-      #AlgoParams$itermax = AlgoParams$itermax + 1 #LOOSEEND: Run for extra iteration if fails higher level prior
-      next
-    }
-    # Prepare for acceptance
-    u <- runif(1)
-    # Acceptance probability
-    alpha <- min(c(exp(lTargNew - lTargOld),1))
-    # Metropolis Acceptance Algorithm
-    if (alpha>=u) { # Accepted!
-      output[it,] <- c(TRUE, lTargNew, xNew)
-      # Only update the comparative logTarget value if it was accepted
-      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp, AlgoParams = AlgoParams), error=function(e) NA)
-      #lTargOld <- lTargNew
-      # Store this for next time!
-      xPrev<-xNew
-    } else {  # Rejected
-      # output[it,] <- c(FALSE, lTargNew, xNew)
-      output[it,] <- c(FALSE, lTargOld, xPrev) #output[(it-1),]
-      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model), AlgoParams = AlgoParams), error=function(e) NA)
-      if(it<=AlgoParams$GreedyStart) {it <- it + 1; next}
-    }
-    # Global Scaling Factor (GSF), mean & covariance update
-    Lgsf <- Lgsf + gamzy[it]*(alpha-AlgoParams$Pstar)
-    propCOV <- propCOV + gamzy[it]*((xPrev - propMu)%*%t(xPrev - propMu) - propCOV)
-    propMu <- propMu + gamzy[it]*(xPrev - propMu)
-    #propCOV[is.na(propCOV)|is.infinite(propCOV)]<-0
-    
-    print(paste0("Total covariance = ",sum(exp(Lgsf) * propCOV)))#sum(exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))))
-    print(paste0("Global Scaling Factor, r = ",exp(Lgsf)))#exp(2*Lgsf)))
-    print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",output[it,2]))
-    print(" ")
-    
-    Omega_curr <- xPrev %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
-    Intensity <- seq(4,10,0.01)
-    Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = theta) 
-    
-    D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
-    D_MortDisp_sample <- BinR( Omega_curr$Lambda1$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda1$omega, Omega_curr$zeta)
-    D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
-    D_Mort_sample <- BinR(Omega_curr$Lambda2$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda2$omega , Omega_curr$zeta) * D_MortDisp_sample
-    D_Disp <- D_MortDisp - D_Mort
-    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
-    D_BD_sample <- BinR(Omega_curr$Lambda3$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda3$omega, Omega_curr$zeta)
-    #plot(Intensity, D_MortDisp, col='green', type='l'); 
-    plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
-    lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
-    lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
-    
-    # Save log-target and parameters
-    saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
-    # Save covariance matrix
-    saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
-    
-    it <- it + 1
-  }
-  
-  
-  return(list(PhysicalValues=output[which.max(output[,2]),3:ncol(output)], # MAP value 
-              OptimisationOut=output,
-              COVARIANCE=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV))))
-  
-}
-Algorithm <- match.fun('AMCMC')
-
-#Algorithm 6 from 'A tutorial on adaptive MCMC'. Seems to work better but much Slower
-AMCMC2<-function(dir,Model,iVals,AlgoParams){
-
-  # Set Random Number Generator (RNG) initial seed
-  set.seed(1)
-  # Check no mistakes have been made in the model, methodology and initial values
-  checkLTargs(Model,iVals,AlgoParams)
-  
-  ###### Initialisations ######
-  n_x <- length(unlist(iVals$x0))
-  Lgsf<-rep(0, n_x)
-  # NOTE: WE APPLY LINK FUNCTIONS TO INITIAL GUESS (VALUES ARE IN PARAMETER SPACE, NOT PHYSICAL SPACE)
-  xPrev<-propMu<-unlist(iVals$x0)
-  #if(!is.null(Model$links)) iVals$x0%<>%unlist()%>%Proposed2Physical(Model)
-  
-  # NOTE: COVARIANCE MATRIX IS ALSO IN PARAMETER SPACE, NOT PHYSICAL SPACE
-  propCOV<-iVals$COV
-  normCOV<-sum(propCOV*t(propCOV))
-  n <- length(xPrev) + 1
-  output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n+1)
-  xNew <- rep(NA,n-1)
-  lTargNew<-alpha<-c()
-  # Create file names with unique names for storage reasons
-  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
-  # Generate Adaptive Metropolis Global Scaling Factor iterative vector
-  gamzy <- AlgoParams$gamzy0/(1:2000)^(seq(from=1/(51),to=1,length.out=2000)) #GenerateGamzy(AlgoParams)
-  gamzy <- gamzy[1:AlgoParams$itermax]
-  ##############################
-  print(unlist(iVals$x0))
-  # Find first log-target value using initial values
-  output[1, ] <- c(TRUE,logTarget(dir = dir,Model = Model,
-                                  proposed = xPrev %>% Proposed2Physical(Model),AlgoParams = AlgoParams),
-                   xPrev)
-  lTargOld<-output[1,2]
-  # print(output[1,])
-  # Start the iterations!
-  it <- 2
-  while (it <= AlgoParams$itermax){
-    print(it)
-    # Parameter proposal
-    Lambda <- diag(exp(Lgsf))
-    Lambda_chol <- chol(Lambda)
-    Z <- rmvnorm(1, rep(0, n_x), Lambda_chol %*% propCOV %*% Lambda_chol)
-    xNew <- xPrev
-    for (i in 1:n_x){
-      xNew[i] <- xNew[i] + Z[i]
-    }
-    #xNew<-multvarNormProp(xt=xPrev, propPars=exp(Lgsf)*propCOV)#exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))
-    # Convert parameters to physical/useable values
-    if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
-    # Calculate log-target value
-    lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
-                                   AlgoParams = AlgoParams), error=function(e) NA)
-    print(lTargNew)
-    # Check if we have a NaN
-    if(is.na(lTargNew)|is.infinite(lTargNew)) {
-      output[it,] <- c(FALSE, lTargNew, xNew)
-      it <- it + 1 
-      #AlgoParams$itermax = AlgoParams$itermax + 1 #LOOSEEND: Run for extra iteration if fails higher level prior
-      next
-    }
-    # Prepare for acceptance
-    u <- runif(1)
-    # Acceptance probability
-    alpha <- min(c(exp(lTargNew - lTargOld),1))
-    
-    for (k in 1:n_x){
-      e_k <- rep(0, n_x)
-      e_k[k] <- 1
-      xNew2 <- xPrev + Z[k] * e_k
-      xProp2 <- xNew2%>%Proposed2Physical(Model)
-      lTargNew2 <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp2,
-                                      AlgoParams = AlgoParams), error=function(e) NA) 
-      alpha2 <- min(c(exp(lTargNew2 - lTargOld),1))
-      Lgsf[k] <- Lgsf[k] + gamzy[it]*(alpha2-AlgoParams$Pstar)
-    }
-    
-    # Metropolis Acceptance Algorithm
-    if (alpha>=u) { # Accepted!
-      output[it,] <- c(TRUE, lTargNew, xNew)
-      # Only update the comparative logTarget value if it was accepted
-      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp, AlgoParams = AlgoParams), error=function(e) NA)
-      # Store this for next time!
-      xPrev<-xNew
-    } else {  # Rejected
-      # output[it,] <- c(FALSE, lTargNew, xNew)
-      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model), AlgoParams = AlgoParams), error=function(e) NA)
-      output[it,] <- c(FALSE, lTargOld, xPrev) #output[(it-1),]
-      if(it<=AlgoParams$GreedyStart) {it <- it + 1; next}
-    }
-    # Global Scaling Factor (GSF), mean & covariance update
-
-    propCOV <- propCOV + gamzy[it]*((xPrev - propMu)%*%t(xPrev - propMu) - propCOV)
-    propMu <- propMu + gamzy[it]*(xPrev - propMu)
-    #propCOV[is.na(propCOV)|is.infinite(propCOV)]<-0
-    
-    print(paste0("Total covariance = ",sum(exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))))
-    print(paste0("Global Scaling Factor, r = ",exp(2*Lgsf)))
-    print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",output[it,2]))
-    print(output[it,])
-    print(" ")
-    
-    Omega_curr <- xPrev %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
-    Intensity <- seq(4,10,0.01)
-    Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = theta) 
-    
-    D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
-    D_MortDisp_sample <- BinR( Omega_curr$Lambda1$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda1$omega, Omega_curr$zeta)
-    D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
-    D_Mort_sample <- BinR(Omega_curr$Lambda2$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda2$omega , Omega_curr$zeta) * D_MortDisp_sample
-    D_Disp <- D_MortDisp - D_Mort
-    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
-    D_BD_sample <- BinR(Omega_curr$Lambda3$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda3$omega, Omega_curr$zeta)
-    #plot(Intensity, D_MortDisp, col='green', type='l'); 
-    plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
-    lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
-    lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
-    
-    # Save log-target and parameters
-    saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
-    # Save covariance matrix
-    saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
-    
-    it <- it + 1
-  }
-  
-  return(list(PhysicalValues=output[which.max(output[,2]),3:ncol(output)], # MAP value 
-              OptimisationOut=output,
-              COVARIANCE=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV))))
-  
-}
-
-#Algorithm 5 from 'A tutorial on adaptive MCMC'
-AMCMC3<-function(dir,Model,iVals,AlgoParams){
-
-  # Set Random Number Generator (RNG) initial seed
-  set.seed(1)
-  # Check no mistakes have been made in the model, methodology and initial values
-  checkLTargs(Model,iVals,AlgoParams)
-  
-  ###### Initialisations ######
-  n_x <- length(unlist(iVals$x0))
-  Lgsf<-rep(0, n_x)
-  # NOTE: WE APPLY LINK FUNCTIONS TO INITIAL GUESS (VALUES ARE IN PARAMETER SPACE, NOT PHYSICAL SPACE)
-  xPrev<-propMu<-unlist(iVals$x0)
-  #if(!is.null(Model$links)) iVals$x0%<>%unlist()%>%Proposed2Physical(Model)
-  # NOTE: COVARIANCE MATRIX IS ALSO IN PARAMETER SPACE, NOT PHYSICAL SPACE
-  propCOV<-iVals$COV
-  normCOV<-sum(propCOV*t(propCOV))
-  n <- length(xPrev) + 1
-  output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n+1)
-  xNew <- rep(NA,n-1)
-  lTargNew<-alpha<-c()
-  # Create file names with unique names for storage reasons
-  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
-  # Generate Adaptive Metropolis Global Scaling Factor iterative vector
-  gamzy <- AlgoParams$gamzy0/(1:2000)^(seq(from=1/(1+AlgoParams$epsilon),to=1,length.out=2000)) #GenerateGamzy(AlgoParams)
-  gamzy <- gamzy[1:AlgoParams$itermax]
-  print(unlist(iVals$x0))
-  # Find first log-target value using initial values
-  output[1, ] <- c(TRUE,logTarget(dir = dir,Model = Model,
-                                  proposed = xPrev %>%Proposed2Physical(Model),AlgoParams = AlgoParams),
-                   xPrev)
-  lTargOld<-output[1,2]
-  # print(output[1,])
-  # Start the iterations!
-  it <- 2
-  while (it <= AlgoParams$itermax){
-    print(it)
-    # Parameter proposal
-    k <- sample(1:n_x, 1)
-    e_k <- rep(0, n_x)
-    e_k[k] <- 1
-    xNew <- xPrev
-    xNew[k] <- xNew[k] + rnorm(1,0, exp(Lgsf[k]) * propCOV[k,k])
-    
-    #xNew<-multvarNormProp(xt=xPrev, propPars=exp(Lgsf)*propCOV)#exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))
-    # Convert parameters to physical/useable values
-    if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
-    # Calculate log-target value
-    lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
-                                   AlgoParams = AlgoParams), error=function(e) NA)
-    print(lTargNew)
-    # Check if we have a NaN
-    if(is.na(lTargNew)|is.infinite(lTargNew)) {
-      output[it,] <- c(FALSE, lTargNew, xNew)
-      it <- it + 1 
-      #AlgoParams$itermax = AlgoParams$itermax + 1 #LOOSEEND: Run for extra iteration if fails higher level prior
-      next
-    }
-    # Prepare for acceptance
-    u <- runif(1)
-    # Acceptance probability
-    alpha <- min(c(exp(lTargNew - lTargOld),1))
-    # Metropolis Acceptance Algorithm
-    if (alpha>=u) { # Accepted!
-      output[it,] <- c(TRUE, lTargNew, xNew)
-      # Only update the comparative logTarget value if it was accepted
-      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp, AlgoParams = AlgoParams), error=function(e) NA)
-      # Store this for next time!
-      xPrev<-xNew
-    } else {  # Rejected
-      # output[it,] <- c(FALSE, lTargNew, xNew)
-      output[it,] <- c(FALSE, lTargOld, xPrev) #output[(it-1),]
-      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model), AlgoParams = AlgoParams), error=function(e) NA)
-      if(it<=AlgoParams$GreedyStart) {it <- it + 1; next}
-    }
-    # Global Scaling Factor (GSF), mean & covariance update
-    Lgsf[k] <- Lgsf[k] + gamzy[it]*(alpha-AlgoParams$Pstar)
-    propCOV <- propCOV + gamzy[it]*((xPrev - propMu)%*%t(xPrev - propMu) - propCOV)
-    propMu <- propMu + gamzy[it]*(xPrev - propMu)
-    #propCOV[is.na(propCOV)|is.infinite(propCOV)]<-0
-    
-    print(paste0("Total covariance = ",sum(exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))))
-    print(paste0("Global Scaling Factor, r = ",exp(2*Lgsf)))
-    print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",output[it,2]))
-    print(" ")
-    
-    Omega_curr <- xPrev %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
-    Intensity <- seq(4,10,0.01)
-    Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = theta) 
-    
-    D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
-    D_MortDisp_sample <- BinR( Omega_curr$Lambda1$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda1$omega, Omega_curr$zeta)
-    D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
-    D_Mort_sample <- BinR(Omega_curr$Lambda2$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda2$omega , Omega_curr$zeta) * D_MortDisp_sample
-    D_Disp <- D_MortDisp - D_Mort
-    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
-    D_BD_sample <- BinR(Omega_curr$Lambda3$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda3$omega, Omega_curr$zeta)
-    #plot(Intensity, D_MortDisp, col='green', type='l'); 
-    plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
-    lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
-    lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
-    
-    
-    # Save log-target and parameters
-    saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
-    # Save covariance matrix
-    saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
-    
-    it <- it + 1
-  }
-  return(list(PhysicalValues=output[which.max(output[,2]),3:ncol(output)], # MAP value 
-              OptimisationOut=output,
-              COVARIANCE=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV))))
-  
-}
-Algorithm <- match.fun('AMCMC3')
-
-# Non-adaptive MCMC
-AMCMC4<-function(dir,Model,iVals,AlgoParams){.
-  
-  # Set Random Number Generator (RNG) initial seed
-  set.seed(1) #set.seed(round(runif(1,0,100000)))
-  # Check no mistakes have been made in the model, methodology and initial values
-  checkLTargs(Model,iVals,AlgoParams)
-  
-  ###### Initialisations ######
-  Lgsf<-0
-  # NOTE: WE APPLY LINK FUNCTIONS TO INITIAL GUESS (VALUES ARE IN PARAMETER SPACE, NOT PHYSICAL SPACE)
   xPrev<-propMu<-unlist(iVals$x0)
   if(!is.null(Model$links)) iVals$x0%<>%unlist()%>%Proposed2Physical(Model)
   # NOTE: COVARIANCE MATRIX IS ALSO IN PARAMETER SPACE, NOT PHYSICAL SPACE
@@ -487,12 +118,12 @@ AMCMC4<-function(dir,Model,iVals,AlgoParams){.
   # Create file names with unique names for storage reasons
   tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
   # Generate Adaptive Metropolis Global Scaling Factor iterative vector
-  gamzy <- #GenerateGamzy(AlgoParams)
+  gamzy <- GenerateGamzy(AlgoParams)
   ##############################
   print(unlist(iVals$x0))
   # Find first log-target value using initial values
   output[1, ] <- c(TRUE,logTarget(dir = dir,Model = Model,
-                                  proposed = xPrev %>%Proposed2Physical(Model),AlgoParams = AlgoParams),
+                                  proposed = iVals$x0,AlgoParams = AlgoParams),
                    xPrev)
   lTargOld<-output[1,2]
   # print(output[1,])
@@ -501,7 +132,7 @@ AMCMC4<-function(dir,Model,iVals,AlgoParams){.
   while (it <= AlgoParams$itermax){
     print(it)
     # Parameter proposal
-    xNew<-multvarNormProp(xt=xPrev, propPars=propCOV)#exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))
+    xNew<-multvarNormProp(xt=xPrev, propPars=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))
     # Convert parameters to physical/useable values
     if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
     # Calculate log-target value
@@ -511,8 +142,7 @@ AMCMC4<-function(dir,Model,iVals,AlgoParams){.
     # Check if we have a NaN
     if(is.na(lTargNew)|is.infinite(lTargNew)) {
       output[it,] <- c(FALSE, lTargNew, xNew)
-      it <- it + 1 
-      #AlgoParams$itermax = AlgoParams$itermax + 1 #LOOSEEND: Run for extra iteration if fails higher level prior
+      it <- it + 1
       next
     }
     # Prepare for acceptance
@@ -528,35 +158,19 @@ AMCMC4<-function(dir,Model,iVals,AlgoParams){.
       xPrev<-xNew
     } else {  # Rejected
       # output[it,] <- c(FALSE, lTargNew, xNew)
-      output[it,] <- c(FALSE, lTargOld, xPrev) #output[(it-1),]
+      output[it,] <- output[(it-1),]
       if(it<=AlgoParams$GreedyStart) {it <- it + 1; next}
     }
     # Global Scaling Factor (GSF), mean & covariance update
-    propMu <- xPrev
+    Lgsf <- Lgsf + gamzy[it]*(alpha-AlgoParams$Pstar)
+    propMu <- propMu + gamzy[it]*(xPrev - propMu)
+    propCOV <- propCOV + gamzy[it]*((xPrev - propMu)%*%t(xPrev - propMu) - propCOV)
+    propCOV[is.na(propCOV)|is.infinite(propCOV)]<-0
     
     print(paste0("Total covariance = ",sum(exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))))
     print(paste0("Global Scaling Factor, r = ",exp(2*Lgsf)))
-    print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",output[it,2]))
+    print(paste0(round(it*100/itermax),"% done. LL = ",output[it,1]))
     print(" ")
-    
-    Omega_curr <- xPrev %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
-    Intensity <- seq(4,10,0.01)
-    Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = theta) 
-    
-    D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
-    D_MortDisp_sample <- BinR( Omega_curr$Lambda1$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda1$omega, Omega_curr$zeta)
-    D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
-    D_Mort_sample <- BinR(Omega_curr$Lambda2$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda2$omega , Omega_curr$zeta) * D_MortDisp_sample
-    D_Disp <- D_MortDisp - D_Mort
-    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
-    D_BD_sample <- BinR(Omega_curr$Lambda3$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda3$omega, Omega_curr$zeta)
-    #plot(Intensity, D_MortDisp, col='green', type='l'); 
-    plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
-    lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
-    lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
-    
-    
     
     # Save log-target and parameters
     saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
@@ -566,13 +180,126 @@ AMCMC4<-function(dir,Model,iVals,AlgoParams){.
     it <- it + 1
   }
   
-  
-  return(list(PhysicalValues=output[which.max(output[,2]),3:ncol(output)], # MAP value 
+  return(list(PhysicalValues=output[max(output[,1],na.rm = T),2:ncol(output)], # MAP value 
               OptimisationOut=output,
               COVARIANCE=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV))))
   
 }
-Algorithm <- match.fun('AMCMC4')
+
+# Block MH algorithm: https://cepr.org/sites/default/files/40002_Session%202%20-%20MetropolisHastings.pdf
+# with adaptive https://arxiv.org/pdf/2101.00118.pdf
+# Described here as SCAM (single component adaptive Metropolis-Hastings): https://link.springer.com/article/10.1007/BF02789703
+# other adaptive approaches: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.149.9329&rep=rep1&type=pdf, http://probability.ca/jeff/ftpdir/adaptex.pdf,file:///home/manderso/Downloads/1080222083%20(1).pdf
+SCAM <-function(dir,Model,iVals,AlgoParams){
+  
+  # Set Random Number Generator (RNG) initial seed
+  set.seed(round(runif(1,0,100000))) 
+  # Check no mistakes have been made in the model, methodology and initial values
+  checkLTargs(Model,iVals,AlgoParams)
+  
+  t_0 <- 40
+  
+  xPrev<-propMu<-unlist(iVals$x0)
+  n_x <- length(xPrev)
+  xbar_tminus1 <- xPrev
+  blocks = Model$par_blocks
+  nblocks = length(blocks)
+  s_d = list()
+  nperblock = list()
+  eps = list()
+  C_0_init = diag(0.001, nrow=n_x)
+  propCOV = list()
+  C_0 = list()
+  for (b in 1:nblocks){
+    nperblock[[b]] = length(blocks[[b]])
+    s_d[[b]] = (2.38)^2/nperblock[[b]]
+    eps[[b]] = diag(0.0001, nrow=nperblock[[b]])
+    propCOV[[b]] <- C_0_init[blocks[[b]], blocks[[b]]]
+    C_0[[b]] <- as.matrix(C_0_init[blocks[[b]], blocks[[b]]])
+  }
+
+  output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n_x+1)
+  xNew <- rep(NA,n_x)
+  lTargNew<-alpha<-c()
+  # Create file names with unique names for storage reasons
+  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
+  
+  # Find first log-target value using initial values
+  output[1, ] <- c(logTarget(dir = dir,Model = Model,
+                                  proposed = xPrev %>%Proposed2Physical(Model),AlgoParams = AlgoParams),
+                   xPrev)
+  lTargOld<-output[1,1]
+
+  # Start the iterations!
+  it <- 2
+  while (it <= AlgoParams$itermax){
+    print(it)
+    t <- it - 1
+    for (b in 1:nblocks){
+      
+      # Parameter proposal
+      xNew <- xPrev
+      if (t > t_0){
+        xNew[blocks[[b]]] <- multvarNormProp(xt=xPrev[blocks[[b]]], propPars=propCOV[[b]])
+      } else {
+        xNew[blocks[[b]]] <- multvarNormProp(xt=xPrev[blocks[[b]]], propPars=C_0[[b]])
+      }
+      
+      # Check proposal is within the parameter space:
+      if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
+        b <- b + 1 
+        next
+      }
+      
+      # Convert parameters to physical/useable values
+      if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
+      
+      # Calculate log-target value
+      lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
+                                     AlgoParams = AlgoParams), error=function(e) NA)
+
+      # Check if we have a NaN
+      if(is.na(lTargNew)|is.infinite(lTargNew)) {
+        b <- b + 1 
+        next
+      }
+      
+      # Prepare for acceptance
+      u <- runif(1)
+      
+      # Acceptance probability
+      alpha <- min(c(exp(lTargNew - lTargOld),1))
+      
+      # Metropolis Acceptance Algorithm
+      if (alpha>=u) { # Accepted!
+        xPrev<-xNew
+      } 
+      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
+                                     AlgoParams = AlgoParams), error=function(e) NA)
+      
+      propCOV[[b]] <- (t-1)/t * propCOV[[b]] + s_d[[b]]/(t+1) * (xPrev[blocks[[b]]] - xbar_tminus1[blocks[[b]]]) %*% t(xPrev[blocks[[b]]] - xbar_tminus1[blocks[[b]]]) + s_d[[b]] /t * eps[[b]]
+      xbar_tminus1[blocks[[b]]] <- (t * xbar_tminus1[blocks[[b]]] + xPrev[blocks[[b]]])/(t+1)
+      
+      print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",lTargOld))
+      print(" ")
+      
+    }
+    output[it,] <- c(lTargOld, xPrev)
+    
+    # Save log-target and parameters
+    saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
+    # Save covariance matrix
+    saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
+    
+    it <- it + 1
+  }
+  
+  return(list(PhysicalValues=output[which.max(output[,1]),2:ncol(output)] %>% 
+                relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model), # MAP value 
+              OptimisationOut=output))
+  
+}
+
 
 
 NelderMeadOptim<-function(dir,Model,iVals,AlgoParams){

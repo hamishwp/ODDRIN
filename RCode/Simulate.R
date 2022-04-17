@@ -1,6 +1,7 @@
 library(gstat)
 
 setClass("ODDSim", contains="ODD")
+setClass("BDSim", contains="BD")
 # Get ODDSim objects to inherit the methods and attributes of ODD objects
 
 # Make a new method for the initialisation of the ODDSim object. Much is the same as for an ODD object,
@@ -124,6 +125,74 @@ setMethod(f="initialize", signature="ODDSim",
             
             print("Checking ODDSim values")
             checkODD(.Object)
+            
+            return(.Object)
+          }
+)
+
+setMethod(f="initialize", signature="BDSim",
+          definition=function(.Object,ODD=NULL) {
+            
+            if(is.null(ODD)) return(.Object)            
+            
+            .Object@hazard<-ODD@hazard
+            .Object@cIndies<-ODD@cIndies[ODD@cIndies$iso3%in%'ABC',]
+            .Object@I0<-ODD@I0
+            .Object@hazdates<-ODD@hazdates
+            .Object@eventid<-ODD@eventid
+            .Object@fIndies<-ODD@fIndies
+            
+            .Object@buildingsfile<-paste0("./IIDIPUS_Input/OSM_Buildings_Objects/",unique(ODD@eventid)[1])
+            
+            Damage = data.frame(Latitude=double(),Longitude=double(), grading=character(), Confidence=character())
+            cells_with_sat <- sample(1:NROW(ODD@coords), runif(1,3,15))
+            
+            for (ij in cells_with_sat){
+              lonmin <- ODD@coords[ij,'Longitude']-ODD@grid@cellsize['Longitude']/2
+              latmin <- ODD@coords[ij,'Latitude']-ODD@grid@cellsize['Latitude']/2
+              lonmax <- ODD@coords[ij,'Longitude']+ODD@grid@cellsize['Longitude']/2
+              latmax <- ODD@coords[ij,'Latitude']+ODD@grid@cellsize['Latitude']/2
+              if(ODD$nBuildings[ij] == 0){
+                next
+              }
+              for (k in 1:ODD$nBuildings[ij]){
+                Damage %<>% add_row(
+                  Longitude = runif(1,lonmin, lonmax),
+                  Latitude = runif(1, latmin, latmax),
+                  grading = NA, 
+                  Confidence = NA
+                )
+              }
+            }
+            
+            print("Forming SpatialPointsDataFrame from building damage data")
+            Damage<-SpatialPointsDataFrame(coords = Damage[,c("Longitude","Latitude")],
+                                           data = Damage[,c("grading","Confidence")],
+                                           proj4string = crs("+proj=longlat +datum=WGS84 +ellps=WGS84"))
+            
+            .Object@data <- Damage@data
+            .Object@coords.nrs <-Damage@coords.nrs
+            .Object@coords <-Damage@coords
+            .Object@bbox <-Damage@bbox
+            .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            rm(Damage)
+            
+            print("Interpolating population density, hazard & GDP-PPP data")
+            .Object%<>%BDinterpODD(ODD=ODD)
+            
+            print("Filter spatial data per country")
+            # We could just copy Damage$iso3 directly, but I don't believe in anyone or anything...
+            .Object@data$ISO3C<-'ABC'
+            
+            print("Accessing OSM to sample building height & area")
+            # ExtractOSMbuildVol(.Object,ODD)
+            
+            linp<-rep(list(1.),length(unique(ODD@cIndies$iso3)))
+            names(linp)<-unique(ODD@cIndies$iso3)
+            .Object@modifier<-linp
+            
+            print("Checking BD values")
+            # checkBD(.Object)
             
             return(.Object)
           }
@@ -260,10 +329,11 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
   DamageData %<>% head(n=nEvents) %>% mutate(iso3='ABC', gmax=NA, mortality=NA, buildDestroyed=NA, qualifierBD=NA) 
   
   ODDpaths = c()
+  BDpaths = c()
   for(ev in unique(DamageData$eventid)){
     miniDam<-DamageData%>%filter(eventid==ev)
     ODDSim <- simulateODDSim(miniDam, I0=I0)
-    
+    BDSim <- new('BDSim', ODDSim)
     namer<-paste0(ODDSim@hazard,
                   str_remove_all(as.character.Date(min(ODDSim@hazdates)),"-"),
                   unique(miniDam$iso3)[1],
@@ -272,6 +342,9 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
     ODDpath<-paste0(dir,"IIDIPUS_SimInput/ODDobjects/",namer)
     ODDpaths<-append(ODDpaths, ODDpath)
     saveRDS(ODDSim,ODDpath)
+    BDpath<-paste0(dir,"IIDIPUS_SimInput/BDobjects/",namer) 
+    BDpaths<-append(BDpaths, BDpath)
+    saveRDS(BDSim,BDpath)
     print(paste0('Saved simulated hazard to ', namer))
   }
   
@@ -293,8 +366,21 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
                                                     buildDestroyed = nBD_predictor,
                                                     qualifierBD = ifelse(is.na(buildDestroyed), NA, 'total'))
     
+    
     #overwrite ODDSim with the updated
     saveRDS(ODDSim, ODDpaths[i])
+  }
+  for (i in 1:length(BDpaths)){
+    BDSim <- readRDS(BDpaths[i])
+    BDSim %<>% BDX(Omega, Model, LL=FALSE, Method=list(Np=1,cores=1))
+    #take these simulations as the actual values
+    BDSim@data$grading <- BDSim@data$ClassPred
+    #switch those affected to 'Damaged' with probability 0.5
+    affected <- which(BDSim@data$grading != 'notaffected')
+    for (j in affected){
+      BDSim@data$grading[j] = ifelse(runif(1)>0.5, BDSim@data$grading[j], 'Damaged')
+    }
+    saveRDS(BDSim,BDpaths[i])
   }
 }
 

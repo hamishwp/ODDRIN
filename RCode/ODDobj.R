@@ -162,12 +162,14 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
       pcontour<-ExtractI0poly(hsdf=hsdf,ODD=ODD)
       # Find all ODD coordinates not inside polycontour
       insidepoly<-rep(F,nrow(ODD))
-      for(p in 1:length(unique(pcontour$id))){
-        tcont<-filter(pcontour,id==p)
-        insidepoly<-insidepoly | sp::point.in.polygon(ODD@coords[,1],
-                                                      ODD@coords[,2],
-                                                      tcont$Longitude,
-                                                      tcont$Latitude)>0
+      if (length(unique(pcontour$id)) > 0){
+        for(p in 1:length(unique(pcontour$id))){
+          tcont<-filter(pcontour,id==p)
+          insidepoly<-insidepoly | sp::point.in.polygon(ODD@coords[,1],
+                                                        ODD@coords[,2],
+                                                        tcont$Longitude,
+                                                        tcont$Latitude)>0
+        }
       }
       rm(tcont)
       hsdf%<>%as.data.frame
@@ -441,7 +443,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
         #Damage1 <-tryCatch(fDamUnscaled(I_ij * Omega$Lambda1$nu,list(I0=Omega$Lambda1$nu*Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
         #Damage2 <-tryCatch(fDamUnscaled(I_ij * Omega$Lambda2$nu,list(I0=Omega$Lambda2$nu*Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
         Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
-        if(is.na(Damage)) print(ij)
+        if(any(is.na(Damage))) print(ij)
         # Scaled damage
         D_MortDisp<-BinR(#Omega$Lambda1$kappa*Damage*Damage + 
                        Omega$Lambda1$nu*Damage + Omega$Lambda1$omega,Omega$zeta)
@@ -456,6 +458,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
         D_Disp<-D_MortDisp - D_Mort
         # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
         tPop[3,ind]<-0
+        
         tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_Disp[ind], D_Mort[ind], (1-D_Mort-D_Disp)[ind])
       } 
     }
@@ -482,9 +485,10 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
       #D_BD = BinR(Damage3+Omega$zeta$lambda*(log(2)^(1/Omega$zeta$k)) - h_0(Omega$Lambda3$nu * Omega$Lambda3$omega,Params$I0 * Omega$Lambda3$nu, Omega$theta), Omega$zeta)
       #D_BD = BinR(Damage, Omega$zeta3)
       #D_BD = lBD(D_B, BD_params)
-      nBD = nBD + fBD(nBuildings, D_BD)
+      moreBD = fBD(nBuildings, D_BD)
+      nBD = nBD + moreBD
   
-      nBuildings = nBuildings - nBD
+      nBuildings = nBuildings - moreBD
     }
     return(rbind(tPop[1:2,,drop=FALSE], nBD))
   }

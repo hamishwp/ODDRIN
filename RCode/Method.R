@@ -433,7 +433,7 @@ SingleEventsModifierCalc<-function(dir,Model,Omega,AlgoParams){
     
     if(is.na(tLL)) stop(ufiles[i])
     
-    init<-log(tLL@predictDisp$gmax/tLL@predictDisp$predictor)*0.1
+    init<-log(tLL@predictDisp$gmax/tLL@predictDisp$disp_predictor)*0.1
     init[init<lower]<-0.5*lower; init[init>upper]<-0.5*upper; 
     init%<>%as.list()
     names(init)<-as.character(tLL@predictDisp$iso3)
@@ -469,7 +469,7 @@ SingleEventsModifierCalc<-function(dir,Model,Omega,AlgoParams){
     modifiers%<>%rbind(data.frame(iso3=ODDy@predictDisp$iso3,modifier=as.numeric(unlist(fin)),
                                   event=ufiles[i],gmax=ODDy@gmax$gmax,
                                   eventid=as.numeric(strsplit(as.character(ufiles[i]),split = "_")[[1]][2]),
-                                  predictor=ODDy@predictDisp$predictor))
+                                  predictor=ODDy@predictDisp$disp_predictor))
     
     saveRDS(ODDy, paste0(dir,"IIDIPUS_Results/ODDobjects/",ufiles[i]))
     saveRDS(modifiers,paste0(dir,"IIDIPUS_Results/ODDobjects/modifiers.Rdata"))

@@ -37,7 +37,7 @@ main_simulated <- function(){
   
   AlgoParams$AllParallel <- TRUE
   AlgoParams$ABC <- 2
-  AlgoParams$itermax <- 20
+  AlgoParams$itermax <- 80
   
   output <- Algorithm(dir=dir,
                       Model=Model,
@@ -52,7 +52,7 @@ main_simulated <- function(){
                         DateTimeString(),"simulated.Rdata"))
   
   # Calculate the single linear predictor term that would make each event prediction perfectly accurate
-  modifiers<-SingleEventsModifierCal(dir,Model,output$PhysicalValues,AlgoParams)
+  modifiers<-SingleEventsModifierCalc(dir,Model,output$PhysicalValues,AlgoParams)
   # Correlate the modifiers to systemic vulnerability, note that systemic vulnerability variables must be defined in the model
   vulnerability<-CorrelateModifier(modifiers,Model)
   
@@ -76,6 +76,10 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
              plotODDy(ODDSim, var='nBD') + xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)
 
 
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRINfork/IIDIPUS_Results/output_2022-04-15_220417')
+
+Intensity <- seq(0,10,0.1)
+Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
 
 # Plot S-curves for the actual and MAP parameterisation
 D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)

@@ -274,7 +274,7 @@ convMat2SPDF<-function(array,name=NULL,crs="WGS84"){
 SplitSamplePop<-function(Pop,n=1){
   k<-length(Pop)
   return(array(vapply(Pop,function(tPop) rmultinom(n=n,
-                                                   size=(tPop + rbernoulli(n=1,p=tPop%%1)),
+                                                   size=(tPop + rbernoulli(n=1,p=tPop%%1)), #LOOSEEND: same size for all Np
                                                    prob=rep(1/9,9)),FUN.VALUE = numeric(9L*n)),dim = c(9,k*n)))
 }
 

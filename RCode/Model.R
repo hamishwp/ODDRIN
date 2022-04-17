@@ -123,8 +123,8 @@ Model$skeleton <- list(
 # names(Model$skeleton$beta)[1]<-paste0("HA.NAT.",haz)
 
 #Set lower and upper bounds for the parameters
-Model$par_lb <- c(-Inf,-Inf,-Inf,-Inf,-Inf,-Inf,   0,   0,   0,   0, -Inf,   0,   0,   0)
-Model$par_ub <- c( Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf,    0, Inf, Inf, Inf)
+Model$par_lb <- c(-10,-10,-10,-10,-10,-10,  0,  0,  0,  0,  -10,  0,  0,  0)
+Model$par_ub <- c( 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,    0, 10, 10, 10)
 
 #Group the parameters based on correlation. These groups will be used to perform the MCMC in blocks. 
 Model$par_blocks <- list(c(1,2,3,4), c(5,6), c(7,8), c(9,10,11,12), 13, 14)
@@ -294,7 +294,7 @@ qualifierDisp<-function(Disp,qualifier,mu) {
 
 # Binomial displacement calculator function
 rbiny<-function(size,p) rbinom(n = 1,size,p); 
-Fbdisp<-function(lPopS,Dprime) mapply(rbiny,lPopS,Dprime)
+Fbdisp<-function(lPopS,Dprime) mapply(rbiny,lPopS,Dprime);
 
 rmultinomy<-function(size, D_Disp, D_Mort, D_Rem) rmultinom(n=1, size, c(D_Disp,D_Mort,D_Rem))
 Fbdam<-function(PopRem, D_Disp, D_Mort, D_Rem) mapply(rmultinomy, PopRem, D_Disp, D_Mort, D_Rem)
@@ -432,7 +432,7 @@ BDprob<-function(b,BD_params){
 
 predBD<-function(b,BD_params){
   lls<-BDprob(b,BD_params)
-  return(mean(apply(lls,1,which.max)))
+  return(mean(apply(lls, 1, function(x) sample(1:5, 1, prob=x)))) #LOOSEEND: Mean?
 }
 
 LL_BD<-function(b,classified,BD_params){
@@ -563,19 +563,20 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       BDy@fIndies<-Model$fIndies
       # Apply BDX
-      tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,center = Model$center,Method=AlgoParams),
+      tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,Model = Model,Method=AlgoParams, LL=T),
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate BD LL of ",filer));return(-Inf)}
       # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
       maxLL<-max(tLL,na.rm = T)
       # Return the average log-likelihood
-      if(expLL) return(cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL))
+      cWeight<-Model$IsoWeights$weights[Model$IsoWeights$iso3==BDy$ISO3C[1]]
+      if(expLL) return(cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL)) 
       else return(cWeight*mean(tLL,na.rm=T))
       
     }
     
-    return(sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
+    return(LL + sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
     
   } else {
     
@@ -586,7 +587,7 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       BDy@fIndies<-Model$fIndies
       # Apply BDX
-      tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,center = Model$center,Method=AlgoParams),
+      tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,Model = Model,Method=AlgoParams, LL=T),
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate BD LL of ",ufiles[i]));return(-Inf)}
@@ -619,8 +620,8 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
   print(paste0("LL Displacements = ",LL)) ; sLL<-LL
   
   # Add the log-likelihood values from the BD (building damage) objects
-  #LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
-  #print(paste0("LL Building Damages = ",LL-sLL))
+  LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
+  print(paste0("LL Building Damages = ",LL-sLL))
   
   posterior<-LL #+HP
   # Add Bayesian priors

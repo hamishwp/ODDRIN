@@ -182,7 +182,7 @@ setMethod(f="initialize", signature="BDSim",
             
             print("Filter spatial data per country")
             # We could just copy Damage$iso3 directly, but I don't believe in anyone or anything...
-            .Object@data$ISO3C<-'ABC'
+            if(NROW(.Object@data)>0) .Object@data$ISO3C<-'ABC'
             
             print("Accessing OSM to sample building height & area")
             # ExtractOSMbuildVol(.Object,ODD)
@@ -208,7 +208,7 @@ simulateEvent <- function(r, I0 = 4.5){
   # - The maximum magnitude varies randomly in [5, 9.3] and the spread in [15, 25]
   # - The earthquake standard deviation in each cell is random uniform in [0.8,1.1]
   
-  maxMag = runif(1, 4.5, 10)
+  maxMag = runif(1, 5, 10)
   sigma = runif(1, 9, 12)
   r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, n=r@nrows)) 
   r <- r * (maxMag/r@data@max)
@@ -319,7 +319,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
   # Output: None
   # Details:
   # - Saves each ODDSim object to IIDIPUS_SimInput/ODDobjects/
-  set.seed(1)
+  set.seed(round(runif(1,0,100000)))
   
   haz='EQ'
   
@@ -359,11 +359,11 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
     
     #take these simulations as the actual values
     ODDSim@gmax <- ODDSim@predictDisp %>% transmute(iso3='ABC',
-                                                    gmax=disp_predictor, 
+                                                    gmax= disp_predictor, #round(rnorm(1, disp_predictor, (0.00001 * disp_predictor^2 + disp_predictor*0.09+10)*0.1)), 
                                                     qualifier = ifelse(is.na(gmax), NA, 'total'),
-                                                    mortality=mort_predictor,
+                                                    mortality= mort_predictor, #round(rnorm(1, mort_predictor, (0.00001 * mort_predictor^2 + mort_predictor*0.09+10)*0.05)),
                                                     qualifierMort = ifelse(is.na(mort_predictor), NA, 'total'), 
-                                                    buildDestroyed = nBD_predictor,
+                                                    buildDestroyed = nBD_predictor, #round(rnorm(1, nBD_predictor, (0.00001 * nBD_predictor^2 + nBD_predictor*0.09+10)*0.05)),
                                                     qualifierBD = ifelse(is.na(buildDestroyed), NA, 'total'))
     
     

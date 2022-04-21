@@ -207,13 +207,13 @@ SCAM <-function(dir,Model,iVals,AlgoParams){
   s_d = list()
   nperblock = list()
   eps = list()
-  C_0_init = diag(0.001, nrow=n_x)
+  C_0_init = diag(0.00001, nrow=n_x)
   propCOV = list()
   C_0 = list()
   for (b in 1:nblocks){
     nperblock[[b]] = length(blocks[[b]])
     s_d[[b]] = (2.38)^2/nperblock[[b]]
-    eps[[b]] = diag(0.0001, nrow=nperblock[[b]])
+    eps[[b]] = diag(0.000001, nrow=nperblock[[b]])
     propCOV[[b]] <- C_0_init[blocks[[b]], blocks[[b]]]
     C_0[[b]] <- as.matrix(C_0_init[blocks[[b]], blocks[[b]]])
   }
@@ -286,6 +286,29 @@ SCAM <-function(dir,Model,iVals,AlgoParams){
     }
     output[it,] <- c(lTargOld, xPrev)
     
+    Intensity <- seq(0,10,0.1)
+    Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
+    
+    Omega_curr <- xPrev %>% 
+      relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
+    
+    # Plot S-curves for the actual and MAP parameterisation
+    D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
+    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)
+    D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
+    D_MortDisp_sample <- BinR( Omega_curr$Lambda1$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda1$omega, Omega_curr$zeta)
+    D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
+    D_Mort_sample <- BinR(Omega_curr$Lambda2$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda2$omega , Omega_curr$zeta) * D_MortDisp_sample
+    D_Disp <- D_MortDisp - D_Mort
+    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
+    D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
+    D_BD_sample <- BinR(Omega_curr$Lambda3$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda3$omega, Omega_curr$zeta)
+    plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
+    lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
+    lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
+    lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2)
+    
+    
     # Save log-target and parameters
     saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
     # Save covariance matrix
@@ -293,6 +316,8 @@ SCAM <-function(dir,Model,iVals,AlgoParams){
     
     it <- it + 1
   }
+  
+  
   
   return(list(PhysicalValues=output[which.max(output[,1]),2:ncol(output)] %>% 
                 relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model), # MAP value 
@@ -307,7 +332,7 @@ NelderMeadOptim<-function(dir,Model,iVals,AlgoParams){
   # We don't need an initial guess of the covariance matrix for MLE optimisation
   x0=Physical2Proposed(iVals$x0,Model)%>%unlist()
   # Only optimise over the input iVals that are not NAs
-  if(is.null(AlgoParams$indices)) AlgoParams$indices<-length(iVals)
+  if(is.null(AlgoParams$indices)) AlgoParams$indices<-length(x0)
   # Cost function (note that this still includes the priors and ABC rejection, so isn't purely frequentist MLE)
   Fopty<-function(vals){
     x0[!AlgoParams$indices]<-vals
@@ -337,7 +362,7 @@ NelderMeadOptim<-function(dir,Model,iVals,AlgoParams){
   
 }
 
-Algorithm%<>%match.fun()
+Algorithm <- match.fun('SCAM')
 
 # Using the bisection method to generate a new guess
 OptimMd<-function(FFF,x,LLs){

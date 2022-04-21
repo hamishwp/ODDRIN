@@ -400,7 +400,6 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
                           !ODD$ISO3C%in%ODD@gmax$iso3))
   
   BD_data_present <- ifelse(all(is.na(ODD@data$nBuildings)) , F, T)
-
   # Calculate non-local linear predictor values
   LP<-GetLP(ODD,Omega,Params,Sinc,notnans)
   # Speed things up a little
@@ -463,7 +462,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
       } 
     }
     #ensure the total displaced, deceased or remaining does not exceed total population
-    tPop[tPop>ODD@data$Population[ij]]<-ODD@data$Population[ij]
+    tPop[tPop>ODD@data$Population[ij]]<-floor(ODD@data$Population[ij])
     
     #if no building destruction data:
     if(!BD_data_present) return(rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np))) #return total displacement and mortality, set number of buildings destroyed to NA
@@ -492,8 +491,9 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
     }
     return(rbind(tPop[1:2,,drop=FALSE], nBD))
   }
-  
+
   Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Destroyed
+
   if(Method$cores>1) { Dam[notnans,,]<-aperm(simplify2array(mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$cores)), perm=c(3,2,1))
   } else  Dam[notnans,,]<- aperm(simplify2array(lapply(X = notnans,FUN = CalcDam)), perm=c(3,2,1))
 

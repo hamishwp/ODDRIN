@@ -337,6 +337,10 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T){
   if(!LL) {notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$GDP)))
   } else notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$GDP) | 
                      is.na(BD@data$grading)))
+  if(nrow(BD) ==0){
+    if(LL){return(0)}
+    else return(BD)
+  }
   BD<-BD[notnans,] ;notnans<-1:nrow(BD)
   # Get parameters for model
   Params<-FormParams(BD,list(Np=Method$Np,center=Model$center))

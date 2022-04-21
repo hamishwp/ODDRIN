@@ -127,8 +127,8 @@ Model$par_lb <- c(-10,-10,-10,-10,-10,-10,  0,  0,  0,  0,  -10,  0,  0,  0)
 Model$par_ub <- c( 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,    0, 10, 10, 10)
 
 #Group the parameters based on correlation. These groups will be used to perform the MCMC in blocks. 
-Model$par_blocks <- list(c(1,2,3,4), c(5,6), c(7,8), c(9,10,11,12), 13, 14)
-
+#Model$par_blocks <- list(c(1,2,3,4), c(5,6), c(7,8), c(9,10,11,12), 13, 14)
+Model$par_blocks <- list(1:14) #try updating all parameters altogether
 # Get the binary regression function
 Model$BinR<-"weibull" # "gompertz"
 
@@ -192,7 +192,6 @@ locpred<-function(x,params){
 }
 
 GDPlinp<-function(ODD,Sinc,beta,center,notnans){
-  
   iGDP<-as.numeric(factor(ODD@data$GDP,levels=unique(ODD@data$GDP)))
   dGDP<-data.frame(ind=iGDP[notnans],GDP=ODD@data$GDP[notnans],iso=ODD@data$ISO3C[notnans])
   dGDP%<>%group_by(ind)%>%summarise(value=log(unique(GDP)*(Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"value"]/
@@ -388,20 +387,26 @@ LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measuremen
     #LL = LL + log(dnorm(Y$gmax, Y$disp_predictor, 50))
     #LL = LL + log(1/(1+abs(Y$gmax - Y$disp_predictor)^2))
     #print(paste(Y$gmax, Y$disp_predictor, dnorm(abs(Y$gmax - Y$disp_predictor) / (0.000004 * Y$gmax^2 + Y$gmax*0.1+10), 0.5, log=TRUE)))
-    LL = LL + dnorm(abs(Y$gmax - Y$disp_predictor) / (0.00001 * Y$gmax^2 + Y$gmax*0.09+10), 0.25, log=TRUE)
+    LL_disp <- dnorm(abs(Y$gmax - Y$disp_predictor) / (0.000001 * Y$gmax^2 + Y$gmax*0.11+10), mean=0, sd=1, log=TRUE)
+    LL = LL + LL_disp
     #LL = LL + log(dLaplace((log(Y$gmax+1)-log(Y$disp_predictor+1))/log(Y$disp_predictor+1), 0, 0.0333)) #LOOSEEND +1 to avoid log issues
     #LL = LL + log(dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.5))
+    #print(paste('disp',Y$gmax, Y$disp_predictor, LL_disp))
   }
   if(is.numeric(Y$mortality)){
     #LL = LL + dnorm(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1, log=TRUE)
     #LL = LL + log(dnorm(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1))
     #LL =  LL + log(1/(1+abs(Y$mortality - Y$mort_predictor)^2))
     #print(paste(Y$mortality, Y$mort_predictor, dnorm(abs(Y$mortality - Y$mort_predictor) / (0.000004 * Y$mortality^2 + Y$mortality*0.1+10), 0.5, log=TRUE)))
-    LL = LL + dnorm(abs(Y$mortality - Y$mort_predictor) / (0.00001 * Y$mortality^2 + Y$mortality*0.09+10), 0.05, log=TRUE)
+    LL_mort <- dnorm(abs(Y$mortality - Y$mort_predictor) / (0.000001 * Y$mortality^2 + Y$mortality*0.11+10), mean=0, sd=1, log=TRUE)
+    LL = LL + LL_mort
+    #print(paste('mort',Y$mortality, Y$mort_predictor, LL_mort))
     #LL = LL + log(dLaplace((log(Y$mortality+1)-log(Y$mort_predictor+1))/log(Y$mort_predictor+1), 0, 0.00333))
   }
   if(is.numeric(Y$buildDestroyed)){
-    LL = LL + dnorm(abs(Y$buildDestroyed - Y$nBD_predictor) / (0.00001 * Y$buildDestroyed^2 + Y$buildDestroyed*0.09+10), 0.25, log=TRUE)
+    LL_BD <- dnorm(abs(Y$buildDestroyed - Y$nBD_predictor) / ( 0.000001 * Y$buildDestroyed^2 + Y$buildDestroyed*0.11+10),mean= 0, sd=1, log=TRUE)
+    LL = LL + LL_BD
+    #print(paste('bd',Y$buildDestroyed, Y$nBD_predictor, LL_BD))
     #LL = LL + dnorm(log(Y$buildDestroyed+1), log(Y$nBD_predictor+1), 0.1, log=TRUE)
     #LL = LL + log(1/(1+abs(Y$buildDestroyed - Y$nBD_predictor))^2)
     #LL = LL + log(dLaplace((Y$buildDestroyed-Y$nBD_predictor)/(Y$nBD_predictor+1),0,0.025))
@@ -415,6 +420,11 @@ LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measuremen
   # dnorm((log(max(Ystar,1))-log(Y)), mean = 0, sd = log(Y), log = T)
   # dgammaM(Ystar,Y,0.1,log = T)
 }
+
+#plot(1:10000, 1:10000, type='l')
+#lines(1:10000, qnorm(0.025, abs(1:10000 - (.00001 * (1:10000)^2 + (1:10000)*0.09+10))/(.00001 * (1:10000)^2 + (1:10000)*0.09+10),0.1))
+#lines(1:10000, qnorm(0.975, 1:10000, (.00001 * (1:10000)^2 + (1:10000)*0.09+10)*0.1))
+
 
 LL_beta_apply<-function(b,value,BD_params) do.call(BD_params$functions[[value]],as.list(c(x=b,unlist(BD_params$Params[[value]]))))
 
@@ -620,8 +630,8 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
   print(paste0("LL Displacements = ",LL)) ; sLL<-LL
   
   # Add the log-likelihood values from the BD (building damage) objects
-  LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
-  print(paste0("LL Building Damages = ",LL-sLL))
+  #LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
+  #print(paste0("LL Building Damages = ",LL-sLL))
   
   posterior<-LL #+HP
   # Add Bayesian priors

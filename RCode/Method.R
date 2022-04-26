@@ -37,7 +37,7 @@ if(is.null(AlgoParams$AllParallel)){
   } else AlgoParams$AllParallel<-F
 }
 # Choose the parameterisation algorithm - the string must match the function name exactly
-Algorithm<-"AMCMC" # "NelderMeadOptim"
+Algorithm<-"SCAM" # "NelderMeadOptim", "AMCMC"
 
 # Metropolis-Hastings proposal distribution, given old values and covariance matrix
 multvarNormProp <- function(xt, propPars){
@@ -123,7 +123,7 @@ AMCMC<-function(dir,Model,iVals,AlgoParams){
   print(unlist(iVals$x0))
   # Find first log-target value using initial values
   output[1, ] <- c(TRUE,logTarget(dir = dir,Model = Model,
-                             proposed = iVals$x0,AlgoParams = AlgoParams),
+                                  proposed = iVals$x0,AlgoParams = AlgoParams),
                    xPrev)
   lTargOld<-output[1,2]
   # print(output[1,])
@@ -186,12 +186,153 @@ AMCMC<-function(dir,Model,iVals,AlgoParams){
   
 }
 
+# Block MH algorithm: https://cepr.org/sites/default/files/40002_Session%202%20-%20MetropolisHastings.pdf
+# with adaptive https://arxiv.org/pdf/2101.00118.pdf
+# Described here as SCAM (single component adaptive Metropolis-Hastings): https://link.springer.com/article/10.1007/BF02789703
+# other adaptive approaches: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.149.9329&rep=rep1&type=pdf, http://probability.ca/jeff/ftpdir/adaptex.pdf,file:///home/manderso/Downloads/1080222083%20(1).pdf
+SCAM <-function(dir,Model,iVals,AlgoParams){
+  
+  # Set Random Number Generator (RNG) initial seed
+  set.seed(round(runif(1,0,100000))) 
+  # Check no mistakes have been made in the model, methodology and initial values
+  checkLTargs(Model,iVals,AlgoParams)
+  
+  t_0 <- 40
+  
+  xPrev<-propMu<-unlist(iVals$x0)
+  n_x <- length(xPrev)
+  xbar_tminus1 <- xPrev
+  blocks = Model$par_blocks
+  nblocks = length(blocks)
+  s_d = list()
+  nperblock = list()
+  eps = list()
+  C_0_init = diag(0.00001, nrow=n_x)
+  propCOV = list()
+  C_0 = list()
+  for (b in 1:nblocks){
+    nperblock[[b]] = length(blocks[[b]])
+    s_d[[b]] = (2.38)^2/nperblock[[b]]
+    eps[[b]] = diag(0.000001, nrow=nperblock[[b]])
+    propCOV[[b]] <- C_0_init[blocks[[b]], blocks[[b]]]
+    C_0[[b]] <- as.matrix(C_0_init[blocks[[b]], blocks[[b]]])
+  }
+
+  output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n_x+1)
+  xNew <- rep(NA,n_x)
+  lTargNew<-alpha<-c()
+  # Create file names with unique names for storage reasons
+  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
+  
+  # Find first log-target value using initial values
+  output[1, ] <- c(logTarget(dir = dir,Model = Model,
+                                  proposed = xPrev %>%Proposed2Physical(Model),AlgoParams = AlgoParams),
+                   xPrev)
+  lTargOld<-output[1,1]
+
+  # Start the iterations!
+  it <- 2
+  while (it <= AlgoParams$itermax){
+    print(it)
+    t <- it - 1
+    for (b in 1:nblocks){
+      
+      # Parameter proposal
+      xNew <- xPrev
+      if (t > t_0){
+        xNew[blocks[[b]]] <- multvarNormProp(xt=xPrev[blocks[[b]]], propPars=propCOV[[b]])
+      } else {
+        xNew[blocks[[b]]] <- multvarNormProp(xt=xPrev[blocks[[b]]], propPars=C_0[[b]])
+      }
+      
+      # Check proposal is within the parameter space:
+      if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
+        b <- b + 1 
+        next
+      }
+      
+      # Convert parameters to physical/useable values
+      if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
+      
+      # Calculate log-target value
+      lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
+                                     AlgoParams = AlgoParams), error=function(e) NA)
+
+      # Check if we have a NaN
+      if(is.na(lTargNew)|is.infinite(lTargNew)) {
+        b <- b + 1 
+        next
+      }
+      
+      # Prepare for acceptance
+      u <- runif(1)
+      
+      # Acceptance probability
+      alpha <- min(c(exp(lTargNew - lTargOld),1))
+      
+      # Metropolis Acceptance Algorithm
+      if (alpha>=u) { # Accepted!
+        xPrev<-xNew
+      } 
+      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
+                                     AlgoParams = AlgoParams), error=function(e) NA)
+      
+      propCOV[[b]] <- (t-1)/t * propCOV[[b]] + s_d[[b]]/(t+1) * (xPrev[blocks[[b]]] - xbar_tminus1[blocks[[b]]]) %*% t(xPrev[blocks[[b]]] - xbar_tminus1[blocks[[b]]]) + s_d[[b]] /t * eps[[b]]
+      xbar_tminus1[blocks[[b]]] <- (t * xbar_tminus1[blocks[[b]]] + xPrev[blocks[[b]]])/(t+1)
+      
+      print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",lTargOld))
+      print(" ")
+      
+    }
+    output[it,] <- c(lTargOld, xPrev)
+    
+    Intensity <- seq(0,10,0.1)
+    Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
+    
+    Omega_curr <- xPrev %>% 
+      relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
+    
+    # Plot S-curves for the actual and MAP parameterisation
+    D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
+    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)
+    D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
+    D_MortDisp_sample <- BinR( Omega_curr$Lambda1$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda1$omega, Omega_curr$zeta)
+    D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
+    D_Mort_sample <- BinR(Omega_curr$Lambda2$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda2$omega , Omega_curr$zeta) * D_MortDisp_sample
+    D_Disp <- D_MortDisp - D_Mort
+    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
+    D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
+    D_BD_sample <- BinR(Omega_curr$Lambda3$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda3$omega, Omega_curr$zeta)
+    plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
+    lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
+    lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
+    lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2)
+    
+    
+    # Save log-target and parameters
+    saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
+    # Save covariance matrix
+    saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
+    
+    it <- it + 1
+  }
+  
+  
+  
+  return(list(PhysicalValues=output[which.max(output[,1]),2:ncol(output)] %>% 
+                relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model), # MAP value 
+              OptimisationOut=output))
+  
+}
+
+
+
 NelderMeadOptim<-function(dir,Model,iVals,AlgoParams){
   
   # We don't need an initial guess of the covariance matrix for MLE optimisation
   x0=Physical2Proposed(iVals$x0,Model)%>%unlist()
   # Only optimise over the input iVals that are not NAs
-  if(is.null(AlgoParams$indices)) AlgoParams$indices<-length(iVals)
+  if(is.null(AlgoParams$indices)) AlgoParams$indices<-length(x0)
   # Cost function (note that this still includes the priors and ABC rejection, so isn't purely frequentist MLE)
   Fopty<-function(vals){
     x0[!AlgoParams$indices]<-vals
@@ -221,7 +362,7 @@ NelderMeadOptim<-function(dir,Model,iVals,AlgoParams){
   
 }
 
-Algorithm%<>%match.fun()
+Algorithm <- match.fun('SCAM')
 
 # Using the bisection method to generate a new guess
 OptimMd<-function(FFF,x,LLs){
@@ -312,12 +453,12 @@ SingleEventsModifierCalc<-function(dir,Model,Omega,AlgoParams){
     names(linp)<-unique(ODDy@gmax$iso3)
     ODDy@modifier<-linp
       
-    tLL<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams),
+    tLL<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                   error=function(e) NA)
     
     if(is.na(tLL)) stop(ufiles[i])
     
-    init<-log(tLL@predictDisp$gmax/tLL@predictDisp$predictor)*0.1
+    init<-log(tLL@predictDisp$gmax/tLL@predictDisp$disp_predictor)*0.1
     init[init<lower]<-0.5*lower; init[init>upper]<-0.5*upper; 
     init%<>%as.list()
     names(init)<-as.character(tLL@predictDisp$iso3)
@@ -346,14 +487,14 @@ SingleEventsModifierCalc<-function(dir,Model,Omega,AlgoParams){
     names(fin)<-as.character(ODDy@gmax$iso3)
     ODDy@modifier<-fin
     
-    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams),
+    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                   error=function(e) NA)
     if(is.na(ODDy)) stop(ufiles[i])
     
     modifiers%<>%rbind(data.frame(iso3=ODDy@predictDisp$iso3,modifier=as.numeric(unlist(fin)),
                                   event=ufiles[i],gmax=ODDy@gmax$gmax,
                                   eventid=as.numeric(strsplit(as.character(ufiles[i]),split = "_")[[1]][2]),
-                                  predictor=ODDy@predictDisp$predictor))
+                                  predictor=ODDy@predictDisp$disp_predictor))
     
     saveRDS(ODDy, paste0(dir,"IIDIPUS_Results/ODDobjects/",ufiles[i]))
     saveRDS(modifiers,paste0(dir,"IIDIPUS_Results/ODDobjects/modifiers.Rdata"))

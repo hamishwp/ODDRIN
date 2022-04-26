@@ -47,11 +47,11 @@ setMethod(f="initialize", signature="ODDSim",
             if(.Object@hazard%in%c("EQ","TC")){
               .Object@gmax<-DamageData%>%group_by(iso3)%>%
                 summarise(gmax=max(gmax),
-                          qualifier=ifelse(all(is.na(gmax)), NA, qualifierDisp[which.max(gmax)]),
+                          qualifier=ifelse(all(is.na(gmax)), NA_character_, qualifierDisp[which.max(gmax)]),
                           mortality=max(mortality),
-                          qualifierMort=ifelse(all(is.na(mortality), NA, qualifierMort[which.max(mortality)])),
+                          qualifierMort=ifelse(all(is.na(mortality), NA_character_, qualifierMort[which.max(mortality)])),
                           buildDestroyed=max(buildDestroyed), 
-                          qualifierBD = ifelse(all(is.na(buildDestroyed), NA, qualifierMort[which.max(mortality)])))
+                          qualifierBD = ifelse(all(is.na(buildDestroyed), NA_character_, qualifierMort[which.max(mortality)])))
               .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
                 transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
             } else {
@@ -359,12 +359,16 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
     
     #take these simulations as the actual values
     ODDSim@gmax <- ODDSim@predictDisp %>% transmute(iso3='ABC',
-                                                    gmax= disp_predictor, #round(rnorm(1, disp_predictor, (0.00001 * disp_predictor^2 + disp_predictor*0.09+10)*0.1)), 
+                                                    gmax= round(rnorm(1, disp_predictor, 0.000001*disp_predictor^2 + disp_predictor*0.1 + 10)), 
                                                     qualifier = ifelse(is.na(gmax), NA, 'total'),
-                                                    mortality= mort_predictor, #round(rnorm(1, mort_predictor, (0.00001 * mort_predictor^2 + mort_predictor*0.09+10)*0.05)),
+                                                    mortality= round(rnorm(1, mort_predictor, 0.0000005*mort_predictor^2 + mort_predictor*0.05 + 5)),
                                                     qualifierMort = ifelse(is.na(mort_predictor), NA, 'total'), 
-                                                    buildDestroyed = nBD_predictor, #round(rnorm(1, nBD_predictor, (0.00001 * nBD_predictor^2 + nBD_predictor*0.09+10)*0.05)),
-                                                    qualifierBD = ifelse(is.na(buildDestroyed), NA, 'total'))
+                                                    buildDestroyed = round(rnorm(1, nBD_predictor, 0.000001*nBD_predictor^2 + nBD_predictor*0.1 + 10)),
+                                                    qualifierBD = ifelse(is.na(buildDestroyed), NA, 'total')) %>% 
+                                          mutate(gmax = ifelse(gmax<0,0,gmax),
+                                                    mortality = ifelse(mortality<0,0,mortality),
+                                                    buildDestroyed = ifelse(buildDestroyed<0,0,buildDestroyed))
+                                        
     
     
     #overwrite ODDSim with the updated

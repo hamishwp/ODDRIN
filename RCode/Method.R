@@ -207,13 +207,16 @@ SCAM <-function(dir,Model,iVals,AlgoParams){
   s_d = list()
   nperblock = list()
   eps = list()
-  C_0_init = diag(0.00001, nrow=n_x)
+
+  C_0_init = diag(0.0001, nrow=n_x)
+
   propCOV = list()
   C_0 = list()
   for (b in 1:nblocks){
     nperblock[[b]] = length(blocks[[b]])
     s_d[[b]] = (2.38)^2/nperblock[[b]]
-    eps[[b]] = diag(0.000001, nrow=nperblock[[b]])
+    eps[[b]] = diag(0.000005, nrow=nperblock[[b]])
+
     propCOV[[b]] <- C_0_init[blocks[[b]], blocks[[b]]]
     C_0[[b]] <- as.matrix(C_0_init[blocks[[b]], blocks[[b]]])
   }
@@ -313,6 +316,9 @@ SCAM <-function(dir,Model,iVals,AlgoParams){
     saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
     # Save covariance matrix
     saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
+
+    saveRDS(xbar_tminus1,paste0(dir,"IIDIPUS_Results/xbar_tminus1_",tag))
+
     
     it <- it + 1
   }
@@ -325,6 +331,8 @@ SCAM <-function(dir,Model,iVals,AlgoParams){
   
 }
 
+
+Algorithm %<>% match.fun()
 
 
 NelderMeadOptim<-function(dir,Model,iVals,AlgoParams){
@@ -362,7 +370,6 @@ NelderMeadOptim<-function(dir,Model,iVals,AlgoParams){
   
 }
 
-Algorithm <- match.fun('SCAM')
 
 # Using the bisection method to generate a new guess
 OptimMd<-function(FFF,x,LLs){

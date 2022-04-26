@@ -36,9 +36,10 @@ main_simulated <- function(){
   # Parameterise... Here we go!
   
   AlgoParams$AllParallel <- TRUE
+  AlgoParams$cores <- 6
   AlgoParams$Np <- 5
   AlgoParams$ABC <- 1
-  AlgoParams$itermax <- 1000
+  AlgoParams$itermax <- 5000
   
   output <- Algorithm(dir=dir,
                       Model=Model,
@@ -62,6 +63,7 @@ main_simulated <- function(){
               fullvulnerability=vulnerability))
 }
 
+
 # -----------------------------------------------------------------------------------------------------------------------
 # ------------------------------------------------- MISCELLANEOUS PLOTS -------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------
@@ -77,7 +79,9 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
              plotODDy(ODDSim, var='nBD') + xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)
 
 
-output <- readRDS('/home/manderso/Documents/GitHub/ODDRINfork/IIDIPUS_Results/output_2022-04-19_162317')
+
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRINfork/IIDIPUS_Results/output_2022-04-25_135511')
+
 
 Omega_MAP <- output[which.max(output[,1]),2:ncol(output)] %>% 
   relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
@@ -107,6 +111,30 @@ lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sam
 logTarget(dir = dir,Model = Model,proposed = Omega_MAP, AlgoParams = AlgoParams)
 logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)
 
+
+#Magnitude vs contribution to likelihood
+folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
+LLs <- c()
+#LLs2 <- c()
+#LLs3 <- c()
+mags <- c()
+for(i in 1:length(ufiles)){
+  # Extract the ODD object
+  ODDy<-readRDS(paste0(folderin,ufiles[i]))
+  # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
+  ODDy@fIndies<-Model$fIndies
+  ODDy@gmax%<>%as.data.frame.list()
+  # Apply DispX
+  LLs <- append(LLs, DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
+  #LLs2 <- append(LLs2, DispX(ODD = ODDy,Omega = Omega_MAP,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
+  #LLs3 <- append(LLs3, DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
+  hrange<-grep("hazMean",names(ODDy),value = T)
+  mags <- append(mags, max(ODDy[hrange]@data, na.rm=TRUE))
+}
+plot(1:142, LLs)
+#points(1:142, LLs2,col='blue')
+#points(1:142, LLs3, col='red')
 
 #Misc plots to compare predictions from the true and MAP parameters
 # folderin<-paste0(dir,"IIDIPUS_SimInput/ODDobjects/")
@@ -171,4 +199,7 @@ logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)
 # for(i in 1:4){
 #   plot(output$OptimisationOut[,i+1], type='l')
 #   abline(h=unlist(Omega)[i], col='red')
+
 # }
+
+

@@ -382,29 +382,46 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
 # Get the log-likelihood for the displacement data
 LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measurements? 
   LL = 0
-  if(is.numeric(Y$gmax)){
+
+  if(!is.na(Y$gmax)){
+
     #LL = LL + log(dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.1))
     #LL = LL + log(dnorm(Y$gmax, Y$disp_predictor, 50))
     #LL = LL + log(1/(1+abs(Y$gmax - Y$disp_predictor)^2))
     #print(paste(Y$gmax, Y$disp_predictor, dnorm(abs(Y$gmax - Y$disp_predictor) / (0.000004 * Y$gmax^2 + Y$gmax*0.1+10), 0.5, log=TRUE)))
-    LL_disp <- dnorm(abs(Y$gmax - Y$disp_predictor) / (0.000001 * Y$gmax^2 + Y$gmax*0.11+10), mean=0, sd=1, log=TRUE)
+    LL_disp <- dnorm(Y$gmax, mean=Y$disp_predictor, sd=0.000001*Y$disp_predictor^2 + Y$disp_predictor*0.1 + 10, log=TRUE)
+    if (Y$gmax == 0){
+      LL_disp = pnorm(0, mean=Y$disp_predictor, sd=0.000001*Y$disp_predictor^2 + Y$disp_predictor*0.1 + 10, log=TRUE)
+    }
+    #LL_disp <- dnorm(abs(log(Y$gmax+20)-log(Y$disp_predictor+20)), 0,0.1,log=TRUE)
     LL = LL + LL_disp
     #LL = LL + log(dLaplace((log(Y$gmax+1)-log(Y$disp_predictor+1))/log(Y$disp_predictor+1), 0, 0.0333)) #LOOSEEND +1 to avoid log issues
     #LL = LL + log(dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.5))
     #print(paste('disp',Y$gmax, Y$disp_predictor, LL_disp))
   }
-  if(is.numeric(Y$mortality)){
+
+  if(!is.na(Y$mortality)){
     #LL = LL + dnorm(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1, log=TRUE)
     #LL = LL + log(dnorm(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1))
     #LL =  LL + log(1/(1+abs(Y$mortality - Y$mort_predictor)^2))
     #print(paste(Y$mortality, Y$mort_predictor, dnorm(abs(Y$mortality - Y$mort_predictor) / (0.000004 * Y$mortality^2 + Y$mortality*0.1+10), 0.5, log=TRUE)))
-    LL_mort <- dnorm(abs(Y$mortality - Y$mort_predictor) / (0.000001 * Y$mortality^2 + Y$mortality*0.11+10), mean=0, sd=1, log=TRUE)
+    LL_mort <- dnorm(Y$mortality, mean=Y$mort_predictor, sd=0.0000005*Y$mort_predictor^2 + Y$mort_predictor*0.05 + 5, log=TRUE)
+    if (Y$mortality == 0){
+      LL_mort = pnorm(0, mean=Y$mort_predictor, sd=0.0000005*Y$mort_predictor^2 + Y$mort_predictor*0.05 + 5, log=TRUE)
+    }
+    
+    LL_mort <- dnorm(abs(log(Y$mortality+20)-log(Y$mort_predictor+20)), 0,0.05,log=TRUE)
     LL = LL + LL_mort
     #print(paste('mort',Y$mortality, Y$mort_predictor, LL_mort))
     #LL = LL + log(dLaplace((log(Y$mortality+1)-log(Y$mort_predictor+1))/log(Y$mort_predictor+1), 0, 0.00333))
   }
-  if(is.numeric(Y$buildDestroyed)){
-    LL_BD <- dnorm(abs(Y$buildDestroyed - Y$nBD_predictor) / ( 0.000001 * Y$buildDestroyed^2 + Y$buildDestroyed*0.11+10),mean= 0, sd=1, log=TRUE)
+
+  if(!is.na(Y$buildDestroyed)){
+    #LL_BD <- dnorm(abs(Y$buildDestroyed - Y$nBD_predictor) / ( 0.000001 * Y$buildDestroyed^2 + Y$buildDestroyed*0.11+10),mean= 0, sd=1, log=TRUE)
+    LL_BD <- dnorm(Y$buildDestroyed, mean=Y$nBD_predictor, sd=0.000001*Y$nBD_predictor^2 + Y$nBD_predictor*0.1 + 10, log=TRUE)
+    if (Y$buildDestroyed == 0){
+      LL_BD = pnorm(0, mean=Y$nBD_predictor, sd=0.000001*Y$nBD_predictor^2 + Y$nBD_predictor*0.1 + 10, log=TRUE)
+    }
     LL = LL + LL_BD
     #print(paste('bd',Y$buildDestroyed, Y$nBD_predictor, LL_BD))
     #LL = LL + dnorm(log(Y$buildDestroyed+1), log(Y$nBD_predictor+1), 0.1, log=TRUE)
@@ -490,7 +507,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
   
   # Load ODD files
   folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
-  ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
   
   # Parallelise appropriately
   if(AlgoParams$AllParallel){
@@ -499,7 +516,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
     AlgoParams$cores<-AlgoParams$NestedCores
     # When using task parallelisation, put the heaviest files first for optimisation reasons
     x <- file.info(paste0(folderin,ufiles))
-    ufiles<-ufiles[match(length(ufiles):1,rank(x$size))]
+    ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))]) #looseend
     
     tmpFn<-function(filer){
       # Extract the ODD object
@@ -565,7 +582,7 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
     AlgoParams$cores<-AlgoParams$NestedCores
     # When using task parallelisation, put the heaviest files first for optimisation reasons
     x <- file.info(paste0(folderin,ufiles))
-    ufiles<-ufiles[match(length(ufiles):1,rank(x$size))]
+    ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
     
     tmpFn<-function(filer){
       # Extract the BD object

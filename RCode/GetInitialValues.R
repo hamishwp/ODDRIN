@@ -40,14 +40,25 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   #   eps=list(eps=-4.339465)#,xi=3.52269924)
   #   # mu=list(muplus=1,muminus=1,sigplus=0.001,sigminus=0.001)
   # )
-  Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=0.8,omega=0.15),
-                                         Lambda2 = list(nu= 0.4, omega=0.9),
-                                         Lambda3 = list(nu=0.7,omega=0.2),
-                                         zeta = list(k=3.5, lambda=1),
-                                         Pdens = list(M=0.02988616, k = 6.473428),
-                                         dollar = list(M = -1.051271, k = 6.473428),
-                                         theta = list(e=0.2359788),
-                                         eps = list(eps=0.01304351))), Model)
+
+  # Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=0.9,omega=0.1),
+  #                                        Lambda2 = list(nu= 0.3, omega=0.7),
+  #                                        Lambda3 = list(nu=0.8,omega=0.1),
+  #                                        zeta = list(k=2.978697, lambda=1.405539),
+  #                                        Pdens = list(M=0.02988616, k = 6.473428),
+  #                                        dollar = list(M = -1.051271, k = 6.473428),
+  #                                        theta = list(e=0.2359788),
+  #                                        eps = list(eps=0.01304351))), Model)
+  
+  
+  Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=1.05,omega=0.15),
+                                         Lambda2 = list(nu= 0.2, omega=0.7),
+                                         Lambda3 = list(nu=0.75,omega=0.1),
+                                         zeta = list(k=2.9, lambda=1.5),
+                                         Pdens = list(M=0.04, k = 6.3),
+                                         dollar = list(M = -1.2, k = 6.2),
+                                         theta = list(e=0.25),
+                                         eps = list(eps=0.03))), Model)
                 
    # Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=0.9,omega=7),
    #   Lambda2 = list(nu= 0.9, omega=8),

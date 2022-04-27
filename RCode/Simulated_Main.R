@@ -39,7 +39,7 @@ main_simulated <- function(){
   AlgoParams$cores <- 6
   AlgoParams$Np <- 5
   AlgoParams$ABC <- 1
-  AlgoParams$itermax <- 5000
+  AlgoParams$itermax <- 2500
   
   output <- Algorithm(dir=dir,
                       Model=Model,
@@ -80,7 +80,7 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
 
 
 
-output <- readRDS('/home/manderso/Documents/GitHub/ODDRINfork/IIDIPUS_Results/output_2022-04-25_135511')
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-04-26_234345')
 
 
 Omega_MAP <- output[which.max(output[,1]),2:ncol(output)] %>% 
@@ -202,4 +202,29 @@ plot(1:142, LLs)
 
 # }
 
+BDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/BDobjects/EQ20130409ABC_-3')
+BDSim@data
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRINfork/IIDIPUS_Results/output_2022-04-25_135511')
 
+LLs1 <- c()
+LLs2 <- c()
+folderin<-paste0(dir,"IIDIPUS_Input/BDobjects/")
+ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+for(i in 1:length(ufiles)){
+  # Extract the BD object
+  BDy<-readRDS(paste0(folderin,ufiles[i]))
+  # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
+  BDy@fIndies<-Model$fIndies
+  # Apply BDX
+  tLL1<-mean(tryCatch(BDX(BD = BDy,Omega = Omega,Model = Model,Method=AlgoParams, LL=T),
+                error=function(e) NA))
+  tLL2<-mean(tryCatch(BDX(BD = BDy,Omega = Omega_MAP,Model = Model,Method=AlgoParams, LL=T),
+                  error=function(e) NA))
+  LLs1 <- append(LLs1, tLL1)
+  LLs2 <- append(LLs2, tLL2)
+  # If all is good, add the LL to the total LL
+  # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
+}
+
+plot(1:142, LLs1)
+points(1:142, LLs2, col='red')

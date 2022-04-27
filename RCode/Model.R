@@ -465,7 +465,6 @@ predBD<-function(b,BD_params){
 LL_BD<-function(b,classified,BD_params){
   
   lls<-BDprob(b,BD_params)
-  
   if(classified=="Damaged") {
     tmp<-rowSums(lls)
     # Sum of all rows for the classifications that predict at least some damage
@@ -583,7 +582,7 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
     # When using task parallelisation, put the heaviest files first for optimisation reasons
     x <- file.info(paste0(folderin,ufiles))
     ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
-    
+
     tmpFn<-function(filer){
       # Extract the BD object
       BDy<-readRDS(paste0(folderin,filer))
@@ -647,8 +646,8 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
   print(paste0("LL Displacements = ",LL)) ; sLL<-LL
   
   # Add the log-likelihood values from the BD (building damage) objects
-  #LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
-  #print(paste0("LL Building Damages = ",LL-sLL))
+  LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
+  print(paste0("LL Building Damages = ",LL-sLL))
   
   posterior<-LL #+HP
   # Add Bayesian priors

@@ -80,7 +80,7 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
 
 
 
-output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-04-26_234345')
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-04-27_141719')
 
 
 Omega_MAP <- output[which.max(output[,1]),2:ncol(output)] %>% 
@@ -102,11 +102,12 @@ D_Disp <- D_MortDisp - D_Mort
 D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
 D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
 D_BD_sample <- BinR(Omega_MAP$Lambda3$nu * Dfun(Intensity, theta=Omega_MAP$theta) + Omega_MAP$Lambda3$omega, Omega_MAP$zeta)
-plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
+plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1), ylab='Proportion'); lines(Intensity, D_Mort_sample, col='red', lty=2)
 lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
 lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
 lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2)
-
+legend(x=1,y=0.7, c('D_Mort', 'D_Disp', 'D_BD', 'D_B'), col=c('red','blue','pink', 'green'), lty=1)
+?legend
 #check that the likelihood from the true parameters is not greater than the MAP estimate
 logTarget(dir = dir,Model = Model,proposed = Omega_MAP, AlgoParams = AlgoParams)
 logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)
@@ -132,7 +133,7 @@ for(i in 1:length(ufiles)){
   hrange<-grep("hazMean",names(ODDy),value = T)
   mags <- append(mags, max(ODDy[hrange]@data, na.rm=TRUE))
 }
-plot(1:142, LLs)
+plot(mags, LLs, xlab='Event Magnitude', ylab='Contribution to Log Likelihood')
 #points(1:142, LLs2,col='blue')
 #points(1:142, LLs3, col='red')
 
@@ -195,12 +196,13 @@ plot(1:142, LLs)
 # abline(h=ODDSim@gmax$gmax)
 # 
 # 
-# par(mfrow=c(2,2))
-# for(i in 1:4){
-#   plot(output$OptimisationOut[,i+1], type='l')
-#   abline(h=unlist(Omega)[i], col='red')
-
-# }
+par(mfrow=c(4,4))
+for(i in 1:14){
+   ylim=c(min(unlist(Omega)[i], output[1000:2100,i+1]), max(unlist(Omega)[i], output[1000:2100,i+1]))
+   print(ylim)
+   plot(output[1000:2100,i+1], type='l', ylab='', ylim=ylim)
+   abline(h=unlist(Omega)[i], col='red')
+}
 
 BDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/BDobjects/EQ20130409ABC_-3')
 BDSim@data

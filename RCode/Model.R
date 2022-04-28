@@ -126,9 +126,6 @@ Model$skeleton <- list(
 Model$par_lb <- c(-10,-10,-10,-10,-10,-10,  0,  0,  0,  0,  -10,  0,  0,  0)
 Model$par_ub <- c( 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,    0, 10, 10, 10)
 
-#Group the parameters based on correlation. These groups will be used to perform the MCMC in blocks. 
-#Model$par_blocks <- list(c(1,2,3,4), c(5,6), c(7,8), c(9,10,11,12), 13, 14)
-Model$par_blocks <- list(1:14) #try updating all parameters altogether
 # Get the binary regression function
 Model$BinR<-"weibull" # "gompertz"
 
@@ -382,18 +379,19 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
 # Get the log-likelihood for the displacement data
 LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measurements? 
   LL = 0
-
+  k = 10
   if(!is.na(Y$gmax)){
 
     #LL = LL + log(dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.1))
     #LL = LL + log(dnorm(Y$gmax, Y$disp_predictor, 50))
     #LL = LL + log(1/(1+abs(Y$gmax - Y$disp_predictor)^2))
     #print(paste(Y$gmax, Y$disp_predictor, dnorm(abs(Y$gmax - Y$disp_predictor) / (0.000004 * Y$gmax^2 + Y$gmax*0.1+10), 0.5, log=TRUE)))
-    LL_disp <- dnorm(Y$gmax, mean=Y$disp_predictor, sd=0.000001*Y$disp_predictor^2 + Y$disp_predictor*0.1 + 10, log=TRUE)
-    if (Y$gmax == 0){
-      LL_disp = pnorm(0, mean=Y$disp_predictor, sd=0.000001*Y$disp_predictor^2 + Y$disp_predictor*0.1 + 10, log=TRUE)
-    }
+    #LL_disp <- dnorm(Y$gmax, mean=Y$disp_predictor, sd=0.000001*Y$disp_predictor^2 + Y$disp_predictor*0.1 + 10, log=TRUE)
+    #if (Y$gmax == 0){
+    #  LL_disp = pnorm(0, mean=Y$disp_predictor, sd=0.000001*Y$disp_predictor^2 + Y$disp_predictor*0.1 + 10, log=TRUE)
+    #}
     #LL_disp <- dnorm(abs(log(Y$gmax+20)-log(Y$disp_predictor+20)), 0,0.1,log=TRUE)
+    LL_disp <- log(dlnormTrunc(Y$gmax+k, log(Y$disp_predictor+k), sdlog=0.1, min=k))
     LL = LL + LL_disp
     #LL = LL + log(dLaplace((log(Y$gmax+1)-log(Y$disp_predictor+1))/log(Y$disp_predictor+1), 0, 0.0333)) #LOOSEEND +1 to avoid log issues
     #LL = LL + log(dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.5))
@@ -405,12 +403,13 @@ LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measuremen
     #LL = LL + log(dnorm(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1))
     #LL =  LL + log(1/(1+abs(Y$mortality - Y$mort_predictor)^2))
     #print(paste(Y$mortality, Y$mort_predictor, dnorm(abs(Y$mortality - Y$mort_predictor) / (0.000004 * Y$mortality^2 + Y$mortality*0.1+10), 0.5, log=TRUE)))
-    LL_mort <- dnorm(Y$mortality, mean=Y$mort_predictor, sd=0.0000005*Y$mort_predictor^2 + Y$mort_predictor*0.05 + 5, log=TRUE)
-    if (Y$mortality == 0){
-      LL_mort = pnorm(0, mean=Y$mort_predictor, sd=0.0000005*Y$mort_predictor^2 + Y$mort_predictor*0.05 + 5, log=TRUE)
-    }
+    #LL_mort <- dnorm(Y$mortality, mean=Y$mort_predictor, sd=0.0000005*Y$mort_predictor^2 + Y$mort_predictor*0.05 + 5, log=TRUE)
+    #if (Y$mortality == 0){
+    #  LL_mort = pnorm(0, mean=Y$mort_predictor, sd=0.0000005*Y$mort_predictor^2 + Y$mort_predictor*0.05 + 5, log=TRUE)
+    #}
     
-    LL_mort <- dnorm(abs(log(Y$mortality+20)-log(Y$mort_predictor+20)), 0,0.05,log=TRUE)
+    #LL_mort <- dnorm(abs(log(Y$mortality+20)-log(Y$mort_predictor+20)), 0,0.05,log=TRUE)
+    LL_mort <- log(dlnormTrunc(Y$mortality+k, log(Y$mort_predictor+k), sdlog=0.03, min=k))
     LL = LL + LL_mort
     #print(paste('mort',Y$mortality, Y$mort_predictor, LL_mort))
     #LL = LL + log(dLaplace((log(Y$mortality+1)-log(Y$mort_predictor+1))/log(Y$mort_predictor+1), 0, 0.00333))
@@ -418,10 +417,11 @@ LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measuremen
 
   if(!is.na(Y$buildDestroyed)){
     #LL_BD <- dnorm(abs(Y$buildDestroyed - Y$nBD_predictor) / ( 0.000001 * Y$buildDestroyed^2 + Y$buildDestroyed*0.11+10),mean= 0, sd=1, log=TRUE)
-    LL_BD <- dnorm(Y$buildDestroyed, mean=Y$nBD_predictor, sd=0.000001*Y$nBD_predictor^2 + Y$nBD_predictor*0.1 + 10, log=TRUE)
-    if (Y$buildDestroyed == 0){
-      LL_BD = pnorm(0, mean=Y$nBD_predictor, sd=0.000001*Y$nBD_predictor^2 + Y$nBD_predictor*0.1 + 10, log=TRUE)
-    }
+    #LL_BD <- dnorm(Y$buildDestroyed, mean=Y$nBD_predictor, sd=0.000001*Y$nBD_predictor^2 + Y$nBD_predictor*0.1 + 10, log=TRUE)
+    #if (Y$buildDestroyed == 0){
+    #  LL_BD = pnorm(0, mean=Y$nBD_predictor, sd=0.000001*Y$nBD_predictor^2 + Y$nBD_predictor*0.1 + 10, log=TRUE)
+    #}
+    LL_BD <- log(dlnormTrunc(Y$buildDestroyed+k, log(Y$nBD_predictor+k), sdlog=0.1, min=k))
     LL = LL + LL_BD
     #print(paste('bd',Y$buildDestroyed, Y$nBD_predictor, LL_BD))
     #LL = LL + dnorm(log(Y$buildDestroyed+1), log(Y$nBD_predictor+1), 0.1, log=TRUE)
@@ -438,9 +438,8 @@ LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measuremen
   # dgammaM(Ystar,Y,0.1,log = T)
 }
 
-#plot(1:10000, 1:10000, type='l')
-#lines(1:10000, qnorm(0.025, abs(1:10000 - (.00001 * (1:10000)^2 + (1:10000)*0.09+10))/(.00001 * (1:10000)^2 + (1:10000)*0.09+10),0.1))
-#lines(1:10000, qnorm(0.975, 1:10000, (.00001 * (1:10000)^2 + (1:10000)*0.09+10)*0.1))
+#xrange <- 1:100; k <- 10; x <- 5
+#plot(xrange, dlnormTrunc(xrange+k, log(x+k), sdlog=0.03, min=k))
 
 
 LL_beta_apply<-function(b,value,BD_params) do.call(BD_params$functions[[value]],as.list(c(x=b,unlist(BD_params$Params[[value]]))))

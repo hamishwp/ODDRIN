@@ -37,7 +37,7 @@ if(is.null(AlgoParams$AllParallel)){
   } else AlgoParams$AllParallel<-F
 }
 # Choose the parameterisation algorithm - the string must match the function name exactly
-Algorithm<-"SCAM" # "NelderMeadOptim", "AMCMC"
+Algorithm<-"AMCMC2" # "NelderMeadOptim", "AMCMC"
 
 # Metropolis-Hastings proposal distribution, given old values and covariance matrix
 multvarNormProp <- function(xt, propPars){
@@ -186,11 +186,9 @@ AMCMC<-function(dir,Model,iVals,AlgoParams){
   
 }
 
-# Block MH algorithm: https://cepr.org/sites/default/files/40002_Session%202%20-%20MetropolisHastings.pdf
-# with adaptive https://arxiv.org/pdf/2101.00118.pdf
-# Described here as SCAM (single component adaptive Metropolis-Hastings): https://link.springer.com/article/10.1007/BF02789703
-# other adaptive approaches: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.149.9329&rep=rep1&type=pdf, http://probability.ca/jeff/ftpdir/adaptex.pdf,file:///home/manderso/Downloads/1080222083%20(1).pdf
-SCAM <-function(dir,Model,iVals,AlgoParams){
+
+# Described in https://arxiv.org/pdf/2101.00118.pdf
+AMCMC2 <-function(dir,Model,iVals,AlgoParams){
   
   # Set Random Number Generator (RNG) initial seed
   set.seed(round(runif(1,0,100000))) 
@@ -202,24 +200,12 @@ SCAM <-function(dir,Model,iVals,AlgoParams){
   xPrev<-propMu<-unlist(iVals$x0)
   n_x <- length(xPrev)
   xbar_tminus1 <- xPrev
-  blocks = Model$par_blocks
-  nblocks = length(blocks)
-  s_d = list()
-  nperblock = list()
-  eps = list()
 
-  C_0_init = diag(0.0001, nrow=n_x)
+  C_0 = diag(0.0001, nrow=n_x)
 
-  propCOV = list()
-  C_0 = list()
-  for (b in 1:nblocks){
-    nperblock[[b]] = length(blocks[[b]])
-    s_d[[b]] = (2.38)^2/nperblock[[b]]
-    eps[[b]] = diag(0.000005, nrow=nperblock[[b]])
-
-    propCOV[[b]] <- C_0_init[blocks[[b]], blocks[[b]]]
-    C_0[[b]] <- as.matrix(C_0_init[blocks[[b]], blocks[[b]]])
-  }
+  s_d = (2.38)^2/n_x
+  eps = diag(0.000005, nrow=n_x)
+  propCOV <- C_0
 
   output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n_x+1)
   xNew <- rep(NA,n_x)
@@ -238,55 +224,53 @@ SCAM <-function(dir,Model,iVals,AlgoParams){
   while (it <= AlgoParams$itermax){
     print(it)
     t <- it - 1
-    for (b in 1:nblocks){
       
-      # Parameter proposal
-      xNew <- xPrev
-      if (t > t_0){
-        xNew[blocks[[b]]] <- multvarNormProp(xt=xPrev[blocks[[b]]], propPars=propCOV[[b]])
-      } else {
-        xNew[blocks[[b]]] <- multvarNormProp(xt=xPrev[blocks[[b]]], propPars=C_0[[b]])
-      }
-      
-      # Check proposal is within the parameter space:
-      if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
-        b <- b + 1 
-        next
-      }
-      
-      # Convert parameters to physical/useable values
-      if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
-      
-      # Calculate log-target value
-      lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
-                                     AlgoParams = AlgoParams), error=function(e) NA)
-
-      # Check if we have a NaN
-      if(is.na(lTargNew)|is.infinite(lTargNew)) {
-        b <- b + 1 
-        next
-      }
-      
-      # Prepare for acceptance
-      u <- runif(1)
-      
-      # Acceptance probability
-      alpha <- min(c(exp(lTargNew - lTargOld),1))
-      
-      # Metropolis Acceptance Algorithm
-      if (alpha>=u) { # Accepted!
-        xPrev<-xNew
-      } 
-      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
-                                     AlgoParams = AlgoParams), error=function(e) NA)
-      
-      propCOV[[b]] <- (t-1)/t * propCOV[[b]] + s_d[[b]]/(t+1) * (xPrev[blocks[[b]]] - xbar_tminus1[blocks[[b]]]) %*% t(xPrev[blocks[[b]]] - xbar_tminus1[blocks[[b]]]) + s_d[[b]] /t * eps[[b]]
-      xbar_tminus1[blocks[[b]]] <- (t * xbar_tminus1[blocks[[b]]] + xPrev[blocks[[b]]])/(t+1)
-      
-      print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",lTargOld))
-      print(" ")
-      
+    # Parameter proposal
+    xNew <- xPrev
+    if (t > t_0){
+      xNew <- multvarNormProp(xt=xPrev, propPars=propCOV)
+    } else {
+      xNew <- multvarNormProp(xt=xPrev, propPars=C_0)
     }
+    
+    # Check proposal is within the parameter space:
+    if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
+      it <- it + 1 
+      next
+    }
+    
+    # Convert parameters to physical/useable values
+    if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
+    
+    # Calculate log-target value
+    lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
+                                   AlgoParams = AlgoParams), error=function(e) NA)
+
+    # Check if we have a NaN
+    if(is.na(lTargNew)|is.infinite(lTargNew)) {
+      it <- it + 1 
+      next
+    }
+    
+    # Prepare for acceptance
+    u <- runif(1)
+    
+    # Acceptance probability
+    alpha <- min(c(exp(lTargNew - lTargOld),1))
+    
+    # Metropolis Acceptance Algorithm
+    if (alpha>=u) { # Accepted!
+      xPrev<-xNew
+    } 
+    lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
+                                   AlgoParams = AlgoParams), error=function(e) NA)
+    
+    propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
+    xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
+    
+    print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",lTargOld))
+    print(" ")
+      
     output[it,] <- c(lTargOld, xPrev)
     
     Intensity <- seq(0,10,0.1)
@@ -322,8 +306,6 @@ SCAM <-function(dir,Model,iVals,AlgoParams){
     
     it <- it + 1
   }
-  
-  
   
   return(list(PhysicalValues=output[which.max(output[,1]),2:ncol(output)] %>% 
                 relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model), # MAP value 

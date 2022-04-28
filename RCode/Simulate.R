@@ -145,7 +145,7 @@ setMethod(f="initialize", signature="BDSim",
             .Object@buildingsfile<-paste0("./IIDIPUS_Input/OSM_Buildings_Objects/",unique(ODD@eventid)[1])
             
             Damage = data.frame(Latitude=double(),Longitude=double(), grading=character(), Confidence=character())
-            cells_with_sat <- sample(1:NROW(ODD@coords), runif(1,3,15))
+            cells_with_sat <- sample(1:NROW(ODD@coords), runif(1,3,20))
             
             for (ij in cells_with_sat){
               lonmin <- ODD@coords[ij,'Longitude']-ODD@grid@cellsize['Longitude']/2
@@ -208,8 +208,8 @@ simulateEvent <- function(r, I0 = 4.5){
   # - The maximum magnitude varies randomly in [5, 9.3] and the spread in [15, 25]
   # - The earthquake standard deviation in each cell is random uniform in [0.8,1.1]
   
-  maxMag = runif(1, 5, 10)
-  sigma = runif(1, 9, 12)
+  maxMag = runif(1, 4.5, 10)
+  sigma = runif(1, 20, 38)
   r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, n=r@nrows)) 
   r <- r * (maxMag/r@data@max)
   sd <- setValues(r, runif(r@ncols*r@nrows, 0.8,1.1))
@@ -286,7 +286,7 @@ simulateODDSim <- function(miniDam, I0=4.5){
   # OUTPUT: 
   #  - ODDSim: an object of class ODDSim (the simulated equivalent of an ODD object)
   
-  r <- raster(ncol=30, nrow=30, xmn=-0.125, xmx=0.125, ymn=-0.125,ymx=0.125, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  r <- raster(ncol=100, nrow=100, xmn=-0.125, xmx=0.125, ymn=-0.125,ymx=0.125, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   
   lenny = rgeom(1, 0.8) + 1 #generate number of events according to a geometric distribution
   bbox = c(-0.125,-0.125,0.125,0.125) 
@@ -294,6 +294,9 @@ simulateODDSim <- function(miniDam, I0=4.5){
                                  NumEvents=lenny,hazard="EQ", I0=I0, eventdates=rep(miniDam$sdate, lenny)))
   for(i in 1:lenny){
     hazsdf <- simulateEvent(r, I0)
+    if(is.null(hazsdf@data$mmi_mean)){
+      next
+    }
     lhazdat <- append(lhazdat, new("HAZARD",
         obj=hazsdf,
         hazard="EQ",
@@ -302,7 +305,10 @@ simulateODDSim <- function(miniDam, I0=4.5){
         alertlevel=ifelse(max(hazsdf$mmi_mean)>7.5, 'red', ifelse(max(hazsdf$mmi_mean)>6, 'orange', 'green')), #assign pretty arbitrarily, don't think this is used in the model
         alertscore=0))
   }
-  
+  if (length(lhazdat)== 1){
+    print('Simulation failed: affected region under simulated event is too small')
+    return(NULL)
+  }
   PopSim <- simulatePopulation(r)
   GDPSim <- simulateGDP(r)
   
@@ -333,6 +339,9 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
   for(ev in unique(DamageData$eventid)){
     miniDam<-DamageData%>%filter(eventid==ev)
     ODDSim <- simulateODDSim(miniDam, I0=I0)
+    if (is.null(ODDSim)){
+      next
+    }
     BDSim <- new('BDSim', ODDSim)
     namer<-paste0(ODDSim@hazard,
                   str_remove_all(as.character.Date(min(ODDSim@hazdates)),"-"),
@@ -340,10 +349,9 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
                   "_",ODDSim@eventid)
     # Save out objects to save on RAM
     ODDpath<-paste0(dir,"IIDIPUS_SimInput/ODDobjects/",namer)
-    ODDpaths<-append(ODDpaths, ODDpath)
     saveRDS(ODDSim,ODDpath)
+    
     BDpath<-paste0(dir,"IIDIPUS_SimInput/BDobjects/",namer) 
-    BDpaths<-append(BDpaths, BDpath)
     saveRDS(BDSim,BDpath)
     print(paste0('Saved simulated hazard to ', namer))
   }
@@ -351,31 +359,29 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
   #calculate Model$center based on the simulated events
   Model$center <- ExtractCentering(dir, input_folder='IIDIPUS_SimInput/', saver=F)
   
+  ODDpaths <-na.omit(list.files(path="IIDIPUS_SimInput/ODDobjects/"))
+  BDpaths <-na.omit(list.files(path="IIDIPUS_SimInput/BDobjects/"))
+  k <- 10
   #now loop through each event and simulate the displacement, mortality, and building destruction using DispX()
   for(i in 1:length(ODDpaths)){
-    ODDSim <- readRDS(ODDpaths[i])
+    ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
     #simulate displacement, mortality and building destruction using DispX
     ODDSim %<>% DispX(Omega, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300))
     
     #take these simulations as the actual values
     ODDSim@gmax <- ODDSim@predictDisp %>% transmute(iso3='ABC',
-                                                    gmax= round(rnorm(1, disp_predictor, 0.000001*disp_predictor^2 + disp_predictor*0.1 + 10)), 
+                                                    gmax = round(rlnormTrunc(1,log(disp_predictor+k), sdlog=0.1, min=k)) - k,
                                                     qualifier = ifelse(is.na(gmax), NA, 'total'),
-                                                    mortality= round(rnorm(1, mort_predictor, 0.0000005*mort_predictor^2 + mort_predictor*0.05 + 5)),
+                                                    mortality = round(rlnormTrunc(1,log(mort_predictor+k), sdlog=0.03, min=k)) - k,
                                                     qualifierMort = ifelse(is.na(mort_predictor), NA, 'total'), 
-                                                    buildDestroyed = round(rnorm(1, nBD_predictor, 0.000001*nBD_predictor^2 + nBD_predictor*0.1 + 10)),
-                                                    qualifierBD = ifelse(is.na(buildDestroyed), NA, 'total')) %>% 
-                                          mutate(gmax = ifelse(gmax<0,0,gmax),
-                                                    mortality = ifelse(mortality<0,0,mortality),
-                                                    buildDestroyed = ifelse(buildDestroyed<0,0,buildDestroyed))
+                                                    buildDestroyed = round(rlnormTrunc(1,log(nBD_predictor+k), sdlog=0.1, min=k)) - k,
+                                                    qualifierBD = ifelse(is.na(buildDestroyed), NA, 'total'))
                                         
-    
-    
     #overwrite ODDSim with the updated
-    saveRDS(ODDSim, ODDpaths[i])
+    saveRDS(ODDSim, paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
   }
   for (i in 1:length(BDpaths)){
-    BDSim <- readRDS(BDpaths[i])
+    BDSim <- readRDS(paste0("IIDIPUS_SimInput/BDobjects/", BDpaths[i]))
     BDSim %<>% BDX(Omega, Model, LL=FALSE, Method=list(Np=1,cores=1))
     #take these simulations as the actual values
     BDSim@data$grading <- BDSim@data$ClassPred
@@ -384,7 +390,8 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
     for (j in affected){
       BDSim@data$grading[j] = ifelse(runif(1)>0.5, BDSim@data$grading[j], 'Damaged')
     }
-    saveRDS(BDSim,BDpaths[i])
+    saveRDS(BDSim,paste0("IIDIPUS_SimInput/BDobjects/",BDpaths[i]))
   }
+  return(Model$center)
 }
 

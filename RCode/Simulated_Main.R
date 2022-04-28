@@ -23,7 +23,7 @@ Omega <- list(Lambda1 = list(nu=1,omega=0.1),
               theta = list(e=0.2359788),
               eps = list(eps=0.01304351))
 
-simulateDataSet(150, Omega, Model=Model, dir = dir)
+Model$center <- simulateDataSet(10, Omega, Model=Model, dir = dir)
 #After generating the simulated data, need to move 'from 'centerings' 
 #and 'ODDobjects' from 'IIDIPUS_SimInput' to 'IIDIPUS_Input'
 
@@ -39,7 +39,7 @@ main_simulated <- function(){
   AlgoParams$cores <- 6
   AlgoParams$Np <- 5
   AlgoParams$ABC <- 1
-  AlgoParams$itermax <- 2500
+  AlgoParams$itermax <- 4000
   
   output <- Algorithm(dir=dir,
                       Model=Model,
@@ -107,7 +107,7 @@ lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue'
 lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
 lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2)
 legend(x=1,y=0.7, c('D_Mort', 'D_Disp', 'D_BD', 'D_B'), col=c('red','blue','pink', 'green'), lty=1)
-?legend
+
 #check that the likelihood from the true parameters is not greater than the MAP estimate
 logTarget(dir = dir,Model = Model,proposed = Omega_MAP, AlgoParams = AlgoParams)
 logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)

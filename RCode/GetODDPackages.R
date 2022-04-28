@@ -50,6 +50,7 @@ LoadLibraries<-function(packred){
   library(doParallel)
   library(foreach)
   library(ExtDist)
+  library(EnvStats)
   
   if(!packred) {
     library(codetools)
@@ -66,7 +67,7 @@ GetODDPackages<-function(packred){
                         "geojsonR", "tiff", "gstat", "mvtnorm",
                         "RColorBrewer", "geosphere","GGally", "wbstats",
                         "countrycode","rworldmap","rworldxtra","chron","ncdf4",
-                        "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist")
+                        "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 'EnvStats')
   
   if(!packred) list.of.packages<-c(list.of.packages,
                                    "codetools","latex2exp",

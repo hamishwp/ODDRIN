@@ -263,7 +263,7 @@ simulateGDP <- function(r){
   #   the GDP of the closest point, therefore partitioning the data. This is an attempt to mimic the administrative 
   #   boundaries present in the actual GDP data.
   
-  nRegions = rpois(1, 5) + 1
+  nRegions = rpois(1, 20) + 1
   regionPoints = cbind(runif(nRegions,r@extent@xmin, r@extent@xmax),runif(nRegions,r@extent@ymin, r@extent@ymax))
   GDPperRegion = round(sort(runif(nRegions, 100, 100000)))
   r_mat <- rasterToPoints(r)
@@ -286,10 +286,10 @@ simulateODDSim <- function(miniDam, I0=4.5){
   # OUTPUT: 
   #  - ODDSim: an object of class ODDSim (the simulated equivalent of an ODD object)
   
-  r <- raster(ncol=100, nrow=100, xmn=-0.125, xmx=0.125, ymn=-0.125,ymx=0.125, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  r <- raster(ncol=100, nrow=100, xmn=-0.25, xmx=0.25, ymn=-0.25,ymx=0.25, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   
   lenny = rgeom(1, 0.8) + 1 #generate number of events according to a geometric distribution
-  bbox = c(-0.125,-0.125,0.125,0.125) 
+  bbox = c(-0.25,-0.25,0.25,0.25) 
   lhazdat<-list(hazard_info=list(bbox=bbox,sdate=min(miniDam$sdate),fdate=max(miniDam$fdate),
                                  NumEvents=lenny,hazard="EQ", I0=I0, eventdates=rep(miniDam$sdate, lenny)))
   for(i in 1:lenny){

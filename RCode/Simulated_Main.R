@@ -23,7 +23,7 @@ Omega <- list(Lambda1 = list(nu=1,omega=0.1),
               theta = list(e=0.2359788),
               eps = list(eps=0.01304351))
 
-Model$center <- simulateDataSet(10, Omega, Model=Model, dir = dir)
+Model$center <- simulateDataSet(100, Omega, Model=Model, dir = dir)
 #After generating the simulated data, need to move 'from 'centerings' 
 #and 'ODDobjects' from 'IIDIPUS_SimInput' to 'IIDIPUS_Input'
 
@@ -46,12 +46,17 @@ main_simulated <- function(){
                       iVals=iVals,
                       AlgoParams=AlgoParams)
   
+  output <- AMCMC2_continue(dir=dir,
+                            Model=Model,
+                            iVals=iVals,
+                            AlgoParams=AlgoParams)
+  
   Omega_MAP = output$PhysicalValues
   
   # Save the output
   saveRDS(object = output,
           file = paste0(dir,"IIDIPUS_Results/output_",
-                        DateTimeString(),"simulated.Rdata"))
+                        DateTimeString(),"10simulated.Rdata"))
   
   # Calculate the single linear predictor term that would make each event prediction perfectly accurate
   modifiers<-SingleEventsModifierCalc(dir,Model,output$PhysicalValues,AlgoParams)
@@ -80,33 +85,69 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
 
 
 
-output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-04-27_141719')
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-02_131753')
 
 
 Omega_MAP <- output[which.max(output[,1]),2:ncol(output)] %>% 
   relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
 
-
 # Plot S-curves for the actual and MAP parameterisation
+plot_S_curves <- function(Omega, Omega_MAP=NULL){
+  Intensity <- seq(0,10,0.1)
+  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta)
+  D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
+  D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
+  D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
+  D_Disp <- D_MortDisp - D_Mort
+  D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
+  plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1), ylab='Proportion'); lines(Intensity, D_Disp, col='blue'); 
+  lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_extent, col='green', type='l'); 
+  legend(x=1,y=0.7, c('D_Mort', 'D_Disp', 'D_BD', 'D_B'), col=c('red','blue','pink', 'green'), lty=1)
+  
+  if(!is.null(Omega_MAP)){
+    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_MAP$theta) , Omega_MAP$zeta)
+    D_MortDisp_sample <- BinR( Omega_MAP$Lambda1$nu * Dfun(Intensity, theta=Omega_MAP$theta) + Omega_MAP$Lambda1$omega, Omega_MAP$zeta)
+    D_Mort_sample <- BinR(Omega_MAP$Lambda2$nu * Dfun(Intensity, theta=Omega_MAP$theta) + Omega_MAP$Lambda2$omega , Omega_MAP$zeta) * D_MortDisp_sample
+    D_BD_sample <- BinR(Omega_MAP$Lambda3$nu * Dfun(Intensity, theta=Omega_MAP$theta) + Omega_MAP$Lambda3$omega, Omega_MAP$zeta)
+    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
+    lines(Intensity, D_Mort_sample, col='red', lty=2); lines(Intensity, D_Disp_sample, col='blue', lty=2); 
+    lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2);
+  }
+}
 
-Intensity <- seq(0,10,0.1)
-Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
+plot_S_curves(Omega,Omega_MAP)
 
-D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
-D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_MAP$theta) , Omega_MAP$zeta)
-D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
-D_MortDisp_sample <- BinR( Omega_MAP$Lambda1$nu * Dfun(Intensity, theta=Omega_MAP$theta) + Omega_MAP$Lambda1$omega, Omega_MAP$zeta)
-D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
-D_Mort_sample <- BinR(Omega_MAP$Lambda2$nu * Dfun(Intensity, theta=Omega_MAP$theta) + Omega_MAP$Lambda2$omega , Omega_MAP$zeta) * D_MortDisp_sample
-D_Disp <- D_MortDisp - D_Mort
-D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
-D_BD_sample <- BinR(Omega_MAP$Lambda3$nu * Dfun(Intensity, theta=Omega_MAP$theta) + Omega_MAP$Lambda3$omega, Omega_MAP$zeta)
-plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1), ylab='Proportion'); lines(Intensity, D_Mort_sample, col='red', lty=2)
-lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
-lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
-lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2)
-legend(x=1,y=0.7, c('D_Mort', 'D_Disp', 'D_BD', 'D_B'), col=c('red','blue','pink', 'green'), lty=1)
+plot_shaded_S_curves <- function(Omega, output){
+  Intensity <- seq(0,10,0.1)
+  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta)
+  D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
+  D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
+  D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
+  D_Disp <- D_MortDisp - D_Mort
+  D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
+  plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1), ylab='Proportion', lwd=3); 
+  
+  n_iter <- NROW(output)
+  plotted_iter <- round(seq(1,700,length.out=700))
+  for (i in plotted_iter){
+    Omega_iter <- output[i,2:ncol(output)] %>% 
+      relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
+    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_iter$theta) , Omega_iter$zeta)
+    D_MortDisp_sample <- BinR( Omega_iter$Lambda1$nu * Dfun(Intensity, theta=Omega_iter$theta) + Omega_iter$Lambda1$omega, Omega_iter$zeta)
+    D_Mort_sample <- BinR(Omega_iter$Lambda2$nu * Dfun(Intensity, theta=Omega_iter$theta) + Omega_iter$Lambda2$omega , Omega_iter$zeta) * D_MortDisp_sample
+    D_BD_sample <- BinR(Omega_iter$Lambda3$nu * Dfun(Intensity, theta=Omega_iter$theta) + Omega_iter$Lambda3$omega, Omega_iter$zeta)
+    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
+    lines(Intensity, D_Mort_sample, col=adjustcolor("red", alpha = 0.1)); lines(Intensity, D_Disp_sample, col=adjustcolor("cyan", alpha = 0.1), alpha=0.2); 
+    lines(Intensity, D_extent_sample, col=adjustcolor("green", alpha = 0.1)); lines(Intensity, D_BD_sample, col=adjustcolor("pink", alpha = 0.1)); 
+  }
+  lines(Intensity, D_Mort, col='darkred', lwd=3); 
+  lines(Intensity, D_Disp, col='blue', lwd=3); 
+  lines(Intensity, D_BD, col='hotpink', type='l', lwd=3); lines(Intensity, D_extent, col='darkgreen', type='l', lwd=3); 
+  legend(x=1,y=0.7, c('D_Mort', 'D_Disp', 'D_BD', 'D_B'), col=c('red','blue','pink', 'green'), lty=1)
+}
+
+
+
 
 #check that the likelihood from the true parameters is not greater than the MAP estimate
 logTarget(dir = dir,Model = Model,proposed = Omega_MAP, AlgoParams = AlgoParams)
@@ -138,50 +179,50 @@ plot(mags, LLs, xlab='Event Magnitude', ylab='Contribution to Log Likelihood')
 #points(1:142, LLs3, col='red')
 
 #Misc plots to compare predictions from the true and MAP parameters
-# folderin<-paste0(dir,"IIDIPUS_SimInput/ODDobjects/")
-# ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-# x_actual = c()
-# x_pred_TRUE = c()
-# x_pred_MAP = c()
-# y_actual = c()
-# y_pred_TRUE = c()
-# y_pred_MAP = c()
-# z_actual = c()
-# z_pred_TRUE = c()
-# z_pred_MAP = c()
-# 
-# for(i in 1:length(ufiles)){
-#   ODDSim <- readRDS(paste0(folderin,ufiles[i]))
-#   #simulate displacement, mortality and building destruction using DispX
-#   ODDSim_Omega <- ODDSim %>% DispX(Omega, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300))
-#   ODDSim_MAP <- ODDSim %>% DispX(Omega_MAP, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300))
-#   x_actual = append(x_actual, ODDSim@gmax$gmax)
-#   x_pred_TRUE = append(x_pred_TRUE, ODDSim_Omega@predictDisp$disp_predictor)
-#   x_pred_MAP = append(x_pred_MAP, ODDSim_MAP@predictDisp$disp_predictor)
-#   y_actual = append(y_actual, ODDSim@gmax$mortality)
-#   y_pred_TRUE = append(y_pred_TRUE, ODDSim_Omega@predictDisp$mort_predictor)
-#   y_pred_MAP = append(y_pred_MAP, ODDSim_MAP@predictDisp$mort_predictor)
-#   z_actual = append(z_actual, ODDSim@gmax$buildDestroyed)
-#   z_pred_TRUE = append(z_pred_TRUE, ODDSim_Omega@predictDisp$nBD_predictor)
-#   z_pred_MAP = append(z_pred_MAP, ODDSim_MAP@predictDisp$nBD_predictor)
-# }
-# 
-# par(mfrow=c(1,1))
-# plot(log(x_actual), log(x_actual))
-# points(x_actual%>% log(), x_pred_TRUE%>% log(), col='blue')
-# points(x_actual %>% log(), x_pred_MAP%>% log(), col='red')
-# 
-# par(mfrow=c(1,1))
-# plot(log(y_actual), log(y_actual), ylim=c(2,10))
-# points(y_actual%>% log(), y_pred_TRUE%>% log(), col='blue')
-# points(y_actual %>% log(), y_pred_MAP%>% log(), col='red')
-# 
-# 
-# par(mfrow=c(1,1))
-# plot(log(z_actual), log(z_actual), ylim=c(6.5,7.5))
-# points(z_actual%>% log(), z_pred_TRUE%>% log(), col='blue')
-# points(z_actual %>% log(), z_pred_MAP%>% log(), col='red')
-# 
+folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+x_actual = c()
+x_pred_TRUE = c()
+x_pred_MAP = c()
+y_actual = c()
+y_pred_TRUE = c()
+y_pred_MAP = c()
+z_actual = c()
+z_pred_TRUE = c()
+z_pred_MAP = c()
+
+for(i in 1:length(ufiles)){
+  ODDSim <- readRDS(paste0(folderin,ufiles[i]))
+  #simulate displacement, mortality and building destruction using DispX
+  ODDSim_Omega <- ODDSim %>% DispX(Omega, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300))
+  ODDSim_MAP <- ODDSim %>% DispX(Omega_MAP, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300))
+  x_actual = append(x_actual, ODDSim@gmax$gmax)
+  x_pred_TRUE = append(x_pred_TRUE, ODDSim_Omega@predictDisp$disp_predictor)
+  x_pred_MAP = append(x_pred_MAP, ODDSim_MAP@predictDisp$disp_predictor)
+  y_actual = append(y_actual, ODDSim@gmax$mortality)
+  y_pred_TRUE = append(y_pred_TRUE, ODDSim_Omega@predictDisp$mort_predictor)
+  y_pred_MAP = append(y_pred_MAP, ODDSim_MAP@predictDisp$mort_predictor)
+  z_actual = append(z_actual, ODDSim@gmax$buildDestroyed)
+  z_pred_TRUE = append(z_pred_TRUE, ODDSim_Omega@predictDisp$nBD_predictor)
+  z_pred_MAP = append(z_pred_MAP, ODDSim_MAP@predictDisp$nBD_predictor)
+}
+
+par(mfrow=c(1,1))
+plot(log(x_actual), log(x_actual))
+points(x_actual%>% log(), x_pred_TRUE%>% log(), col='blue')
+points(x_actual %>% log(), x_pred_MAP%>% log(), col='red')
+
+par(mfrow=c(1,1))
+plot(log(y_actual), log(y_actual))
+points(y_actual%>% log(), y_pred_TRUE%>% log(), col='blue')
+points(y_actual %>% log(), y_pred_MAP%>% log(), col='red')
+
+
+par(mfrow=c(1,1))
+plot(log(z_actual), log(z_actual))
+points(z_actual%>% log(), z_pred_TRUE%>% log(), col='blue')
+points(z_actual %>% log(), z_pred_MAP%>% log(), col='red')
+
 # 
 # i = 10
 # samples = c()
@@ -198,9 +239,8 @@ plot(mags, LLs, xlab='Event Magnitude', ylab='Contribution to Log Likelihood')
 # 
 par(mfrow=c(4,4))
 for(i in 1:14){
-   ylim=c(min(unlist(Omega)[i], output[1000:2100,i+1]), max(unlist(Omega)[i], output[1000:2100,i+1]))
-   print(ylim)
-   plot(output[1000:2100,i+1], type='l', ylab='', ylim=ylim)
+   ylim=c(min(unlist(Omega)[i], output[1:700,i+1]), max(unlist(Omega)[i], output[1:700,i+1]))
+   plot(output[1:700,i+1], type='l', ylab='', ylim=ylim)
    abline(h=unlist(Omega)[i], col='red')
 }
 
@@ -230,3 +270,11 @@ for(i in 1:length(ufiles)){
 
 plot(1:142, LLs1)
 points(1:142, LLs2, col='red')
+
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-04-30_170148')
+
+for (i in 1:NROW(output)){
+  if (is.na(output[i,1])){
+    output[i,] <- output[i-1,]
+  }
+}

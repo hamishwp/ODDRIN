@@ -196,13 +196,13 @@ AMCMC2 <-function(dir,Model,iVals,AlgoParams){
   # Check no mistakes have been made in the model, methodology and initial values
   checkLTargs(Model,iVals,AlgoParams)
   
-  t_0 <- 40
+  t_0 <- 500
   
   xPrev<-propMu<-unlist(iVals$x0)
   n_x <- length(xPrev)
   xbar_tminus1 <- xPrev
 
-  C_0 = iVals$COV #diag(0.00001, nrow=n_x)
+  C_0 = diag(0.001, nrow=n_x)
 
   s_d = (2.38)^2/n_x
   eps = diag(0.000000001, nrow=n_x)
@@ -233,6 +233,7 @@ AMCMC2 <-function(dir,Model,iVals,AlgoParams){
     } else {
       xNew <- multvarNormProp(xt=xPrev, propPars=C_0)
     }
+    xNew[7:14] <- unlist(Omega)[7:14]
     
     # Check proposal is within the parameter space:
     if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
@@ -259,6 +260,11 @@ AMCMC2 <-function(dir,Model,iVals,AlgoParams){
       next
     }
     
+    if (lTargNew > (lTargOld - 50)){
+      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
+                                     AlgoParams = AlgoParams), error=function(e) NA)
+    }
+    
     # Prepare for acceptance
     u <- runif(1)
     
@@ -269,9 +275,8 @@ AMCMC2 <-function(dir,Model,iVals,AlgoParams){
     if (alpha>=u) { # Accepted!
       print('ACCEPTED!')
       xPrev<-xNew
+      lTargOld <- lTargNew
     } 
-    lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
-                                   AlgoParams = AlgoParams), error=function(e) NA)
     
     propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
     xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
@@ -292,14 +297,14 @@ AMCMC2 <-function(dir,Model,iVals,AlgoParams){
     # Plot S-curves for the actual and MAP parameterisation
     D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
     D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)
-    D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
-    D_MortDisp_sample <- BinR( Omega_curr$Lambda1$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda1$omega, Omega_curr$zeta)
-    D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
-    D_Mort_sample <- BinR(Omega_curr$Lambda2$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda2$omega , Omega_curr$zeta) * D_MortDisp_sample
+    D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
+    D_MortDisp_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda1$nu, Omega_curr$Lambda1$omega)
+    D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
+    D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda2$nu, Omega_curr$Lambda2$omega)
     D_Disp <- D_MortDisp - D_Mort
     D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
-    D_BD_sample <- BinR(Omega_curr$Lambda3$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda3$omega, Omega_curr$zeta)
+    D_BD <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
+    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda3$nu, Omega_curr$Lambda3$omega)
     plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
     lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
     lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
@@ -318,7 +323,153 @@ AMCMC2 <-function(dir,Model,iVals,AlgoParams){
     saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
 
     saveRDS(xbar_tminus1,paste0(dir,"IIDIPUS_Results/xbar_tminus1_",tag))
+    print(cov2cor(propCOV))
+    
+    it <- it + 1
+  }
+  
+  return(list(PhysicalValues=output[which.max(output[,1]),2:ncol(output)] %>% 
+                relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model), # MAP value 
+              OptimisationOut=output))
+  
+}
 
+AMCMC3 <-function(dir,Model,iVals,AlgoParams){
+  
+  # Set Random Number Generator (RNG) initial seed
+  set.seed(round(runif(1,0,100000))) 
+  # Check no mistakes have been made in the model, methodology and initial values
+  checkLTargs(Model,iVals,AlgoParams)
+  
+  t_0 <- 500
+  
+  xPrev<-propMu<-unlist(iVals$x0)
+  n_x <- length(xPrev)
+  xbar_tminus1 <- xPrev
+  
+  C_0 = diag(0.001, nrow=n_x)
+  
+  s_d = (2.38)^2/n_x
+  eps = diag(0.000000001, nrow=n_x)
+  propCOV <- diag(n_x)
+  epsilon=1
+  
+  output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n_x+1)
+  xNew <- rep(NA,n_x)
+  lTargNew<-alpha<-c()
+  # Create file names with unique names for storage reasons
+  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
+  
+  # Find first log-target value using initial values
+  output[1, ] <- c(logTarget(dir = dir,Model = Model,
+                             proposed = xPrev %>%Proposed2Physical(Model),AlgoParams = AlgoParams),
+                   xPrev)
+  lTargOld<-output[1,1]
+  
+  # Start the iterations!
+  it <- 2
+  while (it <= AlgoParams$itermax){
+    print(it)
+    t <- it - 1
+    epsilon = ifelse(t < t0, 1 - t * (1-0.1)/t0, 0.1)
+    
+    # Parameter proposal
+    xNew <- xPrev
+    if (t > t_0){
+      xNew <- multvarNormProp(xt=xPrev, propPars=propCOV)
+    } else {
+      xNew <- multvarNormProp(xt=xPrev, propPars=C_0)
+    }
+    
+    # Check proposal is within the parameter space:
+    if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
+      output[it,] <- c(lTargOld, xPrev)
+      propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
+      xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
+      it <- it + 1 
+      next
+    }
+    
+    # Convert parameters to physical/useable values
+    if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
+    
+    # Calculate log-target value
+    lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
+                                   AlgoParams = AlgoParams, epsilon= epsilon), error=function(e) NA)
+    
+    # Check if we have a NaN
+    if(is.na(lTargNew)|is.infinite(lTargNew)) {
+      output[it,] <- c(lTargOld, xPrev)
+      propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
+      xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
+      it <- it + 1 
+      next
+    }
+    
+    if (lTargNew > (lTargOld - 50)){
+      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
+                                     AlgoParams = AlgoParams, epsilon=epsilon), error=function(e) NA)
+    }
+    
+    # Prepare for acceptance
+    u <- runif(1)
+    
+    # Acceptance probability
+    alpha <- min(c(exp(lTargNew - lTargOld),1))
+    
+    # Metropolis Acceptance Algorithm
+    if (alpha>=u) { # Accepted!
+      print('ACCEPTED!')
+      xPrev<-xNew
+      lTargOld <- lTargNew
+    } 
+    
+    propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
+    xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
+    
+    print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",lTargOld))
+    print(" ")
+    
+    output[it,] <- c(lTargOld, xPrev)
+    
+    Intensity <- seq(0,10,0.1)
+    Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
+    
+    Omega_curr <- xPrev %>% 
+      relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
+    
+    par(mfrow=c(4,4))
+    
+    # Plot S-curves for the actual and MAP parameterisation
+    D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
+    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)
+    D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
+    D_MortDisp_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda1$nu, Omega_curr$Lambda1$omega)
+    D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
+    D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda2$nu, Omega_curr$Lambda2$omega)
+    D_Disp <- D_MortDisp - D_Mort
+    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
+    D_BD <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
+    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda3$nu, Omega_curr$Lambda3$omega)
+    plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
+    lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
+    lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
+    lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2)
+    
+    for(i in 1:14){
+      ylim=c(min(unlist(Omega)[i], output[1:it,i+1]), max(unlist(Omega)[i], output[1:it,i+1]))
+      plot(output[1:it,i+1], type='l', ylab='', ylim=ylim)
+      abline(h=unlist(Omega)[i], col='red')
+    }
+    
+    
+    # Save log-target and parameters
+    saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
+    # Save covariance matrix
+    saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
+    
+    saveRDS(xbar_tminus1,paste0(dir,"IIDIPUS_Results/xbar_tminus1_",tag))
+    print(cov2cor(propCOV))
     
     it <- it + 1
   }
@@ -336,10 +487,10 @@ AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
   # Check no mistakes have been made in the model, methodology and initial values
   checkLTargs(Model,iVals,AlgoParams)
   
-  t_0 <- 40
-  output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-02_112455')
-  xbar_tminus1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/xbar_tminus1_2022-05-02_112455')
-  propCOV <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/covariance_2022-05-02_112455')
+  t_0 <- 170
+  output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-17_111122')
+  xbar_tminus1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/xbar_tminus1_2022-05-17_111122')
+  propCOV <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/covariance_2022-05-17_111122')
   xPrev <- unlist(iVals$x0)
   xPrev[1:14] <- output[min(which(is.na(output[,1])))-1, 2:NCOL(output)]
   n_x <- length(xPrev)
@@ -369,10 +520,13 @@ AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
     } else {
       xNew <- multvarNormProp(xt=xPrev, propPars=C_0)
     }
+    xNew[7:14] <- unlist(Omega)[7:14]
     
     # Check proposal is within the parameter space:
     if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
       output[it,] <- c(lTargOld, xPrev)
+      propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
+      xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
       it <- it + 1 
       next
     }
@@ -387,8 +541,15 @@ AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
     # Check if we have a NaN
     if(is.na(lTargNew)|is.infinite(lTargNew)) {
       output[it,] <- c(lTargOld, xPrev)
+      propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
+      xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
       it <- it + 1 
       next
+    }
+    
+    if (lTargNew > (lTargOld - 50)){
+      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
+                                     AlgoParams = AlgoParams), error=function(e) NA)
     }
     
     # Prepare for acceptance
@@ -399,10 +560,10 @@ AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
     
     # Metropolis Acceptance Algorithm
     if (alpha>=u) { # Accepted!
+      print('ACCEPTED!')
       xPrev<-xNew
+      lTargOld <- lTargNew
     } 
-    lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
-                                   AlgoParams = AlgoParams), error=function(e) NA)
     
     propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
     xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
@@ -418,22 +579,28 @@ AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
     Omega_curr <- xPrev %>% 
       relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
     
+    par(mfrow=c(4,4))
     # Plot S-curves for the actual and MAP parameterisation
     D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
     D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)
-    D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
-    D_MortDisp_sample <- BinR( Omega_curr$Lambda1$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda1$omega, Omega_curr$zeta)
-    D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
-    D_Mort_sample <- BinR(Omega_curr$Lambda2$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda2$omega , Omega_curr$zeta) * D_MortDisp_sample
+    D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
+    D_MortDisp_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda1$nu, Omega_curr$Lambda1$omega)
+    D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
+    D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda2$nu, Omega_curr$Lambda2$omega)
     D_Disp <- D_MortDisp - D_Mort
     D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
-    D_BD_sample <- BinR(Omega_curr$Lambda3$nu * Dfun(Intensity, theta=Omega_curr$theta) + Omega_curr$Lambda3$omega, Omega_curr$zeta)
+    D_BD <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
+    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda3$nu, Omega_curr$Lambda3$omega)
     plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
     lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
     lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
     lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2)
     
+    for(i in 1:14){
+      ylim=c(min(unlist(Omega)[i], output[1:it,i+1]), max(unlist(Omega)[i], output[1:it,i+1]))
+      plot(output[1:it,i+1], type='l', ylab='', ylim=ylim)
+      abline(h=unlist(Omega)[i], col='red')
+    }
     
     # Save log-target and parameters
     saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))

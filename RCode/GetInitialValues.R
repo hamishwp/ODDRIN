@@ -57,14 +57,14 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   #                                        eps = list(eps=0.01304351))), Model)
   
   
-  Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=1.05,omega=0.15),
-                                         Lambda2 = list(nu= 0.2, omega=0.7),
-                                         Lambda3 = list(nu=0.75,omega=0.1),
+  Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=-0.05,omega=0.45),
+                                         Lambda2 = list(nu= 1.1, omega=0.85),
+                                         Lambda3 = list(nu=0.35,omega=0.6),
                                          zeta = list(k=2.9, lambda=1.5),
-                                         Pdens = list(M=0.04, k = 6.3),
-                                         dollar = list(M = -1.2, k = 6.2),
-                                         theta = list(e=0.25),
-                                         eps = list(eps=0.03))), Model)
+                                         Pdens = list(M=0.02988616, k = 6.473428), #list(M=0.05, k = 6.4),
+                                         dollar = list(M = -1.051271, k = 6.473428), #list(M = -1.05, k = 6.5),
+                                         theta = list(e=0.2359788), #list(e=0.23),
+                                         eps = list(eps=0.01))), Model)
                 
    # Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=0.9,omega=7),
    #   Lambda2 = list(nu= 0.9, omega=8),
@@ -90,8 +90,8 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   lenny<-length(unlist(Omega))
   # Note that this is in proposal space, not physical space, hence the logarithms
   #propCOV <- diag(c(rep(0.1,lenny)))
-  #propCOV<-diag(rep(lenny/60,lenny))
-  propCOV<-readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/covariance_2022-05-04_120755')
+  propCOV<-diag(rep(lenny/60,lenny))
+  #propCOV<-readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/covariance_2022-05-04_120755')
   # propCOV<-diag(abs(c(log(0.17/0.12),log(0.04/0.02),log(0.09/0.055),
   #                     log(2/1.5),log(5.5/4.5),
   #                     log(0.67/0.5),log(0.13/0.09),

@@ -384,11 +384,11 @@ FormParams<-function(ODD,listy){
   return(Params)
 }
 
-setGeneric("DispX", function(ODD,Omega,center, BD_params, LL,Method)
+setGeneric("DispX", function(ODD,Omega,center, BD_params, LL,Method, epsilon)
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
-                                   Method=list(Np=20,cores=8,cap=-300)
+                                   Method=list(Np=20,cores=8,cap=-300), epsilon=0.1,
 ){
   # Extract 0D parameters & speed up loop
   Params<-FormParams(ODD,list(Np=Method$Np,center=center))
@@ -444,17 +444,20 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
         Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
         if(any(is.na(Damage))) print(ij)
         # Scaled damage
-        D_MortDisp<-BinR(#Omega$Lambda1$kappa*Damage*Damage + 
-                       Omega$Lambda1$nu*Damage + Omega$Lambda1$omega,Omega$zeta)
+        #D_MortDisp<-BinR(#Omega$Lambda1$kappa*Damage*Damage + 
+        #               Omega$Lambda1$nu*Damage + Omega$Lambda1$omega,Omega$zeta)
                        # Damage, Omega$zeta1)
                        #Damage1+Omega$zeta$lambda*(log(2)^(1/Omega$zeta$k)) - h_0(Omega$Lambda1$nu * Omega$Lambda1$omega,Params$I0 * Omega$Lambda1$nu, Omega$theta), Omega$zeta)
+        D_MortDisp <- plnorm(Damage, meanlog = Omega$Lambda1$nu, sdlog = Omega$Lambda1$omega)
         #D_Disp <- BinR(Damage, Omega$zeta1)
-        D_Mort<-BinR(#Omega$Lambda2$kappa*Damage*Damage + 
-                     Omega$Lambda2$nu*Damage + Omega$Lambda2$omega, Omega$zeta) * D_MortDisp 
+        #D_Mort<-BinR(#Omega$Lambda2$kappa*Damage*Damage + 
+        #             Omega$Lambda2$nu*Damage + Omega$Lambda2$omega, Omega$zeta) * D_MortDisp 
                     #  Damage, Omega$zeta2) * D_MortDisp
                      #   Damage2+Omega$zeta$lambda*(log(2)^(1/Omega$zeta$k)) - h_0(Omega$Lambda2$nu * Omega$Lambda2$omega,Params$I0 * Omega$Lambda2$nu, Omega$theta), Omega$zeta) * D_MortDisp
         #D_Disp <- ifelse(D_Disp+D_Mort<1, D_Disp, 1- D_Mort)
+        D_Mort <- plnorm(Damage, meanlog = Omega$Lambda2$nu, sdlog = Omega$Lambda2$omega)
         D_Disp<-D_MortDisp - D_Mort
+        D_Disp <- ifelse(D_Disp<0, 0, D_Disp)
         # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
         tPop[3,ind]<-0
         
@@ -480,7 +483,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
       I_ij<-ODD@data[ij,h]
       Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[5], error=function(e) NA) #calculate unscaled damage (excluding GDP)
       #Damage3 <-tryCatch(fDamUnscaled(Omega$Lambda3$nu * I_ij,list(I0=Omega$Lambda3$nu*Params$I0, Np=Params$Np),Omega)*locallinp[5], error=function(e) NA) #calculate unscaled damage (excluding GDP)
-      D_BD = BinR(Omega$Lambda3$nu * Damage + Omega$Lambda3$omega, Omega$zeta)
+      #D_BD = BinR(Omega$Lambda3$nu * Damage + Omega$Lambda3$omega, Omega$zeta)
+      D_BD = plnorm(Damage, meanlog = Omega$Lambda3$nu, sdlog = Omega$Lambda3$omega)
       #D_BD = BinR(Damage3+Omega$zeta$lambda*(log(2)^(1/Omega$zeta$k)) - h_0(Omega$Lambda3$nu * Omega$Lambda3$omega,Params$I0 * Omega$Lambda3$nu, Omega$theta), Omega$zeta)
       #D_BD = BinR(Damage, Omega$zeta3)
       #D_BD = lBD(D_B, BD_params)
@@ -505,7 +509,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
   #   Disp[ind,]%<>%qualifierDisp(qualifier = ODD@gmax$qualifier[ODD@gmax$iso3==c],mu = Omega$mu)
   # }
   
-  funcy<-function(i,LLout=T) {
+  funcy<-function(i,LLout=T, epsilon=0.1) {
     tmp<-data.frame(iso3=ODD$ISO3C,IDPs=Dam[,i,1], mort=Dam[,i,2], nBD=Dam[,i,3]) %>% 
       group_by(iso3) %>% summarise(disp_predictor=floor(sum(IDPs,na.rm = T)), 
                                  mort_predictor=floor(sum(mort,na.rm = T)),
@@ -516,12 +520,12 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
     #print(paste(tmp$nBD_predictor, tmp$buildDestroyed))
     #print(tmp)
     if(LLout) {
-      return(LL_IDP(tmp))
+      return(LL_IDP(tmp, epsilon))
     }
     return(tmp)
   }
   
-  outer<-vapply(1:Method$Np,funcy,numeric(length(unique(ODD@gmax$iso3))))
+  outer<-vapply(1:Method$Np,funcy,numeric(length(unique(ODD@gmax$iso3))), epsilon=epsilon)
   #outer[outer<Method$cap]<-Method$cap
   # Find the best fit solution
   if(length(unique(ODD@gmax$iso3))>1) {

@@ -14,9 +14,9 @@ source('RCode/Simulate.R')
 
 
 #Parameterise the model and simulate the data:
-Omega <- list(Lambda1 = list(nu=1,omega=0.1),
-              Lambda2 = list(nu= 0.15, omega=0.75),
-              Lambda3 = list(nu=0.7,omega=0.05),
+Omega <- list(Lambda1 = list(nu=0,omega=0.5),
+              Lambda2 = list(nu= 1.3, omega=0.9),
+              Lambda3 = list(nu=0.4,omega=0.6),
               zeta = list(k=2.978697, lambda=1.405539),
               Pdens = list(M=0.02988616, k = 6.473428),
               dollar = list(M = -1.051271, k = 6.473428),
@@ -38,8 +38,8 @@ main_simulated <- function(){
   AlgoParams$AllParallel <- TRUE
   AlgoParams$cores <- 6
   AlgoParams$Np <- 5
-  AlgoParams$ABC <- 1
-  AlgoParams$itermax <- 4000
+  AlgoParams$ABC <- 1.5
+  AlgoParams$itermax <- 10000
   
   output <- Algorithm(dir=dir,
                       Model=Model,
@@ -88,7 +88,7 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
 output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-02_131753')
 
 
-Omega_MAP <- output[which.max(output[,1]),2:ncol(output)] %>% 
+Omega_MAP <- output[which.max(output[1:750,1]),2:ncol(output)] %>% 
   relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
 
 # Plot S-curves for the actual and MAP parameterisation
@@ -96,10 +96,11 @@ plot_S_curves <- function(Omega, Omega_MAP=NULL){
   Intensity <- seq(0,10,0.1)
   Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta)
   D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
-  D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
-  D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
+  D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
+  D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
   D_Disp <- D_MortDisp - D_Mort
-  D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
+  D_Disp <- ifelse(D_Disp < 0, 0, D_Disp)
+  D_BD <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
   plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1), ylab='Proportion'); lines(Intensity, D_Disp, col='blue'); 
   lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_extent, col='green', type='l'); 
   legend(x=1,y=0.7, c('D_Mort', 'D_Disp', 'D_BD', 'D_B'), col=c('red','blue','pink', 'green'), lty=1)
@@ -121,23 +122,23 @@ plot_shaded_S_curves <- function(Omega, output){
   Intensity <- seq(0,10,0.1)
   Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta)
   D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
-  D_MortDisp <- BinR( Omega$Lambda1$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda1$omega, Omega$zeta)
-  D_Mort <- BinR(Omega$Lambda2$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda2$omega , Omega$zeta) * D_MortDisp
+  D_MortDisp <-  plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
+  D_Mort <-  plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
   D_Disp <- D_MortDisp - D_Mort
-  D_BD <- BinR(Omega$Lambda3$nu * Dfun(Intensity, theta=Omega$theta) + Omega$Lambda3$omega, Omega$zeta)
+  D_BD <-  plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
   plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1), ylab='Proportion', lwd=3); 
   
   n_iter <- NROW(output)
-  plotted_iter <- round(seq(1,700,length.out=700))
+  plotted_iter <- round(seq(250,750,length.out=500))
   for (i in plotted_iter){
     Omega_iter <- output[i,2:ncol(output)] %>% 
       relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
     D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_iter$theta) , Omega_iter$zeta)
-    D_MortDisp_sample <- BinR( Omega_iter$Lambda1$nu * Dfun(Intensity, theta=Omega_iter$theta) + Omega_iter$Lambda1$omega, Omega_iter$zeta)
-    D_Mort_sample <- BinR(Omega_iter$Lambda2$nu * Dfun(Intensity, theta=Omega_iter$theta) + Omega_iter$Lambda2$omega , Omega_iter$zeta) * D_MortDisp_sample
-    D_BD_sample <- BinR(Omega_iter$Lambda3$nu * Dfun(Intensity, theta=Omega_iter$theta) + Omega_iter$Lambda3$omega, Omega_iter$zeta)
+    D_MortDisp_sample <-  plnorm( Dfun(Intensity, theta=Omega_iter$theta), Omega_iter$Lambda1$nu, Omega_iter$Lambda1$omega)
+    D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_iter$theta), Omega_iter$Lambda2$nu, Omega_iter$Lambda2$omega)
+    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_iter$theta), Omega_iter$Lambda3$nu, Omega_iter$Lambda3$omega)
     D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    lines(Intensity, D_Mort_sample, col=adjustcolor("red", alpha = 0.1)); lines(Intensity, D_Disp_sample, col=adjustcolor("cyan", alpha = 0.1), alpha=0.2); 
+    lines(Intensity, D_Mort_sample, col=adjustcolor("red", alpha = 0.1)); lines(Intensity, D_Disp_sample, col=adjustcolor("cyan", alpha = 0.1)); 
     lines(Intensity, D_extent_sample, col=adjustcolor("green", alpha = 0.1)); lines(Intensity, D_BD_sample, col=adjustcolor("pink", alpha = 0.1)); 
   }
   lines(Intensity, D_Mort, col='darkred', lwd=3); 
@@ -152,6 +153,7 @@ plot_shaded_S_curves <- function(Omega, output){
 #check that the likelihood from the true parameters is not greater than the MAP estimate
 logTarget(dir = dir,Model = Model,proposed = Omega_MAP, AlgoParams = AlgoParams)
 logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)
+
 
 
 #Magnitude vs contribution to likelihood
@@ -208,9 +210,9 @@ for(i in 1:length(ufiles)){
 }
 
 par(mfrow=c(1,1))
-plot(log(x_actual), log(x_actual))
-points(x_actual%>% log(), x_pred_TRUE%>% log(), col='blue')
-points(x_actual %>% log(), x_pred_MAP%>% log(), col='red')
+plot(x_actual,x_actual, xlim=c(1,10000),ylim=c(1,10000))
+points(x_actual, x_pred_TRUE, col='blue')
+points(x_actual, x_pred_MAP, col='red')
 
 par(mfrow=c(1,1))
 plot(log(y_actual), log(y_actual))
@@ -278,3 +280,8 @@ for (i in 1:NROW(output)){
     output[i,] <- output[i-1,]
   }
 }
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-06_093328')
+
+
+cov2cor(cov(cbind(c(1,1,2), 
+                  c(1,1,3))))

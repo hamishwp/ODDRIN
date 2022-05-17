@@ -123,7 +123,7 @@ Model$skeleton <- list(
 # names(Model$skeleton$beta)[1]<-paste0("HA.NAT.",haz)
 
 #Set lower and upper bounds for the parameters
-Model$par_lb <- c(-10,-10,-10,-10,-10,-10,  0,  0,  0,  0,  -10,  0,  0,  0)
+Model$par_lb <- c(-10,  0,-10,  0,-10,  0,  0,  0,  0,  0,  -10,  0,  0,  0)
 Model$par_ub <- c( 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,    0, 10, 10, 10)
 
 # Get the binary regression function
@@ -324,12 +324,13 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
         return(BinR(D,Omega$zeta))
       }
       if (type=='Buildings Destroyed'){
-        return(BinR(Omega$Lambda3$nu * D + Omega$Lambda3$omega, Omega$zeta))
+        return(plnorm(D,Omega$Lambda3$nu, Omega$Lambda3$omega))
       }
-      DispMort <- BinR(Omega$Lambda1$nu * D + Omega$Lambda1$omega,Omega$zeta)
-      Mort <- BinR(Omega$Lambda2$nu * D + Omega$Lambda2$omega,Omega$zeta) * DispMort
+      DispMort <- plnorm(D,Omega$Lambda1$nu, Omega$Lambda1$omega)
+      Mort <- plnorm(D,Omega$Lambda2$nu, Omega$Lambda2$omega)
+      Disp <- ifelse(DispMort - Mort < 0, 0, DispMort - Mort)
       if (type=='Displacement'){
-        return(DispMort - Mort)
+        return(Disp)
       }
       else if (type=='Mortality'){
         return(Mort)
@@ -377,7 +378,7 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
 
 
 # Get the log-likelihood for the displacement data
-LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measurements? 
+LL_IDP<-function(Y, epsilon){ #LOOSEEND is it fair to marginalize over missing measurements? 
   LL = 0
   k = 10
   if(!is.na(Y$gmax)){
@@ -391,7 +392,7 @@ LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measuremen
     #  LL_disp = pnorm(0, mean=Y$disp_predictor, sd=0.000001*Y$disp_predictor^2 + Y$disp_predictor*0.1 + 10, log=TRUE)
     #}
     #LL_disp <- dnorm(abs(log(Y$gmax+20)-log(Y$disp_predictor+20)), 0,0.1,log=TRUE)
-    LL_disp <- log(dlnormTrunc(Y$gmax+k, log(Y$disp_predictor+k), sdlog=0.1, min=k))
+    LL_disp <- log(dlnormTrunc(Y$gmax+k, log(Y$disp_predictor+k), sdlog=epsilon, min=k))
     LL = LL + LL_disp
     #LL = LL + log(dLaplace((log(Y$gmax+1)-log(Y$disp_predictor+1))/log(Y$disp_predictor+1), 0, 0.0333)) #LOOSEEND +1 to avoid log issues
     #LL = LL + log(dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.5))
@@ -409,7 +410,7 @@ LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measuremen
     #}
     
     #LL_mort <- dnorm(abs(log(Y$mortality+20)-log(Y$mort_predictor+20)), 0,0.05,log=TRUE)
-    LL_mort <- log(dlnormTrunc(Y$mortality+k, log(Y$mort_predictor+k), sdlog=0.03, min=k))
+    LL_mort <- log(dlnormTrunc(Y$mortality+k, log(Y$mort_predictor+k), sdlog=0.3*epsilon, min=k))
     LL = LL + LL_mort
     #print(paste('mort',Y$mortality, Y$mort_predictor, LL_mort))
     #LL = LL + log(dLaplace((log(Y$mortality+1)-log(Y$mort_predictor+1))/log(Y$mort_predictor+1), 0, 0.00333))
@@ -421,7 +422,7 @@ LL_IDP<-function(Y){ #LOOSEEND is it fair to marginalize over missing measuremen
     #if (Y$buildDestroyed == 0){
     #  LL_BD = pnorm(0, mean=Y$nBD_predictor, sd=0.000001*Y$nBD_predictor^2 + Y$nBD_predictor*0.1 + 10, log=TRUE)
     #}
-    LL_BD <- log(dlnormTrunc(Y$buildDestroyed+k, log(Y$nBD_predictor+k), sdlog=0.1, min=k))
+    LL_BD <- log(dlnormTrunc(Y$buildDestroyed+k, log(Y$nBD_predictor+k), sdlog=epsilon, min=k))
     LL = LL + LL_BD
     #print(paste('bd',Y$buildDestroyed, Y$nBD_predictor, LL_BD))
     #LL = LL + dnorm(log(Y$buildDestroyed+1), log(Y$nBD_predictor+1), 0.1, log=TRUE)
@@ -501,7 +502,7 @@ Model$IsoWeights<-GetIsoWeights(dir)
 Model$IsoWeights %<>% add_row(iso3='ABC', weights=1)
 
 # Log-likelihood for displacement (ODD) objects
-LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
+LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T, epsilon=0.1){
   
   # Load ODD files
   folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
@@ -523,7 +524,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       ODDy@fIndies<-Model$fIndies
       ODDy@gmax%<>%as.data.frame.list()
       # Apply DispX
-      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams),
+      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams, epsilon=epsilon),
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate Disp LL of ",filer));return(-Inf)}
@@ -548,7 +549,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       ODDy@fIndies<-Model$fIndies
       ODDy@gmax%<>%as.data.frame.list()
       # Apply DispX
-      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams),
+      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams, epsilon=epsilon),
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate Disp LL of ",ufiles[i]));return(-Inf)}
@@ -645,8 +646,8 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
   print(paste0("LL Displacements = ",LL)) ; sLL<-LL
   
   # Add the log-likelihood values from the BD (building damage) objects
-  LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
-  print(paste0("LL Building Damages = ",LL-sLL))
+  #LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
+  #print(paste0("LL Building Damages = ",LL-sLL))
   
   posterior<-LL #+HP
   # Add Bayesian priors

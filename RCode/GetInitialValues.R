@@ -57,15 +57,28 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   #                                        eps = list(eps=0.01304351))), Model)
   
   
-  Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=-0.05,omega=0.45),
-                                         Lambda2 = list(nu= 1.1, omega=0.85),
-                                         Lambda3 = list(nu=0.35,omega=0.6),
-                                         zeta = list(k=2.9, lambda=1.5),
-                                         Pdens = list(M=0.02988616, k = 6.473428), #list(M=0.05, k = 6.4),
-                                         dollar = list(M = -1.051271, k = 6.473428), #list(M = -1.05, k = 6.5),
-                                         theta = list(e=0.2359788), #list(e=0.23),
-                                         eps = list(eps=0.01))), Model)
-                
+  # Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=-0.05,omega=0.45),
+  #                                        Lambda2 = list(nu= 1.4, omega=0.85),
+  #                                        Lambda3 = list(nu=0.35,omega=0.6),
+  #                                        zeta = list(k=2.9, lambda=1.5),
+  #                                        Pdens = list(M=0.02988616, k = 6.473428), #list(M=0.05, k = 6.4),
+  #                                        dollar = list(M = -1.051271, k = 6.473428), #list(M = -1.05, k = 6.5),
+  #                                        theta = list(e=0.2359788), #list(e=0.23),
+  #                                        eps = list(eps=0.01))), Model)
+  
+  HP = Inf
+  while(HP> AlgoParams$ABC){
+    Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=runif(1,-0.05,0.05),omega=runif(1,0.45,0.55)),
+                                            Lambda2 = list(nu=runif(1,1.25,1.35), omega=runif(1,0.85,0.95)),
+                                            Lambda3 = list(nu=runif(1,0.35,0.45),omega=runif(1,0.55,0.65)),
+                                           zeta = list(k=runif(1,2.9,3.1), lambda=runif(1,1.35,1.45)),
+                                           Pdens = list(M=runif(1,0.025,0.035), k = runif(1,6.4,6.6)), 
+                                           dollar = list(M = runif(1,-1.1,-1), k = runif(1,6.4,6.6)), #list(M = -1.05, k = 6.5),
+                                           theta = list(e=runif(1,0.23,0.24)), #list(e=0.23),
+                                           eps = list(eps=runif(1,0.005,0.015)))), Model)
+    HP<-Model$HighLevelPriors(Omega,Model)
+    print(HP)
+  }              
    # Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=0.9,omega=7),
    #   Lambda2 = list(nu= 0.9, omega=8),
    #   Lambda3 = list(nu=1.2,omega=7.5),

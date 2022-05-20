@@ -629,7 +629,7 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
 }
 
 # Bayesian Posterior distribution: This is for a group of ODD objects with observed data
-logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
+logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T, epsilon=0.1){
   
   # Apply higher order priors
   if(!is.null(Model$HighLevelPriors)){
@@ -642,7 +642,7 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
   if (HP> AlgoParams$ABC) return(-Inf)
   
   # Add the log-likelihood values from the ODD (displacement) objects
-  LL<-LL_Displacement(0,dir,Model,proposed,AlgoParams,expLL=T)
+  LL<-LL_Displacement(0,dir,Model,proposed,AlgoParams,expLL=T, epsilon)
   print(paste0("LL Displacements = ",LL)) ; sLL<-LL
   
   # Add the log-likelihood values from the BD (building damage) objects

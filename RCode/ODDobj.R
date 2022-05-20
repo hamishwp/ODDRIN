@@ -388,7 +388,7 @@ setGeneric("DispX", function(ODD,Omega,center, BD_params, LL,Method, epsilon)
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
-                                   Method=list(Np=20,cores=8,cap=-300), epsilon=0.1,
+                                   Method=list(Np=20,cores=8,cap=-300), epsilon=0.1
 ){
   # Extract 0D parameters & speed up loop
   Params<-FormParams(ODD,list(Np=Method$Np,center=center))

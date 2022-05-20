@@ -36,12 +36,12 @@ main_simulated <- function(){
   # Parameterise... Here we go!
   
   AlgoParams$AllParallel <- TRUE
-  AlgoParams$cores <- 6
+  AlgoParams$cores <- 14
   AlgoParams$Np <- 5
   AlgoParams$ABC <- 1.5
   AlgoParams$itermax <- 10000
   
-  output <- Algorithm(dir=dir,
+  output <- AMCMC3(dir=dir,
                       Model=Model,
                       iVals=iVals,
                       AlgoParams=AlgoParams)
@@ -85,7 +85,7 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
 
 
 
-output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-02_131753')
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-17_202856')
 
 
 Omega_MAP <- output[which.max(output[1:750,1]),2:ncol(output)] %>% 
@@ -129,7 +129,7 @@ plot_shaded_S_curves <- function(Omega, output){
   plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1), ylab='Proportion', lwd=3); 
   
   n_iter <- NROW(output)
-  plotted_iter <- round(seq(250,750,length.out=500))
+  plotted_iter <- round(seq(1000,5000,length.out=500))
   for (i in plotted_iter){
     Omega_iter <- output[i,2:ncol(output)] %>% 
       relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)

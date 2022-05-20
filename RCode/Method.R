@@ -347,7 +347,8 @@ AMCMC3 <-function(dir,Model,iVals,AlgoParams){
   n_x <- length(xPrev)
   xbar_tminus1 <- xPrev
   
-  C_0 = diag(0.001, nrow=n_x)
+  C_0 = diag(0.0001, nrow=n_x)
+  C_0[13,13] = 0.00001 
   
   s_d = (2.38)^2/n_x
   eps = diag(0.000000001, nrow=n_x)
@@ -362,7 +363,7 @@ AMCMC3 <-function(dir,Model,iVals,AlgoParams){
   
   # Find first log-target value using initial values
   output[1, ] <- c(logTarget(dir = dir,Model = Model,
-                             proposed = xPrev %>%Proposed2Physical(Model),AlgoParams = AlgoParams),
+                             proposed = xPrev %>%Proposed2Physical(Model),AlgoParams = AlgoParams, epsilon=epsilon),
                    xPrev)
   lTargOld<-output[1,1]
   
@@ -371,8 +372,8 @@ AMCMC3 <-function(dir,Model,iVals,AlgoParams){
   while (it <= AlgoParams$itermax){
     print(it)
     t <- it - 1
-    epsilon = ifelse(t < t0, 1 - t * (1-0.1)/t0, 0.1)
-    
+    epsilon = ifelse(t < t_0, 1 - t * (1-0.1)/t_0, 0.1)
+    print(paste("epsilon", epsilon))
     # Parameter proposal
     xNew <- xPrev
     if (t > t_0){

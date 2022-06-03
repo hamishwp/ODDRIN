@@ -384,7 +384,7 @@ FormParams<-function(ODD,listy){
   return(Params)
 }
 
-setGeneric("DispX", function(ODD,Omega,center, BD_params, LL,Method, epsilon)
+setGeneric("DispX", function(ODD,Omega,center, BD_params, LL,Method, epsilon=0.1)
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
@@ -439,25 +439,15 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
       for (s in 1:length(SincN)){
         if(all(lPopS[s,]==0)) next
         # Predict damage at coordinate {i,j} (vector with MC particles)
-        #Damage1 <-tryCatch(fDamUnscaled(I_ij * Omega$Lambda1$nu,list(I0=Omega$Lambda1$nu*Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
-        #Damage2 <-tryCatch(fDamUnscaled(I_ij * Omega$Lambda2$nu,list(I0=Omega$Lambda2$nu*Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
         Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
         if(any(is.na(Damage))) print(ij)
+        
         # Scaled damage
-        #D_MortDisp<-BinR(#Omega$Lambda1$kappa*Damage*Damage + 
-        #               Omega$Lambda1$nu*Damage + Omega$Lambda1$omega,Omega$zeta)
-                       # Damage, Omega$zeta1)
-                       #Damage1+Omega$zeta$lambda*(log(2)^(1/Omega$zeta$k)) - h_0(Omega$Lambda1$nu * Omega$Lambda1$omega,Params$I0 * Omega$Lambda1$nu, Omega$theta), Omega$zeta)
         D_MortDisp <- plnorm(Damage, meanlog = Omega$Lambda1$nu, sdlog = Omega$Lambda1$omega)
-        #D_Disp <- BinR(Damage, Omega$zeta1)
-        #D_Mort<-BinR(#Omega$Lambda2$kappa*Damage*Damage + 
-        #             Omega$Lambda2$nu*Damage + Omega$Lambda2$omega, Omega$zeta) * D_MortDisp 
-                    #  Damage, Omega$zeta2) * D_MortDisp
-                     #   Damage2+Omega$zeta$lambda*(log(2)^(1/Omega$zeta$k)) - h_0(Omega$Lambda2$nu * Omega$Lambda2$omega,Params$I0 * Omega$Lambda2$nu, Omega$theta), Omega$zeta) * D_MortDisp
-        #D_Disp <- ifelse(D_Disp+D_Mort<1, D_Disp, 1- D_Mort)
         D_Mort <- plnorm(Damage, meanlog = Omega$Lambda2$nu, sdlog = Omega$Lambda2$omega)
         D_Disp<-D_MortDisp - D_Mort
         D_Disp <- ifelse(D_Disp<0, 0, D_Disp)
+        
         # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
         tPop[3,ind]<-0
         
@@ -482,12 +472,9 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
 
       I_ij<-ODD@data[ij,h]
       Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[5], error=function(e) NA) #calculate unscaled damage (excluding GDP)
-      #Damage3 <-tryCatch(fDamUnscaled(Omega$Lambda3$nu * I_ij,list(I0=Omega$Lambda3$nu*Params$I0, Np=Params$Np),Omega)*locallinp[5], error=function(e) NA) #calculate unscaled damage (excluding GDP)
-      #D_BD = BinR(Omega$Lambda3$nu * Damage + Omega$Lambda3$omega, Omega$zeta)
+
       D_BD = plnorm(Damage, meanlog = Omega$Lambda3$nu, sdlog = Omega$Lambda3$omega)
-      #D_BD = BinR(Damage3+Omega$zeta$lambda*(log(2)^(1/Omega$zeta$k)) - h_0(Omega$Lambda3$nu * Omega$Lambda3$omega,Params$I0 * Omega$Lambda3$nu, Omega$theta), Omega$zeta)
-      #D_BD = BinR(Damage, Omega$zeta3)
-      #D_BD = lBD(D_B, BD_params)
+
       moreBD = fBD(nBuildings, D_BD)
       nBD = nBD + moreBD
   

@@ -89,252 +89,7 @@ checkLTargs<-function(Model,iVals,AlgoParams){
   if(length(unlist(iVals$x0))!=nrow(iVals$COV) | length(unlist(iVals$x0))!=ncol(iVals$COV)) stop("Mismatching initial values and initial covariance matrix")
 }
 
-# Sampling the posterior of the model parameters
-# (proper developers would split this, but I need to see all the goods!)
-AMCMC<-function(dir,Model,iVals,AlgoParams){
-  # purpose : Generalised Adaptative Metropolis-Hastings Algorithm with Global Adaptative Scaling
-  # Details : Christian L. Muller, (ETH) 'Exploring the common concepts of a-MCMC and cov matrix
-  #           adaptation schemes', Dagstuhl Seminar Proceedings, 2010.
-  #           Uses the multivariate Gaussian distribution as proposal, 
-  #           whereby the proposal covariance is updated at every iteration.
-  
-  # Set Random Number Generator (RNG) initial seed
-  set.seed(round(runif(1,0,100000)))
-  # Check no mistakes have been made in the model, methodology and initial values
-  checkLTargs(Model,iVals,AlgoParams)
-  
-  ###### Initialisations ######
-  Lgsf<-0
-  # NOTE: WE APPLY LINK FUNCTIONS TO INITIAL GUESS (VALUES ARE IN PARAMETER SPACE, NOT PHYSICAL SPACE)
-  xPrev<-propMu<-unlist(iVals$x0)
-  if(!is.null(Model$links)) iVals$x0%<>%unlist()%>%Proposed2Physical(Model)
-  # NOTE: COVARIANCE MATRIX IS ALSO IN PARAMETER SPACE, NOT PHYSICAL SPACE
-  propCOV<-iVals$COV
-  normCOV<-sum(propCOV*t(propCOV))
-  n <- length(xPrev) + 1
-  output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n+1)
-  xNew <- rep(NA,n-1)
-  lTargNew<-alpha<-c()
-  # Create file names with unique names for storage reasons
-  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
-  # Generate Adaptive Metropolis Global Scaling Factor iterative vector
-  gamzy <- GenerateGamzy(AlgoParams)
-  ##############################
-  print(unlist(iVals$x0))
-  # Find first log-target value using initial values
-  output[1, ] <- c(TRUE,logTarget(dir = dir,Model = Model,
-                                  proposed = iVals$x0,AlgoParams = AlgoParams),
-                   xPrev)
-  lTargOld<-output[1,2]
-  # print(output[1,])
-  # Start the iterations!
-  it <- 2
-  while (it <= AlgoParams$itermax){
-    print(it)
-    # Parameter proposal
-    xNew<-multvarNormProp(xt=xPrev, propPars=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))
-    # Convert parameters to physical/useable values
-    if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
-    # Calculate log-target value
-    lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
-                                   AlgoParams = AlgoParams), error=function(e) NA)
-    print(lTargNew)
-    # Check if we have a NaN
-    if(is.na(lTargNew)|is.infinite(lTargNew)) {
-      output[it,] <- c(FALSE, lTargNew, xNew)
-      it <- it + 1
-      next
-    }
-    # Prepare for acceptance
-    u <- runif(1)
-    # Acceptance probability
-    alpha <- min(c(exp(lTargNew - lTargOld),1))
-    # Metropolis Acceptance Algorithm
-    if (alpha>=u) { # Accepted!
-      output[it,] <- c(TRUE, lTargNew, xNew)
-      # Only update the comparative logTarget value if it was accepted
-      lTargOld <- lTargNew
-      print('ACCEPTED!')
-      # Store this for next time!
-      xPrev<-xNew
-    } else {  # Rejected
-      # output[it,] <- c(FALSE, lTargNew, xNew)
-      output[it,] <- output[(it-1),]
-      if(it<=AlgoParams$GreedyStart) {it <- it + 1; next}
-    }
-    # Global Scaling Factor (GSF), mean & covariance update
-    Lgsf <- Lgsf + gamzy[it]*(alpha-AlgoParams$Pstar)
-    propMu <- propMu + gamzy[it]*(xPrev - propMu)
-    propCOV <- propCOV + gamzy[it]*((xPrev - propMu)%*%t(xPrev - propMu) - propCOV)
-    propCOV[is.na(propCOV)|is.infinite(propCOV)]<-0
-    
-    print(paste0("Total covariance = ",sum(exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))))
-    print(paste0("Global Scaling Factor, r = ",exp(2*Lgsf)))
-    print(paste0(round(it*100/itermax),"% done. LL = ",output[it,1]))
-    print(" ")
-    
-    # Save log-target and parameters
-    saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
-    # Save covariance matrix
-    saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
-    
-    it <- it + 1
-  }
-  
-  return(list(PhysicalValues=output[max(output[,1],na.rm = T),2:ncol(output)], # MAP value 
-              OptimisationOut=output,
-              COVARIANCE=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV))))
-  
-}
-
-
-# Described in https://arxiv.org/pdf/2101.00118.pdf
-AMCMC2 <-function(dir,Model,iVals,AlgoParams){
-  
-  # Set Random Number Generator (RNG) initial seed
-  set.seed(round(runif(1,0,100000))) 
-  # Check no mistakes have been made in the model, methodology and initial values
-  checkLTargs(Model,iVals,AlgoParams)
-  
-  t_0 <- 500
-  
-  xPrev<-propMu<-unlist(iVals$x0)
-  n_x <- length(xPrev)
-  xbar_tminus1 <- xPrev
-
-  C_0 = diag(0.001, nrow=n_x)
-
-  s_d = (2.38)^2/n_x
-  eps = diag(0.000000001, nrow=n_x)
-  propCOV <- diag(n_x)
-
-  output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n_x+1)
-  xNew <- rep(NA,n_x)
-  lTargNew<-alpha<-c()
-  # Create file names with unique names for storage reasons
-  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
-  
-  # Find first log-target value using initial values
-  output[1, ] <- c(logTarget(dir = dir,Model = Model,
-                                  proposed = xPrev %>%Proposed2Physical(Model),AlgoParams = AlgoParams),
-                   xPrev)
-  lTargOld<-output[1,1]
-
-  # Start the iterations!
-  it <- 2
-  while (it <= AlgoParams$itermax){
-    print(it)
-    t <- it - 1
-      
-    # Parameter proposal
-    xNew <- xPrev
-    if (t > t_0){
-      xNew <- multvarNormProp(xt=xPrev, propPars=propCOV)
-    } else {
-      xNew <- multvarNormProp(xt=xPrev, propPars=C_0)
-    }
-    xNew[7:14] <- unlist(Omega)[7:14]
-    
-    # Check proposal is within the parameter space:
-    if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
-      output[it,] <- c(lTargOld, xPrev)
-      propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
-      xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
-      it <- it + 1 
-      next
-    }
-    
-    # Convert parameters to physical/useable values
-    if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
-    
-    # Calculate log-target value
-    lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
-                                   AlgoParams = AlgoParams), error=function(e) NA)
-
-    # Check if we have a NaN
-    if(is.na(lTargNew)|is.infinite(lTargNew)) {
-      output[it,] <- c(lTargOld, xPrev)
-      propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
-      xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
-      it <- it + 1 
-      next
-    }
-    
-    if (lTargNew > (lTargOld - 50)){
-      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
-                                     AlgoParams = AlgoParams), error=function(e) NA)
-    }
-    
-    # Prepare for acceptance
-    u <- runif(1)
-    
-    # Acceptance probability
-    alpha <- min(c(exp(lTargNew - lTargOld),1))
-    
-    # Metropolis Acceptance Algorithm
-    if (alpha>=u) { # Accepted!
-      print('ACCEPTED!')
-      xPrev<-xNew
-      lTargOld <- lTargNew
-    } 
-    
-    propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
-    xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
-    
-    print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",lTargOld))
-    print(" ")
-      
-    output[it,] <- c(lTargOld, xPrev)
-    
-    Intensity <- seq(0,10,0.1)
-    Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
-    
-    Omega_curr <- xPrev %>% 
-      relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
-    
-    par(mfrow=c(4,4))
-    
-    # Plot S-curves for the actual and MAP parameterisation
-    D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
-    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)
-    D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
-    D_MortDisp_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda1$nu, Omega_curr$Lambda1$omega)
-    D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
-    D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda2$nu, Omega_curr$Lambda2$omega)
-    D_Disp <- D_MortDisp - D_Mort
-    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    D_BD <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
-    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda3$nu, Omega_curr$Lambda3$omega)
-    plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
-    lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
-    lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
-    lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2)
-    
-    for(i in 1:14){
-      ylim=c(min(unlist(Omega)[i], output[1:it,i+1]), max(unlist(Omega)[i], output[1:it,i+1]))
-      plot(output[1:it,i+1], type='l', ylab='', ylim=ylim)
-      abline(h=unlist(Omega)[i], col='red')
-    }
-    
-    
-    # Save log-target and parameters
-    saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
-    # Save covariance matrix
-    saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
-
-    saveRDS(xbar_tminus1,paste0(dir,"IIDIPUS_Results/xbar_tminus1_",tag))
-    print(cov2cor(propCOV))
-    
-    it <- it + 1
-  }
-  
-  return(list(PhysicalValues=output[which.max(output[,1]),2:ncol(output)] %>% 
-                relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model), # MAP value 
-              OptimisationOut=output))
-  
-}
-
-AMCMC3 <-function(dir,Model,iVals,AlgoParams){
+AMCMC <-function(dir,Model,iVals,AlgoParams){
   
   # Set Random Number Generator (RNG) initial seed
   set.seed(round(runif(1,0,100000))) 
@@ -407,6 +162,7 @@ AMCMC3 <-function(dir,Model,iVals,AlgoParams){
       next
     }
     
+    #if proposed log likelihood is close to the old log likelihood, then resample the old log likelihood
     if (lTargNew > (lTargOld - 50)){
       lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
                                      AlgoParams = AlgoParams, epsilon=epsilon), error=function(e) NA)
@@ -442,21 +198,9 @@ AMCMC3 <-function(dir,Model,iVals,AlgoParams){
     par(mfrow=c(4,4))
     
     # Plot S-curves for the actual and MAP parameterisation
-    D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
-    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)
-    D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
-    D_MortDisp_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda1$nu, Omega_curr$Lambda1$omega)
-    D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
-    D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda2$nu, Omega_curr$Lambda2$omega)
-    D_Disp <- D_MortDisp - D_Mort
-    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    D_BD <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
-    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda3$nu, Omega_curr$Lambda3$omega)
-    plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
-    lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
-    lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
-    lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2)
+    plot_S_curves(Omega, Omega_curr)
     
+    #create trace plots
     for(i in 1:14){
       ylim=c(min(unlist(Omega)[i], output[1:it,i+1]), max(unlist(Omega)[i], output[1:it,i+1]))
       plot(output[1:it,i+1], type='l', ylab='', ylim=ylim)
@@ -481,22 +225,23 @@ AMCMC3 <-function(dir,Model,iVals,AlgoParams){
   
 }
 
-AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
+#Allows you to continue an unfinished MCMC chain that was interrupted
+AMCMC_continueunfinished <-function(dir,Model,iVals,AlgoParams, filetag){
   
   # Set Random Number Generator (RNG) initial seed
   set.seed(round(runif(1,0,100000))) 
   # Check no mistakes have been made in the model, methodology and initial values
   checkLTargs(Model,iVals,AlgoParams)
   
-  t_0 <- 170
-  output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-30_222310')
-  xbar_tminus1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/xbar_tminus1_2022-05-30_222310')
-  propCOV <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/covariance_2022-05-30_222310')
+  output <- readRDS(paste0(dir, '/IIDIPUS_Results/output_', filetag)) 
+  xbar_tminus1 <- readRDS(paste0(dir, '/IIDIPUS_Results/xbar_tminus1_', filetag)) 
+  propCOV <- readRDS(paste0(dir, '/IIDIPUS_Results/propCOV_', filetag)) 
   xPrev <- unlist(iVals$x0)
-  xPrev[1:14] <- output[min(which(is.na(output[,1])))-1, 2:NCOL(output)]
+  interruption_point <- min(which(is.na(output[,1])))-1
+  xPrev[1:14] <- output[interruption_point, 2:NCOL(output)]
   n_x <- length(xPrev)
   
-  C_0 = diag(0.001, nrow=n_x)
+  C_0 = diag(0.0001, nrow=n_x)
   
   s_d = (2.38)^2/n_x
   eps = diag(0.0000001, nrow=n_x)
@@ -506,7 +251,7 @@ AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
   # Create file names with unique names for storage reasons
   tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
   
-  lTargOld<-output[min(which(is.na(output[,1])))-1, 1]
+  lTargOld<-output[interruption_point, 1]
   
   # Start the iterations!
   it <- min(which(is.na(output[,1])))
@@ -581,27 +326,17 @@ AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
       relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
     
     par(mfrow=c(4,4))
-    # Plot S-curves for the actual and MAP parameterisation
-    D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
-    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)
-    D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
-    D_MortDisp_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda1$nu, Omega_curr$Lambda1$omega)
-    D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
-    D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda2$nu, Omega_curr$Lambda2$omega)
-    D_Disp <- D_MortDisp - D_Mort
-    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    D_BD <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
-    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda3$nu, Omega_curr$Lambda3$omega)
-    plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Mort_sample, col='red', lty=2)
-    lines(Intensity, D_Disp, col='blue'); lines(Intensity, D_Disp_sample, col='blue', lty=2)
-    lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2)
-    lines(Intensity, D_extent, col='green', type='l'); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2)
     
+    # Plot S-curves for the actual and MAP parameterisation
+    plot_S_curves(Omega, Omega_curr)
+    
+    #create trace plots
     for(i in 1:14){
       ylim=c(min(unlist(Omega)[i], output[1:it,i+1]), max(unlist(Omega)[i], output[1:it,i+1]))
       plot(output[1:it,i+1], type='l', ylab='', ylim=ylim)
       abline(h=unlist(Omega)[i], col='red')
     }
+    
     
     # Save log-target and parameters
     saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
@@ -620,8 +355,7 @@ AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
   
 }
 
-
-Algorithm <- match.fun('AMCMC2')
+Algorithm <- match.fun('AMCMC')
 
 
 NelderMeadOptim<-function(dir,Model,iVals,AlgoParams){

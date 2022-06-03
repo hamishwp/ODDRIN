@@ -395,3 +395,27 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
   return(Model$center)
 }
 
+#plot the S-curve for a given parameterisation (and optionally compare to a second)
+plot_S_curves <- function(Omega, Omega_curr=NULL){
+  Intensity <- seq(0,10,0.1)
+  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta)
+  D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
+  D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
+  D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
+  D_Disp <- D_MortDisp - D_Mort
+  D_BD <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
+  
+  plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Disp, col='blue');
+  lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_extent, col='green', type='l');
+  
+  
+  if(!is.null(Omega_curr)){
+    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)
+    D_MortDisp_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda1$nu, Omega_curr$Lambda1$omega)
+    D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda2$nu, Omega_curr$Lambda2$omega)
+    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda3$nu, Omega_curr$Lambda3$omega)
+    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
+    lines(Intensity, D_Mort_sample, col='red', lty=2); lines(Intensity, D_Disp_sample, col='blue', lty=2); 
+    lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2);
+  }
+}

@@ -42,15 +42,16 @@ main_simulated <- function(){
   
   iVals<-GetInitVals(dir,Model,AlgoParams)
   
-  output <- AMCMC3(dir=dir,
+  output <- AMCMC(dir=dir,
                       Model=Model,
                       iVals=iVals,
                       AlgoParams=AlgoParams)
   
-  output <- AMCMC2_continue(dir=dir,
+  output <- AMCMC_continueunfinished(dir=dir,
                             Model=Model,
                             iVals=iVals,
-                            AlgoParams=AlgoParams)
+                            AlgoParams=AlgoParams, 
+                            filetag='2022-05-30_222310')
   
   Omega_MAP = output$PhysicalValues
   
@@ -87,7 +88,7 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
 
 
 
-output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-24_232828')
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-31_162842')
 
 output1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-24_232828')
 output2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-25_214953')
@@ -106,30 +107,6 @@ Omega_MAP <- output[which.max(output[1:750,1]),2:ncol(output)] %>%
   relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
 
 # Plot S-curves for the actual and MAP parameterisation
-plot_S_curves <- function(Omega, Omega_MAP=NULL){
-  Intensity <- seq(0,10,0.1)
-  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta)
-  D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
-  D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
-  D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
-  D_Disp <- D_MortDisp - D_Mort
-  D_Disp <- ifelse(D_Disp < 0, 0, D_Disp)
-  D_BD <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
-  plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1), ylab='Proportion'); lines(Intensity, D_Disp, col='blue'); 
-  lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_extent, col='green', type='l'); 
-  legend(x=1,y=0.7, c('D_Mort', 'D_Disp', 'D_BD', 'D_B'), col=c('red','blue','pink', 'green'), lty=1)
-  
-  if(!is.null(Omega_MAP)){
-    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_MAP$theta) , Omega_MAP$zeta)
-    D_MortDisp_sample <- BinR( Omega_MAP$Lambda1$nu * Dfun(Intensity, theta=Omega_MAP$theta) + Omega_MAP$Lambda1$omega, Omega_MAP$zeta)
-    D_Mort_sample <- BinR(Omega_MAP$Lambda2$nu * Dfun(Intensity, theta=Omega_MAP$theta) + Omega_MAP$Lambda2$omega , Omega_MAP$zeta) * D_MortDisp_sample
-    D_BD_sample <- BinR(Omega_MAP$Lambda3$nu * Dfun(Intensity, theta=Omega_MAP$theta) + Omega_MAP$Lambda3$omega, Omega_MAP$zeta)
-    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    lines(Intensity, D_Mort_sample, col='red', lty=2); lines(Intensity, D_Disp_sample, col='blue', lty=2); 
-    lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2);
-  }
-}
-
 plot_S_curves(Omega,Omega_MAP)
 
 plot_shaded_S_curves <- function(Omega, output){
@@ -174,25 +151,33 @@ logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)
 folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
 ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
 LLs <- c()
-#LLs2 <- c()
+LLs2 <- c()
 #LLs3 <- c()
 mags <- c()
 for(i in 1:length(ufiles)){
   # Extract the ODD object
   ODDy<-readRDS(paste0(folderin,ufiles[i]))
-  # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
-  ODDy@fIndies<-Model$fIndies
-  ODDy@gmax%<>%as.data.frame.list()
-  # Apply DispX
   LLs <- append(LLs, DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
-  #LLs2 <- append(LLs2, DispX(ODD = ODDy,Omega = Omega_MAP,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
+  LLs2 <- append(LLs2, DispX(ODD = ODDy,Omega = Omega_MAP,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
   #LLs3 <- append(LLs3, DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
   hrange<-grep("hazMean",names(ODDy),value = T)
   mags <- append(mags, max(ODDy[hrange]@data, na.rm=TRUE))
 }
 plot(mags, LLs, xlab='Event Magnitude', ylab='Contribution to Log Likelihood')
-#points(1:142, LLs2,col='blue')
+points(mags, LLs2,col='blue')
 #points(1:142, LLs3, col='red')
+
+#Plot Linear Predictor Terms
+for(i in 1:length(ufiles)){
+  ODDSim <- readRDS(paste0(folderin,ufiles[i]))
+  #simulate displacement, mortality and building destruction using DispX
+  Params<-FormParams(ODDSim,list(Np=5,center=Model$center))
+  # Income distribution percentiles & extract income percentile  
+  SincN<-seq(10,90,by = 10); Sinc<-ExtractCIndy(ODDSim,var = paste0("p",SincN,"p100"))
+  notnans<-which(!(is.na(ODDSim$Population) | is.na(ODDSim$ISO3C) | is.na(ODDSim$GDP)))
+  LP <- GetLP(ODDSim,Omega,Params,Sinc,notnans)
+  locallinp<-LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]]
+}
 
 #Misc plots to compare predictions from the true and MAP parameters
 folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
@@ -223,15 +208,24 @@ for(i in 1:length(ufiles)){
   z_pred_MAP = append(z_pred_MAP, ODDSim_MAP@predictDisp$nBD_predictor)
 }
 
+LL_Omega <- c()
+LL_MAP <- c()
+for(i in 1:length(ufiles)){
+  ODDSim <- readRDS(paste0(folderin,ufiles[i]))
+  #simulate displacement, mortality and building destruction using DispX
+  LL_Omega <- append(LL_Omega, ODDSim %>% DispX(Omega, Model$center, Model$BD_params, LL=TRUE, Method=list(Np=1,cores=1,cap=-300))
+  LL_MAP <- ODDSim %>% DispX(Omega_MAP, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300))
+}
+
 par(mfrow=c(1,1))
-plot(x_actual,x_actual, xlim=c(1,10000),ylim=c(1,10000))
+plot(x_actual,x_actual, xlim=c(1,100000),ylim=c(1,100000))
 points(x_actual, x_pred_TRUE, col='blue')
 points(x_actual, x_pred_MAP, col='red')
 
 par(mfrow=c(1,1))
-plot(log(y_actual), log(y_actual))
-points(y_actual%>% log(), y_pred_TRUE%>% log(), col='blue')
-points(y_actual %>% log(), y_pred_MAP%>% log(), col='red')
+plot(y_actual, y_actual, xlim=c(1,1000), ylim=c(1,1000))
+points(y_actual, y_pred_TRUE, col='blue')
+points(y_actual, y_pred_MAP, col='red')
 
 
 par(mfrow=c(1,1))

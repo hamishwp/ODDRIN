@@ -32,14 +32,15 @@ main_simulated <- function(){
   #ODDpaths<-ExtractData(Model$haz,dir,extractedData)
   # Extract initial parameterisation estimate
   
-  iVals<-GetInitVals(dir,Model,AlgoParams)
   # Parameterise... Here we go!
   
   AlgoParams$AllParallel <- TRUE
-  AlgoParams$cores <- 14
+  AlgoParams$cores <- 6
   AlgoParams$Np <- 5
   AlgoParams$ABC <- 1.5
   AlgoParams$itermax <- 10000
+  
+  iVals<-GetInitVals(dir,Model,AlgoParams)
   
   output <- AMCMC3(dir=dir,
                       Model=Model,
@@ -73,6 +74,7 @@ main_simulated <- function(){
 # ------------------------------------------------- MISCELLANEOUS PLOTS -------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------
 
+
 #Plot the simulated data
 #Names: ODDSim.png, Sim DispMortBD.png  
 #Size: 1500 x 700
@@ -85,7 +87,19 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
 
 
 
-output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-17_202856')
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-24_232828')
+
+output1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-24_232828')
+output2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-25_214953')
+output3 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-30_222310')
+
+
+par(mfrow=c(4,4))
+for(i in 2:15){
+  plot(1:3400, output1[1:3400,i], type='l', ylim = c(min(c(output1[1:3400,i],output2[1:3400,i])),max(c(output1[1:3400,i],output2[1:3400,i])) ))
+  lines(1:3400, output2[1:3400,i], type='l', col='red')
+  lines(1:3400, output3[1:3400,i], type='l', col='red')
+}
 
 
 Omega_MAP <- output[which.max(output[1:750,1]),2:ncol(output)] %>% 

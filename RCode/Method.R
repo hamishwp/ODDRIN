@@ -489,9 +489,9 @@ AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
   checkLTargs(Model,iVals,AlgoParams)
   
   t_0 <- 170
-  output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-17_111122')
-  xbar_tminus1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/xbar_tminus1_2022-05-17_111122')
-  propCOV <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/covariance_2022-05-17_111122')
+  output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-30_222310')
+  xbar_tminus1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/xbar_tminus1_2022-05-30_222310')
+  propCOV <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/covariance_2022-05-30_222310')
   xPrev <- unlist(iVals$x0)
   xPrev[1:14] <- output[min(which(is.na(output[,1])))-1, 2:NCOL(output)]
   n_x <- length(xPrev)
@@ -521,7 +521,7 @@ AMCMC2_continue <-function(dir,Model,iVals,AlgoParams){
     } else {
       xNew <- multvarNormProp(xt=xPrev, propPars=C_0)
     }
-    xNew[7:14] <- unlist(Omega)[7:14]
+    #xNew[7:14] <- unlist(Omega)[7:14]
     
     # Check proposal is within the parameter space:
     if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){

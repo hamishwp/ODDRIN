@@ -68,14 +68,14 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   
   HP = Inf
   while(HP> AlgoParams$ABC){
-    Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=runif(1,-0.05,0.05),omega=runif(1,0.45,0.55)),
-                                            Lambda2 = list(nu=runif(1,1.25,1.35), omega=runif(1,0.85,0.95)),
-                                            Lambda3 = list(nu=runif(1,0.35,0.45),omega=runif(1,0.55,0.65)),
-                                           zeta = list(k=runif(1,2.9,3.1), lambda=runif(1,1.35,1.45)),
-                                           Pdens = list(M=runif(1,0.025,0.035), k = runif(1,6.4,6.6)), 
-                                           dollar = list(M = runif(1,-1.1,-1), k = runif(1,6.4,6.6)), #list(M = -1.05, k = 6.5),
-                                           theta = list(e=runif(1,0.23,0.24)), #list(e=0.23),
-                                           eps = list(eps=runif(1,0.005,0.015)))), Model)
+    Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=runif(1,-0.1,0.1),omega=runif(1,0.4,0.6)),
+                                            Lambda2 = list(nu=runif(1,1.2,1.4), omega=runif(1,0.8,1)),
+                                            Lambda3 = list(nu=runif(1,0.3,0.5),omega=runif(1,0.5,0.7)),
+                                           zeta = list(k=runif(1,2.85,3.15), lambda=runif(1,1.3,1.5)),
+                                           Pdens = list(M=runif(1,0.02,0.04), k = runif(1,6.3,6.7)), 
+                                           dollar = list(M = runif(1,-1.2,-0.9), k = runif(1,6.3,6.7)), #list(M = -1.05, k = 6.5),
+                                           theta = list(e=runif(1,0.22,0.25)), #list(e=0.23),
+                                           eps = list(eps=runif(1,0.001,0.02)))), Model)
     HP<-Model$HighLevelPriors(Omega,Model)
     print(HP)
   }              

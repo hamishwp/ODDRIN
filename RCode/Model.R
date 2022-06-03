@@ -646,8 +646,8 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T, epsilon=0.1){
   print(paste0("LL Displacements = ",LL)) ; sLL<-LL
   
   # Add the log-likelihood values from the BD (building damage) objects
-  #LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
-  #print(paste0("LL Building Damages = ",LL-sLL))
+  LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
+  print(paste0("LL Building Damages = ",LL-sLL))
   
   posterior<-LL #+HP
   # Add Bayesian priors

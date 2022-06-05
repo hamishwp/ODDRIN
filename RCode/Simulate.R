@@ -318,14 +318,16 @@ simulateODDSim <- function(miniDam, I0=4.5){
 }
 
 
-simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
+simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5, cap=-300){
   # Input:
   # - nEvents: The number of ODDSim objects to generate
   # - Omega: The model parameterisation
-  # Output: None
+  # - outliers: If true, includes an outlier at a high intensity with higher impact than simulated by the model
+  # Output: 
+  # - center: the center values of PDens and GDP under the simulated data
   # Details:
   # - Saves each ODDSim object to IIDIPUS_SimInput/ODDobjects/
-  set.seed(round(runif(1,0,100000)))
+  set.seed(round(runif(1,0,1000)))
   
   haz='EQ'
   
@@ -362,21 +364,23 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
   ODDpaths <-na.omit(list.files(path="IIDIPUS_SimInput/ODDobjects/"))
   BDpaths <-na.omit(list.files(path="IIDIPUS_SimInput/BDobjects/"))
   k <- 10
+  intensities <- c() #store eq intensities
   #now loop through each event and simulate the displacement, mortality, and building destruction using DispX()
   for(i in 1:length(ODDpaths)){
     ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
+    intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
     ODDSim %<>% DispX(Omega, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300))
     
     #take these simulations as the actual values
     ODDSim@gmax <- ODDSim@predictDisp %>% transmute(iso3='ABC',
-                                                    gmax = round(rlnormTrunc(1,log(disp_predictor+k), sdlog=0.1, min=k)) - k,
+                                                    gmax = disp_predictor, #round(rlnormTrunc(1,log(disp_predictor+k), sdlog=0.1, min=k)) - k,
                                                     qualifier = ifelse(is.na(gmax), NA, 'total'),
-                                                    mortality = round(rlnormTrunc(1,log(mort_predictor+k), sdlog=0.03, min=k)) - k,
+                                                    mortality = mort_predictor, #round(rlnormTrunc(1,log(mort_predictor+k), sdlog=0.03, min=k)) - k,
                                                     qualifierMort = ifelse(is.na(mort_predictor), NA, 'total'), 
-                                                    buildDestroyed = round(rlnormTrunc(1,log(nBD_predictor+k), sdlog=0.1, min=k)) - k,
+                                                    buildDestroyed = nBD_predictor, #round(rlnormTrunc(1,log(nBD_predictor+k), sdlog=0.1, min=k)) - k,
                                                     qualifierBD = ifelse(is.na(buildDestroyed), NA, 'total'))
-                                        
+    
     #overwrite ODDSim with the updated
     saveRDS(ODDSim, paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
   }
@@ -391,6 +395,18 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, I0=4.5, cap=-300){
       BDSim@data$grading[j] = ifelse(runif(1)>0.5, BDSim@data$grading[j], 'Damaged')
     }
     saveRDS(BDSim,paste0("IIDIPUS_SimInput/BDobjects/",BDpaths[i]))
+  }
+  
+  if (outliers){
+    #double the impact of the highest intensity earthquake
+    i <- which.max(intensities)
+    ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
+    ODDSim@gmax %<>% mutate(
+      gmax = 2 * gmax,
+      mortality = 2 * mortality,
+      buildDestroyed = 2 * buildDestroyed
+    )
+    saveRDS(ODDSim, paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
   }
   return(Model$center)
 }

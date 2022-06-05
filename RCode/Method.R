@@ -103,7 +103,6 @@ AMCMC <-function(dir,Model,iVals,AlgoParams){
   xbar_tminus1 <- xPrev
   
   C_0 = diag(0.0001, nrow=n_x)
-  C_0[13,13] = 0.00001 
   
   s_d = (2.38)^2/n_x
   eps = diag(0.000000001, nrow=n_x)

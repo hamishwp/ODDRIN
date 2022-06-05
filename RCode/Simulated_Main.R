@@ -23,9 +23,10 @@ Omega <- list(Lambda1 = list(nu=0,omega=0.5),
               theta = list(e=0.2359788),
               eps = list(eps=0.01304351))
 
-Model$center <- simulateDataSet(100, Omega, Model=Model, dir = dir)
+Model$center <- simulateDataSet(100, Omega, Model=Model, dir = dir, outliers = TRUE)
 #After generating the simulated data, need to move 'from 'centerings' 
 #and 'ODDobjects' from 'IIDIPUS_SimInput' to 'IIDIPUS_Input'
+
 
 
 main_simulated <- function(){
@@ -145,6 +146,21 @@ plot_shaded_S_curves <- function(Omega, output){
 logTarget(dir = dir,Model = Model,proposed = Omega_MAP, AlgoParams = AlgoParams)
 logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)
 
+
+
+# folderin<-paste0(dir,"IIDIPUS_SimInput/ODDobjects/")
+# ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) 
+# mags = c()
+# mort = c()
+# disp = c()
+# bd = c()
+# for(i in 1:length(ufiles)){
+#   ODDy<-readRDS(paste0(folderin,ufiles[i]))
+#   mags = append(mags, max(ODDy@data$hazMean1, na.rm=TRUE))
+#   mort = append(mort, ODDy@gmax$mortality/sum(ODDy@data$Population, na.rm=TRUE))
+#   disp = append(disp, ODDy@gmax$gmax/sum(ODDy@data$Population, na.rm=TRUE))
+#   bd = append(bd, ODDy@gmax$buildDestroyed/sum(ODDy@data$nBD, na.rm=TRUE))
+# }
 
 
 #Magnitude vs contribution to likelihood

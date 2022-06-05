@@ -382,65 +382,42 @@ LL_IDP<-function(Y, epsilon){ #LOOSEEND is it fair to marginalize over missing m
   LL = 0
   k = 10
   if(!is.na(Y$gmax)){
-
-    #LL = LL + log(dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.1))
-    #LL = LL + log(dnorm(Y$gmax, Y$disp_predictor, 50))
-    #LL = LL + log(1/(1+abs(Y$gmax - Y$disp_predictor)^2))
-    #print(paste(Y$gmax, Y$disp_predictor, dnorm(abs(Y$gmax - Y$disp_predictor) / (0.000004 * Y$gmax^2 + Y$gmax*0.1+10), 0.5, log=TRUE)))
-    #LL_disp <- dnorm(Y$gmax, mean=Y$disp_predictor, sd=0.000001*Y$disp_predictor^2 + Y$disp_predictor*0.1 + 10, log=TRUE)
-    #if (Y$gmax == 0){
-    #  LL_disp = pnorm(0, mean=Y$disp_predictor, sd=0.000001*Y$disp_predictor^2 + Y$disp_predictor*0.1 + 10, log=TRUE)
-    #}
-    #LL_disp <- dnorm(abs(log(Y$gmax+20)-log(Y$disp_predictor+20)), 0,0.1,log=TRUE)
-    LL_disp <- log(dlnormTrunc(Y$gmax+k, log(Y$disp_predictor+k), sdlog=epsilon, min=k))
+    LL_disp <- log(dloglap(Y$gmax+k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+      (1-ploglap(k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
+    #LL_disp <- log(dlnormTrunc(Y$gmax+k, log(Y$disp_predictor+k), sdlog=epsilon, min=k))
     LL = LL + LL_disp
-    #LL = LL + log(dLaplace((log(Y$gmax+1)-log(Y$disp_predictor+1))/log(Y$disp_predictor+1), 0, 0.0333)) #LOOSEEND +1 to avoid log issues
-    #LL = LL + log(dnorm(log(Y$gmax+1), log(Y$disp_predictor+1), 0.5))
-    #print(paste('disp',Y$gmax, Y$disp_predictor, LL_disp))
   }
 
   if(!is.na(Y$mortality)){
-    #LL = LL + dnorm(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1, log=TRUE)
-    #LL = LL + log(dnorm(log(Y$mortality+1), log(Y$mort_predictor+1), 0.1))
-    #LL =  LL + log(1/(1+abs(Y$mortality - Y$mort_predictor)^2))
-    #print(paste(Y$mortality, Y$mort_predictor, dnorm(abs(Y$mortality - Y$mort_predictor) / (0.000004 * Y$mortality^2 + Y$mortality*0.1+10), 0.5, log=TRUE)))
-    #LL_mort <- dnorm(Y$mortality, mean=Y$mort_predictor, sd=0.0000005*Y$mort_predictor^2 + Y$mort_predictor*0.05 + 5, log=TRUE)
-    #if (Y$mortality == 0){
-    #  LL_mort = pnorm(0, mean=Y$mort_predictor, sd=0.0000005*Y$mort_predictor^2 + Y$mort_predictor*0.05 + 5, log=TRUE)
-    #}
-    
-    #LL_mort <- dnorm(abs(log(Y$mortality+20)-log(Y$mort_predictor+20)), 0,0.05,log=TRUE)
-    LL_mort <- log(dlnormTrunc(Y$mortality+k, log(Y$mort_predictor+k), sdlog=0.3*epsilon, min=k))
+    LL_mort <- log(dloglap(Y$mortality+k, location.ald = log(Y$mort_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+      (1-ploglap(k, location.ald = log(Y$mort_predictor+k), scale.ald = 0.3 * epsilon, tau = 0.5, log = FALSE)))
+    #LL_mort <- log(dlnormTrunc(Y$mortality+k, log(Y$mort_predictor+k), sdlog=0.3*epsilon, min=k))
     LL = LL + LL_mort
-    #print(paste('mort',Y$mortality, Y$mort_predictor, LL_mort))
-    #LL = LL + log(dLaplace((log(Y$mortality+1)-log(Y$mort_predictor+1))/log(Y$mort_predictor+1), 0, 0.00333))
   }
 
   if(!is.na(Y$buildDestroyed)){
-    #LL_BD <- dnorm(abs(Y$buildDestroyed - Y$nBD_predictor) / ( 0.000001 * Y$buildDestroyed^2 + Y$buildDestroyed*0.11+10),mean= 0, sd=1, log=TRUE)
-    #LL_BD <- dnorm(Y$buildDestroyed, mean=Y$nBD_predictor, sd=0.000001*Y$nBD_predictor^2 + Y$nBD_predictor*0.1 + 10, log=TRUE)
-    #if (Y$buildDestroyed == 0){
-    #  LL_BD = pnorm(0, mean=Y$nBD_predictor, sd=0.000001*Y$nBD_predictor^2 + Y$nBD_predictor*0.1 + 10, log=TRUE)
-    #}
-    LL_BD <- log(dlnormTrunc(Y$buildDestroyed+k, log(Y$nBD_predictor+k), sdlog=epsilon, min=k))
+    LL_BD <- log(dloglap(Y$buildDestroyed+k, location.ald = log(Y$nBD_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+      (1-ploglap(k, location.ald = log(Y$nBD_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
+    #LL_BD <- log(dlnormTrunc(Y$buildDestroyed+k, log(Y$nBD_predictor+k), sdlog=epsilon, min=k))
     LL = LL + LL_BD
-    #print(paste('bd',Y$buildDestroyed, Y$nBD_predictor, LL_BD))
-    #LL = LL + dnorm(log(Y$buildDestroyed+1), log(Y$nBD_predictor+1), 0.1, log=TRUE)
-    #LL = LL + log(1/(1+abs(Y$buildDestroyed - Y$nBD_predictor))^2)
-    #LL = LL + log(dLaplace((Y$buildDestroyed-Y$nBD_predictor)/(Y$nBD_predictor+1),0,0.025))
-    #LL = LL + log(dLaplace(log(Y$buildDestroyed+1)-log(Y$nBD_predictor+1), 0, 0.2)) 
   }
   #print(LL)
   return(LL)
-  
-  # -log(1+(Y$gmax-Y$predictor)^2/Y$gmax)
-  # -((Y$gmax-Y$predictor)^2/Y$gmax)
-  # dnorm((log(max(Ystar,1))-log(Y)), mean = 0, sd = log(Y), log = T)
-  # dgammaM(Ystar,Y,0.1,log = T)
 }
 
-#xrange <- 1:100; k <- 10; x <- 5
-#plot(xrange, dlnormTrunc(xrange+k, log(x+k), sdlog=0.03, min=k))
+# Plot to compare normal and laplace kernels
+# xrang <- seq(1000,2000,1)
+# xobs <- 1500
+# lapval <- dloglap(xobs+k, location.ald = log(xrang+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+#   (1-ploglap(k, location.ald = log(xrang+k), scale.ald = epsilon, tau = 0.5, log = FALSE))
+# normval <- dlnormTrunc(xobs+k, log(xrang+k), sdlog=epsilon, min=k)
+# plot(xrang, log(lapval))
+# points(xrang, log(normval), col='red')
+#q <- 0.975
+#xobs <- 1000
+#qloglap(q, location.ald = log(xobs+k), scale.ald = 0.09, tau = 0.5, log = FALSE)/
+#    (1-ploglap(k, location.ald = log(xobs+k), scale.ald = 0.1, tau = 0.5, log = FALSE))
+#qlnormTrunc(q, log(xobs+k), sdlog=epsilon, min=k)
 
 
 LL_beta_apply<-function(b,value,BD_params) do.call(BD_params$functions[[value]],as.list(c(x=b,unlist(BD_params$Params[[value]]))))

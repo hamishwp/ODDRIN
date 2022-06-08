@@ -382,23 +382,23 @@ LL_IDP<-function(Y, epsilon){ #LOOSEEND is it fair to marginalize over missing m
   LL = 0
   k = 10
   if(!is.na(Y$gmax)){
-    LL_disp <- log(dloglap(Y$gmax+k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
-      (1-ploglap(k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
-    #LL_disp <- log(dlnormTrunc(Y$gmax+k, log(Y$disp_predictor+k), sdlog=epsilon, min=k))
+    #LL_disp <- log(dloglap(Y$gmax+k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+    #  (1-ploglap(k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
+    LL_disp <- log(dlnormTrunc(Y$gmax+k, log(Y$disp_predictor+k), sdlog=epsilon, min=k))
     LL = LL + LL_disp
   }
 
   if(!is.na(Y$mortality)){
-    LL_mort <- log(dloglap(Y$mortality+k, location.ald = log(Y$mort_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
-      (1-ploglap(k, location.ald = log(Y$mort_predictor+k), scale.ald = 0.3 * epsilon, tau = 0.5, log = FALSE)))
-    #LL_mort <- log(dlnormTrunc(Y$mortality+k, log(Y$mort_predictor+k), sdlog=0.3*epsilon, min=k))
+    #LL_mort <- log(dloglap(Y$mortality+k, location.ald = log(Y$mort_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+    #  (1-ploglap(k, location.ald = log(Y$mort_predictor+k), scale.ald = 0.3 * epsilon, tau = 0.5, log = FALSE)))
+    LL_mort <- log(dlnormTrunc(Y$mortality+k, log(Y$mort_predictor+k), sdlog=0.3*epsilon, min=k))
     LL = LL + LL_mort
   }
 
   if(!is.na(Y$buildDestroyed)){
-    LL_BD <- log(dloglap(Y$buildDestroyed+k, location.ald = log(Y$nBD_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
-      (1-ploglap(k, location.ald = log(Y$nBD_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
-    #LL_BD <- log(dlnormTrunc(Y$buildDestroyed+k, log(Y$nBD_predictor+k), sdlog=epsilon, min=k))
+    #LL_BD <- log(dloglap(Y$buildDestroyed+k, location.ald = log(Y$nBD_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+    #  (1-ploglap(k, location.ald = log(Y$nBD_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
+    LL_BD <- log(dlnormTrunc(Y$buildDestroyed+k, log(Y$nBD_predictor+k), sdlog=epsilon, min=k))
     LL = LL + LL_BD
   }
   #print(LL)

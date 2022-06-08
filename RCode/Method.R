@@ -17,6 +17,7 @@
 ##########################################################################
 ##########################################################################
 
+library(rstan)
 # Methodology parameters required
 AlgoParams<-list(Np=20, # Number of Monte Carlo particles
                  cores=8, # Number of parallelised threads per event
@@ -37,7 +38,7 @@ if(is.null(AlgoParams$AllParallel)){
   } else AlgoParams$AllParallel<-F
 }
 # Choose the parameterisation algorithm - the string must match the function name exactly
-Algorithm<-"AMCMC2" # "NelderMeadOptim", "AMCMC"
+Algorithm<-"AMCMC" # "NelderMeadOptim", "AMCMC"
 
 # Metropolis-Hastings proposal distribution, given old values and covariance matrix
 multvarNormProp <- function(xt, propPars){
@@ -162,7 +163,7 @@ AMCMC <-function(dir,Model,iVals,AlgoParams){
     }
     
     #if proposed log likelihood is close to the old log likelihood, then resample the old log likelihood
-    if (lTargNew > (lTargOld - 50)){
+    if (lTargNew > (lTargOld - 50) || (t <= 500 & t %% 10 == 0 )){
       lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
                                      AlgoParams = AlgoParams, epsilon=epsilon), error=function(e) NA)
     }
@@ -206,6 +207,9 @@ AMCMC <-function(dir,Model,iVals,AlgoParams){
       abline(h=unlist(Omega)[i], col='red')
     }
     
+    print(paste('Single Chain R-Hat', paste(round(apply(output[round(it/2):it,2:15],2, rhat, split = TRUE), digits=2), collapse=' ')))
+    print(paste('ESS', paste(round(apply(output[min(1000, round(it/2)):it,2:15],2, ess_basic), digits=2), collapse=' ')))
+    
     
     # Save log-target and parameters
     saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
@@ -234,11 +238,13 @@ AMCMC_continueunfinished <-function(dir,Model,iVals,AlgoParams, filetag){
   
   output <- readRDS(paste0(dir, '/IIDIPUS_Results/output_', filetag)) 
   xbar_tminus1 <- readRDS(paste0(dir, '/IIDIPUS_Results/xbar_tminus1_', filetag)) 
-  propCOV <- readRDS(paste0(dir, '/IIDIPUS_Results/propCOV_', filetag)) 
+  propCOV <- readRDS(paste0(dir, '/IIDIPUS_Results/covariance_', filetag)) 
   xPrev <- unlist(iVals$x0)
+  
   interruption_point <- min(which(is.na(output[,1])))-1
   xPrev[1:14] <- output[interruption_point, 2:NCOL(output)]
   n_x <- length(xPrev)
+  t_0 <- 500
   
   C_0 = diag(0.0001, nrow=n_x)
   
@@ -250,10 +256,11 @@ AMCMC_continueunfinished <-function(dir,Model,iVals,AlgoParams, filetag){
   # Create file names with unique names for storage reasons
   tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
   
-  lTargOld<-output[interruption_point, 1]
+  lTargOld<-tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
+                               AlgoParams = AlgoParams), error=function(e) NA)
   
   # Start the iterations!
-  it <- min(which(is.na(output[,1])))
+  it <- interruption_point + 1 #min(which(is.na(output[,1])))
   while (it <= AlgoParams$itermax){
     print(it)
     t <- it - 1
@@ -292,7 +299,7 @@ AMCMC_continueunfinished <-function(dir,Model,iVals,AlgoParams, filetag){
       next
     }
     
-    if (lTargNew > (lTargOld - 50)){
+    if (lTargNew > (lTargOld - 50) || (t <= 500 & t %% 10 == 0 )){
       lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
                                      AlgoParams = AlgoParams), error=function(e) NA)
     }
@@ -336,6 +343,9 @@ AMCMC_continueunfinished <-function(dir,Model,iVals,AlgoParams, filetag){
       abline(h=unlist(Omega)[i], col='red')
     }
     
+    #print the Rhat for each of the parameters from the second half of each chain
+    print(paste('Single Chain R-Hat', paste(round(apply(output[round(it/2):it,2:15],2, rhat, split = TRUE), digits=2), collapse=' ')))
+    print(paste('ESS', paste(round(apply(output[min(1000, round(it/2)):it,2:15],2, ess_basic), digits=2), collapse=' ')))
     
     # Save log-target and parameters
     saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))

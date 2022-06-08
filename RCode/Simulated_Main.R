@@ -52,7 +52,7 @@ main_simulated <- function(){
                             Model=Model,
                             iVals=iVals,
                             AlgoParams=AlgoParams, 
-                            filetag='2022-05-30_222310')
+                            filetag='2022-06-06_094129')
   
   Omega_MAP = output$PhysicalValues
   
@@ -107,6 +107,9 @@ for(i in 2:15){
 Omega_MAP <- output[which.max(output[1:750,1]),2:ncol(output)] %>% 
   relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
 
+Omega_MAP <- output[490,2:ncol(output)] %>% 
+  relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
+
 # Plot S-curves for the actual and MAP parameterisation
 plot_S_curves(Omega,Omega_MAP)
 
@@ -144,7 +147,8 @@ plot_shaded_S_curves <- function(Omega, output){
 
 #check that the likelihood from the true parameters is not greater than the MAP estimate
 logTarget(dir = dir,Model = Model,proposed = Omega_MAP, AlgoParams = AlgoParams)
-logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)
+
+for(i in 1:5) logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)
 
 
 
@@ -265,8 +269,8 @@ points(z_actual %>% log(), z_pred_MAP%>% log(), col='red')
 # 
 par(mfrow=c(4,4))
 for(i in 1:14){
-   ylim=c(min(unlist(Omega)[i], output[1:700,i+1]), max(unlist(Omega)[i], output[1:700,i+1]))
-   plot(output[1:700,i+1], type='l', ylab='', ylim=ylim)
+   ylim=c(min(unlist(Omega)[i], output[1:1500,i+1]), max(unlist(Omega)[i], output[1:1500,i+1]))
+   plot(output[1:1500,i+1], type='l', ylab='', ylim=ylim)
    abline(h=unlist(Omega)[i], col='red')
 }
 

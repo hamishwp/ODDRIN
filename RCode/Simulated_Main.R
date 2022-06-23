@@ -38,7 +38,7 @@ main_simulated <- function(){
   AlgoParams$AllParallel <- TRUE
   AlgoParams$cores <- 6
   AlgoParams$Np <- 5
-  AlgoParams$ABC <- 1.5
+  AlgoParams$ABC <- 1
   AlgoParams$itermax <- 10000
   
   iVals<-GetInitVals(dir,Model,AlgoParams)
@@ -46,7 +46,8 @@ main_simulated <- function(){
   output <- AMCMC(dir=dir,
                       Model=Model,
                       iVals=iVals,
-                      AlgoParams=AlgoParams)
+                      AlgoParams=AlgoParams, 
+                      unfinished=F)
   
   output <- AMCMC_continueunfinished(dir=dir,
                             Model=Model,
@@ -89,20 +90,25 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
 
 
 
-output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-31_162842')
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-06-08_142325')
 
-output1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-24_232828')
-output2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-25_214953')
+output1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-06-08_142325')
+output2 <- readRDS('/home/manderso/Downloads/output_2022-06-08_142424')
 output3 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-30_222310')
 
 
 par(mfrow=c(4,4))
 for(i in 2:15){
-  plot(1:3400, output1[1:3400,i], type='l', ylim = c(min(c(output1[1:3400,i],output2[1:3400,i])),max(c(output1[1:3400,i],output2[1:3400,i])) ))
-  lines(1:3400, output2[1:3400,i], type='l', col='red')
-  lines(1:3400, output3[1:3400,i], type='l', col='red')
+  plot(1:4000, output1[1:4000,i], type='l', ylim = c(min(c(output1[1:4000,i],output2[1:4000,i])),max(c(output1[1:4000,i],output2[1:4000,i])) ))
+  lines(1:4000, output2[1:4000,i], type='l', col='blue')
+  abline(h=unlist(Omega)[i-1],col='red')
 }
 
+for(i in 1:n_x){
+  ylim=c(min(unlist(Physical2Proposed(Omega,Model))[i], output[1:it,i+1]), max(unlist(Physical2Proposed(Omega,Model))[i], output[1:it,i+1]))
+  plot(output[1:it,i+1], type='l', ylab='', ylim=ylim)
+  abline(h=unlist(Physical2Proposed(Omega,Model))[i], col='red')
+}
 
 Omega_MAP <- output[which.max(output[1:750,1]),2:ncol(output)] %>% 
   relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
@@ -123,18 +129,20 @@ plot_shaded_S_curves <- function(Omega, output){
   D_BD <-  plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
   plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1), ylab='Proportion', lwd=3); 
   
-  n_iter <- NROW(output)
-  plotted_iter <- round(seq(1000,5000,length.out=500))
+  #n_iter <- NROW(output)
+  plotted_iter <- which(hp_samples[,15] < 0.5)
   for (i in plotted_iter){
-    Omega_iter <- output[i,2:ncol(output)] %>% 
+    Omega_iter <- output[i,2:(lenny+1)] %>% #output[i,2:ncol(output)] %>% 
       relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
     D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_iter$theta) , Omega_iter$zeta)
     D_MortDisp_sample <-  plnorm( Dfun(Intensity, theta=Omega_iter$theta), Omega_iter$Lambda1$nu, Omega_iter$Lambda1$omega)
     D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_iter$theta), Omega_iter$Lambda2$nu, Omega_iter$Lambda2$omega)
     D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_iter$theta), Omega_iter$Lambda3$nu, Omega_iter$Lambda3$omega)
     D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    lines(Intensity, D_Mort_sample, col=adjustcolor("red", alpha = 0.1)); lines(Intensity, D_Disp_sample, col=adjustcolor("cyan", alpha = 0.1)); 
-    lines(Intensity, D_extent_sample, col=adjustcolor("green", alpha = 0.1)); lines(Intensity, D_BD_sample, col=adjustcolor("pink", alpha = 0.1)); 
+    lines(Intensity, D_Mort_sample, col=adjustcolor("red", alpha = 0.1)); 
+    lines(Intensity, D_Disp_sample, col=adjustcolor("cyan", alpha = 0.1)); 
+    #lines(Intensity, D_extent_sample, col=adjustcolor("green", alpha = 0.1)); 
+    #lines(Intensity, D_BD_sample, col=adjustcolor("pink", alpha = 0.1)); 
   }
   lines(Intensity, D_Mort, col='darkred', lwd=3); 
   lines(Intensity, D_Disp, col='blue', lwd=3); 
@@ -148,10 +156,28 @@ plot_shaded_S_curves <- function(Omega, output){
 #check that the likelihood from the true parameters is not greater than the MAP estimate
 logTarget(dir = dir,Model = Model,proposed = Omega_MAP, AlgoParams = AlgoParams)
 
-for(i in 1:5) logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)
+for(i in 1:5) logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams, epsilon=AlgoParams$epsilon_min)
 
+LLs_disp <- array(NA, c(2, 5))
+LLs_tot <- array(NA, c(2, 5))
+j = 1
+for (Np in c(1, 2)){
+  print(j)
+  for (i in 1:5){
+    print(i)
+    AlgoParams$Np <- Np
+    LLs_disp[j, i] = LL_Displacement(0, dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams, epsilon=AlgoParams$epsilon_min)
+    LLs_tot[j,i] = LL_Buildings(LLs_disp[j,i], dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams)
+  }
+  j = j + 1
+}
 
-
+plot(rep(1,5), LLs_disp[1,],xlim=c(0.5,5.5), ylim=c(min(LLs_disp), max(LLs_disp)))
+points(rep(2,5), LLs_disp[2,])
+points(rep(3,5), LLs_disp[3,])
+points(rep(4,5), LLs_disp[4,])
+points(rep(5,5), LLs_disp[5,])
+range(LLs_tot[5,])
 # folderin<-paste0(dir,"IIDIPUS_SimInput/ODDobjects/")
 # ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) 
 # mags = c()
@@ -176,12 +202,17 @@ LLs2 <- c()
 mags <- c()
 for(i in 1:length(ufiles)){
   # Extract the ODD object
+  print(i)
   ODDy<-readRDS(paste0(folderin,ufiles[i]))
-  LLs <- append(LLs, DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
-  LLs2 <- append(LLs2, DispX(ODD = ODDy,Omega = Omega_MAP,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
+  AlgoParams$Np <- 1
+  print(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
+  AlgoParams$Np <- 2
+  print(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
+  #LLs <- append(LLs, DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
+  #LLs2 <- append(LLs2, DispX(ODD = ODDy,Omega = Omega_MAP,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
   #LLs3 <- append(LLs3, DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams))
-  hrange<-grep("hazMean",names(ODDy),value = T)
-  mags <- append(mags, max(ODDy[hrange]@data, na.rm=TRUE))
+  #hrange<-grep("hazMean",names(ODDy),value = T)
+  #mags <- append(mags, max(ODDy[hrange]@data, na.rm=TRUE))
 }
 plot(mags, LLs, xlab='Event Magnitude', ylab='Contribution to Log Likelihood')
 points(mags, LLs2,col='blue')

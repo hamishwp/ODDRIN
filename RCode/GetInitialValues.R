@@ -68,17 +68,17 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   
   HP = Inf
   while(HP> AlgoParams$ABC){
-    Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=runif(1,-0.1,0.1),omega=runif(1,0.4,0.6)),
-                                            Lambda2 = list(nu=runif(1,1.2,1.4), omega=runif(1,0.8,1)),
-                                            Lambda3 = list(nu=runif(1,0.3,0.5),omega=runif(1,0.5,0.7)),
-                                           zeta = list(k=runif(1,2.85,3.15), lambda=runif(1,1.3,1.5)),
-                                           Pdens = list(M=runif(1,0.02,0.04), k = runif(1,6.3,6.7)), 
-                                           dollar = list(M = runif(1,-1.2,-0.9), k = runif(1,6.3,6.7)), #list(M = -1.05, k = 6.5),
-                                           theta = list(e=runif(1,0.22,0.25)), #list(e=0.23),
-                                           eps = list(eps=runif(1,0.001,0.02)))), Model)
-    HP<-Model$HighLevelPriors(Omega,Model)
-    print(HP)
-  }              
+   Omega <- list(Lambda1 = list(nu=runif(1,-0.1,0.1),omega=runif(1,0.4,0.6)),
+                                           Lambda2 = list(nu=runif(1,1.2,1.4), omega=runif(1,0.8,1)),
+                                           Lambda3 = list(nu=runif(1,0.3,0.5),omega=runif(1,0.5,0.7)),
+                                          zeta = list(k=runif(1,2.85,3.15), lambda=runif(1,1.3,1.5)),
+                                          Pdens = list(M=runif(1,0.02,0.04), k = runif(1,6.3,6.7)),
+                                          dollar = list(M = runif(1,-1.2,-0.9), k = runif(1,6.3,6.7)), #list(M = -1.05, k = 6.5),
+                                          theta = list(e=runif(1,0.22,0.25)), #list(e=0.23),
+                                          eps = list(eps=runif(1,0.001,0.02)))
+   HP<-Model$HighLevelPriors(Omega,Model)
+   print(HP)
+  }
    # Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=0.9,omega=7),
    #   Lambda2 = list(nu= 0.9, omega=8),
    #   Lambda3 = list(nu=1.2,omega=7.5),
@@ -100,10 +100,26 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   #                     theta = list(e=0.2),
   #                     eps = list(eps=0.01))), Model)
 
-  lenny<-length(unlist(Omega))
+  lenny<-length(unlist(Model$links))
   # Note that this is in proposal space, not physical space, hence the logarithms
-  #propCOV <- diag(c(rep(0.1,lenny)))
-  propCOV<-diag(rep(lenny/60,lenny))
+  propCOV <- diag(c(rep(0.1,lenny)))
+  
+  # i = 1
+  # n_samples <- 100
+  # hp_samples <- array(NA, dim=c(n_samples,lenny+1))
+  # while (i <= n_samples){
+  #   sample <- runif(lenny, Model$par_lb, Model$par_ub) #generate proposal on the physical space
+  #   HP <- Model$HighLevelPriors(relist(sample,skeleton=Model$skeleton),Model) #check higher level prior of the proposal
+  #   #print(HP)
+  #   if (HP < AlgoParams$ABC){ #if less then ABC threshold
+  #     hp_samples[i,] <- c(unlist(Physical2Proposed(relist(sample, Model$skeleton), Model)), HP) #transform to proposed space from physical and store
+  #     print(hp_samples[i,])
+  #     i = i + 1
+  #   }
+  # }
+  # Omega <- unlist(relist(hp_samples[which.min(hp_samples[,lenny+1]), 1:lenny], Model$skeleton))
+  # propCOV<-cov(hp_samples[,1:lenny])/10
+  
   #propCOV<-readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/covariance_2022-05-04_120755')
   # propCOV<-diag(abs(c(log(0.17/0.12),log(0.04/0.02),log(0.09/0.055),
   #                     log(2/1.5),log(5.5/4.5),
@@ -111,7 +127,7 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   #                     log(3.5/4.5)
   #                     )))*0.5
   
-  iVals<-list(x0=Omega,COV=propCOV)
+  iVals<-list(x0=Physical2Proposed(Omega, Model),COV=propCOV)
   return(iVals)
   
 }

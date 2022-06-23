@@ -384,11 +384,11 @@ FormParams<-function(ODD,listy){
   return(Params)
 }
 
-setGeneric("DispX", function(ODD,Omega,center, BD_params, LL,Method, epsilon=0.1)
+setGeneric("DispX", function(ODD,Omega,center, BD_params, LL,Method, epsilon=c(0.15,0.03,0.1))
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
-                                   Method=list(Np=20,cores=8,cap=-300), epsilon=0.1
+                                   Method=list(Np=20,cores=8,cap=-300), epsilon=c(0.15,0.03,0.1)
 ){
   # Extract 0D parameters & speed up loop
   Params<-FormParams(ODD,list(Np=Method$Np,center=center))
@@ -496,7 +496,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
   #   Disp[ind,]%<>%qualifierDisp(qualifier = ODD@gmax$qualifier[ODD@gmax$iso3==c],mu = Omega$mu)
   # }
   
-  funcy<-function(i,LLout=T, epsilon=0.1) {
+  funcy<-function(i,LLout=T, epsilon=AlgoParams$epsilon_min) {
     tmp<-data.frame(iso3=ODD$ISO3C,IDPs=Dam[,i,1], mort=Dam[,i,2], nBD=Dam[,i,3]) %>% 
       group_by(iso3) %>% summarise(disp_predictor=floor(sum(IDPs,na.rm = T)), 
                                  mort_predictor=floor(sum(mort,na.rm = T)),

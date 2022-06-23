@@ -402,9 +402,9 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     i <- which.max(intensities)
     ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
     ODDSim@gmax %<>% mutate(
-      gmax = 4 * gmax,
-      mortality = 4 * mortality,
-      buildDestroyed = 4 * buildDestroyed
+      gmax = 2 * gmax,
+      mortality = 2 * mortality,
+      buildDestroyed = 2 * buildDestroyed
     )
     saveRDS(ODDSim, paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
   }

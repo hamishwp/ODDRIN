@@ -30,7 +30,11 @@ AlgoParams<-list(Np=20, # Number of Monte Carlo particles
                  Pstar=0.234, # Adaptive metropolis acceptance rate
                  gamzy0=0.2, # How quickly do the rejected parameters start having an influence on the covariance? (like GreedyStart) 
                  epsilon=50, # Do we still want values at larger numbers of iterations to have an influence on the covariance?
-                 minVar=1e-4 # Prevent certain parameters from being too sure of themselves
+                 minVar=1e-4, # Prevent certain parameters from being too sure of themselves
+                 t_0 =500,
+                 eps = 0.000000001,
+                 epsilon_min=c(0.15,0.03,0.1),
+                 epsilon_max=c(0.45,0.09,0.3)
                  )
 		 
 if(is.null(AlgoParams$AllParallel)){
@@ -56,7 +60,7 @@ Proposed2Physical<-function(proposed,Model,index=NULL){
   if(is.null(index)) index<-1:length(Model$links)
   # Link functions to convert values into useable/physical values
   for (i in index)  {
-    proposed[i] <- match.fun(Model$links[[names(proposed)[i]]])(proposed[i])
+    proposed[i] <- match.fun(Model$links[[names(proposed)[i]]])(proposed[i], Model$par_lb[i],Model$par_ub[i])
   }
   # Reshape into desired structure
   proposed%>%relist(skeleton=Model$skeleton)
@@ -71,11 +75,15 @@ Physical2Proposed<-function(proposed,Model,index=NULL){
   if(is.null(index)) index<-1:length(Model$unlinks)
   # Link functions to convert values into useable/physical values
   for (i in index)  {
-    proposed[i] <- match.fun(Model$unlinks[[names(proposed)[i]]])(proposed[i])
+    proposed[i] <- match.fun(Model$unlinks[[names(proposed)[i]]])(proposed[i], Model$par_lb[i],Model$par_ub[i])
   }
   # Reshape into desired structure
   proposed%>%relist(skeleton=Model$skeleton)
   
+}
+
+Array2Physical <- function(array, Model){
+  return(array %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model))
 }
 
 # Generate the Adaptive Metropolis Global Scaling Factor discount factor
@@ -90,61 +98,84 @@ checkLTargs<-function(Model,iVals,AlgoParams){
   if(length(unlist(iVals$x0))!=nrow(iVals$COV) | length(unlist(iVals$x0))!=ncol(iVals$COV)) stop("Mismatching initial values and initial covariance matrix")
 }
 
-AMCMC <-function(dir,Model,iVals,AlgoParams){
+modifyAcc <- function(xNew, xPrev, Model){
+  Model$acceptTrans%<>%unlist()
+  index<-1:length(unlist(Model$unlinks))
+  product <- 1
+  for (i in index){
+    product <- product * match.fun(Model$acceptTrans[[names(xNew)[i]]])(xNew[i], xPrev[i], Model$par_lb[i],Model$par_ub[i])
+  }
+  print(product)
+  return(product)
+}
+
+AMCMC <-function(dir, Model, iVals, AlgoParams, unfinished=F, tag=''){
   
   # Set Random Number Generator (RNG) initial seed
   set.seed(round(runif(1,0,100000))) 
   # Check no mistakes have been made in the model, methodology and initial values
   checkLTargs(Model,iVals,AlgoParams)
   
-  t_0 <- 500
-  
-  xPrev<-propMu<-unlist(iVals$x0)
+  xPrev<-unlist(iVals$x0)
   n_x <- length(xPrev)
-  xbar_tminus1 <- xPrev
-  
-  C_0 = diag(0.0001, nrow=n_x)
-  
   s_d = (2.38)^2/n_x
-  eps = diag(0.000000001, nrow=n_x)
-  propCOV <- diag(n_x)
-  epsilon=1
+  eps = diag(AlgoParams$eps, nrow=n_x)
   
-  output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n_x+1)
+  if (!unfinished){
+    xbar_tminus1 <- xPrev
+    output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n_x+1)
+    C_0 = diag(0.0001, nrow=n_x) /exp(xPrev)#iVals$COV
+    propCOV <- diag(n_x)
+    it <- 1
+    epsilon <- AlgoParams$epsilon_max
+  } else {
+    output <- readRDS(paste0(dir, '/IIDIPUS_Results/output_', tag)) 
+    xbar_tminus1 <- readRDS(paste0(dir, '/IIDIPUS_Results/xbar_tminus1_', tag)) 
+    propCOV <- readRDS(paste0(dir, '/IIDIPUS_Results/covariance_', tag)) 
+    it <- min(which(is.na(output[,1])))-1
+    xPrev[1:n_x] <- output[it, 2:NCOL(output)]
+    if((it-1) > AlgoParams$t_0){
+      epsilon <- AlgoParams$epsilon_min
+    } else {
+      epsilon <- AlgoParams$epsilon_max - (it-1) * (AlgoParams$epsilon_max-AlgoParams$epsilon_min)/AlgoParams$t_0
+    }
+  }
+  
   xNew <- rep(NA,n_x)
   lTargNew<-alpha<-c()
   # Create file names with unique names for storage reasons
   tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
   
   # Find first log-target value using initial values
-  output[1, ] <- c(logTarget(dir = dir,Model = Model,
-                             proposed = xPrev %>%Proposed2Physical(Model),AlgoParams = AlgoParams, epsilon=epsilon),
-                   xPrev)
-  lTargOld<-output[1,1]
+  lTargOld <- logTarget(dir = dir,Model = Model,
+                             proposed = xPrev %>% Proposed2Physical(Model),AlgoParams = AlgoParams, epsilon=epsilon)
+  
+  output[it,] <- c(lTargOld, xPrev)
   
   # Start the iterations!
-  it <- 2
+  it <- it + 1
   while (it <= AlgoParams$itermax){
     print(it)
     t <- it - 1
-    epsilon = ifelse(t < t_0, 1 - t * (1-0.1)/t_0, 0.1)
-    print(paste("epsilon", epsilon))
+  
     # Parameter proposal
     xNew <- xPrev
-    if (t > t_0){
+    if (t > AlgoParams$t_0){
       xNew <- multvarNormProp(xt=xPrev, propPars=propCOV)
+      epsilon <- AlgoParams$epsilon_min
     } else {
       xNew <- multvarNormProp(xt=xPrev, propPars=C_0)
+      epsilon <- AlgoParams$epsilon_max - t * (AlgoParams$epsilon_max-AlgoParams$epsilon_min)/AlgoParams$t_0
     }
     
     # Check proposal is within the parameter space:
-    if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
-      output[it,] <- c(lTargOld, xPrev)
-      propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
-      xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
-      it <- it + 1 
-      next
-    }
+    #if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
+    #  output[it,] <- c(lTargOld, xPrev)
+    #  propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
+    #  xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
+    #  it <- it + 1 
+    #  next
+    #}
     
     # Convert parameters to physical/useable values
     if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
@@ -163,7 +194,7 @@ AMCMC <-function(dir,Model,iVals,AlgoParams){
     }
     
     #if proposed log likelihood is close to the old log likelihood, then resample the old log likelihood
-    if (lTargNew > (lTargOld - 50) || (t <= 500 & t %% 10 == 0 )){
+    if (lTargNew > (lTargOld - 50) || (t <= AlgoParams$t_0 & t %% 10 == 0 )){
       lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
                                      AlgoParams = AlgoParams, epsilon=epsilon), error=function(e) NA)
     }
@@ -172,7 +203,7 @@ AMCMC <-function(dir,Model,iVals,AlgoParams){
     u <- runif(1)
     
     # Acceptance probability
-    alpha <- min(c(exp(lTargNew - lTargOld),1))
+    alpha <- min(c(exp(lTargNew - lTargOld) * modifyAcc(xNew, xPrev, Model),1) )
     
     # Metropolis Acceptance Algorithm
     if (alpha>=u) { # Accepted!
@@ -187,28 +218,23 @@ AMCMC <-function(dir,Model,iVals,AlgoParams){
     print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",lTargOld))
     print(" ")
     
-    output[it,] <- c(lTargOld, xPrev)
-    
-    Intensity <- seq(0,10,0.1)
-    Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
-    
-    Omega_curr <- xPrev %>% 
-      relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
+    output[it,] <- c(lTargOld, xPrev %>% Proposed2Physical(Model) %>% unlist())
     
     par(mfrow=c(4,4))
-    
-    # Plot S-curves for the actual and MAP parameterisation
-    plot_S_curves(Omega, Omega_curr)
+    # Plot S-curves for the actual and current
+    plot_S_curves(Omega,  xPrev %>% Proposed2Physical(Model))
     
     #create trace plots
-    for(i in 1:14){
+    for(i in 1:n_x){
       ylim=c(min(unlist(Omega)[i], output[1:it,i+1]), max(unlist(Omega)[i], output[1:it,i+1]))
       plot(output[1:it,i+1], type='l', ylab='', ylim=ylim)
       abline(h=unlist(Omega)[i], col='red')
     }
     
-    print(paste('Single Chain R-Hat', paste(round(apply(output[round(it/2):it,2:15],2, rhat, split = TRUE), digits=2), collapse=' ')))
-    print(paste('ESS', paste(round(apply(output[min(1000, round(it/2)):it,2:15],2, ess_basic), digits=2), collapse=' ')))
+    plot(output[ifelse(it>500,500,1):it,1], type='l', ylab='')
+    
+    print(paste('Single Chain R-Hat', paste(round(apply(output[round(it/2):it,2:(n_x+1)],2, rhat, split = TRUE), digits=2), collapse=' ')))
+    print(paste('ESS', paste(round(apply(output[min(1000, round(it/2)):it,2:(n_x+1)],2, ess_basic), digits=2), collapse=' ')))
     
     
     # Save log-target and parameters
@@ -225,143 +251,6 @@ AMCMC <-function(dir,Model,iVals,AlgoParams){
   return(list(PhysicalValues=output[which.max(output[,1]),2:ncol(output)] %>% 
                 relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model), # MAP value 
               OptimisationOut=output))
-  
-}
-
-#Allows you to continue an unfinished MCMC chain that was interrupted
-AMCMC_continueunfinished <-function(dir,Model,iVals,AlgoParams, filetag){
-  
-  # Set Random Number Generator (RNG) initial seed
-  set.seed(round(runif(1,0,100000))) 
-  # Check no mistakes have been made in the model, methodology and initial values
-  checkLTargs(Model,iVals,AlgoParams)
-  
-  output <- readRDS(paste0(dir, '/IIDIPUS_Results/output_', filetag)) 
-  xbar_tminus1 <- readRDS(paste0(dir, '/IIDIPUS_Results/xbar_tminus1_', filetag)) 
-  propCOV <- readRDS(paste0(dir, '/IIDIPUS_Results/covariance_', filetag)) 
-  xPrev <- unlist(iVals$x0)
-  
-  interruption_point <- min(which(is.na(output[,1])))-1
-  xPrev[1:14] <- output[interruption_point, 2:NCOL(output)]
-  n_x <- length(xPrev)
-  t_0 <- 500
-  
-  C_0 = diag(0.0001, nrow=n_x)
-  
-  s_d = (2.38)^2/n_x
-  eps = diag(0.0000001, nrow=n_x)
-
-  xNew <- rep(NA,n_x)
-  lTargNew<-alpha<-c()
-  # Create file names with unique names for storage reasons
-  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
-  
-  lTargOld<-tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
-                               AlgoParams = AlgoParams), error=function(e) NA)
-  
-  # Start the iterations!
-  it <- interruption_point + 1 #min(which(is.na(output[,1])))
-  while (it <= AlgoParams$itermax){
-    print(it)
-    t <- it - 1
-    
-    # Parameter proposal
-    xNew <- xPrev
-    if (t > t_0){
-      xNew <- multvarNormProp(xt=xPrev, propPars=propCOV)
-    } else {
-      xNew <- multvarNormProp(xt=xPrev, propPars=C_0)
-    }
-    #xNew[7:14] <- unlist(Omega)[7:14]
-    
-    # Check proposal is within the parameter space:
-    if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
-      output[it,] <- c(lTargOld, xPrev)
-      propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
-      xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
-      it <- it + 1 
-      next
-    }
-    
-    # Convert parameters to physical/useable values
-    if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
-    
-    # Calculate log-target value
-    lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
-                                   AlgoParams = AlgoParams), error=function(e) NA)
-    
-    # Check if we have a NaN
-    if(is.na(lTargNew)|is.infinite(lTargNew)) {
-      output[it,] <- c(lTargOld, xPrev)
-      propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
-      xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
-      it <- it + 1 
-      next
-    }
-    
-    if (lTargNew > (lTargOld - 50) || (t <= 500 & t %% 10 == 0 )){
-      lTargOld <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
-                                     AlgoParams = AlgoParams), error=function(e) NA)
-    }
-    
-    # Prepare for acceptance
-    u <- runif(1)
-    
-    # Acceptance probability
-    alpha <- min(c(exp(lTargNew - lTargOld),1))
-    
-    # Metropolis Acceptance Algorithm
-    if (alpha>=u) { # Accepted!
-      print('ACCEPTED!')
-      xPrev<-xNew
-      lTargOld <- lTargNew
-    } 
-    
-    propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
-    xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
-    
-    print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",lTargOld))
-    print(" ")
-    
-    output[it,] <- c(lTargOld, xPrev)
-    
-    Intensity <- seq(0,10,0.1)
-    Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
-    
-    Omega_curr <- xPrev %>% 
-      relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
-    
-    par(mfrow=c(4,4))
-    
-    # Plot S-curves for the actual and MAP parameterisation
-    plot_S_curves(Omega, Omega_curr)
-    
-    #create trace plots
-    for(i in 1:14){
-      ylim=c(min(unlist(Omega)[i], output[1:it,i+1]), max(unlist(Omega)[i], output[1:it,i+1]))
-      plot(output[1:it,i+1], type='l', ylab='', ylim=ylim)
-      abline(h=unlist(Omega)[i], col='red')
-    }
-    
-    #print the Rhat for each of the parameters from the second half of each chain
-    print(paste('Single Chain R-Hat', paste(round(apply(output[round(it/2):it,2:15],2, rhat, split = TRUE), digits=2), collapse=' ')))
-    print(paste('ESS', paste(round(apply(output[min(1000, round(it/2)):it,2:15],2, ess_basic), digits=2), collapse=' ')))
-    
-    # Save log-target and parameters
-    saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
-    # Save covariance matrix
-    saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
-    
-    saveRDS(xbar_tminus1,paste0(dir,"IIDIPUS_Results/xbar_tminus1_",tag))
-    
-    
-    it <- it + 1
-  }
-  
-  return(list(PhysicalValues=output[which.max(output[,1]),2:ncol(output)] %>% 
-                relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model), # MAP value 
-              OptimisationOut=output))
-  
 }
 
 Algorithm <- match.fun('AMCMC')

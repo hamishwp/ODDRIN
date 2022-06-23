@@ -201,3 +201,51 @@ SortBDout<-function(ufiles){
   }
 }
 
+#update the ODD files to include mortality data from EMDAT
+UpdateODD <- function(){
+  
+  startRow = 7 #ignore metadata stored on the first 6 rows
+  EMDAT = openxlsx::read.xlsx(paste0(dir,"/Displacement_Data/emdat.xlsx"), startRow=startRow)
+  EMDAT %<>% transmute(
+    iso3 = ISO,
+    mortality = ifelse(is.na(Total.Deaths), 0, Total.Deaths), #assume blank cells correspond to 0 deaths ??? 
+    qualifierMort = 'total',
+    hazard = ifelse(Disaster.Type == 'Earthquake', 'EQ', 'UK'), #Earthquake or Unknown
+    sdate = as.Date(paste(Start.Day,Start.Month,Start.Year, sep='-'), format='%d-%m-%Y'),
+    eventid = paste(Year, Seq, sep='-'), 
+    fdate = as.Date(paste(Start.Day,Start.Month,Start.Year, sep='-'), format='%d-%m-%Y'), 
+    inHelix = FALSE #tracks to avoid duplicates
+  )
+  
+  folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+  ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
+    
+  for(i in 1:length(ufiles)){
+    # Extract the ODD object
+    ODDy<-readRDS(paste0(folderin,ufiles[i]))
+    
+    event_match <- which((EMDAT[,'iso3'] %in% ODDy@gmax$iso3 & 
+            (EMDAT[,'sdate'] > (min(as.Date(ODDy@hazdates)) - 2)) & 
+            (EMDAT[,'fdate'] < (max(as.Date(ODDy@hazdates)) + 2))))
+    if (length(event_match) > 0){
+      ODDy@gmax['mortality'] <- NA
+      ODDy@gmax['qualifierMort'] <- 'Total'
+      for (k in 1:length(ODDy@gmax$iso3)){
+        country_match = which(EMDAT[event_match,'iso3'] == ODDy@gmax$iso3[k])
+        if (length(country_match) > 1){
+          print(paste('Matching EQ in', ODDy@gmax$iso3[k], 'from', min(as.Date(ODDy@hazdates)), 'to',  max(as.Date(ODDy@hazdates)), 
+                      'with EQs in', EMDAT[event_match[country_match], 'iso3'], 'from', EMDAT[event_match[country_match], 'sdate'], 'to', EMDAT[event_match[country_match], 'fdate']))
+          #if more than one match within the time period, take the sum of the mortality
+          ODDy@gmax[k, 'mortality'] <- sum(EMDAT[event_match[country_match], 'mortality'])
+        }
+        else if (length(country_match) == 1){
+          print(paste('Matching EQ in', ODDy@gmax$iso3[k], 'from', min(as.Date(ODDy@hazdates)), 'to',  max(as.Date(ODDy@hazdates)), 
+                'with EQ in', EMDAT[event_match[country_match], 'iso3'], 'from', EMDAT[event_match[country_match], 'sdate'], 'to', EMDAT[event_match[country_match], 'fdate']))
+          ODDy@gmax[k, 'mortality'] <- EMDAT[event_match[country_match], 'mortality']
+        }
+      }
+      
+      saveRDS(ODDy, paste0(folderin, ufiles[i]))
+    }
+  }
+}

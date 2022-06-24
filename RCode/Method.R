@@ -133,7 +133,7 @@ AMCMC <-function(dir, Model, iVals, AlgoParams, unfinished=F, tag=''){
     xbar_tminus1 <- readRDS(paste0(dir, '/IIDIPUS_Results/xbar_tminus1_', tag)) 
     propCOV <- readRDS(paste0(dir, '/IIDIPUS_Results/covariance_', tag)) 
     it <- min(which(is.na(output[,1])))-1
-    xPrev[1:n_x] <- output[it, 2:NCOL(output)]
+    xPrev[1:n_x] <- unlist(Physical2Proposed(relist(output[it, 2:NCOL(output)], skeleton=Model$skeleton), Model))
     if((it-1) > AlgoParams$t_0){
       epsilon <- AlgoParams$epsilon_min
     } else {
@@ -150,7 +150,7 @@ AMCMC <-function(dir, Model, iVals, AlgoParams, unfinished=F, tag=''){
   lTargOld <- logTarget(dir = dir,Model = Model,
                              proposed = xPrev %>% Proposed2Physical(Model),AlgoParams = AlgoParams, epsilon=epsilon)
   
-  output[it,] <- c(lTargOld, xPrev)
+  output[it,] <- c(lTargOld, unlist(xPrev  %>% Proposed2Physical(Model)))
   
   # Start the iterations!
   it <- it + 1

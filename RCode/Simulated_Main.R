@@ -37,7 +37,7 @@ main_simulated <- function(){
   
   AlgoParams$AllParallel <- TRUE
   AlgoParams$cores <- 6
-  AlgoParams$Np <- 5
+  AlgoParams$Np <- 10
   AlgoParams$ABC <- 1
   AlgoParams$itermax <- 10000
   
@@ -48,6 +48,13 @@ main_simulated <- function(){
                       iVals=iVals,
                       AlgoParams=AlgoParams, 
                       unfinished=F)
+  
+  output <- AMCMC(dir=dir,
+                  Model=Model,
+                  iVals=iVals,
+                  AlgoParams=AlgoParams, 
+                  unfinished=T, 
+                  tag='2022-06-22_141021')
   
   output <- AMCMC_continueunfinished(dir=dir,
                             Model=Model,
@@ -90,7 +97,7 @@ grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25),
 
 
 
-output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-06-08_142325')
+output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-06-22_141021')
 
 output1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-06-08_142325')
 output2 <- readRDS('/home/manderso/Downloads/output_2022-06-08_142424')
@@ -105,9 +112,9 @@ for(i in 2:15){
 }
 
 for(i in 1:n_x){
-  ylim=c(min(unlist(Physical2Proposed(Omega,Model))[i], output[1:it,i+1]), max(unlist(Physical2Proposed(Omega,Model))[i], output[1:it,i+1]))
-  plot(output[1:it,i+1], type='l', ylab='', ylim=ylim)
-  abline(h=unlist(Physical2Proposed(Omega,Model))[i], col='red')
+  ylim=c(min(unlist(Omega)[i], output[520:1100,i+1]), max(unlist(Omega)[i], output[520:1100,i+1]))
+  plot(output[520:1100,i+1], type='l', ylab='', ylim=ylim)
+  abline(h=unlist(Omega)[i], col='red')
 }
 
 Omega_MAP <- output[which.max(output[1:750,1]),2:ncol(output)] %>% 

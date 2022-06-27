@@ -4,42 +4,43 @@ library(magrittr)
 ExtractData<-function(haz="EQ",dir="./",extractedData=T){
   
   if(extractedData) return(paste0(dir,"IIDIPUS_Input/ODDobjects/"))
-
+  
   # Get the human displacement data from IDMC Helix & GIDD databases and other sources filtered by hazard
-  DispData<-GetDisplacements(haz, saved=T)
+  DamageData<-GetDisplacements(haz, saved=F, GIDD=F, EMDAT=T)
   # Extract GDACS database on the event for further validation & alertscore benchmarking
-  dfGDACS<-FilterGDACS(haz=haz,syear=min(AsYear(DispData$sdate)),fyear=max(AsYear(DispData$sdate)),red=T)
+  dfGDACS<-FilterGDACS(haz=haz,syear=min(AsYear(DamageData$sdate)),fyear=max(AsYear(DamageData$sdate)),red=T)
   # Extract all building damage points
   Damage<-ExtractBDfiles(dir = dir,haz = haz)
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
-  for (ev in unique(DispData$eventid)){
+  for (ev in unique(DamageData$eventid)){
     # Subset displacement and disaster database objects
-    miniDisp<-DispData%>%filter(eventid==ev)
+    miniDam<-DamageData%>%filter(eventid==ev)
     # Set some confining dates for the rest of the data to be assigned to this event
-    maxdate<-miniDisp$sdate-5
-    if(is.na(miniDisp$fdate)) mindate<-miniDisp$sdate+3 else mindate<-miniDisp$fdate+3
+    maxdate<-miniDam$sdate-5
+    if(is.na(miniDam$fdate)) mindate<-miniDam$sdate+3 else mindate<-miniDam$fdate+3
     # GDACS subset
-    miniDACS<-dfGDACS%>%filter(iso3%in%unique(miniDisp$iso3) & 
+    miniDACS<-dfGDACS%>%filter(iso3%in%unique(miniDam$iso3) & 
                                  sdate<mindate & sdate>maxdate)
     # Match displacement and hazard data and extract hazard maps
     # HazSDF includes SpatialPixelDataFrame object of hazmean & hazsd per date 
     # (list of each, bbox-cropped to remove M < minmag)
-    lhazSDF<-tryCatch(GetDisaster(miniDisp,miniDACS),error=function(e) NULL)
-    if(is.null(lhazSDF)) {
-      print(paste0("Warning: no hazard data found for event ", unique(miniDisp$iso3),
-                   " ",unique(miniDisp$hazard), " ", min(miniDisp$sdate) ))
+    #lhazSDF<-tryCatch(GetDisaster(miniDam,miniDACS),error=function(e) NULL)
+    lhazSDF<-tryCatch(GetDisaster(miniDam),error=function(e) NULL)
+    if(!is.null(lhazSDF)) {
+      print(paste0("Warning: no hazard data found for event ", unique(miniDam$iso3),
+                   " ",unique(miniDam$hazard), " ", min(miniDam$sdate) ))
       next
     }
     
     # Create the ODD object:
-    ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DispData=miniDisp),error=function(e) NULL)
-    if(is.null(ODDy)) {print(paste0("ODD FAIL: ",ev, " ",unique(miniDisp$iso3)[1]," ", unique(miniDisp$sdate)[1])) ;next}
+    ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDam),error=function(e) NULL)
+    if(is.null(ODDy)) {print(paste0("ODD FAIL: ",ev, " ",unique(miniDam$iso3)[1]," ", unique(miniDam$sdate)[1])) ;next}
     
     # Create a unique hazard event name
     namer<-paste0(ODDy@hazard,
                   str_remove_all(as.character.Date(min(ODDy@hazdates)),"-"),
-                  unique(miniDisp$iso3)[1],
+                  unique(miniDam$iso3)[1],
                   "_",ODDy@eventid)
     # Save out objects to save on RAM
     ODDpath<-paste0(dir,"IIDIPUS_Input/ODDobjects/",namer)
@@ -52,14 +53,14 @@ ExtractData<-function(haz="EQ",dir="./",extractedData=T){
     ggsave(paste0(namer,".png"), plot=plotODDyBG(ODDy),path = paste0(directory,'Plots/IIDIPUS_BG/'),width = 8,height = 5)
     
     # Building damage subset
-    miniDam<-Damage%>%filter(iso3%in%unique(miniDisp$iso3) & 
+    miniDam<-Damage%>%filter(iso3%in%unique(miniDam$iso3) & 
                                sdate<mindate & sdate>maxdate)
     # Get building damage data and filter to matched hazard events
     BDpath=NA_character_
     if(nrow(miniDam)>0) {
       # Make building damage object BD
       BDy<- tryCatch(new("BD",Damage=miniDam,ODD=ODDy),error=function(e) NULL)
-      if(is.null(BDy)) {print(paste0("BD FAIL: ",ev, " ",unique(miniDisp$iso3)[1]," ", unique(miniDisp$sdate)[1])) ;next}
+      if(is.null(BDy)) {print(paste0("BD FAIL: ",ev, " ",unique(miniDam$iso3)[1]," ", unique(miniDam$sdate)[1])) ;next}
       BDpath <-paste0(dir,"IIDIPUS_Input/BDobjects/",namer)
       # Save it out!
       saveRDS(BDy, BDpath)
@@ -88,7 +89,7 @@ FormODDyOmega<-function(dir,Model,proposed,AlgoParams){
     ODDy@fIndies<-Model$fIndies
     if(class(ODDy@gmax)=="list") ODDy@gmax%<>%as.data.frame.list()
     # Apply DispX
-    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center,LL = F,Method = AlgoParams),
+    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                    error=function(e) NA)
     # if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate Disp LL of ",ufiles[i]));next}
     if(is.na(ODDy)) stop(paste0("Failed to calculate Disp LL of ",ufiles[i]))
@@ -138,7 +139,7 @@ ODDypreds<-function(dir,haz,Model,Omega,AlgoParams){
     GDP<-ODDy@data%>%group_by(ISO3C)%>%summarise(meany=mean(GDP,na.rm=T),.groups="keep")%>%na.omit()%>%transmute(iso3=ISO3C,GDP=meany)
     ttt%<>%merge(GDP,by="iso3")
     
-    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams),
+    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                    error=function(e) NA)
     if(is.na(ODDy)|nrow(ODDy@predictDisp)<1) {print(paste0("no information found for ",ufiles[i])) ; next}
     
@@ -200,3 +201,51 @@ SortBDout<-function(ufiles){
   }
 }
 
+#update the ODD files to include mortality data from EMDAT
+UpdateODD <- function(){
+  
+  startRow = 7 #ignore metadata stored on the first 6 rows
+  EMDAT = openxlsx::read.xlsx(paste0(dir,"/Displacement_Data/emdat.xlsx"), startRow=startRow)
+  EMDAT %<>% transmute(
+    iso3 = ISO,
+    mortality = ifelse(is.na(Total.Deaths), 0, Total.Deaths), #assume blank cells correspond to 0 deaths ??? 
+    qualifierMort = 'total',
+    hazard = ifelse(Disaster.Type == 'Earthquake', 'EQ', 'UK'), #Earthquake or Unknown
+    sdate = as.Date(paste(Start.Day,Start.Month,Start.Year, sep='-'), format='%d-%m-%Y'),
+    eventid = paste(Year, Seq, sep='-'), 
+    fdate = as.Date(paste(Start.Day,Start.Month,Start.Year, sep='-'), format='%d-%m-%Y'), 
+    inHelix = FALSE #tracks to avoid duplicates
+  )
+  
+  folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+  ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
+    
+  for(i in 1:length(ufiles)){
+    # Extract the ODD object
+    ODDy<-readRDS(paste0(folderin,ufiles[i]))
+    
+    event_match <- which((EMDAT[,'iso3'] %in% ODDy@gmax$iso3 & 
+            (EMDAT[,'sdate'] > (min(as.Date(ODDy@hazdates)) - 2)) & 
+            (EMDAT[,'fdate'] < (max(as.Date(ODDy@hazdates)) + 2))))
+    if (length(event_match) > 0){
+      ODDy@gmax['mortality'] <- NA
+      ODDy@gmax['qualifierMort'] <- 'Total'
+      for (k in 1:length(ODDy@gmax$iso3)){
+        country_match = which(EMDAT[event_match,'iso3'] == ODDy@gmax$iso3[k])
+        if (length(country_match) > 1){
+          print(paste('Matching EQ in', ODDy@gmax$iso3[k], 'from', min(as.Date(ODDy@hazdates)), 'to',  max(as.Date(ODDy@hazdates)), 
+                      'with EQs in', EMDAT[event_match[country_match], 'iso3'], 'from', EMDAT[event_match[country_match], 'sdate'], 'to', EMDAT[event_match[country_match], 'fdate']))
+          #if more than one match within the time period, take the sum of the mortality
+          ODDy@gmax[k, 'mortality'] <- sum(EMDAT[event_match[country_match], 'mortality'])
+        }
+        else if (length(country_match) == 1){
+          print(paste('Matching EQ in', ODDy@gmax$iso3[k], 'from', min(as.Date(ODDy@hazdates)), 'to',  max(as.Date(ODDy@hazdates)), 
+                'with EQ in', EMDAT[event_match[country_match], 'iso3'], 'from', EMDAT[event_match[country_match], 'sdate'], 'to', EMDAT[event_match[country_match], 'fdate']))
+          ODDy@gmax[k, 'mortality'] <- EMDAT[event_match[country_match], 'mortality']
+        }
+      }
+      
+      saveRDS(ODDy, paste0(folderin, ufiles[i]))
+    }
+  }
+}

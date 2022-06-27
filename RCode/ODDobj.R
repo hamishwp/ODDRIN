@@ -55,7 +55,7 @@ AddGDP<-function(ODDobj,inds=NULL,GDP=NULL){
   
   if(is.null(GDP)) GDP<-GetKummu(ODDobj@dir,c(ODDobj@bbox))
   # Minimise computation if only one GDP value is found
-  if(length(unique(GDP@data$GDP))==1) {
+  if(length(unique(GDP@data$GDP))==1) { #LOOSEEND: should be GDP@data$X2015 ? 
     ODDobj$GDP<-rep(unique(GDP@data$GDP),length(ODDobj@data$Population))
     ODDobj$GDP[is.na(ODDobj$Population)]<-NA
     return(ODDobj)
@@ -162,12 +162,14 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
       pcontour<-ExtractI0poly(hsdf=hsdf,ODD=ODD)
       # Find all ODD coordinates not inside polycontour
       insidepoly<-rep(F,nrow(ODD))
-      for(p in 1:length(unique(pcontour$id))){
-        tcont<-filter(pcontour,id==p)
-        insidepoly<-insidepoly | sp::point.in.polygon(ODD@coords[,1],
-                                                      ODD@coords[,2],
-                                                      tcont$Longitude,
-                                                      tcont$Latitude)>0
+      if (length(unique(pcontour$id)) > 0){
+        for(p in 1:length(unique(pcontour$id))){
+          tcont<-filter(pcontour,id==p)
+          insidepoly<-insidepoly | sp::point.in.polygon(ODD@coords[,1],
+                                                        ODD@coords[,2],
+                                                        tcont$Longitude,
+                                                        tcont$Latitude)>0
+        }
       }
       rm(tcont)
       hsdf%<>%as.data.frame
@@ -209,13 +211,13 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
 # Initialisation of the ODD object
 setMethod(f="initialize", signature="ODD",
           # definition=function(.Object,bbox,lhazSDF,dater=NULL,dir=directory,
-          definition=function(.Object,lhazSDF=NULL,DispData=NULL,dir="./",Model=list(
+          definition=function(.Object,lhazSDF=NULL,DamageData=NULL,dir="./",Model=list(
             INFORM_vars=c("CC.INS.GOV.GE", # Government Effectiveness
                           "VU.SEV.AD", # Economic Dependency Vulnerability
                           "CC.INS.DRR", # Disaster Risk Reduction
                           "VU.SEV.PD", # Multi-dimensional Poverty
                           "CC.INF.PHY" # Physical Infrastructure
-            ),
+            ), 
             fIndies=list(CC.INS.GOV.GE=returnX, # Government Effectiveness
                          VU.SEV.AD=returnX, # Economic Dependency Vulnerability
                          CC.INS.DRR=returnX, # Disaster Risk Reduction
@@ -245,15 +247,17 @@ setMethod(f="initialize", signature="ODD",
             .Object@dir<-dir
             .Object@hazard<-lhazSDF$hazard_info$hazard
 
-	    if(length(unique(DispData$eventid))==1) .Object@eventid<-unique(DispData$eventid)
+	    if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
             if(.Object@hazard%in%c("EQ","TC")){
-              .Object@gmax<-DispData%>%group_by(iso3)%>%
-                summarise(gmax=max(gmax),qualifier=qualifier[which.max(gmax)])
-              .Object@IDPs<-DispData[,c("sdate","gmax","qualifier")]%>%
+              .Object@gmax<-DamageData%>%group_by(iso3)%>%
+                summarise(gmax=max(gmax),qualifier=qualifierDisp[which.max(gmax)], #LOOSEEND change to be displacement specific
+                          mortality=max(mortality),qualifierMort=qualifierMort[which.max(mortality)],
+                          buildDestroyed=max(buildDestroyed), qualifierBD = qualifierBD[which.max(buildDestroyed)])
+              .Object@IDPs<-DamageData[,c("sdate","gmax","qualifier")]%>%
                 transmute(date=sdate,IDPs=gmax,qualifier=qualifier)
             } else {
               # THIS IS READY FOR THE IPM APPROACH FOR MID/LONG DURATION HAZARDS
-              .Object@IDPs<-DispData%>%group_by(sdate)%>%summarise(IDPs=max(IDPs),.groups = 'drop_last')%>%
+              .Object@IDPs<-DamageData%>%group_by(sdate)%>%summarise(IDPs=max(IDPs),.groups = 'drop_last')%>%
                 transmute(date=sdate,IDPs=IDPs)
               # Note that I leave .Object@gmax intentionally blank
             }
@@ -273,6 +277,8 @@ setMethod(f="initialize", signature="ODD",
             .Object@coords <-obj@coords
             .Object@bbox <-obj@bbox
             .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            
+            .Object@data$nBuildings <- ExtractOSMnBuildings(bbox=bbox)
             
             print("Adding hazard events")
             # Including minshake polygon per hazard event using getcontour from adehabitatMA package
@@ -378,45 +384,49 @@ FormParams<-function(ODD,listy){
   return(Params)
 }
 
-setGeneric("DispX", function(ODD,Omega,center,LL,Method)
+setGeneric("DispX", function(ODD,Omega,center, BD_params, LL,Method, epsilon=c(0.15,0.03,0.1))
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
-setMethod("DispX", "ODD", function(ODD,Omega,center,LL=F,
-                                   Method=list(Np=20,cores=8,cap=-300)
+setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
+                                   Method=list(Np=20,cores=8,cap=-300), epsilon=c(0.15,0.03,0.1)
 ){
   # Extract 0D parameters & speed up loop
   Params<-FormParams(ODD,list(Np=Method$Np,center=center))
   # Income distribution percentiles & extract income percentile  
   SincN<-seq(10,90,by = 10); Sinc<-ExtractCIndy(ODD,var = paste0("p",SincN,"p100"))
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
-  if(!LL) notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$GDP)))
-  else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$GDP) |
+  if(!LL) {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$GDP)))
+  } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$GDP) |
                           !ODD$ISO3C%in%ODD@gmax$iso3))
+  
+  BD_data_present <- ifelse(all(is.na(ODD@data$nBuildings)) , F, T)
   # Calculate non-local linear predictor values
   LP<-GetLP(ODD,Omega,Params,Sinc,notnans)
   # Speed things up a little
-  hrange<-grep("hazMean",names(ODDy),value = T)
+  hrange<-grep("hazMean",names(ODD),value = T)
   # Function to predict displacement per gridpoint
-  CalcDisp<-function(ij){
+  CalcDam<-function(ij){
     iso3c<-ODD@data$ISO3C[ij]
     # Calculate local linear predictor (NOTE: is a vector due to income distribution)
-    locallinp<-LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]]
-    # locallinp<-rep(1,10)
-    # Sample population per income distribution (Assumes 9 percentiles)
-    lPopS<-SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) 
-    tDisp<-array(0,Method$Np)
+    locallinp<-LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] #LOOSEEND
+    #locallinp<-rep(1,10) #reducing parameter space while I'm figuring out the MCMC
+
+    # Sample population per income distribution (Assumes 9 percentiles):
+    lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) 
+    tPop <-array(0,c(3, Method$Np)) #row 1 = tDisp, #row 2 = tMort, #row 3 = tRem
+    tPop[3,]=colSums(lPopS)
     for(h in hrange){
       # for(h in c(1)){
       if(is.na(ODD@data[ij,h])) next
-      # Resample population based on who is already displaced
-      ind<-(colSums(lPopS)-tDisp)>0
+      # Resample population based on who is remaining
+      ind<-tPop[3,]>0
       if(h!=hrange[1]) {
-        if(sum(ind)==0) return(tDisp)
-        if(length(lPopS[,ind])==0) return(tDisp)
-        if(sum(ind)>1) sumz<-colSums(lPopS[,ind])
-        else sumz<-sum(lPopS[,ind])
-        lPopS[,!ind]<-0
-        lPopS[,ind]<-SplitSamplePop(Pop=(sumz-tDisp[ind]))
+        if(sum(ind)==0) break #if no remaining population, skip modelling
+        if(length(lPopS[,ind])==0) break #if no remaining population, skip modelling
+        #if(sum(ind)>1) sumz<-colSums(lPopS[,ind])
+        #else sumz<-sum(lPopS[,ind])
+        #lPopS[,!ind]<-0
+        lPopS[,ind]<-SplitSamplePop(Pop=tPop[3,ind])
       }
       # Sample hazard Intensity 
       # the uncertainty is too high... so I scale it to get some interpretable results (I know, I'm not really a statistician, I don't even have a degree, I was actually just having a look around the department when they confused me for the interviewee. I didn't have the heart to say anything. You don't hate me as much as I do)
@@ -429,24 +439,55 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,LL=F,
       for (s in 1:length(SincN)){
         if(all(lPopS[s,]==0)) next
         # Predict damage at coordinate {i,j} (vector with MC particles)
-        Damage<-tryCatch(fDamUnscaled(I_ij,Params[c("I0","Np")],Omega)*locallinp[s], error=function(e) NA)
+        Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
         if(any(is.na(Damage))) print(ij)
+        
         # Scaled damage
-        Dprime<-BinR(Omega$Lambda$kappa*Damage*Damage + 
-                       Omega$Lambda$nu*Damage +
-                       Omega$Lambda$omega,Omega$zeta)
-        # Local displacement additions
-        tDisp[ind]<-tDisp[ind]+Fbdisp(lPopS[s,ind],Dprime[ind])
-      }  
+        D_MortDisp <- plnorm(Damage, meanlog = Omega$Lambda1$nu, sdlog = Omega$Lambda1$omega)
+        D_Mort <- plnorm(Damage, meanlog = Omega$Lambda2$nu, sdlog = Omega$Lambda2$omega)
+        D_Disp<-D_MortDisp - D_Mort
+        D_Disp <- ifelse(D_Disp<0, 0, D_Disp)
+        
+        # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
+        tPop[3,ind]<-0
+        
+        tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_Disp[ind], D_Mort[ind], (1-D_Mort-D_Disp)[ind])
+      } 
     }
-    tDisp[tDisp>ODD@data$Population[ij]]<-ODD@data$Population[ij]
-    return(tDisp)
+    #ensure the total displaced, deceased or remaining does not exceed total population
+    tPop[tPop>ODD@data$Population[ij]]<-floor(ODD@data$Population[ij])
+    
+    #if no building destruction data:
+    if(!BD_data_present) return(rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np))) #return total displacement and mortality, set number of buildings destroyed to NA
+    
+    #otherwise, sample from the model for the number of buildings destroyed:
+    #we take locallinp[5] which corresponds to locallinp for the median GDP
+    nBuildings = rep(ODD@data$nBuildings[ij], Method$Np)
+    nBD = rep(0, Method$Np)
+    for (h in hrange){
+      if(is.na(ODD@data[ij,h])) next
+      if(h!=hrange[1]) {
+        if(all(nBuildings==0)) break #if no remaining buildings, skip modelling LOOSEEND
+      }
+
+      I_ij<-ODD@data[ij,h]
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[5], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+
+      D_BD = plnorm(Damage, meanlog = Omega$Lambda3$nu, sdlog = Omega$Lambda3$omega)
+
+      moreBD = fBD(nBuildings, D_BD)
+      nBD = nBD + moreBD
+  
+      nBuildings = nBuildings - moreBD
+    }
+    return(rbind(tPop[1:2,,drop=FALSE], nBD))
   }
-  
-  Disp<-array(0,c(nrow(ODD),Method$Np))
-  if(Method$cores>1) { Disp[notnans,]<-t(matrix(unlist(mclapply(X = notnans,FUN = CalcDisp,mc.cores = Method$cores)),ncol=length(notnans)))
-  } else  Disp[notnans,]<-t(matrix(unlist(lapply(X = notnans,FUN = CalcDisp)),ncol=length(notnans)))
-  
+
+  Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Destroyed
+
+  if(Method$cores>1) { Dam[notnans,,]<-aperm(simplify2array(mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$cores)), perm=c(3,2,1))
+  } else  Dam[notnans,,]<- aperm(simplify2array(lapply(X = notnans,FUN = CalcDam)), perm=c(3,2,1))
+
   # return(Disp)
 
   # If the IDMC estimate is foreseen to be a lower or upper bound, or a generally poor estimate
@@ -455,21 +496,24 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,LL=F,
   #   Disp[ind,]%<>%qualifierDisp(qualifier = ODD@gmax$qualifier[ODD@gmax$iso3==c],mu = Omega$mu)
   # }
   
-  funcy<-function(i,LLout=T) {
-    tmp<-data.frame(iso3=ODD$ISO3C,IDPs=Disp[,i])%>%
-      group_by(iso3)%>%summarise(predictor=floor(sum(IDPs,na.rm = T)),.groups = 'drop_last')
+  funcy<-function(i,LLout=T, epsilon=AlgoParams$epsilon_min) {
+    tmp<-data.frame(iso3=ODD$ISO3C,IDPs=Dam[,i,1], mort=Dam[,i,2], nBD=Dam[,i,3]) %>% 
+      group_by(iso3) %>% summarise(disp_predictor=floor(sum(IDPs,na.rm = T)), 
+                                 mort_predictor=floor(sum(mort,na.rm = T)),
+                                 nBD_predictor=floor(sum(nBD,na.rm = T)),
+                                 .groups = 'drop_last')
     tmp<-tmp[!is.na(tmp$iso3) & tmp$iso3%in%ODD@gmax$iso3,]
     tmp%<>%merge(ODD@gmax,by="iso3")%>%arrange(desc(gmax))
-
+    #print(paste(tmp$nBD_predictor, tmp$buildDestroyed))
+    #print(tmp)
     if(LLout) {
-      return(LL_IDP(tmp))
+      return(LL_IDP(tmp, epsilon))
     }
     return(tmp)
   }
   
-  outer<-vapply(1:Method$Np,funcy,numeric(length(unique(ODD@gmax$iso3))))
-  outer[outer<Method$cap]<-Method$cap
-  
+  outer<-vapply(1:Method$Np,funcy,numeric(length(unique(ODD@gmax$iso3))), epsilon=epsilon)
+  #outer[outer<Method$cap]<-Method$cap
   # Find the best fit solution
   if(length(unique(ODD@gmax$iso3))>1) {
     if(LL)  return(log(rowMeans(exp(outer),na.rm=T)))
@@ -478,15 +522,29 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,LL=F,
     if(LL)  return(log(mean(exp(outer),na.rm=T)))
     MLE<-which.max(log(exp(outer)))
   }
+  if(Method$Np == 1){
+    MLE=1
+  }
   # Save into ODD object
   # ODD@data$Disp<-Disp[,MLE]*sum(ODD@gmax$gmax)/mean(sum(Disp[,MLE])) %>% round()
-  ODD@data$Disp<-Disp[,MLE]
+  ODD@data$Disp<-Dam[,MLE,1]  #should this be named data$DispPred or something instead?
+  ODD@data$Mort<-Dam[,MLE,2]
+  ODD@data$nBD<-Dam[,MLE,3]
   # I know this is kind of repeating code, but I want the other function as fast as possible
-  ODD@predictDisp<-funcy(MLE,LLout=F)
+  ODD@predictDisp<-funcy(MLE,LLout=F) 
   
   return(ODD)
   
 })
+
+ExtractOSMnBuildings <- function(bbox){
+  #Input: Bounding box of hazard
+  #Output: Number of buildings in each of the population grid cells (denoted using ij)
+  buildings<-GetOSMbuildings(bbox) #retrieve number of buildings using OpenStreetMaps
+  nBuildings = rasterize(buildings@coords, raster(ODD["Population"]), fun='count')@data@values #LOOSEEND: ensure same rasterization as population
+  nBuildings[is.na(nBuildings)] = 0
+  return(nBuildings)
+}
 
 GroupODDyBoundaries<-function(ODDy,boundaries){
   
@@ -557,7 +615,20 @@ GetVarName<-function(varname){
   
   lookup<-list("Population"="CIESIN Population Data",
                "Disp" = "Displaced Population",
+               "Mort" = "Mortality",
                "GDP" = "GDP [USD-2015]",
+               "FBPop" = "HRSL Population",
+               "RWI" = "FB Relative Wealth Index",
+               "DamBDosm" = "Damaged Buildings (OSM)",
+               "DamBDFB" = "Damaged Buildings (HRSL)")
+  
+  #Max's lookup for easier plotting
+  lookup<-list("Population"="Population  ",
+               "Disp" = "Displacement ",
+               "Mort" = "Mortality   ",
+               "nBuildings" = "# Buildings ",
+               "nBD" = "# Build Dest",
+               "GDP" = "GDP         ",
                "FBPop" = "HRSL Population",
                "RWI" = "FB Relative Wealth Index",
                "DamBDosm" = "Damaged Buildings (OSM)",
@@ -682,15 +753,15 @@ OutputODDyFile<-function(ODDy,filer=NULL){
   ODDy$ISO3C<-NULL
   
   ODDy@modifier$HTI<- -0.16
-  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams)
+  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
   ODDy@predictDisp
   ODDy$LowCIDisp<-ODDy$Disp
   ODDy@modifier$HTI<- 0.4
-  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams)
+  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
   ODDy@predictDisp
   ODDy$HiCIDisp<-ODDy$Disp
   ODDy@modifier$HTI<- 0
-  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams)
+  ODDy<-DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
   ODDy@predictDisp
   ODDy$ExpDisp<-ODDy$Disp
   ODDy$Disp<-NULL

@@ -63,38 +63,82 @@ if(haz%in%c("EQ","TC","FL")) {
 Model$modifiers$INFORM<- T
 Model$modifiers$WB<-     T
 Model$modifiers$WID<-    T
-  
+
+ab_bounded <- function(x, a, b){
+  return((b*exp(x)+a)/(exp(x)+1))
+}
+
+ab_bounded_inv <- function(x, a, b){
+  return(log(x-a)-log(b-x))
+}
+
+ab_bounded_acc <- function(xnew, xold, a, b){
+  return((b-xnew)/(b-xold)*(xnew-a)/(xold-a))
+}
+
 # Link functions (MUST BE SAME LENGTH AS OMEGA)
 Model$links<-list(
-  Lambda=list(kappa='exp',nu='exp',omega='exp'),
-  zeta=list(k='exp',lambda='exp'), # zeta=list(k=2.5,lambda=1.6),
+  Lambda1=list(nu='ab_bounded',omega='ab_bounded'),
+  Lambda2=list(nu='ab_bounded',omega='ab_bounded'),
+  Lambda3=list(nu='ab_bounded',omega='ab_bounded'),
+  zeta=list(k='ab_bounded',lambda='ab_bounded'), # zeta=list(k=2.5,lambda=1.6),
+  #zeta1=list(k='exp',lambda='exp'),
+  #zeta2=list(k='exp',lambda='exp'),
+  #zeta3=list(k='exp',lambda='exp'),
   # beta=list(xxx='exp',CC.INS.GOV.GE='exp',VU.SEV.AD='exp',CC.INS.DRR='exp',VU.SEV.PD='exp',CC.INF.PHY='exp'),
-  Pdens=list(M='exp',k='exp'),
-  dollar=list(M='negexp',k='exp'),
-  theta=list(e='exp'), #list(e=0.25),
+  Pdens=list(M='ab_bounded',k='ab_bounded'),
+  dollar=list(M='ab_bounded',k='ab_bounded'),
+  theta=list(e='ab_bounded'), #list(e=0.25),
   # rho=list(A='exp',H='exp'),
-  eps=list(eps='exp')#,xi='exp')
+  eps=list(eps='ab_bounded')#,xi='exp')
   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
 )
-# names(Model$links$beta)[1]<-paste0("HA.NAT.",haz)
 
 # And to go the other way....
 Model$unlinks<-list(
-  Lambda=list(kappa='log',nu='log',omega='log'),
-  zeta=list(k='log',lambda='log'), # zeta=list(k=2.5,lambda=1.6),
+  Lambda1=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+  Lambda2=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+  Lambda3=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+  zeta=list(k='ab_bounded_inv',lambda='ab_bounded_inv'), # zeta=list(k=2.5,lambda=1.6),
+  #zeta1=list(k='log',lambda='log'),
+  #zeta2=list(k='log',lambda='log'),
+  #zeta3=list(k='log',lambda='log'),
   # beta=list(xxx='log',CC.INS.GOV.GE='log',VU.SEV.AD='log',CC.INS.DRR='log',VU.SEV.PD='log',CC.INF.PHY='log'),
-  Pdens=list(M='log',k='log'),
-  dollar=list(M='logneg',k='log'),
-  theta=list(e='log'), #list(e=0.25),
+  Pdens=list(M='ab_bounded_inv',k='ab_bounded_inv'),
+  dollar=list(M='ab_bounded_inv',k='ab_bounded_inv'),
+  theta=list(e='ab_bounded_inv'), #list(e=0.25),
   # rho=list(A='log',H='log'),
-  eps=list(eps='log')#,xi='log')
+  eps=list(eps='ab_bounded_inv')#,xi='log')
   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
 )
+
+Model$acceptTrans <- list(
+  Lambda1=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
+  Lambda2=list(nu='ab_bounded_acc',omega='ab_bounded_acc'),
+  Lambda3=list(nu='ab_bounded_acc',omega='ab_bounded_acc'),
+  zeta=list(k='ab_bounded_acc',lambda='ab_bounded_acc'), # zeta=list(k=2.5,lambda=1.6),
+  #zeta1=list(k=NA,lambda=NA),
+  #zeta2=list(k=NA,lambda=NA),
+  #zeta3=list(k=NA,lambda=NA),
+  # beta=list(xxx=NA,CC.INS.GOV.GE=NA,VU.SEV.AD=NA,CC.INS.DRR=NA,VU.SEV.PD=NA,CC.INF.PHY=NA),
+  Pdens=list(M='ab_bounded_acc',k='ab_bounded_acc'),
+  dollar=list(M='ab_bounded_acc',k='ab_bounded_acc'),
+  theta=list(e='ab_bounded_acc'), #list(e=0.25),
+  # rho=list(A=NA,H=NA),
+  eps=list(eps='ab_bounded_acc')#,xi=NA)
+  # mu=list(muplus=NA,muminus=NA,sigplus=NA,sigminus=NA)
+)
+
 # names(Model$unlinks$beta)[1]<-paste0("HA.NAT.",haz)
 # Skeleton
 Model$skeleton <- list(
-  Lambda=list(kappa=NA,nu=NA,omega=NA),
+  Lambda1=list(nu=NA,omega=NA),
+  Lambda2=list(nu=NA,omega=NA),
+  Lambda3=list(nu=NA,omega=NA),
   zeta=list(k=NA,lambda=NA), # zeta=list(k=2.5,lambda=1.6),
+  #zeta1=list(k=NA,lambda=NA),
+  #zeta2=list(k=NA,lambda=NA),
+  #zeta3=list(k=NA,lambda=NA),
   # beta=list(xxx=NA,CC.INS.GOV.GE=NA,VU.SEV.AD=NA,CC.INS.DRR=NA,VU.SEV.PD=NA,CC.INF.PHY=NA),
   Pdens=list(M=NA,k=NA),
   dollar=list(M=NA,k=NA),
@@ -104,6 +148,37 @@ Model$skeleton <- list(
   # mu=list(muplus=NA,muminus=NA,sigplus=NA,sigminus=NA)
 )
 # names(Model$skeleton$beta)[1]<-paste0("HA.NAT.",haz)
+
+#Set lower and upper bounds for the parameters
+Model$par_lb <- c(-3,  
+                  0,
+                  -3, 
+                  0,
+                  -3,  
+                  0,  
+                  0,  
+                  0,  
+                  0,  #PDens M
+                  0,  #PDens k
+                  -10,  #dollar M
+                  0,   #dollar k
+                  0, #theta_e
+                  0) #epsilon
+Model$par_ub <- c(3, 
+                  10, 
+                  3, 
+                  10, 
+                  3, 
+                  10, 
+                  10, 
+                  10, 
+                  10, #PDens M
+                  10, #PDens k 
+                  0,  #dollar M
+                  10, #dollar k
+                  0.5, #theta_e
+                  1) #epsilon
+
 
 # Get the binary regression function
 Model$BinR<-"weibull" # "gompertz"
@@ -168,9 +243,8 @@ locpred<-function(x,params){
 }
 
 GDPlinp<-function(ODD,Sinc,beta,center,notnans){
-  
-  iGDP<-as.numeric(factor(ODD$GDP,levels=unique(ODD$GDP)))
-  dGDP<-data.frame(ind=iGDP[notnans],GDP=ODD$GDP[notnans],iso=ODD$ISO3C[notnans])
+  iGDP<-as.numeric(factor(ODD@data$GDP,levels=unique(ODD@data$GDP)))
+  dGDP<-data.frame(ind=iGDP[notnans],GDP=ODD@data$GDP[notnans],iso=ODD@data$ISO3C[notnans])
   dGDP%<>%group_by(ind)%>%summarise(value=log(unique(GDP)*(Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"value"]/
                                       Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]) & Sinc$variable=="p50p100","value"])),
                               income=Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"variable"],
@@ -238,6 +312,8 @@ fDamUnscaled<-function(I,Params,Omega){
     (h_0(I,Params$I0,Omega$theta)*
        stochastic(Params$Np,Omega$eps))%>%return()
 }
+
+
 # Baseline hazard function h_0
 h_0<-function(I,I0,theta){
   ind<-I>I0
@@ -268,7 +344,20 @@ qualifierDisp<-function(Disp,qualifier,mu) {
 
 # Binomial displacement calculator function
 rbiny<-function(size,p) rbinom(n = 1,size,p); 
-Fbdisp<-function(lPopS,Dprime) mapply(rbiny,lPopS,Dprime)
+Fbdisp<-function(lPopS,Dprime) mapply(rbiny,lPopS,Dprime);
+
+rmultinomy<-function(size, D_Disp, D_Mort, D_Rem) rmultinom(n=1, size, c(D_Disp,D_Mort,D_Rem))
+Fbdam<-function(PopRem, D_Disp, D_Mort, D_Rem) mapply(rmultinomy, PopRem, D_Disp, D_Mort, D_Rem)
+
+lBD<-function(D_B, BD_params){
+  #input: probability of Building Damage D^B
+  #output: probability of Building Destruction D^BD
+  relative_probs = BDprob(D_B, BD_params) %>% mutate('damaged' = rowSums(.[1:4]))
+  D_BD = (relative_probs[['destroyed']] + relative_probs[['severe']])/rowSums(relative_probs)
+  return(D_BD)
+}
+
+fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 # Log likelihood, posterior and prior distribution calculations
@@ -279,29 +368,64 @@ Fbdisp<-function(lPopS,Dprime) mapply(rbiny,lPopS,Dprime)
 Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
   
   if(!is.null(modifier)) lp<-exp(as.numeric(unlist(modifier))) else lp<-1.
-  
+  lp <- c(0.361022, 1, 2.861055)#lp_range
   if(Model$haz=="EQ"){
     
     Dfun<-function(I_ij) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
-    Dispfun<-function(I_ij) BinR(Dfun(I_ij)*Dfun(I_ij)*Omega$Lambda$kappa+Omega$Lambda$nu*Dfun(I_ij) + Omega$Lambda$omega,Omega$zeta)
-    Damfun<-function(I_ij) BinR(Dfun(I_ij),Omega$zeta)
-
-    adder<-rep(0,length(lp))
-    for(i in 1:length(adder)){
-      # Add lower bound priors:
-      adder[i]<-sum(500*pweibull(c(Dispfun(4.6)*lp[i],Damfun(4.6)*lp[i]),3,0.001))
-      # Middle range priors:
-      adder[i]<-adder[i]+sum(150*pweibull(c(Dispfun(6)*lp[i],Damfun(6)*lp[i]),15,0.8) + 
-                               150*(1- pweibull(c(Dispfun(6)*lp[i],Damfun(6)*lp[i]),3,0.005)))
-      # Upper bound priors:
-      adder[i]<-adder[i]+sum(500*(1-pweibull(c(Dispfun(9)*lp[i],Damfun(9)*lp[i]),30,0.85)))
+    Damfun<-function(I_ij, type) {
+      D <- Dfun(I_ij)
+      if (type=='Damage'){
+        return(BinR(D,Omega$zeta))
+      }
+      if (type=='Buildings Destroyed'){
+        return(plnorm(D,Omega$Lambda3$nu, Omega$Lambda3$omega))
+      }
+      DispMort <- plnorm(D,Omega$Lambda1$nu, Omega$Lambda1$omega)
+      Mort <- plnorm(D,Omega$Lambda2$nu, Omega$Lambda2$omega)
+      Disp <- ifelse(DispMort - Mort < 0, 0, DispMort - Mort)
+      if (type=='Displacement'){
+        return(Disp)
+      }
+      else if (type=='Mortality'){
+        return(Mort)
+      }
     }
-    return(-1*adder)
+    adder<-0
+      # Add lower bound priors:
+    adder<-sum(pweibull(Damfun(4.6, type='Displacement')*lp[1],3,0.01), pweibull(Damfun(4.6, type='Mortality')*lp[1],3,0.01),
+                  pweibull(Damfun(4.6, type='Buildings Destroyed')*lp[1],3,0.01), pweibull(Damfun(4.6, type='Damage')*lp[1],3,0.01))
+    # Middle range priors:
+    adder<-adder+sum(pweibull(Damfun(6, type='Displacement')*lp[2],15,0.8), 1- pweibull(Damfun(6, type='Displacement')*lp[2],3,0.005),
+                           pweibull(Damfun(6, type='Mortality')*lp[2],15,0.4), 1- pweibull(Damfun(6, type='Mortality')*lp[2],3,0.005),
+                           pweibull(Damfun(6, type='Buildings Destroyed')*lp[2],15,0.8), 1- pweibull(Damfun(6, type='Buildings Destroyed')*lp[2],3,0.005),
+                           pweibull(Damfun(6, type='Damage')*lp[2],15,0.8), 1- pweibull(Damfun(6, type='Damage')*lp[2],3,0.005)
+                           )
+    # Upper bound priors:
+    adder<-adder+sum(1-pweibull(Damfun(9, type='Displacement')*lp[3],5,0.3), 1-pweibull(Damfun(9, type='Mortality')*lp[3],5,0.2),
+                           1-pweibull(Damfun(9, type='Buildings Destroyed')*lp[3],5,0.5), 1-pweibull(Damfun(9, type='Damage')*lp[3],30,0.85))
+    
+    # adder<-rep(0,length(lp))
+    # for(i in 1:length(adder)){
+    #   # Add lower bound priors:
+    #   adder[i]<-sum(pweibull(Damfun(4.6, type='Displacement')*lp[i],3,0.01), pweibull(Damfun(4.6, type='Mortality')*lp[i],3,0.01),
+    #                 pweibull(Damfun(4.6, type='Buildings Destroyed')*lp[i],3,0.01), pweibull(Damfun(4.6, type='Damage')*lp[i],3,0.01))
+    #   # Middle range priors:
+    #   adder[i]<-adder[i]+sum(pweibull(Damfun(6, type='Displacement')*lp[i],15,0.8), 1- pweibull(Damfun(6, type='Displacement')*lp[i],3,0.005),
+    #                          pweibull(Damfun(6, type='Mortality')*lp[i],15,0.8), 1- pweibull(Damfun(6, type='Mortality')*lp[i],3,0.005),
+    #                          pweibull(Damfun(6, type='Buildings Destroyed')*lp[i],15,0.8), 1- pweibull(Damfun(6, type='Buildings Destroyed')*lp[i],3,0.005),
+    #                          pweibull(Damfun(6, type='Damage')*lp[i],15,0.8), 1- pweibull(Damfun(6, type='Damage')*lp[i],3,0.005)
+    #                          )
+    #   # Upper bound priors:
+    #   adder[i]<-adder[i]+sum(1-pweibull(Damfun(9, type='Displacement')*lp[i],5,0.3), 1-pweibull(Damfun(9, type='Mortality')*lp[i],5,0.2),
+    #                          1-pweibull(Damfun(9, type='Buildings Destroyed')*lp[i],5,0.5), 1-pweibull(Damfun(9, type='Damage')*lp[i],30,0.85))
+    # }
+    return(sum(adder)) #looseend: need to address when including modifiers
+    #return(adder)
     
   } else if(Model$haz=="TC"){
     
     Dfun<-function(I_ij) h_0(I = I_ij,I0 = 3,theta = Omega$theta) 
-    Dispfun<-function(I_ij) c(BinR(Dfun(I_ij)*Dfun(I_ij)*Omega$Lambda$kappa+Omega$Lambda$nu*Dfun(I_ij) + Omega$Lambda$omega,Omega$zeta)%o%lp)
+    Dispfun<-function(I_ij) c(BinR(Dfun(I_ij)*Dfun(I_ij)*Omega$Lambda1$kappa+Omega$Lambda1$nu*Dfun(I_ij) + Omega$Lambda1$omega,Omega$zeta)%o%lp)
     Damfun<-function(I_ij) c(BinR(Dfun(I_ij),Omega$zeta)%o%lp)
     
     # Add lower bound priors:
@@ -320,14 +444,62 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
   
 }
 
+
 # Get the log-likelihood for the displacement data
-LL_IDP<-function(Y){
-  -log(1+abs(Y$gmax-Y$predictor)) 
-  # -log(1+(Y$gmax-Y$predictor)^2/Y$gmax)
-  # -((Y$gmax-Y$predictor)^2/Y$gmax)
-  # dnorm((log(max(Ystar,1))-log(Y)), mean = 0, sd = log(Y), log = T)
-  # dgammaM(Ystar,Y,0.1,log = T)
+LL_IDP<-function(Y, epsilon){
+
+  impacts = c('gmax', 'mortality', 'displacement') #move this outside
+  predictions = c('disp_predictor', 'mort_predictor', 'nBD_Predictor')
+  impacts_observed <- which(impacts %in% colnames(Y))
+  LL = 0 
+  k = 10
+  for (i in impacts_observed){
+    iso_observed <- which(!is.na(Y[,impacts[i]]) & !is.na(Y[,predictions[i]]))
+    LL = LL + log(dlnormTrunc(Y[iso_observed,impacts[i]]+k, log(Y[iso_observed,predictions[i]]+k), sdlog=epsilon[i], min=k))
+  }
+  
+  # if(impacts_observed[1] & !is.na(Y$gmax)){
+  #   #LL_disp <- log(dloglap(Y$gmax+k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+  #   #  (1-ploglap(k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
+  #   LL_disp <- log(dlnormTrunc(Y$gmax+k, log(Y$disp_predictor+k), sdlog=epsilon[1], min=k))
+  #   LL = LL + LL_disp
+  # }
+  # 
+  # if("mortality" %in% colnames(Y) & !is.na(Y$mortality)){
+  #   #LL_mort <- log(dloglap(Y$mortality+k, location.ald = log(Y$mort_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+  #   #  (1-ploglap(k, location.ald = log(Y$mort_predictor+k), scale.ald = 0.3 * epsilon, tau = 0.5, log = FALSE)))
+  #   LL_mort <- log(dlnormTrunc(Y$mortality+k, log(Y$mort_predictor+k), sdlog=epsilon[2], min=k))
+  #   LL = LL + LL_mort
+  # }
+  # 
+  # if("buildDestroyed" %in% colnames(Y) & !is.na(Y$buildDestroyed)){
+  #   #LL_BD <- log(dloglap(Y$buildDestroyed+k, location.ald = log(Y$nBD_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+  #   #  (1-ploglap(k, location.ald = log(Y$nBD_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
+  #   LL_BD <- log(dlnormTrunc(Y$buildDestroyed+k, log(Y$nBD_predictor+k), sdlog=epsilon[3], min=k))
+  #   LL = LL + LL_BD
+  # }
+  #print(LL)
+  if (any(is.infinite(LL))) {
+    inf_id <- which(is.infinite(LL))
+    LL[inf_id] <- -300
+  }
+  return(LL)
 }
+
+# Plot to compare normal and laplace kernels
+# xrang <- seq(1000,2000,1)
+# xobs <- 1500
+# lapval <- dloglap(xobs+k, location.ald = log(xrang+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
+#   (1-ploglap(k, location.ald = log(xrang+k), scale.ald = epsilon, tau = 0.5, log = FALSE))
+# normval <- dlnormTrunc(xobs+k, log(xrang+k), sdlog=epsilon, min=k)
+# plot(xrang, log(lapval))
+# points(xrang, log(normval), col='red')
+#q <- 0.975
+#xobs <- 1000
+#qloglap(q, location.ald = log(xobs+k), scale.ald = 0.09, tau = 0.5, log = FALSE)/
+#    (1-ploglap(k, location.ald = log(xobs+k), scale.ald = 0.1, tau = 0.5, log = FALSE))
+#qlnormTrunc(q, log(xobs+k), sdlog=epsilon, min=k)
+
 
 LL_beta_apply<-function(b,value,BD_params) do.call(BD_params$functions[[value]],as.list(c(x=b,unlist(BD_params$Params[[value]]))))
 
@@ -345,13 +517,12 @@ BDprob<-function(b,BD_params){
 
 predBD<-function(b,BD_params){
   lls<-BDprob(b,BD_params)
-  return(mean(apply(lls,1,which.max)))
+  return(mean(apply(lls, 1, function(x) sample(1:5, 1, prob=x)))) #LOOSEEND: Mean?
 }
 
 LL_BD<-function(b,classified,BD_params){
   
   lls<-BDprob(b,BD_params)
-  
   if(classified=="Damaged") {
     tmp<-rowSums(lls)
     # Sum of all rows for the classifications that predict at least some damage
@@ -386,13 +557,14 @@ GetIsoWeights<-function(dir){
 }
 
 Model$IsoWeights<-GetIsoWeights(dir)
+Model$IsoWeights %<>% add_row(iso3='ABC', weights=1)
 
 # Log-likelihood for displacement (ODD) objects
-LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
+LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.15,0.03,0.1)){
   
   # Load ODD files
   folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
-  ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
   
   # Parallelise appropriately
   if(AlgoParams$AllParallel){
@@ -401,7 +573,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
     AlgoParams$cores<-AlgoParams$NestedCores
     # When using task parallelisation, put the heaviest files first for optimisation reasons
     x <- file.info(paste0(folderin,ufiles))
-    ufiles<-ufiles[match(length(ufiles):1,rank(x$size))]
+    ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))]) #looseend
     
     tmpFn<-function(filer){
       # Extract the ODD object
@@ -410,7 +582,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       ODDy@fIndies<-Model$fIndies
       ODDy@gmax%<>%as.data.frame.list()
       # Apply DispX
-      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center,LL = T,Method = AlgoParams),
+      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams, epsilon=epsilon),
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate Disp LL of ",filer));return(-Inf)}
@@ -435,7 +607,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       ODDy@fIndies<-Model$fIndies
       ODDy@gmax%<>%as.data.frame.list()
       # Apply DispX
-      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center,LL = T,Method = AlgoParams),
+      tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams, epsilon=epsilon),
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate Disp LL of ",ufiles[i]));return(-Inf)}
@@ -444,8 +616,8 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
       maxLL<-max(tLL,na.rm = T)
       # Add the likelihood to the list of all events.
-      if(expLL) LL<-LL+cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL)
-      else LL<-LL+cWeight*mean(tLL,na.rm=T)
+      if(expLL) {LL<-LL+cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL)
+      } else LL<-LL+cWeight*mean(tLL,na.rm=T)
     }
     
     return(LL)
@@ -467,27 +639,30 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
     AlgoParams$cores<-AlgoParams$NestedCores
     # When using task parallelisation, put the heaviest files first for optimisation reasons
     x <- file.info(paste0(folderin,ufiles))
-    ufiles<-ufiles[match(length(ufiles):1,rank(x$size))]
-    
+    ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
+
     tmpFn<-function(filer){
       # Extract the BD object
       BDy<-readRDS(paste0(folderin,filer))
+      if(nrow(BDy@data)==0){return(0)}
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       BDy@fIndies<-Model$fIndies
       # Apply BDX
-      tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,center = Model$center,Method=AlgoParams),
+      tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,Model = Model,Method=AlgoParams, LL=T),
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate BD LL of ",filer));return(-Inf)}
       # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
       maxLL<-max(tLL,na.rm = T)
       # Return the average log-likelihood
-      if(expLL) return(cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL))
+      cWeight<-Model$IsoWeights$weights[Model$IsoWeights$iso3==BDy$ISO3C[which(!is.na(BDy$ISO3C))[1]]] #looseend
+      if(is.na(cWeight)){return(-Inf)}                               
+      if(expLL) return(cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL)) 
       else return(cWeight*mean(tLL,na.rm=T))
       
     }
     
-    return(sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
+    return(LL + sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
     
   } else {
     
@@ -498,7 +673,7 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       BDy@fIndies<-Model$fIndies
       # Apply BDX
-      tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,center = Model$center,Method=AlgoParams),
+      tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,Model = Model,Method=AlgoParams, LL=T),
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate BD LL of ",ufiles[i]));return(-Inf)}
@@ -514,7 +689,7 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
 }
 
 # Bayesian Posterior distribution: This is for a group of ODD objects with observed data
-logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
+logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.15,0.03,0.1)){
   
   # Apply higher order priors
   if(!is.null(Model$HighLevelPriors)){
@@ -523,17 +698,20 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
   }
   
   # Approximate Bayesian Computation rejection
-  if(HP<=AlgoParams$ABC) return(-5000000) # Cannot be infinite, but large (& negative) to not crash the Adaptive MCMC algorithm
+  #if(HP>AlgoParams$ABC) return(-5000000) # Cannot be infinite, but large (& negative) to not crash the Adaptive MCMC algorithm
+  if (HP> AlgoParams$ABC) return(-Inf)
   
   # Add the log-likelihood values from the ODD (displacement) objects
-  LL<-LL_Displacement(0,dir,Model,proposed,AlgoParams,expLL=T)
+  LL<-LL_Displacement(0,dir,Model,proposed,AlgoParams,expLL=T, epsilon)
   print(paste0("LL Displacements = ",LL)) ; sLL<-LL
-  
+  if (LL == 0){
+    return(Inf)
+  }
   # Add the log-likelihood values from the BD (building damage) objects
   LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
   print(paste0("LL Building Damages = ",LL-sLL))
   
-  posterior<-LL+HP
+  posterior<-LL #+HP
   # Add Bayesian priors
   if(!is.null(Model$priors)){
     posterior<-posterior+sum(Priors(proposed,Model$priors),na.rm=T)
@@ -555,7 +733,7 @@ logTargetSingle<-function(ODDy,Model,Omega,AlgoParams){
   # 
   # LL<-HP
   
-  tLL<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center,
+  tLL<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params,
                       LL = T,Method = AlgoParams),
                 error=function(e) NA)
   

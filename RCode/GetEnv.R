@@ -1,5 +1,5 @@
 # Where is the main folder with all the code and data
-dir<-directory<-"/home/patten/Documents/Coding/Oxford/IIDIPUS/"
+dir<-directory<-"/home/manderso/Documents/GitHub/ODDRIN/"
 # Set the working directory from your environment variables
 setwd(directory)
 # Directory of the Data for Good data, e.g. Disaster Mapping, 4G connectivity, etc

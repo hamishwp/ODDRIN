@@ -169,17 +169,18 @@ setMethod("BDinterpODD", "BD", function(BD,ODD){
         # We deal with these later (just incase the ordering of ODD columns has been muddled about)
         next
       }
-      
       # Find polygons of I>=I0
       pcontour<-ODDI0poly(ODD,var)
       
       insidepoly<-rep(F,nrow(BD))
-      for(p in 1:length(unique(pcontour$id))){
-        tcont<-filter(pcontour,id==p)
-        insidepoly<-insidepoly | sp::point.in.polygon(BD@coords[,1],
-                                                      BD@coords[,2],
-                                                      tcont$Longitude,
-                                                      tcont$Latitude)>0
+      if (length(unique(pcontour$id)) > 0){
+        for(p in 1:length(unique(pcontour$id))){
+          tcont<-filter(pcontour,id==p)
+          insidepoly<-insidepoly | sp::point.in.polygon(BD@coords[,1],
+                                                        BD@coords[,2],
+                                                        tcont$Longitude,
+                                                        tcont$Latitude)>0
+        }
       }
       
       if(sum(insidepoly)==0) next
@@ -200,7 +201,7 @@ setMethod("BDinterpODD", "BD", function(BD,ODD){
     }
     
     if(length(sum(rowSums(polysave)==0))>0){
-      print(paste0(sum(rowSums(polysave)==0)," building damage values were not exposed to a hazard... ",unique(miniDam$event)))
+      print(paste0(sum(rowSums(polysave)==0)," building damage values were not exposed to a hazard... "))#,unique(miniDam$event)))
       BD%<>%raster::subset(rowSums(polysave)!=0)
     }
   }
@@ -323,18 +324,23 @@ setMethod("ExtractOSMbuildVol", "BD", function(BD,ODD){
   
   print(paste0("Saving the buildings samples out to the file ",BD@buildingsfile))
   saveRDS(buildings,BD@buildingsfile)
-  
   # BD%<>%SampleBuildings(buildings)
   
 })
+
 
 # Code that calculates/predicts the total human displacement 
 setGeneric("BDX", function(BD,Omega,Model,Method,LL)
   standardGeneric("BDX") )
 setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T){
   # Only calculate buildings with all key parameters
-  notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$GDP) | 
+  if(!LL) {notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$GDP)))
+  } else notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$GDP) | 
                      is.na(BD@data$grading)))
+  if(nrow(BD) ==0){
+    if(LL){return(0)}
+    else return(BD)
+  }
   BD<-BD[notnans,] ;notnans<-1:nrow(BD)
   # Get parameters for model
   Params<-FormParams(BD,list(Np=Method$Np,center=Model$center))
@@ -344,16 +350,17 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T){
   # buildings<-readRDS(BD@buildingsfile)
   # Sample income distribution by area*building height?
   # BD%<>%SampleBuildings(buildings,F)
-  hrange<-grep("hazMean",names(BDy),value = T)
+  hrange<-grep("hazMean",names(BD),value = T)
   # Calculate non-local linear predictor values
   LP<-GetLP(BD,Omega,Params,Sinc,notnans)
   # for each building in list,
   CalcBD<-function(ij){
     iso3c<-BD@data$ISO3C[ij]
     # Calculate local linear predictor (NOTE: is a scalar - we randomly sample one value)
-    locallinp<-tryCatch(sample(LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]],size=1)*
-      LP$Plinp[ij]*LP$linp[[iso3c]],         error=function(e) NA)
-    # if(is.na(locallinp)) stop(ij)
+      locallinp<-tryCatch(sample(LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]],size=Method$Np, replace=TRUE)*
+      LP$Plinp[ij]*LP$linp[[iso3c]],         error=function(e) NA) #LOOSEEND: Assumes that a house is equally likely to be from each income bracket. 
+    #locallinp<- LP$dGDP$linp[5]* LP$Plinp[ij]*LP$linp[[iso3c]]
+      # if(is.na(locallinp)) stop(ij)
     # locallinp<-1.
     bDamage<-0
     for(h in hrange){
@@ -373,14 +380,13 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T){
     }
     bDamage[bDamage>=1]<-1-1e-10
     bDamage[bDamage<=1e-7]<-1e-7
-    
     # Use l_beta functions to evaluate probability of classified in group
     if(LL)  return(LL_BD(b=bDamage,classified=BD@data$grading[ij],BD_params=Model$BD_params))
     return(predBD(b=bDamage,BD_params=Model$BD_params))
   }
   
   if(LL) {
-    if(cores>1) {return(colMeans(t(matrix(unlist(mclapply(X = notnans,FUN = CalcBD,mc.cores = Method$cores)),ncol=length(notnans)))))
+    if(Method$cores>1) {return(colMeans(t(matrix(unlist(mclapply(X = notnans,FUN = CalcBD,mc.cores = Method$cores)),ncol=length(notnans)))))
     } else return(colMeans(t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans)))))
   }
   # classified<-t(matrix(unlist(mclapply(X = notnans,FUN = predBD,mc.cores = Method$cores)),ncol=length(notnans)))

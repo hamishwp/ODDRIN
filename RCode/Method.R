@@ -17,7 +17,6 @@
 ##########################################################################
 ##########################################################################
 
-library(rstan)
 # Methodology parameters required
 AlgoParams<-list(Np=20, # Number of Monte Carlo particles
                  cores=8, # Number of parallelised threads per event

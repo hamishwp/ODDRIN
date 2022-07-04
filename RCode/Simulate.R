@@ -370,7 +370,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
     intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
-    ODDSim %<>% DispX(Omega, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300))
+    ODDSim %<>% DispX(Omega, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300, epsilon=AlgoParams$epsilon_min, kernel='lognormal'))
     
     #take these simulations as the actual values
     ODDSim@gmax <- ODDSim@predictDisp %>% transmute(iso3='ABC',
@@ -414,7 +414,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
 #plot the S-curve for a given parameterisation (and optionally compare to a second)
 plot_S_curves <- function(Omega, Omega_curr=NULL){
   Intensity <- seq(0,10,0.1)
-  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta)
+  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = theta)
   D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
   D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
   D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)

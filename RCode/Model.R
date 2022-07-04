@@ -368,7 +368,7 @@ fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
 Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
   
   if(!is.null(modifier)) lp<-exp(as.numeric(unlist(modifier))) else lp<-1.
-  lp <- c(0.361022, 1, 2.861055)#lp_range
+  lp <- c(0.361022, 1, 2.861055)# lp_range - 0.361022 corresponds to lp for minimum GDP and PDens scaling, 2.861055 corresponds to maximum
   if(Model$haz=="EQ"){
     
     Dfun<-function(I_ij) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
@@ -389,6 +389,9 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
       else if (type=='Mortality'){
         return(Mort)
       }
+      else if (type == 'DispMort'){
+        return(DispMort)
+      }
     }
     adder<-0
       # Add lower bound priors:
@@ -396,11 +399,13 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
                   pweibull(Damfun(4.6, type='Buildings Destroyed')*lp[1],3,0.01), pweibull(Damfun(4.6, type='Damage')*lp[1],3,0.01))
     # Middle range priors:
     adder<-adder+sum(pweibull(Damfun(6, type='Displacement')*lp[2],15,0.8), 1- pweibull(Damfun(6, type='Displacement')*lp[2],3,0.005),
-                           pweibull(Damfun(6, type='Mortality')*lp[2],15,0.4), 1- pweibull(Damfun(6, type='Mortality')*lp[2],3,0.005),
+                           pweibull(Damfun(6, type='Mortality')*lp[2],15,0.1),# 1- pweibull(Damfun(6, type='Mortality')*lp[2],3,0.005),
                            pweibull(Damfun(6, type='Buildings Destroyed')*lp[2],15,0.8), 1- pweibull(Damfun(6, type='Buildings Destroyed')*lp[2],3,0.005),
-                           pweibull(Damfun(6, type='Damage')*lp[2],15,0.8), 1- pweibull(Damfun(6, type='Damage')*lp[2],3,0.005)
+                           pweibull(Damfun(6, type='Damage')*lp[2],15,0.8), 1- pweibull(Damfun(6, type='Damage')*lp[2],3,0.005),
+                           pweibull(Damfun(6, type='DispMort')*lp[2], 15, 0.8)
                            )
     # Upper bound priors:
+    adder <- adder + pweibull(Damfun(7, type='Mortality')*lp[2],15,0.2)
     adder<-adder+sum(1-pweibull(Damfun(9, type='Displacement')*lp[3],5,0.3), 1-pweibull(Damfun(9, type='Mortality')*lp[3],5,0.2),
                            1-pweibull(Damfun(9, type='Buildings Destroyed')*lp[3],5,0.5), 1-pweibull(Damfun(9, type='Damage')*lp[3],30,0.85))
     
@@ -446,18 +451,26 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
 
 
 # Get the log-likelihood for the displacement data
-LL_IDP<-function(Y, epsilon){
-
+LL_IDP<-function(Y, epsilon, kernel){
+  LL <- 0
+  k <- 10
   impacts = c('gmax', 'mortality', 'displacement') #move this outside
   predictions = c('disp_predictor', 'mort_predictor', 'nBD_Predictor')
-  impacts_observed <- which(impacts %in% colnames(Y))
-  LL = 0 
-  k = 10
-  for (i in impacts_observed){
-    iso_observed <- which(!is.na(Y[,impacts[i]]) & !is.na(Y[,predictions[i]]))
-    LL = LL + log(dlnormTrunc(Y[iso_observed,impacts[i]]+k, log(Y[iso_observed,predictions[i]]+k), sdlog=epsilon[i], min=k))
+  impacts_observed <- intersect(which(impacts %in% colnames(Y)), which(predictions %in% colnames(Y)))
+
+  if (kernel == 'loglaplace'){ #use a laplace kernel 
+    for (i in impacts_observed){
+      iso_observed <- which(!is.na(Y[,impacts[i]]) & !is.na(Y[,predictions[i]]))
+      LL = LL + log(dloglap(Y[iso_observed,impacts[i]]+k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = epsilon[i], tau = 0.5, log = FALSE)/
+           (1-ploglap(k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = epsilon[i], tau = 0.5, log = FALSE)))
+    }
   }
-  
+  else { #use a lognormal kernel 
+    for (i in impacts_observed){
+      iso_observed <- which(!is.na(Y[,impacts[i]]) & !is.na(Y[,predictions[i]]))
+      LL = LL + log(dlnormTrunc(Y[iso_observed,impacts[i]]+k, log(Y[iso_observed,predictions[i]]+k), sdlog=epsilon[i], min=k))
+    }
+  }
   # if(impacts_observed[1] & !is.na(Y$gmax)){
   #   #LL_disp <- log(dloglap(Y$gmax+k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
   #   #  (1-ploglap(k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
@@ -489,11 +502,11 @@ LL_IDP<-function(Y, epsilon){
 # Plot to compare normal and laplace kernels
 # xrang <- seq(1000,2000,1)
 # xobs <- 1500
-# lapval <- dloglap(xobs+k, location.ald = log(xrang+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
-#   (1-ploglap(k, location.ald = log(xrang+k), scale.ald = epsilon, tau = 0.5, log = FALSE))
-# normval <- dlnormTrunc(xobs+k, log(xrang+k), sdlog=epsilon, min=k)
-# plot(xrang, log(lapval))
-# points(xrang, log(normval), col='red')
+# lapval <- dloglap(xobs+k, location.ald = log(xrang+k), scale.ald = epsilon[2], tau = 0.5, log = FALSE)/
+#   (1-ploglap(k, location.ald = log(xrang+k), scale.ald = epsilon[1], tau = 0.5, log = FALSE))
+# normval <- dlnormTrunc(xobs+k, log(xrang+k), sdlog=epsilon[1], min=k)
+# plot(xrang, lapval)
+# points(xrang, normval, col='red')
 #q <- 0.975
 #xobs <- 1000
 #qloglap(q, location.ald = log(xobs+k), scale.ald = 0.09, tau = 0.5, log = FALSE)/

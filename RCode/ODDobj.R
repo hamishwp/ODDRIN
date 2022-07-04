@@ -484,7 +484,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
   }
 
   Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Destroyed
-
+  
+  #Method$cores is equal to AlgoParams$NestedCores (changed in Model file)
   if(Method$cores>1) { Dam[notnans,,]<-aperm(simplify2array(mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$cores)), perm=c(3,2,1))
   } else  Dam[notnans,,]<- aperm(simplify2array(lapply(X = notnans,FUN = CalcDam)), perm=c(3,2,1))
 
@@ -496,7 +497,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
   #   Disp[ind,]%<>%qualifierDisp(qualifier = ODD@gmax$qualifier[ODD@gmax$iso3==c],mu = Omega$mu)
   # }
   
-  funcy<-function(i,LLout=T, epsilon=AlgoParams$epsilon_min) {
+  funcy<-function(i,LLout=T, epsilon=AlgoParams$epsilon_min, kernel=AlgoParams$kernel) {
     tmp<-data.frame(iso3=ODD$ISO3C,IDPs=Dam[,i,1], mort=Dam[,i,2], nBD=Dam[,i,3]) %>% 
       group_by(iso3) %>% summarise(disp_predictor=floor(sum(IDPs,na.rm = T)), 
                                  mort_predictor=floor(sum(mort,na.rm = T)),
@@ -507,11 +508,16 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
     #print(paste(tmp$nBD_predictor, tmp$buildDestroyed))
     #print(tmp)
     if(LLout) {
-      return(LL_IDP(tmp, epsilon))
+      return(LL_IDP(tmp, epsilon,  kernel))
     }
     return(tmp)
   }
-  
+  if (LL == F & Method$Np == 1){
+    ODD@predictDisp<-funcy(1,LLout=F) 
+    
+    return(ODD)
+  }
+
   outer<-vapply(1:Method$Np,funcy,numeric(length(unique(ODD@gmax$iso3))), epsilon=epsilon)
   #outer[outer<Method$cap]<-Method$cap
   # Find the best fit solution

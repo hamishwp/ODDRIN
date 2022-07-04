@@ -30,10 +30,11 @@ AlgoParams<-list(Np=20, # Number of Monte Carlo particles
                  gamzy0=0.2, # How quickly do the rejected parameters start having an influence on the covariance? (like GreedyStart) 
                  epsilon=50, # Do we still want values at larger numbers of iterations to have an influence on the covariance?
                  minVar=1e-4, # Prevent certain parameters from being too sure of themselves
-                 t_0 =500,
+                 t_0 =200,
                  eps = 0.000000001,
                  epsilon_min=c(0.15,0.03,0.1),
-                 epsilon_max=c(0.45,0.09,0.3)
+                 epsilon_max=c(0.45,0.09,0.3), 
+                 kernel='lognormal' #options are lognormal or loglaplace
                  )
 		 
 if(is.null(AlgoParams$AllParallel)){
@@ -104,7 +105,6 @@ modifyAcc <- function(xNew, xPrev, Model){
   for (i in index){
     product <- product * match.fun(Model$acceptTrans[[names(xNew)[i]]])(xNew[i], xPrev[i], Model$par_lb[i],Model$par_ub[i])
   }
-  print(product)
   return(product)
 }
 
@@ -123,7 +123,7 @@ AMCMC <-function(dir, Model, iVals, AlgoParams, unfinished=F, tag=''){
   if (!unfinished){
     xbar_tminus1 <- xPrev
     output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n_x+1)
-    C_0 = diag(0.0001, nrow=n_x) /exp(xPrev)#iVals$COV
+    C_0 = iVals$COV #diag(0.0001, nrow=n_x) /exp(xPrev)#
     propCOV <- diag(n_x)
     it <- 1
     epsilon <- AlgoParams$epsilon_max
@@ -179,13 +179,19 @@ AMCMC <-function(dir, Model, iVals, AlgoParams, unfinished=F, tag=''){
     # Convert parameters to physical/useable values
     if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
     
+    start.time <- Sys.time()
+    
     # Calculate log-target value
     lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
                                    AlgoParams = AlgoParams, epsilon= epsilon), error=function(e) NA)
     
+    end.time <- Sys.time()
+    time.taken <- end.time - start.time
+    print(time.taken)
+    
     # Check if we have a NaN
     if(is.na(lTargNew)|is.infinite(lTargNew)) {
-      output[it,] <- c(lTargOld, xPrev)
+      output[it,] <- c(lTargOld, xPrev %>% Proposed2Physical(Model) %>% unlist())
       propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
       xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
       it <- it + 1 

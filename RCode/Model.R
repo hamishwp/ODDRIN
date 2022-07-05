@@ -313,6 +313,14 @@ fDamUnscaled<-function(I,Params,Omega){
        stochastic(Params$Np,Omega$eps))%>%return()
 }
 
+D_MortDisp_calc <- function(Damage, Omega){
+  D_Mort_and_Disp <- plnorm(Damage, meanlog = Omega$Lambda1$nu, sdlog = Omega$Lambda1$omega)
+  D_Mort <- plnorm(Damage, meanlog = Omega$Lambda2$nu, sdlog = Omega$Lambda2$omega)
+  D_Disp <- D_Mort_and_Disp - D_Mort
+  D_Disp <- ifelse(D_Disp<0, 0, D_Disp)
+  return(rbind(D_Mort, D_Disp))
+}
+
 
 # Baseline hazard function h_0
 h_0<-function(I,I0,theta){
@@ -368,7 +376,7 @@ fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
 Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
   
   if(!is.null(modifier)) lp<-exp(as.numeric(unlist(modifier))) else lp<-1.
-  lp <- c(0.361022, 1, 2.861055)# lp_range - 0.361022 corresponds to lp for minimum GDP and PDens scaling, 2.861055 corresponds to maximum
+  lp <- c(0.361022, 1, 2.861055) # lp_range - 0.361022 corresponds to lp for minimum GDP and PDens scaling, 2.861055 corresponds to maximum
   if(Model$haz=="EQ"){
     
     Dfun<-function(I_ij) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta) 
@@ -454,8 +462,8 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
 LL_IDP<-function(Y, epsilon, kernel){
   LL <- 0
   k <- 10
-  impacts = c('gmax', 'mortality', 'displacement') #move this outside
-  predictions = c('disp_predictor', 'mort_predictor', 'nBD_Predictor')
+  impacts = c('gmax', 'mortality', 'buildDestroyed') #move this outside
+  predictions = c('disp_predictor', 'mort_predictor', 'nBD_predictor')
   impacts_observed <- intersect(which(impacts %in% colnames(Y)), which(predictions %in% colnames(Y)))
 
   if (kernel == 'loglaplace'){ #use a laplace kernel 
@@ -465,11 +473,15 @@ LL_IDP<-function(Y, epsilon, kernel){
            (1-ploglap(k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = epsilon[i], tau = 0.5, log = FALSE)))
     }
   }
-  else { #use a lognormal kernel 
+  else if (kernel == 'lognormal'){ #use a lognormal kernel 
     for (i in impacts_observed){
       iso_observed <- which(!is.na(Y[,impacts[i]]) & !is.na(Y[,predictions[i]]))
       LL = LL + log(dlnormTrunc(Y[iso_observed,impacts[i]]+k, log(Y[iso_observed,predictions[i]]+k), sdlog=epsilon[i], min=k))
     }
+  }
+  else {
+    print(paste0("Failed to recognise kernel", AlgoParams$kernel))
+    return(-Inf)
   }
   # if(impacts_observed[1] & !is.na(Y$gmax)){
   #   #LL_disp <- log(dloglap(Y$gmax+k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/

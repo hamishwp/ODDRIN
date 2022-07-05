@@ -1,6 +1,6 @@
 
 
-tag <- '2022-07-03_095044'
+tag <- '2022-07-04_145319'
 n_x <- 14
 output <- readRDS(paste0(dir, 'AWS_IIDIPUS_Results/output_', tag))
 
@@ -21,103 +21,92 @@ for(i in 1:n_x){
   plot(output[1:endpoint,i+1], type='l', ylab='', ylim=ylim, main=names(unlist(Omega))[i])
   abline(h=unlist(Omega)[i], col='red')
 }
+par(mfrow=c(1,1))
+
+#Compare maximum a posteri estimate with the true values
+Omega_MAP <- output[which.max(output[1:endpoint,1]),2:ncol(output)] %>% 
+  relist(skeleton=Model$skeleton)
+
+# Plot S-curves for the actual and MAP parameterisation
+plot_S_curves(Omega,Omega_MAP)
+
+# Plot Posterior S-curves for the actual and MAP parameterisation
+plot_posterior_S_curves <- function(Omega, output){
+  Intensity <- seq(0,10,0.1)
+  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta)
+  Damage <- Dfun(Intensity, theta=Omega$theta)
+  D_extent <- BinR(Damage, Omega$zeta)
+  D_MortDisp <-  D_MortDisp_calc(Damage, Omega)
+  D_BD <-  plnorm(Damage, Omega$Lambda3$nu, Omega$Lambda3$omega)
+  plot(Intensity, D_MortDisp[1,], col='red', type='l', ylim=c(0,1), ylab='Proportion', lwd=3); 
+  
+  plotted_iter <- (endpoint %/% 2):endpoint
+  for (i in plotted_iter){
+    Omega_i <- output[i,2:(n_x+1)] %>% relist(skeleton=Model$skeleton)
+    Damage_i <- Dfun(Intensity, theta=Omega_i$theta) 
+    D_extent_sample <- BinR(Damage_i, Omega_i$zeta)
+    D_MortDisp_sample <-  D_MortDisp_calc(Damage_i, Omega_i)
+    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_i$theta), Omega_i$Lambda3$nu, Omega_i$Lambda3$omega)
+    lines(Intensity, D_MortDisp_sample[1,], col=adjustcolor("red", alpha = 0.1)); lines(Intensity, D_MortDisp_sample[2,], col=adjustcolor("cyan", alpha = 0.1)); 
+    #lines(Intensity, D_extent_sample, col=adjustcolor("green", alpha = 0.1)); lines(Intensity, D_BD_sample, col=adjustcolor("pink", alpha = 0.1)); 
+  }
+  lines(Intensity, D_MortDisp[1,], col='darkred', lwd=3); lines(Intensity, D_MortDisp[2,], col='blue', lwd=3); 
+  #lines(Intensity, D_BD, col='hotpink', type='l', lwd=3); lines(Intensity, D_extent, col='darkgreen', type='l', lwd=3); 
+  legend(x=1,y=0.7, c('D_Mort', 'D_Disp', 'D_BD', 'D_B'), col=c('red','blue','pink', 'green'), lty=1)
+}
+
+plot_posterior_S_curves(Omega, output)
+
+#compare likelihood of the true parameters to the MAP estimate
+for(i in 1:5){
+  logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams, epsilon=AlgoParams$epsilon_min)
+  logTarget(dir = dir,Model = Model,proposed = Omega_MAP, AlgoParams = AlgoParams)
+} 
 
 
 # -----------------------------------------------------------------------------------------------------------------------
 # ------------------------------------------------- MULTIPLE CHAINS -----------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------
 
+tags <- c('2022-07-04_131850_laplace', '2022-07-04_145319_normal')
+outputs <- list()
+param_max <- unlist(Omega)
+param_min <- unlist(Omega)
+endpoint_max <- 1
 
-#Plot the simulated data
-#Names: ODDSim.png, Sim DispMortBD.png  
-#Size: 1500 x 700
-grid.arrange(plotODDy(ODDSim, var='Population') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
-             plotODDy(ODDSim, var='GDP')+ xlim(-0.25,0.25) + ylim(-0.25,0.25), 
-             plotODDy(ODDSim, var='nBuildings')+ xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)
-grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
-             plotODDy(ODDSim, var='Mort') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
-             plotODDy(ODDSim, var='nBD') + xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)
-
-
-
-output <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-06-22_141021')
-
-output1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-06-08_142325')
-output2 <- readRDS('/home/manderso/Downloads/output_2022-06-08_142424')
-output3 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/output_2022-05-30_222310')
-
-
-par(mfrow=c(4,4))
-for(i in 2:15){
-  plot(1:4000, output1[1:4000,i], type='l', ylim = c(min(c(output1[1:4000,i],output2[1:4000,i])),max(c(output1[1:4000,i],output2[1:4000,i])) ))
-  lines(1:4000, output2[1:4000,i], type='l', col='blue')
-  abline(h=unlist(Omega)[i-1],col='red')
+#combine all chains into a single list
+for (i in 1:length(tags)){
+  output_i <- list(
+    output = readRDS(paste0(dir, 'AWS_IIDIPUS_Results/output_', tags[i])),
+    endpoint = which(is.na(output[,1]))[1] - 1
+  )
+  endpoint_max <- max(endpoint_max, output_i$endpoint)
+  param_max <- apply(rbind(output_i$output[1:output_i$endpoint,2:(n_x+1)], param_max), 2, max, na.rm = TRUE)
+  param_min <- apply(rbind(output_i$output[1:output_i$endpoint,2:(n_x+1)], param_min), 2, min, na.rm = TRUE)
+  outputs[[i]] <- output_i
 }
 
+#Trace plots for multiple chains
 par(mfrow=c(4,4))
 for(i in 1:n_x){
-  ylim=c(min(unlist(Omega)[i], output[520:1800,i+1]), max(unlist(Omega)[i], output[520:1800,i+1]))
-  plot(output[520:1800,i+1], type='l', ylab='', ylim=ylim)
-  abline(h=unlist(Omega)[i], col='red')
-  abline(v=600, col='blue')
-}
-plot(output[520:1800,1], type='l', ylab='Likelihood')
-abline(v=600, col='blue')
-
-Omega_MAP <- output[which.max(output[1:750,1]),2:ncol(output)] %>% 
-  relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
-
-Omega_MAP <- output[490,2:ncol(output)] %>% 
-  relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
-
-# Plot S-curves for the actual and MAP parameterisation
-plot_S_curves(Omega,Omega_MAP)
-
-plot_shaded_S_curves <- function(Omega, output){
-  Intensity <- seq(0,10,0.1)
-  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta)
-  D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
-  D_MortDisp <-  plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
-  D_Mort <-  plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
-  D_Disp <- D_MortDisp - D_Mort
-  D_BD <-  plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
-  plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1), ylab='Proportion', lwd=3); 
-  
-  #n_iter <- NROW(output)
-  plotted_iter <- which(hp_samples[,15] < 0.5)
-  for (i in plotted_iter){
-    Omega_iter <- output[i,2:(lenny+1)] %>% #output[i,2:ncol(output)] %>% 
-      relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
-    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_iter$theta) , Omega_iter$zeta)
-    D_MortDisp_sample <-  plnorm( Dfun(Intensity, theta=Omega_iter$theta), Omega_iter$Lambda1$nu, Omega_iter$Lambda1$omega)
-    D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_iter$theta), Omega_iter$Lambda2$nu, Omega_iter$Lambda2$omega)
-    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_iter$theta), Omega_iter$Lambda3$nu, Omega_iter$Lambda3$omega)
-    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    lines(Intensity, D_Mort_sample, col=adjustcolor("red", alpha = 0.1)); 
-    lines(Intensity, D_Disp_sample, col=adjustcolor("cyan", alpha = 0.1)); 
-    #lines(Intensity, D_extent_sample, col=adjustcolor("green", alpha = 0.1)); 
-    #lines(Intensity, D_BD_sample, col=adjustcolor("pink", alpha = 0.1)); 
+  plot(outputs[[1]]$output[1:endpoint_max,i+1], type='l', ylab='', ylim=c(param_min[i], param_max[i]), main=names(unlist(Omega))[i])
+  if (length(tags) > 1){
+    for(j in 2:length(tags)){
+      lines(outputs[[j]]$output[1:(outputs[[j]]$endpoint),i+1], type='l', col='blue')
+    }
   }
-  lines(Intensity, D_Mort, col='darkred', lwd=3); 
-  lines(Intensity, D_Disp, col='blue', lwd=3); 
-  lines(Intensity, D_BD, col='hotpink', type='l', lwd=3); lines(Intensity, D_extent, col='darkgreen', type='l', lwd=3); 
-  legend(x=1,y=0.7, c('D_Mort', 'D_Disp', 'D_BD', 'D_B'), col=c('red','blue','pink', 'green'), lty=1)
+  abline(h=unlist(Omega)[i], col='red')
 }
+par(mfrow=c(1,1))
 
-
-
-
-#check that the likelihood from the true parameters is not greater than the MAP estimate
-logTarget(dir = dir,Model = Model,proposed = Omega_MAP, AlgoParams = AlgoParams)
-
-for(i in 1:5) logTarget(dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams, epsilon=AlgoParams$epsilon_min)
+# ---------------------------------------------------------------------------------------------
 
 LLs_disp <- array(NA, c(2, 5))
 LLs_tot <- array(NA, c(2, 5))
 j = 1
-for (Np in c(1, 2)){
+for (Np in c(1)){
   print(j)
-  for (i in 1:5){
+  for (i in 1){
     print(i)
     AlgoParams$Np <- Np
     LLs_disp[j, i] = LL_Displacement(0, dir = dir,Model = Model,proposed = Omega, AlgoParams = AlgoParams, epsilon=AlgoParams$epsilon_min)

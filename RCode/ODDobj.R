@@ -442,16 +442,12 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
         Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[s], error=function(e) NA)
         if(any(is.na(Damage))) print(ij)
         
-        # Scaled damage
-        D_MortDisp <- plnorm(Damage, meanlog = Omega$Lambda1$nu, sdlog = Omega$Lambda1$omega)
-        D_Mort <- plnorm(Damage, meanlog = Omega$Lambda2$nu, sdlog = Omega$Lambda2$omega)
-        D_Disp<-D_MortDisp - D_Mort
-        D_Disp <- ifelse(D_Disp<0, 0, D_Disp)
+        D_MortDisp <- D_MortDisp_calc(Damage, Omega) #First row of D_MortDisp is D_Mort, second row is D_Disp
         
         # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
         tPop[3,ind]<-0
         
-        tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_Disp[ind], D_Mort[ind], (1-D_Mort-D_Disp)[ind])
+        tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_MortDisp[2,ind], D_MortDisp[1,ind], (1-D_MortDisp[1,ind]-D_MortDisp[2,ind]))
       } 
     }
     #ensure the total displaced, deceased or remaining does not exceed total population

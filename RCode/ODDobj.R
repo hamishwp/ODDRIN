@@ -29,9 +29,12 @@ source('RCode/Model.R')
 source('RCode/GetPopDemo.R')
 source('RCode/GetSocioEconomic.R')
 source('RCode/GetINFORM.R')
+library(devtools)
 library(parallel)
 library(doParallel)
 library(foreach)
+install_github('nathanvan/parallelsugar')
+library(parallelsugar)
 
 checkODD<-function(object) {
   

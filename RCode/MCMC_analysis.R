@@ -33,7 +33,7 @@ plot_S_curves(Omega,Omega_MAP)
 # Plot Posterior S-curves for the actual and MAP parameterisation
 plot_posterior_S_curves <- function(Omega, output){
   Intensity <- seq(0,10,0.1)
-  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = Omega$theta)
+  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = theta)
   Damage <- Dfun(Intensity, theta=Omega$theta)
   D_extent <- BinR(Damage, Omega$zeta)
   D_MortDisp <-  D_MortDisp_calc(Damage, Omega)
@@ -99,7 +99,102 @@ for(i in 1:n_x){
 }
 par(mfrow=c(1,1))
 
-# ---------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------ SMC ABC --------------------------------------------------------
+# -----------------------------------------------------------------------------------------------------------------------
+
+tag <- '2022-07-16_093045'
+output <- readRDS(paste0(dir,"AWS_IIDIPUS_Results/abcsmc_",tag))
+s_finish = max(which(colSums(is.na(output$omegastore[,1,]))==0)) #find last completed step
+
+Omega_sample_phys <- output$omegastore[,,1:s_finish]
+W <- output$W[,1:s_finish]
+d <- output$d[,1:s_finish]
+Npart <- NROW(W)
+
+par(mfrow=c(4,4))
+for (i in 1:n_x){
+  plot(rep(1:s_finish,each=Npart),Omega_sample_phys[,i,1:s_finish], ylim=c(min(Omega_sample_phys[,i,1:s_finish], unlist(Omega)[i]), max(Omega_sample_phys[,i,1:s_finish], unlist(Omega)[i])),
+       main=names(unlist(Omega))[i], xlab='step', ylab='')
+  abline(h=unlist(Omega)[i], col='red')
+}
+par(mfrow=c(1,1))
+
+par(mfrow=c(4,4))
+for (i in 1:n_x){
+  plot(rep(1, Npart), Omega_sample_phys[,i,1], ylim=c(min(Omega_sample_phys[,i,1:s_finish], unlist(Omega)[i]), max(Omega_sample_phys[,i,1:s_finish], unlist(Omega)[i])), xlim=c(1, s_finish),
+       main=names(unlist(Omega))[i], xlab='step', ylab='')
+  for (s in 2:s_finish){
+    retain <- which(d[,s] < quantile(d[,s], 0.6))
+    points(rep(s, length(retain)), Omega_sample_phys[retain,i,s], col='blue')
+    points(rep(s, Npart - length(retain)), Omega_sample_phys[-(retain),i,s], col='black')
+  }
+  abline(h=unlist(Omega)[i], col='red')
+}
+par(mfrow=c(1,1))
+
+
+
+plot(rep(1:s_finish, each=Npart), as.vector(d[,1:s_finish]), ylab='Negative Log Likelihood', xlab='step')
+
+
+# Compare posterior S-curves with the S-curve under the true parameterisation
+Intensity <- seq(0,10,0.1)
+Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = theta)
+Damage <- Dfun(Intensity, theta=Omega$theta)
+D_extent <- BinR(Damage, Omega$zeta)
+D_MortDisp <-  D_MortDisp_calc(Damage, Omega)
+D_BD <-  plnorm(Damage, Omega$Lambda3$nu, Omega$Lambda3$omega)
+plot(Intensity, D_MortDisp[1,], col='red', type='l', ylim=c(0,1), ylab='Proportion', lwd=3); 
+for (i in 1:Npart){
+  Omega_i <- Omega_sample_phys[i,,s_finish] %>% relist(skeleton=Model$skeleton)
+  Damage_i <- Dfun(Intensity, theta=Omega_i$theta) 
+  D_extent_sample <- BinR(Damage_i, Omega_i$zeta)
+  D_MortDisp_sample <-  D_MortDisp_calc(Damage_i, Omega_i)
+  D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_i$theta), Omega_i$Lambda3$nu, Omega_i$Lambda3$omega)
+  lines(Intensity, D_MortDisp_sample[1,], col=adjustcolor("red", alpha = 0.1)); lines(Intensity, D_MortDisp_sample[2,], col=adjustcolor("cyan", alpha = 0.1)); 
+}
+lines(Intensity, D_MortDisp[1,], col='darkred', lwd=3); lines(Intensity, D_MortDisp[2,], col='blue', lwd=3); 
+#lines(Intensity, D_BD, col='hotpink', type='l', lwd=3); lines(Intensity, D_extent, col='darkgreen', type='l', lwd=3); 
+legend(x=1,y=0.7, c('D_Mort', 'D_Disp', 'D_BD', 'D_B'), col=c('red','blue','pink', 'green'), lty=1)
+
+
+Omega_MAP <- Omega_sample_phys[which.min(d[,s_finish]),,s_finish] %>% relist(skeleton=Model$skeleton)
+#Plot disp, mort and nBD simulations under the true and MAP parameterisations
+folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+impact_MAP <- array(NA, dim=c(3, length(ufiles)))
+impact_Omega <- array(NA, dim=c(3, length(ufiles)))
+impact_true <- array(NA, dim=c(3, length(ufiles)))
+for(i in 1:length(ufiles)){
+  ODDSim <- readRDS(paste0(folderin,ufiles[i]))
+  #simulate displacement, mortality and building destruction using DispX
+  ODDSim_Omega <- ODDSim %>% DispX(Omega, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300))
+  ODDSim_MAP <- ODDSim %>% DispX(Omega_MAP, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300))
+  impact_true[1, i] = ODDSim@gmax$gmax
+  impact_Omega[1, i] = ODDSim_Omega@predictDisp$disp_predictor
+  impact_MAP[1, i] = ODDSim_MAP@predictDisp$disp_predictor
+  impact_true[2, i] = ODDSim@gmax$mortality
+  impact_Omega[2, i] = ODDSim_Omega@predictDisp$mort_predictor
+  impact_MAP[2, i] = ODDSim_MAP@predictDisp$mort_predictor
+  impact_true[3, i] =  ODDSim@gmax$buildDestroyed
+  impact_Omega[3, i] = ODDSim_Omega@predictDisp$nBD_predictor
+  impact_MAP[3, i] = ODDSim_MAP@predictDisp$nBD_predictor
+}
+
+par(mfrow=c(1,1))
+plot(impact_true[2,],impact_true[2,], xlim=c(1,500000),ylim=c(1,500000))
+points(impact_true[2,], impact_Omega[2,], col='blue')
+points(impact_true[2,], impact_MAP[2,], col='red')
+
+k <- 10
+epsilon = 0.03
+log(dlnormTrunc(impact_true[2,36]+k, log(impact_MAP[2,36]+k), sdlog=epsilon, min=k))
+log(dlnormTrunc(impact_true[2,36]+k, log(impact_Omega[2,36]+k), sdlog=epsilon, min=k))
+
+
+# -----------------------------------------------------------------------------------------------------------------------
+
 
 LLs_disp <- array(NA, c(2, 5))
 LLs_tot <- array(NA, c(2, 5))

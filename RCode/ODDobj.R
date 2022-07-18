@@ -493,7 +493,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
   #   Disp[ind,]%<>%qualifierDisp(qualifier = ODD@gmax$qualifier[ODD@gmax$iso3==c],mu = Omega$mu)
   # }
   
-  funcy<-function(i,LLout=T, epsilon=AlgoParams$epsilon_min, kernel=AlgoParams$kernel) {
+  funcy<-function(i,LLout=T, epsilon=AlgoParams$epsilon_min, kernel=AlgoParams$kernel, cap=AlgoParams$cap) {
     tmp<-data.frame(iso3=ODD$ISO3C,IDPs=Dam[,i,1], mort=Dam[,i,2], nBD=Dam[,i,3]) %>% 
       group_by(iso3) %>% summarise(disp_predictor=floor(sum(IDPs,na.rm = T)), 
                                  mort_predictor=floor(sum(mort,na.rm = T)),
@@ -504,7 +504,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
     #print(paste(tmp$nBD_predictor, tmp$buildDestroyed))
     #print(tmp)
     if(LLout) {
-      return(LL_IDP(tmp, epsilon,  kernel))
+      return(LL_IDP(tmp, epsilon,  kernel, cap))
     }
     return(tmp)
   }
@@ -515,12 +515,14 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
   }
 
   outer<-vapply(1:Method$Np,funcy,numeric(length(unique(ODD@gmax$iso3))), epsilon=epsilon)
-  #outer[outer<Method$cap]<-Method$cap
-  # Find the best fit solution
+  outer[outer < (-745)]<- -745
+  
+  # Find thebest fit solution
   if(length(unique(ODD@gmax$iso3))>1) {
     if(LL)  return(log(rowMeans(exp(outer),na.rm=T)))
     MLE<-which.max(log(colSums(exp(outer),na.rm=T)))
   }  else {
+    #return(outer) #SMC-CHANGE
     if(LL)  return(log(mean(exp(outer),na.rm=T)))
     MLE<-which.max(log(exp(outer)))
   }

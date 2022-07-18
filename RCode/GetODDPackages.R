@@ -53,6 +53,7 @@ LoadLibraries<-function(packred){
   library(EnvStats)
   library(posterior)
   library(VGAM)
+  library(mvtnorm)
   
   if(!packred) {
     library(codetools)

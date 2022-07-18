@@ -459,7 +459,7 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
 
 
 # Get the log-likelihood for the displacement data
-LL_IDP<-function(Y, epsilon, kernel){
+LL_IDP<-function(Y, epsilon, kernel, cap){
   LL <- 0
   k <- 10
   impacts = c('gmax', 'mortality', 'buildDestroyed') #move this outside
@@ -469,14 +469,24 @@ LL_IDP<-function(Y, epsilon, kernel){
   if (kernel == 'loglaplace'){ #use a laplace kernel 
     for (i in impacts_observed){
       iso_observed <- which(!is.na(Y[,impacts[i]]) & !is.na(Y[,predictions[i]]))
-      LL = LL + log(dloglap(Y[iso_observed,impacts[i]]+k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = epsilon[i], tau = 0.5, log = FALSE)/
+      LL_impact = log(dloglap(Y[iso_observed,impacts[i]]+k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = epsilon[i], tau = 0.5, log = FALSE)/
            (1-ploglap(k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = epsilon[i], tau = 0.5, log = FALSE)))
+      if(is.finite(LL_impact)){
+        LL = LL + LL_impact
+      } else {
+        LL = LL + cap
+      }
     }
   }
   else if (kernel == 'lognormal'){ #use a lognormal kernel 
     for (i in impacts_observed){
       iso_observed <- which(!is.na(Y[,impacts[i]]) & !is.na(Y[,predictions[i]]))
-      LL = LL + log(dlnormTrunc(Y[iso_observed,impacts[i]]+k, log(Y[iso_observed,predictions[i]]+k), sdlog=epsilon[i], min=k))
+      LL_impact = log(dlnormTrunc(Y[iso_observed,impacts[i]]+k, log(Y[iso_observed,predictions[i]]+k), sdlog=epsilon[i], min=k))
+      if(is.finite(LL_impact)){
+        LL = LL + LL_impact
+      } else {
+        LL = LL + cap
+      }
     }
   }
   else {
@@ -506,7 +516,7 @@ LL_IDP<-function(Y, epsilon, kernel){
   #print(LL)
   if (any(is.infinite(LL))) {
     inf_id <- which(is.infinite(LL))
-    LL[inf_id] <- -300
+    LL[inf_id] <- cap
   }
   return(LL)
 }
@@ -611,6 +621,8 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.
                     error=function(e) NA)
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate Disp LL of ",filer));return(-Inf)}
+      
+      #return(tLL) #SMC-CHANGE
       # Weight the likelihoods based on the number of events for that country
       cWeight<-Model$IsoWeights$weights[Model$IsoWeights$iso3==ODDy@gmax$iso3[1]]
       # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
@@ -619,7 +631,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.
       if(expLL) return(cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL))
       else return(cWeight*mean(tLL,na.rm=T))
     }
-  
+    #return(colSums(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores)))) # SMC-CHANGE
     return(sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
     
   } else {
@@ -675,8 +687,10 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       # Apply BDX
       tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,Model = Model,Method=AlgoParams, LL=T),
                     error=function(e) NA)
+      
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate BD LL of ",filer));return(-Inf)}
+      #return(tLL) #SMC-CHANGE
       # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
       maxLL<-max(tLL,na.rm = T)
       # Return the average log-likelihood
@@ -686,7 +700,7 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       else return(cWeight*mean(tLL,na.rm=T))
       
     }
-    
+    #return(LL + colSums(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores)))) #SMC-CHANGE
     return(LL + sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
     
   } else {
@@ -728,20 +742,20 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.15,0.03,0
   
   # Add the log-likelihood values from the ODD (displacement) objects
   LL<-LL_Displacement(0,dir,Model,proposed,AlgoParams,expLL=T, epsilon)
-  print(paste0("LL Displacements = ",LL)) ; sLL<-LL
-  if (LL == 0){
-    return(Inf)
-  }
+  #print(paste0("LL Displacements = ",LL)) ; sLL<-LL
+  #if (any(LL == 0)){ #SMC-CHANGE
+  #  return(Inf)
+  #}
   # Add the log-likelihood values from the BD (building damage) objects
   LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
-  print(paste0("LL Building Damages = ",LL-sLL))
+  #print(paste0("LL Building Damages = ",LL-sLL))
   
   posterior<-LL #+HP
   # Add Bayesian priors
   if(!is.null(Model$priors)){
     posterior<-posterior+sum(Priors(proposed,Model$priors),na.rm=T)
   }
-  print(paste0("Posterior = ",posterior))
+  #print(paste0("Posterior = ",posterior))
   
   return(posterior)
   

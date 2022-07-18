@@ -50,18 +50,12 @@ main_simulated <- function(){
                       AlgoParams=AlgoParams, 
                       unfinished=F)
   
-  output <- AMCMC(dir=dir,
-                  Model=Model,
-                  iVals=iVals,
-                  AlgoParams=AlgoParams, 
-                  unfinished=T, 
-                  tag='2022-06-22_141021')
-  
-  output <- AMCMC_continueunfinished(dir=dir,
-                            Model=Model,
-                            iVals=iVals,
-                            AlgoParams=AlgoParams, 
-                            filetag='2022-06-06_094129')
+  # output <- AMCMC(dir=dir,
+  #                 Model=Model,
+  #                 iVals=iVals,
+  #                 AlgoParams=AlgoParams, 
+  #                 unfinished=T, 
+  #                 tag='2022-06-22_141021')
   
   Omega_MAP = output$PhysicalValues
   

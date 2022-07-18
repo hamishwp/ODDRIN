@@ -121,8 +121,8 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   #   }
   # }
   # Omega <- unlist(relist(hp_samples[which.min(hp_samples[,lenny+1]), 1:lenny], Model$skeleton))
-  # propCOV<-cov(hp_samples[,1:lenny]) /100
-  # 
+  # # propCOV<-cov(hp_samples[,1:lenny]) /100
+
   #propCOV<-readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/covariance_2022-05-04_120755')
   # propCOV<-diag(abs(c(log(0.17/0.12),log(0.04/0.02),log(0.09/0.055),
   #                     log(2/1.5),log(5.5/4.5),
@@ -135,10 +135,18 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
   
 }
 
-
-
-
-
+HLPrior_sample <- function(Model, AlgoParams){
+  #Draws a sample from the prior that accepts the Higher Level Prior
+  #Returns sample on the transformed space (not the physical space)
+  n_x <- length(unlist(Model$links))
+  HP <- AlgoParams$ABC + 1
+  sample <- rep(0, n_x)
+  while (HP > AlgoParams$ABC){
+    sample <- runif(n_x, Model$par_lb, Model$par_ub) #generate proposal on the physical space
+    HP <- Model$HighLevelPriors(relist(sample,skeleton=Model$skeleton),Model) #check higher level prior of the proposal
+  }
+  return(sample %>% relist(Model$skeleton)%>% Physical2Proposed(Model) %>% unlist())
+}
 
 
 

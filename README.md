@@ -156,7 +156,13 @@ Before doing anything, please change the directory location environment variable
 
 ```
 
-**This will error if you have not already installed the necessary data** (see the end of installation instructions - *'Data to be downloaded manually'*). In order to install the full ODDRIN package, I can only guide you through Linux and possibly Mac distributions (sorry!). See the *'Full Windows Installation'* section for instructions for Windows. For Macs, this should, in theory, be the same, but I can't say for sure. The problem is getting the R package `rJava` to work. For Linux and Mac distributions, open a terminal and run the following:
+**This will error if you have not already installed the necessary data** (see the end of installation instructions - *'Data to be downloaded manually'*). 
+
+For a full installation of ODDRIN, the problem is getting the R package `rJava` to work. For Linux and Mac distributions, follow the installation instructions in *'Linux and Mac Installation'* below. For Windows, follow the instructions under *'Windows Installation'*. 
+
+##### Linux and Mac Installation
+
+In order to install the full ODDRIN package for Linux and Mac distributions, open a terminal and run the following:
 
 ```bash
 
@@ -195,9 +201,9 @@ Finally, with `packred<-F` in the file `GetEnv.R`, run the following:
 
 ```
 
-##### Full Windows Installation
+##### Windows Installation
 
-To follow the above instructions for a full installation of ODDRIN on a Windows distribution, first install Ubuntu from the Microsoft Store. This allows Linux command syntax to be run on a Windows machine. Follow all instructions as per the above *EXCEPT* the instruction to set the LD_LIBRARY_PATH. Ubuntu does not permit the user to set LD_LIBRARY_PATH in the '/etc/environment' file, so run the following in Ubuntu instead:
+To install the full ODDRIN package on Windows, first install Ubuntu from the Microsoft Store. This allows Linux command syntax to be run on a Windows machine. Follow all instructions as per the *'Linux and Mac Installation'* section above *EXCEPT* the instruction to set the LD_LIBRARY_PATH. Ubuntu does not permit the user to set LD_LIBRARY_PATH in the '/etc/environment' file, so run the following in Ubuntu instead:
 
 ```bash
 
@@ -206,7 +212,7 @@ To follow the above instructions for a full installation of ODDRIN on a Windows 
     
 ```
 
-Now restart your computer, check that the folder exists, and follow the final steps after the LD_LIBRARY_PATH instruction as detailed above. For the sudo R CMD, please ensure that R is installed for use on Ubuntu, otherwise you will get a command not found error.
+Follow all the remaining steps after the setting of the LD_LIBRARY_PATH instruction as detailed in the *'Linux and Mac Installation'* section above, i.e. check that the folder actually exists, restart your computer, etc. For the sudo R CMD, please ensure that R is installed for use on Ubuntu, otherwise you will get a command not found error.
 
 ##### Data to be Downloaded Manually
 

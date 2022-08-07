@@ -525,7 +525,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
     if(LL)  return(log(rowMeans(exp(outer),na.rm=T)))
     MLE<-which.max(log(colSums(exp(outer),na.rm=T)))
   }  else {
-    #return(outer) #SMC-CHANGE
+    return(outer) #SMC-CHANGE
     if(LL)  return(log(mean(exp(outer),na.rm=T)))
     MLE<-which.max(log(exp(outer)))
   }

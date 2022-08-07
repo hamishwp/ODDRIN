@@ -378,7 +378,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T){
                                        locallinp,
                                        Params[[iso3c]]$Ik)
     }
-    bDamage[bDamage>=1]<-1-1e-10
+    bDamage[bDamage>=1]<-1-1e-7
     bDamage[bDamage<=1e-7]<-1e-7
     # Use l_beta functions to evaluate probability of classified in group
     if(LL)  return(LL_BD(b=bDamage,classified=BD@data$grading[ij],BD_params=Model$BD_params))

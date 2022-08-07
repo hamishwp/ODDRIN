@@ -23,7 +23,7 @@ Omega <- list(Lambda1 = list(nu=0,omega=0.5),
               theta = list(e=0.2359788),
               eps = list(eps=0.01304351))
 
-Model$center <- simulateDataSet(100, Omega, Model=Model, dir = dir, outliers = TRUE)
+Model$center <- simulateDataSet(100, Omega, Model=Model, dir = dir, outliers = FALSE)
 #After generating the simulated data, need to move 'from 'centerings' 
 #and 'ODDobjects' from 'IIDIPUS_SimInput' to 'IIDIPUS_Input'
 
@@ -36,7 +36,7 @@ main_simulated <- function(){
   # Parameterise... Here we go!
   
   AlgoParams$AllParallel <- TRUE
-  AlgoParams$cores <- 8
+  AlgoParams$cores <- 6
   AlgoParams$Np <- 10
   AlgoParams$ABC <- 0.1
   AlgoParams$itermax <- 10000

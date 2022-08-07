@@ -12,7 +12,6 @@
 ###    data, this section defines what function to minimise (cost fn)  ###
 ##########################################################################
 ##########################################################################
-##########################################################################
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 # Model variables and format, based on the specific hazard
@@ -76,6 +75,10 @@ ab_bounded_acc <- function(xnew, xold, a, b){
   return((b-xnew)/(b-xold)*(xnew-a)/(xold-a))
 }
 
+returnX <- function(x,a,b){
+  return(x)
+}
+
 # Link functions (MUST BE SAME LENGTH AS OMEGA)
 Model$links<-list(
   Lambda1=list(nu='ab_bounded',omega='ab_bounded'),
@@ -94,7 +97,41 @@ Model$links<-list(
   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
 )
 
+# Model$links<-list(
+#   Lambda1=list(nu='ab_bounded',omega='ab_bounded'),
+#   Lambda2=list(nu='ab_bounded',omega='ab_bounded'),
+#   Lambda3=list(nu='ab_bounded',omega='ab_bounded'),
+#   zeta=list(k='ab_bounded',lambda='ab_bounded'), # zeta=list(k=2.5,lambda=1.6),
+#   #zeta1=list(k='exp',lambda='exp'),
+#   #zeta2=list(k='exp',lambda='exp'),
+#   #zeta3=list(k='exp',lambda='exp'),
+#   # beta=list(xxx='exp',CC.INS.GOV.GE='exp',VU.SEV.AD='exp',CC.INS.DRR='exp',VU.SEV.PD='exp',CC.INF.PHY='exp'),
+#   Pdens=list(M='ab_bounded',k='ab_bounded'),
+#   dollar=list(M='ab_bounded',k='ab_bounded'),
+#   theta=list(e='ab_bounded'), #list(e=0.25),
+#   # rho=list(A='exp',H='exp'),
+#   eps=list(eps='ab_bounded')#,xi='exp')
+#   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
+# )
+
 # And to go the other way....
+# Model$unlinks<-list(
+#   Lambda1=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   Lambda2=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   Lambda3=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   zeta=list(k='ab_bounded_inv',lambda='ab_bounded_inv'), # zeta=list(k=2.5,lambda=1.6),
+#   #zeta1=list(k='log',lambda='log'),
+#   #zeta2=list(k='log',lambda='log'),
+#   #zeta3=list(k='log',lambda='log'),
+#   # beta=list(xxx='log',CC.INS.GOV.GE='log',VU.SEV.AD='log',CC.INS.DRR='log',VU.SEV.PD='log',CC.INF.PHY='log'),
+#   Pdens=list(M='ab_bounded_inv',k='ab_bounded_inv'),
+#   dollar=list(M='ab_bounded_inv',k='ab_bounded_inv'),
+#   theta=list(e='ab_bounded_inv'), #list(e=0.25),
+#   # rho=list(A='log',H='log'),
+#   eps=list(eps='ab_bounded_inv')#,xi='log')
+#   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
+# )
+
 Model$unlinks<-list(
   Lambda1=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
   Lambda2=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
@@ -335,8 +372,7 @@ hBD<-function(Ab,Population,rho,center){
 }
 # For building damage assessment data
 fDamageBuilding<-function(BD,I,Params,Omega,linp,Ik){
-  BinR(fDamUnscaled(I,Params,Omega)*linp,#*hBD(BD$Ab,BD$Population,Omega$rho,Params$center[c("A","H")]),
-       Omega$zeta)
+  fDamUnscaled(I,Params,Omega)*linp#*hBD(BD$Ab,BD$Population,Omega$rho,Params$center[c("A","H")]),
 }
 
 qualifierDisp<-function(Disp,qualifier,mu) {
@@ -383,7 +419,7 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
     Damfun<-function(I_ij, type) {
       D <- Dfun(I_ij)
       if (type=='Damage'){
-        return(BinR(D,Omega$zeta))
+        return(D)
       }
       if (type=='Buildings Destroyed'){
         return(plnorm(D,Omega$Lambda3$nu, Omega$Lambda3$omega))
@@ -622,7 +658,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate Disp LL of ",filer));return(-Inf)}
       
-      #return(tLL) #SMC-CHANGE
+      return(tLL) #SMC-CHANGE
       # Weight the likelihoods based on the number of events for that country
       cWeight<-Model$IsoWeights$weights[Model$IsoWeights$iso3==ODDy@gmax$iso3[1]]
       # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
@@ -631,7 +667,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.
       if(expLL) return(cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL))
       else return(cWeight*mean(tLL,na.rm=T))
     }
-    #return(colSums(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores)))) # SMC-CHANGE
+    return(colSums(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores)))) # SMC-CHANGE
     return(sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
     
   } else {
@@ -690,7 +726,7 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate BD LL of ",filer));return(-Inf)}
-      #return(tLL) #SMC-CHANGE
+      return(tLL) #SMC-CHANGE
       # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
       maxLL<-max(tLL,na.rm = T)
       # Return the average log-likelihood
@@ -700,7 +736,7 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       else return(cWeight*mean(tLL,na.rm=T))
       
     }
-    #return(LL + colSums(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores)))) #SMC-CHANGE
+    return(LL + colSums(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores)))) #SMC-CHANGE
     return(LL + sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
     
   } else {
@@ -743,9 +779,9 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.15,0.03,0
   # Add the log-likelihood values from the ODD (displacement) objects
   LL<-LL_Displacement(0,dir,Model,proposed,AlgoParams,expLL=T, epsilon)
   #print(paste0("LL Displacements = ",LL)) ; sLL<-LL
-  #if (any(LL == 0)){ #SMC-CHANGE
-  #  return(Inf)
-  #}
+  if (any(LL == 0)){ #SMC-CHANGE
+    return(Inf)
+  }
   # Add the log-likelihood values from the BD (building damage) objects
   LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
   #print(paste0("LL Building Damages = ",LL-sLL))

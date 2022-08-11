@@ -35,8 +35,9 @@ AlgoParams<-list(Np=20, # Number of Monte Carlo particles
                  epsilon_min=c(0.15,0.03,0.1), #(log) standard deviation of ABC kernels for displacement, mortality, and building destruction
                  epsilon_max=c(0.45,0.09,0.3), #initial standard deviation of ABC kernels if the kernel is shrunk over time
                  kernel='lognormal', #options are lognormal or loglaplace
-                 smc_steps = 20, #Number of steps in the ABC-SMC algorithm
-                 smc_Npart = 100 #Number of particles in the ABC-SMC algorithm
+                 smc_steps = 200, #Number of steps in the ABC-SMC algorithm
+                 smc_Npart = 100, #Number of particles in the ABC-SMC algorithm
+                 smc_alpha = 0.9
                  )
 		 
 if(is.null(AlgoParams$AllParallel)){
@@ -411,17 +412,17 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
   n_x <- length(Model$par_lb) #n_x = number of parameters
   Omega_sample <- array(NA, dim=c(Npart, n_x, steps)) #store sampled parameters on the transformed space
   Omega_sample_phys <- array(NA, dim=c(Npart, n_x, steps)) #store sampled parameters on the untransformed space
-  W <- array(NA, dim=c(Npart, steps))
-  d <- array(Inf, dim=c(Npart, M, steps))
-  npa=rep(0,Npart)
-  tolerance = 10000000
-  tolerancetarget=1
+  W <- array(NA, dim=c(Npart, steps)) #Weights
+  d <- array(Inf, dim=c(Npart, M, steps)) #Distances
+  npa=rep(0,Npart) #Number of alive particles (have at least one distance less than the tolerance)
+  tolerance = 10000000 #Ensure all initial distances are less than the tolerance
+  tolerancetarget=1 #LOOSEEND: need to add in an adaptive stopping rule
   tolerancestore=c(tolerance)
   essstore=c(Npart)
   N_T=Npart/2
-  alpha=0.9
+  alpha=AlgoParams$smc_alpha
   
-  tpa<-function(tolerance,x){
+  tpa<-function(tolerance,x){ #calculate the total proportion of alive particles (have at least one distance less than the tolerance)
     d<-abs(x)
     for (i in 1:Npart){
       count<-0
@@ -453,7 +454,8 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
       list(d=d, 
            omegastore=Omega_sample_phys,
            propCOV=array(0, dim=c(n_x,n_x)),
-           W=W),
+           W=W, 
+           tolerance = tolerance),
       paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
     )  
     s_start = 2 # continue the algorithm from s = 2
@@ -475,6 +477,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     }
     s_start = ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
     n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
+    tolerance = output_unfinished$tolerance
   }
   
   for (s in s_start:steps){
@@ -484,6 +487,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     print(paste('Time:', end_time-start_time))
     start_time <- Sys.time()
     
+    #Find the new tolerance such that alpha proportion of the current alive particles stay alive
     toleranceold <- tolerance
     reflevel <- alpha * tpa(toleranceold, d[,,s-1])
     tolerance<-uniroot(function(tolerance) tpa(tolerance,x=d[,,s-1])-reflevel,c(0,toleranceold))$root
@@ -492,9 +496,9 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
          tolerance<-tolerancetarget
     }
     tolerancestore<-c(tolerancestore, tolerance)
-    essstore<-c(essstore, 1/sum(W[,s-1]^2))
+    essstore<-c(essstore, 1/sum(W[,s-1]^2)) #effective sample size
     
-    #compute the associated weights and resample if necessary
+    #compute the associated weights
     npa_old<-rowSums(d[,,s-1]<toleranceold)
     npa<-rowSums(d[,,s-1]<tolerance)
     a<-which(npa_old>0)
@@ -510,7 +514,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
          Omega_sample_phys[,,s]<-Omega_sample_phys[choice,,s-1] 
          d[,,s]<-d[choice,,s-1] 
          W[,s]<-rep(1/Npart,Npart) 
-    } else {
+    } else { #these will be perturbed later via a MCMC step. 
         Omega_sample[,,s]<-Omega_sample[,,s-1] 
         Omega_sample_phys[,,s]<-Omega_sample_phys[,,s-1] 
         d[,,s]<-d[,,s-1] 
@@ -536,6 +540,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
         d_prop <-  -logTarget(dir = dir,Model = Model,
                               proposed = Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model), 
                               AlgoParams = AlgoParams) #calculate distance
+        #calculate the acceptance probability:
         acc <- sum(d_prop<tolerance)/sum(d[n,,s]<tolerance) * modifyAcc(Omega_prop, Omega_sample[n,,s], Model)
         u <- runif(1)
         if(u < acc){
@@ -556,6 +561,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     
     n_start = 1
    
+    #plot the output so far:
     i_zeroweight <- which(W==0,  arr.ind=TRUE)
     plot(rep(1, Npart), apply(d[,,1], c(1), min), xlim=c(1, s), ylim=c(min(d), max(d[which(d<Inf)])))
     for (i in 2:s){
@@ -573,7 +579,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
            omegastore=Omega_sample_phys,
            propCOV=propCOV,
            W=W, 
-           tolerance=toleranceold),
+           tolerance=tolerance),
       paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
     )  
   }

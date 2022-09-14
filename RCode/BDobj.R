@@ -380,12 +380,21 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T){
     }
     bDamage[bDamage>=1]<-1-1e-7
     bDamage[bDamage<=1e-7]<-1e-7
+    
+    #simulated building damage
+    bPred <- rep(0, length=Method$Np)
+    for (k in 1:Method$Np){ 
+      bPred_num <- predBD(b=bDamage[k],BD_params=Model$BD_params)
+      if (bPred[k] < 5){ #If 'Possible', 'Moderate', 'Severe' or 'Destroyed', replace with 'Damaged' with probability 0.5
+        bPred[k] <- ifelse(runif(1)>0.5, names(Model$BD_params$Params)[bPred_num], 'Damaged')
+      } else {bPred[k] <- 'notaffected'}
+    }
     # Use l_beta functions to evaluate probability of classified in group
-    if(LL)  return(LL_BD(b=bDamage,classified=BD@data$grading[ij],BD_params=Model$BD_params))
+    if(LL)  return(bPred==BD@data$grading[ij]) #return 1 if correctly classified
     return(predBD(b=bDamage,BD_params=Model$BD_params))
   }
   
-  if(LL) {
+  if(LL) { #return the proportion of buildings correctly classified
     if(Method$cores>1) {return(colMeans(t(matrix(unlist(mclapply(X = notnans,FUN = CalcBD,mc.cores = Method$cores)),ncol=length(notnans)))))
     } else return(colMeans(t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans)))))
   }
@@ -397,4 +406,5 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T){
   return(BD)
   
 })
+
 

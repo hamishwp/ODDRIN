@@ -345,9 +345,9 @@ stochastic<-function(n,eps){
   return(rgammaM(n = n,mu = 1, sig_percent = eps$eps ))
 }
 # Damage function
-fDamUnscaled<-function(I,Params,Omega){
-    (h_0(I,Params$I0,Omega$theta)*
-       stochastic(Params$Np,Omega$eps))%>%return()
+fDamUnscaled<-function(I,Params,Omega){ 
+  (h_0(I,Params$I0,Omega$theta) * 
+     stochastic(Params$Np,Omega$eps)) %>%return()
 }
 
 D_MortDisp_calc <- function(Damage, Omega){
@@ -363,9 +363,11 @@ D_MortDisp_calc <- function(Damage, Omega){
 h_0<-function(I,I0,theta){
   ind<-I>I0
   h<-rep(0,length(I))
-  h[ind]<-exp( theta$e*(I[ind]-I0) ) -1
+  h[ind]<- exp( theta$e*(I[ind]-I0) ) -1
   return(h)
 }
+
+
 # Building damage baseline hazard function hBD_0
 hBD<-function(Ab,Population,rho,center){
   exp(-rho$A*(log(Ab)-center$A) - rho$H*(log(Population)-center$H))
@@ -498,6 +500,7 @@ Model$HighLevelPriors<-function(Omega,Model,modifier=NULL){
 LL_IDP<-function(Y, epsilon, kernel, cap){
   LL <- 0
   k <- 10
+  cap <- -100
   impacts = c('gmax', 'mortality', 'buildDestroyed') #move this outside
   predictions = c('disp_predictor', 'mort_predictor', 'nBD_predictor')
   impacts_observed <- intersect(which(impacts %in% colnames(Y)), which(predictions %in% colnames(Y)))
@@ -631,7 +634,7 @@ Model$IsoWeights<-GetIsoWeights(dir)
 Model$IsoWeights %<>% add_row(iso3='ABC', weights=1)
 
 # Log-likelihood for displacement (ODD) objects
-LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.15,0.03,0.1)){
+LL_Displacement<-function(dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.15,0.03,0.1)){
   
   # Load ODD files
   folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
@@ -667,8 +670,8 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.
       if(expLL) return(cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL))
       else return(cWeight*mean(tLL,na.rm=T))
     }
-    return(colSums(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores)))) # SMC-CHANGE
-    return(sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
+    return(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))) # SMC-CHANGE
+    #return(sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
     
   } else {
   
@@ -700,7 +703,7 @@ LL_Displacement<-function(LL,dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.
 }
 
 # Log-likelihood for building damage (BD) objects
-LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
+LL_Buildings<-function(dir,Model,proposed,AlgoParams,expLL=T){
   # Load BD files
   folderin<-paste0(dir,"IIDIPUS_Input/BDobjects/")
   ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
@@ -736,8 +739,8 @@ LL_Buildings<-function(LL,dir,Model,proposed,AlgoParams,expLL=T){
       else return(cWeight*mean(tLL,na.rm=T))
       
     }
-    return(LL + colSums(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores)))) #SMC-CHANGE
-    return(LL + sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
+    return(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))) #SMC-CHANGE #d-change
+    #return(LL + sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
     
   } else {
     
@@ -777,16 +780,17 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T, epsilon=c(0.15,0.03,0
   if (HP> AlgoParams$ABC) return(-Inf)
   
   # Add the log-likelihood values from the ODD (displacement) objects
-  LL<-LL_Displacement(0,dir,Model,proposed,AlgoParams,expLL=T, epsilon)
+  LL<-LL_Displacement(dir,Model,proposed,AlgoParams,expLL=T, epsilon)
   #print(paste0("LL Displacements = ",LL)) ; sLL<-LL
-  if (any(LL == 0)){ #SMC-CHANGE
-    return(Inf)
-  }
+  #if (any(LL == 0)){ #SMC-CHANGE
+  #  return(Inf)
+  #}
   # Add the log-likelihood values from the BD (building damage) objects
-  LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
+  #LL%<>%LL_Buildings(dir,Model,proposed,AlgoParams,expLL=T)
+  LL_Build<-LL_Buildings(dir, Model, proposed, AlgoParams, expLL=T)
   #print(paste0("LL Building Damages = ",LL-sLL))
   
-  posterior<-LL #+HP
+  posterior<-rbind(LL, LL_Build)#LL #+HP
   # Add Bayesian priors
   if(!is.null(Model$priors)){
     posterior<-posterior+sum(Priors(proposed,Model$priors),na.rm=T)

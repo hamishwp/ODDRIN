@@ -38,7 +38,7 @@ main_simulated <- function(){
   AlgoParams$AllParallel <- TRUE
   AlgoParams$cores <- 6
   AlgoParams$Np <- 10
-  AlgoParams$ABC <- 0.1
+  AlgoParams$ABC <- 1
   AlgoParams$itermax <- 10000
   AlgoParams$epsilon_max <- AlgoParams$epsilon_min
   

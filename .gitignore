@@ -14,9 +14,13 @@ GRID
 
 Helix
 
-IIDIPUS_Input
+IIDIPUS_Input/
 
-IIDIPUS_Results
+IIDIPUS_SimInput/
+
+IIDIPUS_Results/
+
+Unfinished/
 
 OSM_Buildings_Objects
 

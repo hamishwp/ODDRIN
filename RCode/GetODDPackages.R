@@ -11,7 +11,6 @@ GetSourceFiles<-function(packred){
   source('RCode/HAZARDobj.R')
   
   if(!packred){
-  
     # Basic functions:
     source('RCode/Functions.R')
     # Disaster related:
@@ -71,7 +70,7 @@ GetODDPackages<-function(packred){
                         "RColorBrewer", "geosphere","GGally", "wbstats",
                         "countrycode","rworldmap","rworldxtra","chron","ncdf4",
                         "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 
-                        'EnvStats', 'posterior', 'doParallel', 'VGAM')
+                        'EnvStats', 'posterior', 'doParallel', 'VGAM', 'abind')
   
   if(!packred) list.of.packages<-c(list.of.packages,
                                    "codetools","latex2exp",

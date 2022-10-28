@@ -24,6 +24,7 @@
 #   - SampleBuildArea(object@Population,object@buildareapars)
 #   - Extract hazard intensity values (I0)
 #######################################################################
+
 source('RCode/Functions.R')
 source('RCode/Model.R')
 source('RCode/GetPopDemo.R')
@@ -255,7 +256,8 @@ setMethod(f="initialize", signature="ODD",
               .Object@gmax<-DamageData%>%group_by(iso3)%>%
                 summarise(gmax=max(gmax),qualifier=qualifierDisp[which.max(gmax)], #LOOSEEND change to be displacement specific
                           mortality=max(mortality),qualifierMort=qualifierMort[which.max(mortality)],
-                          buildDestroyed=max(buildDestroyed), qualifierBD = qualifierBD[which.max(buildDestroyed)])
+                          buildDam=max(buildDam), qualifierBuildDam = qualifierBuildDam[which.max(buildDam)],
+                          buildDest=max(buildDest), qualifierBuildDest = qualifierBuildDest[which.max(buildDest)])
               .Object@IDPs<-DamageData[,c("sdate","gmax","qualifier")]%>%
                 transmute(date=sdate,IDPs=gmax,qualifier=qualifier)
             } else {
@@ -323,7 +325,10 @@ setMethod(f="initialize", signature="ODD",
             
             linp<-rep(list(1.),length(unique(.Object@cIndies$iso3)))
             names(linp)<-unique(.Object@cIndies$iso3)
-            .Object@modifier<-linp
+            .Object@modifier<-linp #LOOSEEND: setting modifier to 1 by default.
+                                   #The modifier is exponentiated in GetLP() so 
+                                   #shouldn't it be set to 0 by default?
+                                   #Same in BDSim
             
             print("Checking ODD values")
             checkODD(.Object)
@@ -387,12 +392,19 @@ FormParams<-function(ODD,listy){
   return(Params)
 }
 
-setGeneric("DispX", function(ODD,Omega,center, BD_params, LL,Method, epsilon=c(0.15,0.03,0.1))
+setGeneric("DispX", function(ODD,Omega,center, BD_params, LL, sim=F, Method)
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
-setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
-                                   Method=list(Np=20,cores=8,cap=-300), epsilon=c(0.15,0.03,0.1)
+setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F, 
+                                   Method=list(Np=20,cores=8,cap=-300, epsilon=c(0.15,0.03,0.15,0.1), kernel='lognormal')
 ){
+  # ... Function description ...
+  # LL: Returns 'likelihood' if true or data simulated from model if false
+  # Sim: Set to true when generating data for a simulated ODD object. 
+  
+  
+  
+  
   # Extract 0D parameters & speed up loop
   Params<-FormParams(ODD,list(Np=Method$Np,center=center))
   # Income distribution percentiles & extract income percentile  
@@ -405,6 +417,15 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
   BD_data_present <- ifelse(all(is.na(ODD@data$nBuildings)) , F, T)
   # Calculate non-local linear predictor values
   LP<-GetLP(ODD,Omega,Params,Sinc,notnans)
+  
+  #Should move outside loop and resave the odd objects:
+  if(is.null(ODD@gmax$gmax)) {ODD@gmax$gmax <- NaN}
+  if(is.null(ODD@gmax$mortality)) {ODD@gmax$mortality <- NaN}
+  if(is.null(ODD@gmax$buildDestroyed)) {ODD@gmax$buildDestroyed <- NaN}
+  if(is.null(ODD@gmax$qualifier)){ODD@gmax$qualifier <- NA}
+  if(is.null(ODD@gmax$qualifierMort)){ODD@gmax$qualifierMort <- NA}
+  if(is.null(ODD@gmax$qualifierBD)){ODD@gmax$qualifierBD <- NA}
+  
   # Speed things up a little
   hrange<-grep("hazMean",names(ODD),value = T)
   # Function to predict displacement per gridpoint
@@ -450,7 +471,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
         # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
         tPop[3,ind]<-0
         
-        tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_MortDisp[2,ind], D_MortDisp[1,ind], (1-D_MortDisp[1,ind]-D_MortDisp[2,ind]))
+        tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_MortDisp[2,ind], D_MortDisp[1,ind]) 
       } 
     }
     #ensure the total displaced, deceased or remaining does not exceed total population
@@ -461,28 +482,33 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
     
     #otherwise, sample from the model for the number of buildings destroyed:
     #we take locallinp[5] which corresponds to locallinp for the median GDP
-    nBuildings = rep(ODD@data$nBuildings[ij], Method$Np)
-    nBD = rep(0, Method$Np)
+    
+    nBuild <-array(0,c(3, Method$Np)) #row 1 = nDam, #row 2 = nDest, #row 3 = nRem
+    nBuild[3,]= ODD@data$nBuildings[ij]
     for (h in hrange){
       if(is.na(ODD@data[ij,h])) next
       if(h!=hrange[1]) {
-        if(all(nBuildings==0)) break #if no remaining buildings, skip modelling LOOSEEND
+        if(all(nBuild[3,]==0)) break #if no remaining buildings, skip modelling LOOSEEND
       }
 
       I_ij<-ODD@data[ij,h]
       Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[5], error=function(e) NA) #calculate unscaled damage (excluding GDP)
-
-      D_BD = plnorm(Damage, meanlog = Omega$Lambda3$nu, sdlog = Omega$Lambda3$omega)
-
-      moreBD = fBD(nBuildings, D_BD)
-      nBD = nBD + moreBD
-  
-      nBuildings = nBuildings - moreBD
+      
+      D_DestDam <- D_DestDam_calc(Damage, Omega) #First row of D_DestDam is D_Dest, second row is D_Dam
+      
+      n_DamtoDest <- fBD(nBuild[2,], D_DestDam[1,])
+      nBuild[1,] <- nBuild[1, ] + n_DamtoDest
+      nBuild[2,] <- nBuild[2, ] - n_DamtoDest
+      
+      # Accumulate the number of buildings damaged/destroyed, but not the number of buildings remaining
+      nRem <- nBuild[3,]
+      nBuild[3,] <- 0 
+      nBuild <- nBuild + Fbdam(nRem, D_DestDam[2,], D_DestDam[1,]) 
     }
-    return(rbind(tPop[1:2,,drop=FALSE], nBD))
+    return(rbind(tPop[1:2,,drop=FALSE], nBuild[1:2,,drop=FALSE]))
   }
 
-  Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Destroyed
+  Dam<-array(0,c(nrow(ODD),Method$Np,4)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged, Dam[,,4] = Buildings Destroyed
   
   #Method$cores is equal to AlgoParams$NestedCores (changed in Model file)
   if(Method$cores>1) { Dam[notnans,,]<-aperm(simplify2array(mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$cores)), perm=c(3,2,1))
@@ -496,11 +522,12 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
   #   Disp[ind,]%<>%qualifierDisp(qualifier = ODD@gmax$qualifier[ODD@gmax$iso3==c],mu = Omega$mu)
   # }
   
-  funcy<-function(i,LLout=T, epsilon=AlgoParams$epsilon_min, kernel=AlgoParams$kernel, cap=AlgoParams$cap) {
-    tmp<-data.frame(iso3=ODD$ISO3C,IDPs=Dam[,i,1], mort=Dam[,i,2], nBD=Dam[,i,3]) %>% 
+  funcy<-function(i,LLout=T, epsilon=Method$epsilon, kernel=Method$kernel, cap=Method$cap) {
+    tmp<-data.frame(iso3=ODD$ISO3C,IDPs=Dam[,i,1], mort=Dam[,i,2], buildDam=Dam[,i,3], buildDest=Dam[,i,4]) %>% 
       group_by(iso3) %>% summarise(disp_predictor=floor(sum(IDPs,na.rm = T)), 
                                  mort_predictor=floor(sum(mort,na.rm = T)),
-                                 nBD_predictor=floor(sum(nBD,na.rm = T)),
+                                 buildDam_predictor=floor(sum(buildDam,na.rm = T)),
+                                 buildDest_predictor=floor(sum(buildDest,na.rm = T)),
                                  .groups = 'drop_last')
     tmp<-tmp[!is.na(tmp$iso3) & tmp$iso3%in%ODD@gmax$iso3,]
     tmp%<>%merge(ODD@gmax,by="iso3")%>%arrange(desc(gmax))
@@ -511,16 +538,25 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
     }
     return(tmp)
   }
-  if (LL == F & Method$Np == 1){
+  
+  if (sim == T){ 
+    ODD@data$Disp<-Dam[,1,1]  #should this be named data$DispPred or something instead?
+    ODD@data$Mort<-Dam[,1,2]
+    ODD@data$BuildDam<-Dam[,1,3]
+    ODD@data$BuildDest<-Dam[,1,4]
     ODD@predictDisp<-funcy(1,LLout=F) 
-    
     return(ODD)
   }
-
-  outer<-vapply(1:Method$Np,funcy,numeric(length(unique(ODD@gmax$iso3))), epsilon=epsilon)
+  
+  if(LL == F){
+    return(lapply(1:Method$Np, funcy, LLout=F))
+  }
+  
+  outer<-vapply(1:Method$Np,funcy,numeric(length(unique(ODD@gmax$iso3))), epsilon=Method$epsilon)
   outer[outer < (-745)]<- -745
   
-  # Find thebest fit solution
+  
+  # Find the best fit solution, not sure what this is for ...
   if(length(unique(ODD@gmax$iso3))>1) {
     if(LL)  return(log(rowMeans(exp(outer),na.rm=T)))
     MLE<-which.max(log(colSums(exp(outer),na.rm=T)))
@@ -536,7 +572,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F,
   # ODD@data$Disp<-Disp[,MLE]*sum(ODD@gmax$gmax)/mean(sum(Disp[,MLE])) %>% round()
   ODD@data$Disp<-Dam[,MLE,1]  #should this be named data$DispPred or something instead?
   ODD@data$Mort<-Dam[,MLE,2]
-  ODD@data$nBD<-Dam[,MLE,3]
+  ODD@data$BuildDam<-Dam[,MLE,3]
+  ODD@data$BuildDest<-Dam[,MLE,4]
   # I know this is kind of repeating code, but I want the other function as fast as possible
   ODD@predictDisp<-funcy(MLE,LLout=F) 
   

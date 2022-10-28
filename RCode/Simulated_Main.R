@@ -14,12 +14,12 @@ source('RCode/Simulate.R')
 
 
 #Parameterise the model and simulate the data:
-Omega <- list(Lambda1 = list(nu=0,omega=0.5),
-              Lambda2 = list(nu= 1.3, omega=0.9),
-              Lambda3 = list(nu=0.4,omega=0.6),
-              zeta = list(k=2.978697, lambda=1.405539),
-              Pdens = list(M=0.02988616, k = 6.473428),
-              dollar = list(M = -1.051271, k = 6.473428),
+Omega <- list(Lambda1 = list(nu=8,omega=0.4),
+              Lambda2 = list(nu= 9.5, omega=0.6),
+              Lambda3 = list(nu=7.5,omega=0.4),
+              Lambda4 = list(nu=9, omega=0.4),
+              Pdens = list(M=0.01988616, k = 6.473428),
+              dollar = list(M = -0.41271, k = 6.473428),
               theta = list(e=0.2359788),
               eps = list(eps=0.01304351))
 

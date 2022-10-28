@@ -47,11 +47,13 @@ setMethod(f="initialize", signature="ODDSim",
             if(.Object@hazard%in%c("EQ","TC")){
               .Object@gmax<-DamageData%>%group_by(iso3)%>%
                 summarise(gmax=max(gmax),
-                          qualifier=ifelse(all(is.na(gmax)), NA_character_, qualifierDisp[which.max(gmax)]),
-                          mortality=max(mortality),
-                          qualifierMort=ifelse(all(is.na(mortality), NA_character_, qualifierMort[which.max(mortality)])),
-                          buildDestroyed=max(buildDestroyed), 
-                          qualifierBD = ifelse(all(is.na(buildDestroyed), NA_character_, qualifierMort[which.max(mortality)])))
+                          qualifier=ifelse(all(is.na(gmax)), NA_character_, qualifierDisp[which.max(gmax)]))#,
+                          #mortality=max(mortality),
+                          #qualifierMort=ifelse(all(is.na(mortality)), NA_character_, qualifierMort[which.max(mortality)]),
+                          #buildDam=max(buildDam), 
+                          #qualifierBuildDam = ifelse(all(is.na(buildDam)), NA_character_, qualifierBuildDam[which.max(buildDam)]),
+                          #buildDest=max(buildDest), 
+                          #qualifierBuildDest = ifelse(all(is.na(buildDest)), NA_character_, qualifierBuildDest[which.max(buildDest)]))
               .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
                 transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
             } else {
@@ -119,7 +121,7 @@ setMethod(f="initialize", signature="ODDSim",
             .Object@cIndies<-rbind(INFORM,WID)
             .Object@fIndies<-Model$fIndies
             
-            linp<-rep(list(1.),length(unique(.Object@cIndies$iso3)))
+            linp<-rep(list(0.),length(unique(.Object@cIndies$iso3)))
             names(linp)<-unique(.Object@cIndies$iso3)
             .Object@modifier<-linp
             
@@ -155,7 +157,8 @@ setMethod(f="initialize", signature="BDSim",
               if(ODD$nBuildings[ij] == 0){
                 next
               }
-              for (k in 1:ODD$nBuildings[ij]){
+              for (k in 1:min(20, ODD$nBuildings[ij])){ #avoid having more than 20 buildings per grid in simulated data
+                                                        #to keep the computational requirements low
                 Damage %<>% add_row(
                   Longitude = runif(1,lonmin, lonmax),
                   Latitude = runif(1, latmin, latmax),
@@ -187,7 +190,7 @@ setMethod(f="initialize", signature="BDSim",
             print("Accessing OSM to sample building height & area")
             # ExtractOSMbuildVol(.Object,ODD)
             
-            linp<-rep(list(1.),length(unique(ODD@cIndies$iso3)))
+            linp<-rep(list(0.),length(unique(ODD@cIndies$iso3)))
             names(linp)<-unique(ODD@cIndies$iso3)
             .Object@modifier<-linp
             
@@ -208,8 +211,8 @@ simulateEvent <- function(r, I0 = 4.5){
   # - The maximum magnitude varies randomly in [5, 9.3] and the spread in [15, 25]
   # - The earthquake standard deviation in each cell is random uniform in [0.8,1.1]
   
-  maxMag = runif(1, 4.5, 10)
-  sigma = runif(1, 20, 38)
+  maxMag = runif(1, 6, 10)
+  sigma = runif(1, 3, 5)
   r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, n=r@nrows)) 
   r <- r * (maxMag/r@data@max)
   sd <- setValues(r, runif(r@ncols*r@nrows, 0.8,1.1))
@@ -286,7 +289,7 @@ simulateODDSim <- function(miniDam, I0=4.5){
   # OUTPUT: 
   #  - ODDSim: an object of class ODDSim (the simulated equivalent of an ODD object)
   
-  r <- raster(ncol=100, nrow=100, xmn=-0.25, xmx=0.25, ymn=-0.25,ymx=0.25, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  r <- raster(ncol=10, nrow=10, xmn=-0.25, xmx=0.25, ymn=-0.25,ymx=0.25, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   
   lenny = rgeom(1, 0.8) + 1 #generate number of events according to a geometric distribution
   bbox = c(-0.25,-0.25,0.25,0.25) 
@@ -334,7 +337,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   # Rather than simulating eventids and sdates, just take real events but remove all data except 
   # sdate, fdate, eventid, and displacement/mortality qualifiers
   DamageData = GetDisplacements(haz, saved=F, GIDD=F, EMDAT=T)
-  DamageData %<>% head(n=nEvents) %>% mutate(iso3='ABC', gmax=NA, mortality=NA, buildDestroyed=NA, qualifierBD=NA) 
+  DamageData %<>% head(n=nEvents) %>% mutate(iso3='ABC', gmax=NA, mortality=NA) 
   
   ODDpaths = c()
   BDpaths = c()
@@ -370,7 +373,8 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
     intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
-    ODDSim %<>% DispX(Omega, Model$center, Model$BD_params, LL=FALSE, Method=list(Np=1,cores=1,cap=-300, epsilon=AlgoParams$epsilon_min, kernel='lognormal'))
+    ODDSim %<>% DispX(Omega %>% add_Loc_Params(), Model$center, Model$BD_params, LL=FALSE, sim=T,
+                      Method=list(Np=1,cores=1,cap=-300, epsilon=AlgoParams$epsilon_min, kernel='lognormal'))
     
     #take these simulations as the actual values
     ODDSim@gmax <- ODDSim@predictDisp %>% transmute(iso3='ABC',
@@ -378,21 +382,26 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
                                                     qualifier = ifelse(is.na(gmax), NA, 'total'),
                                                     mortality = mort_predictor, #round(rlnormTrunc(1,log(mort_predictor+k), sdlog=0.03, min=k)) - k,
                                                     qualifierMort = ifelse(is.na(mort_predictor), NA, 'total'), 
-                                                    buildDestroyed = nBD_predictor, #round(rlnormTrunc(1,log(nBD_predictor+k), sdlog=0.1, min=k)) - k,
-                                                    qualifierBD = ifelse(is.na(buildDestroyed), NA, 'total'))
+                                                    buildDest = buildDest_predictor, #round(rlnormTrunc(1,log(nBD_predictor+k), sdlog=0.1, min=k)) - k,
+                                                    qualifierBuildDest = ifelse(is.na(buildDest), NA, 'total'),
+                                                    buildDam = buildDam_predictor, 
+                                                    qualifierBuildDam = ifelse(is.na(buildDam), NA, 'total'))
     
     #overwrite ODDSim with the updated
     saveRDS(ODDSim, paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
   }
   for (i in 1:length(BDpaths)){
     BDSim <- readRDS(paste0("IIDIPUS_SimInput/BDobjects/", BDpaths[i]))
-    BDSim %<>% BDX(Omega, Model, LL=FALSE, Method=list(Np=1,cores=1))
+    BDSim %<>% BDX(Omega %>% add_Loc_Params(), Model, LL=FALSE, Method=list(Np=1,cores=1), sim=T)
     #take these simulations as the actual values
     BDSim@data$grading <- BDSim@data$ClassPred
     #switch those affected to 'Damaged' with probability 0.5
     affected <- which(BDSim@data$grading != 'notaffected')
     for (j in affected){
       BDSim@data$grading[j] = ifelse(runif(1)>0.5, BDSim@data$grading[j], 'Damaged')
+    }
+    if(NROW(BDSim@data)>100){
+      BDSim@data <- BDSim@data[1:100,]
     }
     saveRDS(BDSim,paste0("IIDIPUS_SimInput/BDobjects/",BDpaths[i]))
   }
@@ -413,17 +422,17 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
 
 #plot the S-curve for a given parameterisation (and optionally compare to a second)
 plot_S_curves <- function(Omega, Omega_curr=NULL){
-  Intensity <- seq(0,10,0.1)
-  Dfun<-function(I_ij, theta) h_0(I = I_ij,I0 = 4.5,theta = theta)
-  D_extent <- BinR(Dfun(Intensity, theta=Omega$theta) , Omega$zeta)
-  D_MortDisp <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda1$nu, Omega$Lambda1$omega)
-  D_Mort <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda2$nu, Omega$Lambda2$omega)
-  D_Disp <- D_MortDisp - D_Mort
-  D_BD <- plnorm( Dfun(Intensity, theta=Omega$theta), Omega$Lambda3$nu, Omega$Lambda3$omega)
+  Intensity <- seq(4,10,0.1)
+  I0 = 4.5
+  D_MortDisp <- D_MortDisp_calc(h_0(Intensity, I0, Omega$theta), Omega %>% add_Loc_Params())
+  D_Mort <- D_MortDisp[1,]
+  D_Disp <- D_MortDisp[2,]
+  D_DestDam <- D_DestDam_calc(h_0(Intensity, I0, Omega$theta), Omega %>% add_Loc_Params())
+  D_Dest <- D_DestDam[1,]
+  D_Dam <- D_DestDam[2,]
   
-  plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Disp, col='blue');
-  lines(Intensity, D_BD, col='pink', type='l'); lines(Intensity, D_extent, col='green', type='l');
-  
+  plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Disp, col='brown');
+  lines(Intensity, D_Dest, col='blue', type='l'); lines(Intensity, D_Dam, col='cyan', type='l');
   
   if(!is.null(Omega_curr)){
     D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)

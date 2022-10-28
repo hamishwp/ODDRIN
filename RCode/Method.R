@@ -32,8 +32,7 @@ AlgoParams<-list(Np=20, # Number of Monte Carlo particles
                  minVar=1e-4, # Prevent certain parameters from being too sure of themselves
                  t_0 =200,
                  eps = 0.000000001,
-                 epsilon_min=c(0.15,0.03,0.1), #(log) standard deviation of ABC kernels for displacement, mortality, and building destruction
-                 epsilon_max=c(0.45,0.09,0.3), #initial standard deviation of ABC kernels if the kernel is shrunk over time
+                 epsilon=c(0.15,0.03,0.15,0.1),
                  kernel='lognormal', #options are lognormal or loglaplace
                  smc_steps = 200, #Number of steps in the ABC-SMC algorithm
                  smc_Npart = 100, #Number of particles in the ABC-SMC algorithm
@@ -130,7 +129,7 @@ AMCMC <-function(dir, Model, iVals, AlgoParams, unfinished=F, tag=''){
   if (!unfinished){
     xbar_tminus1 <- xPrev
     output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n_x+1)
-    C_0 = diag(0.0001, nrow=n_x) / exp(xPrev) #iVals$COV #
+    C_0 = diag(0.0001, nrow=n_x) / exp(xPrev) #iVals$COV 
     propCOV <- diag(n_x)
     it <- 1
     epsilon <- AlgoParams$epsilon_max
@@ -171,6 +170,9 @@ AMCMC <-function(dir, Model, iVals, AlgoParams, unfinished=F, tag=''){
     xNew <- xPrev
     if (t > AlgoParams$t_0){
       xNew <- multvarNormProp(xt=xPrev, propPars=propCOV)
+      if(any(xNew < -20) || any(xNew > 20)){
+        next
+      }
       epsilon <- AlgoParams$epsilon_min
     } else {
       xNew <- multvarNormProp(xt=xPrev, propPars=C_0)
@@ -433,7 +435,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
   Omega_sample_phys <- array(NA, dim=c(Npart, n_x, steps)) #store sampled parameters on the untransformed space
   W <- array(NA, dim=c(Npart, steps)) #Weights
   d <- array(Inf, dim=c(Npart, M, steps)) #Distances
-  d_full <- array(0, dim=c(Npart, 170, M, steps))
+  d_full <- array(0, dim=c(Npart, 178, M, steps))
   npa=rep(0,Npart) #Number of alive particles (have at least one distance less than the tolerance)
   tolerance = 10000000 #Ensure all initial distances are less than the tolerance
   tolerancetarget=1 #LOOSEEND: need to add in an adaptive stopping rule
@@ -466,10 +468,12 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
       Omega_sample[n,,1] <- HLPrior_sample(Model, AlgoParams)
       Omega_sample_phys[n,,1] <-  Omega_sample[n,,1] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
       #calculate distance
-      d_full[n,,,1] <- -logTarget(dir = dir,Model = Model,
-                           proposed = Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton), 
+      #CHECK HLP
+      dist_sample <- sampleDist(dir = dir,Model = Model,
+                           proposed = Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% add_Loc_Params(), 
                            AlgoParams = AlgoParams)
-      d[n,,1] <- colSums(d_full[n,,,1])
+      d[n,,1] <- logTarget2(dist_sample)
+      #d_full[n,,,1] <- 
     }
     saveRDS(
       list(d=d, 
@@ -477,18 +481,19 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
            omegastore=Omega_sample_phys,
            propCOV=array(0, dim=c(n_x,n_x)),
            W=W, 
-           tolerance = tolerance),
+           tolerancestore = tolerancestore,
+           essstore = essstore),
       paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
     )  
     s_start = 2 # continue the algorithm from s = 2
     n_start = 1
   } else { #Collect relevant information from the unfinished sample
-    output_unfinished <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2022-09-08_070751') #readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",oldtag))
+    output_unfinished <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2022-09-15_121638') #readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",oldtag))
     s_finish = max(which(colSums(!is.na(output_unfinished$omegastore[,1,]))>0)) #find last completed step
     n_finish = max(which(!is.na(output_unfinished$omegastore[,1,s_finish])))
     W[,1:s_finish] <- output_unfinished$W[,1:s_finish]
     d[,,1:s_finish] <- output_unfinished$d[,,1:s_finish]
-    d_full[,,,1:s_finish] <- output_unfinished$d_full[,,,1:s_finish]
+    #d_full[,,,1:s_finish] <- output_unfinished$d_full[,,,1:s_finish]
     propCOV <- output_unfinished$propCOV
     Omega_sample_phys[,,1:s_finish] <- output_unfinished$omegastore[,,1:s_finish]
     for (n in 1:Npart){
@@ -500,7 +505,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     }
     s_start = ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
     n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
-    tolerance = output_unfinished$tolerance
+    tolerance = ifelse(n_finish==Npart, output_unfinished$tolerancestore[s_finish], output_unfinished$tolerancestore[s_finish-1])
   }
   
   for (s in s_start:steps){
@@ -518,8 +523,9 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     if (tolerance<tolerancetarget){
          tolerance<-tolerancetarget
     }
-    tolerancestore<-c(tolerancestore, tolerance)
+    
     essstore<-c(essstore, 1/sum(W[,s-1]^2)) #effective sample size
+    tolerancestore<-c(tolerancestore, tolerance)
     
     #compute the associated weights
     npa_old<-rowSums(d[,,s-1]<toleranceold)
@@ -536,7 +542,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
          Omega_sample[,,s]<-Omega_sample[choice,,s-1] 
          Omega_sample_phys[,,s]<-Omega_sample_phys[choice,,s-1] 
          d[,,s]<-d[choice,,s-1] 
-         d_full[,,,s]<-d_full[choice,,,s-1] 
+         #d_full[,,,s]<-d_full[choice,,,s-1] 
          W[,s]<-rep(1/Npart,Npart) 
     } else { #these will be perturbed later via a MCMC step. 
         Omega_sample[,,s]<-Omega_sample[,,s-1] 
@@ -546,7 +552,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     }
     
     #calculate perturbation covariance based on Filippi et al., 2012
-    tilda_i <- which(rowSums(d[,,s-1]<tolerance)>0) #identify old particles that fall within the new tolerance
+    tilda_i <- which(rowSums(d[,,s-1]<tolerance)>4) #identify old particles that fall within the new tolerance
     Omega_tilda <- Omega_sample[tilda_i,,s-1] 
     W_tilda <- W[tilda_i,s-1]
     W_tilda <- W_tilda/sum(W_tilda) #normalise weights
@@ -562,22 +568,27 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
       print(paste(' Step:', s, ', Particle:', n))
       if(W[n,s]>0){
         Omega_prop <- multvarNormProp(xt=Omega_sample[n,,s], propPars=propCOV) #perturb the proposal
-        d_full_prop <-  -logTarget(dir = dir,Model = Model,
-                              proposed = Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model), 
-                              AlgoParams = AlgoParams) #calculate distance
-        d_prop <- rep(0, AlgoParams$Np)
-        if (d_full_prop[1]==Inf){
+        Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
+        
+        HP<- Model$HighLevelPriors(Omega_prop_phys %>% add_Loc_Params(), Model)
+        if (HP> AlgoParams$ABC) next
+        
+        dist_sample <- sampleDist(dir = dir,Model = Model,
+                                  proposed = Omega_prop_phys %>% add_Loc_Params(), 
+                                  AlgoParams = AlgoParams)
+        d_prop <- logTarget2(dist_sample)
+        
+        if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
           d_prop <- Inf
-        } else {
-          d_prop <- colSums(d_full_prop)
-        }
+        } 
+        
         #calculate the acceptance probability:
         acc <- sum(d_prop<tolerance)/sum(d[n,,s]<tolerance) * modifyAcc(Omega_prop, Omega_sample[n,,s], Model)
         u <- runif(1)
         if(u < acc){
           Omega_sample[n,,s] <- Omega_prop
           Omega_sample_phys[n,,s] <- Omega_sample[n,,s] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
-          d_full[n,,,s] <- d_full_prop
+          #d_full[n,,,s] <- d_full_prop
           d[n,,s] <- d_prop
         }
         saveRDS(
@@ -586,7 +597,8 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
                omegastore=Omega_sample_phys,
                propCOV=propCOV,
                W=W,
-               tolerance=toleranceold),
+               tolerancestore=tolerancestore,
+               essstore=essstore),
           paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
         )
       }
@@ -615,15 +627,6 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     }
     par(mfrow=c(1,1))
     
-    saveRDS(
-      list(d=d, 
-           d_full=d_full,
-           omegastore=Omega_sample_phys,
-           propCOV=propCOV,
-           W=W, 
-           tolerance=tolerance),
-      paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
-    )  
   }
 }
 

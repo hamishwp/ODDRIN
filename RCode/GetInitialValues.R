@@ -143,7 +143,7 @@ HLPrior_sample <- function(Model, AlgoParams){
   sample <- rep(0, n_x)
   while (HP > AlgoParams$ABC){
     sample <- runif(n_x, Model$par_lb, Model$par_ub) #generate proposal on the physical space
-    HP <- Model$HighLevelPriors(relist(sample,skeleton=Model$skeleton),Model) #check higher level prior of the proposal
+    HP <- Model$HighLevelPriors(relist(sample,skeleton=Model$skeleton) %>% add_Loc_Params(),Model) #check higher level prior of the proposal
   }
   return(sample %>% relist(Model$skeleton)%>% Physical2Proposed(Model) %>% unlist())
 }

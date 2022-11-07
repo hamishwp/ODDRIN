@@ -373,7 +373,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
     intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
-    ODDSim %<>% DispX(Omega %>% add_Loc_Params(), Model$center, Model$BD_params, LL=FALSE, sim=T,
+    ODDSim %<>% DispX(Omega %>% addTransfParams(), Model$center, Model$BD_params, LL=FALSE, sim=T,
                       Method=list(Np=1,cores=1,cap=-300, epsilon=AlgoParams$epsilon_min, kernel='lognormal'))
     
     #take these simulations as the actual values
@@ -392,7 +392,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   }
   for (i in 1:length(BDpaths)){
     BDSim <- readRDS(paste0("IIDIPUS_SimInput/BDobjects/", BDpaths[i]))
-    BDSim %<>% BDX(Omega %>% add_Loc_Params(), Model, LL=FALSE, Method=list(Np=1,cores=1), sim=T)
+    BDSim %<>% BDX(Omega %>% addTransfParams(), Model, LL=FALSE, Method=list(Np=1,cores=1), sim=T)
     #take these simulations as the actual values
     BDSim@data$grading <- BDSim@data$ClassPred
     #switch those affected to 'Damaged' with probability 0.5
@@ -422,25 +422,29 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
 
 #plot the S-curve for a given parameterisation (and optionally compare to a second)
 plot_S_curves <- function(Omega, Omega_curr=NULL){
-  Intensity <- seq(4,10,0.1)
+  Intensity <- seq(4,9.5,0.01)
   I0 = 4.5
-  D_MortDisp <- D_MortDisp_calc(h_0(Intensity, I0, Omega$theta), Omega %>% add_Loc_Params())
+  D_MortDisp <- D_MortDisp_calc(h_0(Intensity, I0, Omega$theta), Omega %>% addTransfParams())
   D_Mort <- D_MortDisp[1,]
   D_Disp <- D_MortDisp[2,]
-  D_DestDam <- D_DestDam_calc(h_0(Intensity, I0, Omega$theta), Omega %>% add_Loc_Params())
+  D_DestDam <- D_DestDam_calc(h_0(Intensity, I0, Omega$theta), Omega %>% addTransfParams())
   D_Dest <- D_DestDam[1,]
   D_Dam <- D_DestDam[2,]
+  D_DestDamTot <- colSums(D_DestDam)
   
-  plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Disp, col='brown');
-  lines(Intensity, D_Dest, col='blue', type='l'); lines(Intensity, D_Dam, col='cyan', type='l');
+  plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Disp, col='orange');
+  lines(Intensity, D_Dest, col='blue', type='l', ylim=c(0,1)); lines(Intensity, D_Dam, col='dark green', type='l');
   
   if(!is.null(Omega_curr)){
-    D_extent_sample <- BinR(Dfun(Intensity, theta=Omega_curr$theta) , Omega_curr$zeta)
-    D_MortDisp_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda1$nu, Omega_curr$Lambda1$omega)
-    D_Mort_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda2$nu, Omega_curr$Lambda2$omega)
-    D_BD_sample <- plnorm( Dfun(Intensity, theta=Omega_curr$theta), Omega_curr$Lambda3$nu, Omega_curr$Lambda3$omega)
-    D_Disp_sample <- D_MortDisp_sample - D_Mort_sample
-    lines(Intensity, D_Mort_sample, col='red', lty=2); lines(Intensity, D_Disp_sample, col='blue', lty=2); 
-    lines(Intensity, D_BD_sample, col='pink', lty=2, lwd=2); lines(Intensity, D_extent_sample, col='green', lty=2, lwd=2);
+    
+    D_MortDisp_curr <- D_MortDisp_calc(h_0(Intensity, I0, Omega_curr$theta), Omega_curr %>% addTransfParams())
+    D_Mort_curr <- D_MortDisp_curr[1,]
+    D_Disp_curr <- D_MortDisp_curr[2,]
+    D_DestDam_curr <- D_DestDam_calc(h_0(Intensity, I0, Omega_curr$theta), Omega_curr %>% addTransfParams())
+    D_Dest_curr <- D_DestDam_curr[1,]
+    D_Dam_curr <- D_DestDam_curr[2,]
+    
+    lines(Intensity, D_Mort_curr, col='pink', lty=2); lines(Intensity, D_Disp_curr, col='yellow', lty=2); 
+    lines(Intensity, D_Dest_curr, col='cyan', lty=2, lwd=2); lines(Intensity, D_Dam_curr, col='green', lty=2, lwd=2);
   }
 }

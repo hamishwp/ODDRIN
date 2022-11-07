@@ -53,6 +53,8 @@ LoadLibraries<-function(packred){
   library(posterior)
   library(VGAM)
   library(mvtnorm)
+  library(abind)
+  library(Rmpi)
   
   if(!packred) {
     library(codetools)
@@ -65,12 +67,13 @@ LoadLibraries<-function(packred){
 
 GetODDPackages<-function(packred){
 
-  list.of.packages <- c("ggplot2","sf","tidyverse","openxlsx","pracma",
+  list.of.packages <- c("dplyr", "ggplot2","sf","tidyverse","openxlsx","pracma",
                         "geojsonR", "tiff", "gstat", "mvtnorm",
                         "RColorBrewer", "geosphere","GGally", "wbstats",
                         "countrycode","rworldmap","rworldxtra","chron","ncdf4",
                         "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 
-                        'EnvStats', 'posterior', 'doParallel', 'VGAM', 'abind')
+                        'EnvStats', 'posterior', 'doParallel', 'VGAM', 'abind',
+                        'Rmpi')
   
   if(!packred) list.of.packages<-c(list.of.packages,
                                    "codetools","latex2exp",
@@ -82,7 +85,7 @@ GetODDPackages<-function(packred){
   
   
   new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-  if(length(new.packages)) install.packages(new.packages)
+  if(length(new.packages)) install.packages(new.packages, repos='http://cran.us.r-project.org')
   
   # devtools::install_github('daroczig/fbRads')
   # if(length(list.of.packages[!("openrouteservice" %in% installed.packages()[,"Package"])])){devtools::install_github("rCarto/osrm")}

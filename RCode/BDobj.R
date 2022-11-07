@@ -339,11 +339,11 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   if(!LL) {notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$GDP)) | all(is.na(BD@data[,hrange])))
   } else notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$GDP) | 
                      is.na(BD@data$grading) | all(is.na(BD@data[,hrange]))))
+  BD<-BD[notnans,] ; notnans<-1:nrow(BD)
   if(nrow(BD) ==0){
     if(LL){return(0)}
     else return(BD)
   }
-  BD<-BD[notnans,] ;notnans<-1:nrow(BD)
   # Get parameters for model
   Params<-FormParams(BD,list(Np=Method$Np,center=Model$center))
   # Income distribution percentiles & extract income percentile  
@@ -358,18 +358,24 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   CalcBD<-function(ij){
     iso3c<-BD@data$ISO3C[ij]
     # Calculate local linear predictor (NOTE: is a scalar - we randomly sample one value)
-      locallinp<-tryCatch(sample(LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]],size=Method$Np, replace=TRUE)*
-      LP$Plinp[ij]*LP$linp[[iso3c]],         error=function(e) NA) #LOOSEEND: Assumes that a house is equally likely to be from each income bracket. 
+    locallinp<-tryCatch(sample(LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]],size=Method$Np, replace=TRUE)*
+    LP$Plinp[ij]*LP$linp[[iso3c]],         error=function(e) NA) #LOOSEEND: Assumes that a house is equally likely to be from each income bracket. 
     #locallinp<- LP$dGDP$linp[5]* LP$Plinp[ij]*LP$linp[[iso3c]]
       # if(is.na(locallinp)) stop(ij)
     # locallinp<-1.
     bDamage<-0
     bDamage<-rep(0, Method$Np) #0 = notaffected, 1 = damaged, 2 = destroyed
     ind <- 1:Method$Np
+    first_haz <- T
+    ind_dam <- c()
     for(h in hrange){
       if(length(BD@data[ij,h])==0) next
       if(is.na(BD@data[ij,h])) next
       if(length(ind)==0) break
+      if (h != hrange[1]){
+        ind_dam <- which(bDamage == 1)
+        first_haz <- F
+      }
       # calculate the sampled hazard intensity I_ij
       # I_ij<-rnorm(n = Method$Np,
       #             mean = BD@data[ij,h],
@@ -377,16 +383,17 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
       
       I_ij<-BD@data[ij,h]
       Damage <-fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp
-      D_DestDam <- D_DestDam_calc(Damage, Omega)
-      D_DestDamUnaf <- rbind(D_DestDam, 1-colSums(D_DestDam))
-      bDamage[ind] <- pmax(bDamage[ind], apply(D_DestDamUnaf, 2, sample, x=2:0, size=1, replace=F)) #note that positional matching of arguments to sample
+      D_DestDam <- D_DestDam_calc(Damage, Omega, first_haz, Model$DestDam_modifiers, ind_dam)
+      D_DestDamUnaf <- rbind(D_DestDam, pmax(0,1-colSums(D_DestDam)))
+      
+      bDamage[ind] <- pmax(bDamage[ind], apply(D_DestDamUnaf[,ind, drop=F], 2, sample, x=2:0, size=1, replace=F)) #note that positional matching of arguments to sample
                                                                                           #is overridden by matching names
       ind <- which(bDamage != 2)
     }
     
     bPred <- ifelse(bDamage == 0, 'notaffected', 'Damaged')
 
-    if(LL) return(bPred==BD@data$grading[ij]) #return 1 if correctly classified
+    if(LL) return(bPred!=BD@data$grading[ij]) #return 1 if incorrectly classified
     
     if(sim == F){
       if(BD@data$grading[ij] == 'notaffected'){
@@ -404,8 +411,8 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   notnans <- notnans[!notnans %in% possiblyDamaged_ij]
   
   if(LL) { #return the proportion of buildings correctly classified
-    if(Method$cores>1) {return(colMeans(t(matrix(unlist(mclapply(X = notnans,FUN = CalcBD,mc.cores = Method$cores)),ncol=length(notnans)))))
-    } else return(colMeans(t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans)))))
+    if(Method$cores>1) {return(colSums(t(matrix(unlist(mclapply(X = notnans,FUN = CalcBD,mc.cores = Method$cores)),ncol=length(notnans)))))
+    } else return(colSums(t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans)))))
   }
   # classified<-t(matrix(unlist(mclapply(X = notnans,FUN = predBD,mc.cores = Method$cores)),ncol=length(notnans)))
   classified<-t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans)))
@@ -414,8 +421,9 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   ICN <- colSums(classified=='Incorrectly classified notaffected')
   ICD <- colSums(classified=='Incorrectly classified damaged')
   
-  if(Method$Np != 1){ return(rbind(CCN, CCD, ICN, ICD))} #If Np = 1, assumes that we are simulating data
+  if(sim == F){ return(rbind(CCN, CCD, ICN, ICD))}
   
+  # Therefore, sim==F and LL==F
   # Save into the file
   BD$ClassPred<-classified
   

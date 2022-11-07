@@ -14,16 +14,16 @@ source('RCode/Simulate.R')
 
 
 #Parameterise the model and simulate the data:
-Omega <- list(Lambda1 = list(nu=8,omega=0.4),
-              Lambda2 = list(nu= 9.5, omega=0.6),
-              Lambda3 = list(nu=7.5,omega=0.4),
-              Lambda4 = list(nu=9, omega=0.4),
+Omega <- list(Lambda1 = list(nu=8,omega=4.9),
+              Lambda2 = list(nu= 9.2, omega=5),
+              Lambda3 = list(nu=7.5,omega=4.1),
+              Lambda4 = list(nu=8.7, omega=5),
               Pdens = list(M=0.01988616, k = 6.473428),
               dollar = list(M = -0.41271, k = 6.473428),
               theta = list(e=0.2359788),
               eps = list(eps=0.01304351))
 
-Model$center <- simulateDataSet(100, Omega, Model=Model, dir = dir, outliers = FALSE)
+Model$center <- simulateDataSet(100, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)
 #After generating the simulated data, need to move 'from 'centerings' 
 #and 'ODDobjects' from 'IIDIPUS_SimInput' to 'IIDIPUS_Input'
 
@@ -38,8 +38,9 @@ main_simulated <- function(){
   AlgoParams$AllParallel <- TRUE
   AlgoParams$cores <- 6
   AlgoParams$Np <- 10
-  AlgoParams$ABC <- 1
+  AlgoParams$ABC <- 0
   AlgoParams$itermax <- 10000
+  AlgoParams$smc_Npart <- 1000
   AlgoParams$epsilon_max <- AlgoParams$epsilon_min
   
   iVals<-GetInitVals(dir,Model,AlgoParams)

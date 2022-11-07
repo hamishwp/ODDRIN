@@ -194,19 +194,19 @@ Model$par_lb <- c(6,
                   0,  
                   0,  #PDens M
                   0,  #PDens k
-                  -2,  #dollar M
+                  -3,  #dollar M
                   0,   #dollar k
                   0.1, #theta_e
                   0) #epsilon
 Model$par_ub <- c(9.5, 
-                  8, 
+                  6, 
                   10.5, 
-                  10, 
+                  6, 
                   9.5, 
-                  8, 
+                  6, 
                   10, 
-                  10, 
-                  2, #PDens M
+                  6, 
+                  3, #PDens M
                   10, #PDens k 
                   0,  #dollar M
                   10, #dollar k
@@ -240,6 +240,18 @@ Params=list(
 )
 
 Model$center<-ExtractCentering(dir,haz,T)
+
+#Modifiers to capture change in probability of building damage from 1st to subsequent events
+#e.g. We may expect P(Unaffected -> Damaged) is smaller in an aftershock as the building has been strong
+# enough to survive the first shock. Alternatively, the first shock may weaken the building and make
+# it more susceptible to damage. 
+Model$DestDam_modifiers <- c(1,1,1) 
+# Modifier 1 = change in P(Unaffected -> Damaged or Destroyed) from 1st to subsequent hzds
+# Modifier 2 = change in P(Unaffected -> Destroyed) from 1st to subsequent hzds
+# Modifier 3 = change from P(Unaffected -> Destroyed) in 1st hzd to P(Damaged -> Destroyed) in subsequent hzds
+# Probability is placed to power of modifier. Therefore:
+#     - Modifier > 1 means probability decreases, modifier < 1 means probability increases
+#     - Modifier must be greater than 0 to ensure probabilities less than 1. 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 # Linear predictor calculations (act to modify the expected damage values)
@@ -355,30 +367,51 @@ fDamUnscaled<-function(I,Params,Omega){
   (h_0(I,Params$I0,Omega$theta) * 
      stochastic(Params$Np,Omega$eps)) %>%return()
 }
-add_Loc_Params <- function(Omega, I0=4.5){
+
+addTransfParams <- function(Omega, I0=4.5){
   Omega$Lambda1$loc <- h_0(Omega$Lambda1$nu, I0, Omega$theta)
   Omega$Lambda2$loc <- h_0(Omega$Lambda2$nu, I0, Omega$theta)
   Omega$Lambda3$loc <- h_0(Omega$Lambda3$nu, I0, Omega$theta)
   Omega$Lambda4$loc <- h_0(Omega$Lambda4$nu, I0, Omega$theta)
+  Omega$Lambda1$sd <- (exp(Omega$theta$e*Omega$Lambda1$omega)-1)/6
+  Omega$Lambda2$sd <- (exp(Omega$theta$e*Omega$Lambda2$omega)-1)/6
+  Omega$Lambda3$sd <- (exp(Omega$theta$e*Omega$Lambda3$omega)-1)/6
+  Omega$Lambda4$sd <- (exp(Omega$theta$e*Omega$Lambda4$omega)-1)/6
   return(Omega)
 }
 
 # Calculate Mortality and Displacement probabilities from the unscaled damage
 D_MortDisp_calc <- function(Damage, Omega){
-  
-  D_Mort_and_Disp <- pnorm(Damage, mean = Omega$Lambda1$loc, sd = Omega$Lambda1$omega)
-  D_Mort <- pnorm(Damage, mean = Omega$Lambda2$loc, sd = Omega$Lambda2$omega)
+  D_Mort_and_Disp <- pnorm(Damage, mean = Omega$Lambda1$loc, sd = Omega$Lambda1$sd)
+  D_Mort <- pnorm(Damage, mean = Omega$Lambda2$loc, sd = Omega$Lambda2$sd)
   D_Disp <- D_Mort_and_Disp - D_Mort
   D_Disp <- ifelse(D_Disp<0, 0, D_Disp)
   return(rbind(D_Mort, D_Disp))
 }
 
 # Calculate Mortality and Displacement probabilities from the unscaled damage
-D_DestDam_calc <- function(Damage, Omega){
-  D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$omega)
-  D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$omega)
-  D_Dam <- D_Dest_and_Dam - D_Dest
-  D_Dam <- ifelse(D_Dam<0, 0, D_Dam)
+D_DestDam_calc <- function(Damage, Omega, first_haz=T, DestDam_modifiers = c(1,1,1), ind_dam=c()){
+  if(first_haz == T){
+    D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sd)
+    D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sd)
+    D_Dam <- D_Dest_and_Dam - D_Dest
+    D_Dam <- ifelse(D_Dam<0, 0, D_Dam)
+  } else {
+    if (length(ind_dam>0)){
+      D_Dest_and_Dam <- D_Dam <- D_Dest <- rep(0, length(Damage))
+      D_Dest_and_Dam[-ind_dam] <- pnorm(Damage[-ind_dam], mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sd) ^ DestDam_modifiers[1]
+      D_Dest[-ind_dam] <- pnorm(Damage[-ind_dam], mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sd) ^ DestDam_modifiers[2]
+      D_Dest_and_Dam[ind_dam] <- 1
+      D_Dest[ind_dam] <- pnorm(Damage[ind_dam], mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sd) ^ DestDam_modifiers[3]
+      D_Dam <- D_Dest_and_Dam - D_Dest
+      D_Dam <- ifelse(D_Dam<0, 0, D_Dam)
+    } else {
+      D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sd) ^ DestDam_modifiers[1]
+      D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sd) ^ DestDam_modifiers[2]
+      D_Dam <- D_Dest_and_Dam - D_Dest
+      D_Dam <- ifelse(D_Dam<0, 0, D_Dam)
+    }
+  }
   return(rbind(D_Dest, D_Dam))
 }
 
@@ -408,7 +441,7 @@ Fbdisp<-function(lPopS,Dprime) mapply(rbiny,lPopS,Dprime);
 
 #when working with buildings, D_Disp is equivalent to D_BuildDam and D_Mort is equivalent to D_BuildDest
 rmultinomy<-function(size, D_Disp, D_Mort, D_Rem) rmultinom(n=1, size, c(D_Disp, D_Mort, D_Rem))
-Fbdam<-function(PopRem, D_Disp, D_Mort) mapply(rmultinomy, PopRem, D_Disp, D_Mort, 1-D_Disp-D_Mort)
+Fbdam<-function(PopRem, D_Disp, D_Mort, D_Rem) mapply(rmultinomy, PopRem, D_Disp, D_Mort, D_Rem)
 
 lBD<-function(D_B, BD_params){
   #input: probability of Building Damage D^B
@@ -490,7 +523,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
 
 
 # Get the log-likelihood for the displacement data
-LL_IDP<-function(Y, epsilon, kernel, cap){
+LL_IDP<-function(Y,  kernel_sd, kernel, cap){
   LL <- 0
   k <- 10
   cap <- -100
@@ -501,8 +534,8 @@ LL_IDP<-function(Y, epsilon, kernel, cap){
   if (kernel == 'loglaplace'){ #use a laplace kernel 
     for (i in impacts_observed){
       iso_observed <- which(!is.nan(Y[,impacts[i]]) & !is.nan(Y[,predictions[i]]))
-      LL_impact = log(dloglap(Y[iso_observed,impacts[i]]+k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = epsilon[i], tau = 0.5, log = FALSE)/
-           (1-ploglap(k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = epsilon[i], tau = 0.5, log = FALSE)))
+      LL_impact = log(dloglap(Y[iso_observed,impacts[i]]+k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = kernel_sd[i], tau = 0.5, log = FALSE)/
+           (1-ploglap(k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = kernel_sd[i], tau = 0.5, log = FALSE)))
       if(is.finite(LL_impact)){
         LL = LL + LL_impact
       } else {
@@ -514,7 +547,7 @@ LL_IDP<-function(Y, epsilon, kernel, cap){
     for (i in impacts_observed){
       iso_observed <- which(!is.nan(Y[,impacts[i]]) & !is.nan(Y[,predictions[i]]))
       if(length(iso_observed)==0) {next}
-      LL_impact = log(dlnormTrunc(Y[iso_observed,impacts[i]]+k, log(Y[iso_observed,predictions[i]]+k), sdlog=epsilon[i], min=k))
+      LL_impact = log(dlnormTrunc(Y[iso_observed,impacts[i]]+k, log(Y[iso_observed,predictions[i]]+k), sdlog=kernel_sd[i], min=k))
       if(is.finite(LL_impact)){
         LL = LL + LL_impact
       } else {
@@ -790,7 +823,7 @@ logTarget<-function(dir,Model,proposed,AlgoParams,expLL=T){
   LL_Build<-LL_Buildings(dir, Model, proposed, AlgoParams, expLL=T)
   #print(paste0("LL Building Damages = ",LL-sLL))
   
-  posterior<-rbind(LL, LL_Build)#LL #+HP
+  posterior<-rbind(-LL, LL_Build)#LL #+HP
   # Add Bayesian priors
   if(!is.null(Model$priors)){
     posterior<-posterior+sum(Priors(proposed,Model$priors),na.rm=T)
@@ -936,10 +969,10 @@ sampleBDDist <- function(dir,Model,proposed,AlgoParams,expLL=T){
 }
 
 sampleDist <- function(dir,Model,proposed,AlgoParams,expLL=T){
-  
+
   Disps<-sampleDisps(dir,Model,proposed,AlgoParams)
   BDDists<- sampleBDDist(dir, Model, proposed, AlgoParams, expLL=T)
-  
+
   return(list(Disps=Disps, BDDists=BDDists))
 }
 
@@ -949,7 +982,7 @@ logTarget2 <- function(dist_sample){
     LL = 0 
     nrows <- NROW(Disps_p)
     for (i in 1:nrows){
-      LL = LL + LL_IDP(Disps_p[i,], epsilon = c(0.15,0.03,0.15,0.1), kernel='lognormal', cap=-300)
+      LL = LL + LL_IDP(Disps_p[i,], kernel_sd = c(0.15,0.03,0.15,0.1), kernel='lognormal', cap=-300)
     }
     return(LL)
   }
@@ -963,6 +996,8 @@ logTarget2 <- function(dist_sample){
   LL_BD <- apply(dist_sample$BDDists, 2, sumBD_dists)
   
   dist_tot <- -LL_disps + LL_BD 
+  
+  return(dist_tot)
 }
 
 # -------------------------------------------------------------------------------------------------------------------

@@ -143,15 +143,39 @@ HLPrior_sample <- function(Model, AlgoParams){
   sample <- rep(0, n_x)
   while (HP > AlgoParams$ABC){
     sample <- runif(n_x, Model$par_lb, Model$par_ub) #generate proposal on the physical space
-    HP <- Model$HighLevelPriors(relist(sample,skeleton=Model$skeleton) %>% add_Loc_Params(),Model) #check higher level prior of the proposal
+    HP <- Model$HighLevelPriors(relist(sample,skeleton=Model$skeleton) %>% addTransfParams(),Model) #check higher level prior of the proposal
   }
   return(sample %>% relist(Model$skeleton)%>% Physical2Proposed(Model) %>% unlist())
 }
 
-
-
-
-
+# omega_samples <- array(0, dim=c(500, 14))
+# for (i in 1:500){
+#   print(i)
+#   #Draws a sample from the prior that accepts the Higher Level Prior
+#   #Returns sample on the transformed space (not the physical space)
+#   n_x <- length(unlist(Model$links))
+#   HP <- AlgoParams$ABC + 1
+#   sample <- rep(0, n_x)
+#   while (HP > AlgoParams$ABC){
+#     sample <- runif(n_x, Model$par_lb, Model$par_ub) #generate proposal on the physical space
+#     sample[c(2,4,6,8)] <- (exp(sample[c(2,4,6,8)]*sample[13])-1)/6
+#     HP <- Model$HighLevelPriors(relist(sample,skeleton=Model$skeleton) %>% addTransfParams(),Model) #check higher level prior of the proposal
+#   }
+#   omega_samples[i,] <- sample
+# }
+# 
+# pairs(omega_samples)
+# hist(omega_samples[,2])
+# plot(log(6*omega_samples2[,2]+1)/omega_samples2[,13])
+# 
+# plot(omega_samples[,13], log(6*omega_samples[,8]+1)/omega_samples[,13])
+# 
+# plot(seq(4.5,10, 0.01), pnorm(exp(omega_samples[1,13]*(seq(4.5,10, 0.01) - 4.5))-1,exp(omega_samples[1,13]*(omega_samples[1,3]-4.5))-1,omega_samples[1,4]), type='l')
+# for(i in 59:59){
+#   lines(seq(4.5,10, 0.01), pnorm(exp(omega_samples[i,13]*(seq(4.5,10, 0.01) - 4.5))-1,exp(omega_samples[i,13]*(omega_samples[i,3]-4.5))-1,omega_samples[i,4]), type='l')
+# }
+# plot(omega_samples[,2])
+# Model$par_ub
 
 
 

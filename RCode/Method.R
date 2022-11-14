@@ -316,16 +316,15 @@ abcSmc <- function(AlgoParams, Model, unfinished=F, oldtag=''){
         dist_sample <- sampleDist(dir = dir,Model = Model,
                                   proposed = Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                                   AlgoParams = AlgoParams)
-        d[n,,1] <- logTarget2(dist_sample)
-        
-        d[n,1] <- -logTarget(dir = dir,Model = Model,
-                             proposed = Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton), 
-                             AlgoParams = AlgoParams)
+        d_i <- logTarget2(dist_sample)
+        max_d_i <- max(d_i)
+        d[n,1] <- log(mean(exp(d_i-max_d_i),na.rm=T))+ max_d_i
       } 
     }
     saveRDS(
       list(d=d, 
-           omegastore=Omega_sample_phys,
+           Omega_sample_phys=Omega_sample_phys,
+           Omega_sample=Omega_sample,
            propCOV=array(0, dim=c(n_x,n_x)),
            W=W),
       paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
@@ -334,19 +333,14 @@ abcSmc <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     n_start = 1
   } else { #Collect relevant information from the unfinished sample
     output_unfinished <- readRDS(paste0(dir,"AWS_IIDIPUS_Results/abcsmc_",oldtag))
-    s_finish = max(which(colSums(!is.na(output_unfinished$omegastore[,1,]))>0)) #find last completed step
-    n_finish = max(which(!is.na(output_unfinished$omegastore[,1,s_finish])))
+    s_finish = max(which(colSums(!is.na(output_unfinished$Omega_sample_phys[,1,]))>0)) #find last completed step
+    n_finish = max(which(!is.na(output_unfinished$Omega_sample_phys[,1,s_finish])))
     W[,1:s_finish] <- output_unfinished$W[,1:s_finish]
     d[,1:s_finish] <- output_unfinished$d[,1:s_finish]
     propCOV <- output_unfinished$propCOV
-    Omega_sample_phys[,,1:s_finish] <- output_unfinished$omegastore[,,1:s_finish]
-    for (n in 1:Npart){
-      for (s in 1:s_finish){
-        #convert particles from the physical to the transformed space
-        if(!is.na(Omega_sample_phys[n,1,s]))
-        Omega_sample[n,,s] <- Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% Physical2Proposed(Model) %>% unlist()
-      }
-    }
+    Omega_sample_phys[,,1:s_finish] <- output_unfinished$Omega_sample_phys[,,1:s_finish]
+    Omega_sample[,,1:s_finish] <- output_unfinished$Omega_sample[,,1:s_finish]
+    
     s_start = ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
     n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
   }
@@ -359,7 +353,7 @@ abcSmc <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     start_time <- Sys.time()
     
     #update the tolerance using the 80th quantile
-    tolerance <- quantile(d[,s-1], probs=0.6)
+    tolerance <- quantile(d[,s-1], probs=0.8)
     print(paste('      Step:', s, ', New tolerance is:', tolerance))
     
     #calculate perturbation covariance using Filippi et al., 2012
@@ -385,14 +379,21 @@ abcSmc <- function(AlgoParams, Model, unfinished=F, oldtag=''){
         Omega_sample_phys[n,,s] <-  Omega_sample[n,,s] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% 
                                           Proposed2Physical(Model) %>% unlist() #convert to physical space
         
-        d[n,s] <-  -logTarget(dir = dir,Model = Model,
-                              proposed = Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton), 
-                              AlgoParams = AlgoParams) #calculate distance
+        HP<- Model$HighLevelPriors(Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), Model)
+        if (HP> AlgoParams$ABC) next
+        dist_sample <- sampleDist(dir = dir,Model = Model,
+                                  proposed = Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
+                                  AlgoParams = AlgoParams)
+        d_i <- logTarget2(dist_sample)
+        max_d_i <- max(d_i)
+        d[n,s] <- log(mean(exp(d_i-max_d_i),na.rm=T))+ max_d_i
       }
+      
       W[n,s] <- 1/sum(W[,s-1]*apply(-sweep(Omega_sample[,,s-1], 2, Omega_sample[n,,s]), 1, dmvnorm, mean=rep(0,n_x), sigma=propCOV)) #update weight
       saveRDS(
         list(d=d, 
-             omegastore=Omega_sample_phys,
+             Omega_sample_phys=Omega_sample_phys,
+             Omega_sample=Omega_sample,
              propCOV=propCOV,
              W=W),
         paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
@@ -412,7 +413,8 @@ abcSmc <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     
     saveRDS(
       list(d=d, 
-           omegastore=Omega_sample_phys,
+           Omega_sample_phys=Omega_sample_phys,
+           Omega_sample=Omega_sample,
            propCOV=propCOV,
            W=W),
       paste0(dir,"IIDIPUS_Results/abcsmc_",tag)

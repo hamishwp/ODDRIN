@@ -241,6 +241,11 @@ Params=list(
 
 Model$center<-ExtractCentering(dir,haz,T)
 
+Model$impacts <- list(labels = c('mortality', 'displacement', 'buildDam', 'buildDest'), 
+                      qualifiers = c('qualifierMort', 'qualifierDisp', 'qualifierBuildDam', 'qualifierBuildDest'),
+                      sampled = c('mort_sampled', 'disp_sampled', 'buildDam_sampled', 'buildDest_sampled'),
+                      polynames = c('polyMort', 'polyDisp', 'polyBuildDam', 'polyBuildDest'))
+
 #Modifiers to capture change in probability of building damage from 1st to subsequent events
 #e.g. We may expect P(Unaffected -> Damaged) is smaller in an aftershock as the building has been strong
 # enough to survive the first shock. Alternatively, the first shock may weaken the building and make
@@ -373,10 +378,10 @@ addTransfParams <- function(Omega, I0=4.5){
   Omega$Lambda2$loc <- h_0(Omega$Lambda2$nu, I0, Omega$theta)
   Omega$Lambda3$loc <- h_0(Omega$Lambda3$nu, I0, Omega$theta)
   Omega$Lambda4$loc <- h_0(Omega$Lambda4$nu, I0, Omega$theta)
-  Omega$Lambda1$sd <- (exp(Omega$theta$e*Omega$Lambda1$omega)-1)/6
-  Omega$Lambda2$sd <- (exp(Omega$theta$e*Omega$Lambda2$omega)-1)/6
-  Omega$Lambda3$sd <- (exp(Omega$theta$e*Omega$Lambda3$omega)-1)/6
-  Omega$Lambda4$sd <- (exp(Omega$theta$e*Omega$Lambda4$omega)-1)/6
+  Omega$Lambda1$sd <- exp(Omega$theta$e*Omega$Lambda1$omega)/6
+  Omega$Lambda2$sd <- exp(Omega$theta$e*Omega$Lambda2$omega)/6
+  Omega$Lambda3$sd <- exp(Omega$theta$e*Omega$Lambda3$omega)/6
+  Omega$Lambda4$sd <- exp(Omega$theta$e*Omega$Lambda4$omega)/6
   return(Omega)
 }
 
@@ -524,65 +529,27 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
 
 # Get the log-likelihood for the displacement data
 LL_IDP<-function(Y,  kernel_sd, kernel, cap){
+  
+  if (is.nan(Y[,'observed']) || is.nan(Y[,'sampled'])) return(0)
+  
   LL <- 0
   k <- 10
   cap <- -100
-  impacts = c('gmax', 'mortality', 'buildDam', 'buildDest') #move this outside
-  predictions = c('disp_predictor', 'mort_predictor', 'buildDam_predictor', 'buildDest_predictor')
-  impacts_observed <- intersect(which(impacts %in% colnames(Y)), which(predictions %in% colnames(Y)))
+  #impacts_observed <- intersect(which(Model$impacts$labels %in% colnames(Y)), which(predictions %in% colnames(Y)))
 
   if (kernel == 'loglaplace'){ #use a laplace kernel 
-    for (i in impacts_observed){
-      iso_observed <- which(!is.nan(Y[,impacts[i]]) & !is.nan(Y[,predictions[i]]))
-      LL_impact = log(dloglap(Y[iso_observed,impacts[i]]+k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = kernel_sd[i], tau = 0.5, log = FALSE)/
-           (1-ploglap(k, location.ald = log(Y[iso_observed,predictions[i]]+k), scale.ald = kernel_sd[i], tau = 0.5, log = FALSE)))
-      if(is.finite(LL_impact)){
-        LL = LL + LL_impact
-      } else {
-        LL = LL + cap
-      }
-    }
-  }
-  else if (kernel == 'lognormal'){ #use a lognormal kernel 
-    for (i in impacts_observed){
-      iso_observed <- which(!is.nan(Y[,impacts[i]]) & !is.nan(Y[,predictions[i]]))
-      if(length(iso_observed)==0) {next}
-      LL_impact = log(dlnormTrunc(Y[iso_observed,impacts[i]]+k, log(Y[iso_observed,predictions[i]]+k), sdlog=kernel_sd[i], min=k))
-      if(is.finite(LL_impact)){
-        LL = LL + LL_impact
-      } else {
-        LL = LL + cap
-      }
-    }
-  }
-  else {
+    LL_impact = log(dloglap(Y[,'observed']+k, location.ald = log(Y[,'sampled']+k), scale.ald = kernel_sd[[Y[1,'impact']]], tau = 0.5, log = FALSE)/
+         (1-ploglap(k, location.ald = log(Y[,'sampled']+k), scale.ald = kernel_sd[[Y[1,'impact']]], tau = 0.5, log = FALSE)))
+  } else if (kernel == 'lognormal'){ #use a lognormal kernel 
+    LL_impact = log(dlnormTrunc(Y[,'observed']+k, log(Y[,'sampled']+k), sdlog=kernel_sd[[Y[1,'impact']]], min=k))
+  } else {
     print(paste0("Failed to recognise kernel", AlgoParams$kernel))
     return(-Inf)
   }
-  # if(impacts_observed[1] & !is.na(Y$gmax)){
-  #   #LL_disp <- log(dloglap(Y$gmax+k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
-  #   #  (1-ploglap(k, location.ald = log(Y$disp_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
-  #   LL_disp <- log(dlnormTrunc(Y$gmax+k, log(Y$disp_predictor+k), sdlog=epsilon[1], min=k))
-  #   LL = LL + LL_disp
-  # }
-  # 
-  # if("mortality" %in% colnames(Y) & !is.na(Y$mortality)){
-  #   #LL_mort <- log(dloglap(Y$mortality+k, location.ald = log(Y$mort_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
-  #   #  (1-ploglap(k, location.ald = log(Y$mort_predictor+k), scale.ald = 0.3 * epsilon, tau = 0.5, log = FALSE)))
-  #   LL_mort <- log(dlnormTrunc(Y$mortality+k, log(Y$mort_predictor+k), sdlog=epsilon[2], min=k))
-  #   LL = LL + LL_mort
-  # }
-  # 
-  # if("buildDestroyed" %in% colnames(Y) & !is.na(Y$buildDestroyed)){
-  #   #LL_BD <- log(dloglap(Y$buildDestroyed+k, location.ald = log(Y$nBD_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)/
-  #   #  (1-ploglap(k, location.ald = log(Y$nBD_predictor+k), scale.ald = epsilon, tau = 0.5, log = FALSE)))
-  #   LL_BD <- log(dlnormTrunc(Y$buildDestroyed+k, log(Y$nBD_predictor+k), sdlog=epsilon[3], min=k))
-  #   LL = LL + LL_BD
-  # }
-  #print(LL)
-  if (any(is.infinite(LL))) {
-    inf_id <- which(is.infinite(LL))
-    LL[inf_id] <- cap
+  if(is.finite(LL_impact)){
+    LL = LL + LL_impact
+  } else {
+    LL = LL + cap
   }
   return(LL)
 }
@@ -590,17 +557,25 @@ LL_IDP<-function(Y,  kernel_sd, kernel, cap){
 # Plot to compare normal and laplace kernels
 # xrang <- seq(1000,2000,1)
 # xobs <- 1500
-# lapval <- dloglap(xobs+k, location.ald = log(xrang+k), scale.ald = epsilon[2], tau = 0.5, log = FALSE)/
-#   (1-ploglap(k, location.ald = log(xrang+k), scale.ald = epsilon[1], tau = 0.5, log = FALSE))
-# normval <- dlnormTrunc(xobs+k, log(xrang+k), sdlog=epsilon[1], min=k)
+# lapval <- dloglap(xobs+k, location.ald = log(xrang+k), scale.ald = AlgoParams$kernel_sd$displacement, tau = 0.5, log = FALSE)/
+#   (1-ploglap(k, location.ald = log(xrang+k), scale.ald = AlgoParams$kernel_sd$displacement, tau = 0.5, log = FALSE))
+# normval <- dlnormTrunc(xobs+k, log(xrang+k), sdlog=AlgoParams$kernel_sd$displacement, min=k)
 # plot(xrang, lapval)
 # points(xrang, normval, col='red')
-#q <- 0.975
-#xobs <- 1000
-#qloglap(q, location.ald = log(xobs+k), scale.ald = 0.09, tau = 0.5, log = FALSE)/
+# q <- 0.975
+# xobs <- 1000
+# qloglap(q, location.ald = log(xobs+k), scale.ald = 0.09, tau = 0.5, log = FALSE)/
 #    (1-ploglap(k, location.ald = log(xobs+k), scale.ald = 0.1, tau = 0.5, log = FALSE))
-#qlnormTrunc(q, log(xobs+k), sdlog=epsilon, min=k)
+# qlnormTrunc(q, log(xobs+k), sdlog=epsilon, min=k)
 
+#Plot of bimodal kernel where we have conflicting data sources
+# xrang <- seq(0,1000000,50)
+# xobs1 <- 684800
+# xobs2 <- 237655
+# normval <- 0.5 * dlnormTrunc(xobs1+k, log(xrang+k), sdlog=AlgoParams$kernel_sd$displacement, min=k) + 0.5 * dlnormTrunc(xobs2+k, log(xrang+k), sdlog=AlgoParams$kernel_sd$displacement, min=k)
+# plot(xrang, normval, col='red', type='l', xlab='Displacement', ylab="'Likelihood' assigned to simulated data")
+# abline(v=xobs1)
+# abline(v=xobs2)
 
 LL_beta_apply<-function(b,value,BD_params) do.call(BD_params$functions[[value]],as.list(c(x=b,unlist(BD_params$Params[[value]]))))
 
@@ -681,7 +656,7 @@ LL_Displacement<-function(dir,Model,proposed,AlgoParams,expLL=T){
       ODDy<-readRDS(paste0(folderin,filer))
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       ODDy@fIndies<-Model$fIndies
-      ODDy@gmax%<>%as.data.frame.list()
+      ODDy@impact%<>%as.data.frame.list()
       # Apply DispX
       tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams),
                     error=function(e) NA)
@@ -708,7 +683,7 @@ LL_Displacement<-function(dir,Model,proposed,AlgoParams,expLL=T){
       ODDy<-readRDS(paste0(folderin,ufiles[i]))
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       ODDy@fIndies<-Model$fIndies
-      ODDy@gmax%<>%as.data.frame.list()
+      ODDy@impact%<>%as.data.frame.list()
       # Apply DispX
       tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = T,Method = AlgoParams),
                     error=function(e) NA)
@@ -858,7 +833,7 @@ sampleDisps <-function(dir,Model,proposed,AlgoParams){
       ODDy<-readRDS(paste0(folderin,filer))
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       ODDy@fIndies<-Model$fIndies
-      ODDy@gmax%<>%as.data.frame.list()
+      ODDy@impact%<>%as.data.frame.list()
       # Apply DispX
       tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                     error=function(e) NA)
@@ -976,13 +951,13 @@ sampleDist <- function(dir,Model,proposed,AlgoParams,expLL=T){
   return(list(Disps=Disps, BDDists=BDDists))
 }
 
-logTarget2 <- function(dist_sample){
+logTarget2 <- function(dist_sample, AlgoParams){
   
   sumLLs <- function(Disps_p){
     LL = 0 
     nrows <- NROW(Disps_p)
     for (i in 1:nrows){
-      LL = LL + LL_IDP(Disps_p[i,], kernel_sd = c(0.15,0.03,0.15,0.1), kernel='lognormal', cap=-300)
+      LL = LL + LL_IDP(Disps_p[i,], kernel_sd = AlgoParams$kernel_sd, kernel=AlgoParams$kernel, cap=-300)
     }
     return(LL)
   }

@@ -94,13 +94,14 @@ setClass("ODD",
                    cIndies="data.frame",
                    fIndies="list",
                    IDPs="data.frame", # includes measurement dates
-                   gmax="list",
+                   impact="data.frame",
                    alerts="data.frame",
                    I0="numeric",
                    hazdates="Date",
                    eventid="numeric",
                    predictDisp="data.frame",
-                   modifier="list"),
+                   modifier="list",
+                   polygons="list"),
          contains = "SpatialPixelsDataFrame")
 
 ExtractI0poly<-function(hsdf,ODD){
@@ -253,13 +254,12 @@ setMethod(f="initialize", signature="ODD",
 
 	    if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
             if(.Object@hazard%in%c("EQ","TC")){
-              .Object@gmax<-DamageData%>%group_by(iso3)%>%
-                summarise(gmax=max(gmax),qualifier=qualifierDisp[which.max(gmax)], #LOOSEEND change to be displacement specific
-                          mortality=max(mortality),qualifierMort=qualifierMort[which.max(mortality)],
-                          buildDam=max(buildDam), qualifierBuildDam = qualifierBuildDam[which.max(buildDam)],
-                          buildDest=max(buildDest), qualifierBuildDest = qualifierBuildDest[which.max(buildDest)])
-              .Object@IDPs<-DamageData[,c("sdate","gmax","qualifier")]%>%
-                transmute(date=sdate,IDPs=gmax,qualifier=qualifier)
+              if(!is.null(DamageData$gmax)){
+                .Object@impact<-DamageData%>%group_by(iso3)%>%
+                  summarise(gmax=max(gmax),qualifier=qualifierDisp[which.max(gmax)]) #LOOSEEND change to be displacement specific
+                .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
+                  transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
+              }
             } else {
               # THIS IS READY FOR THE IPM APPROACH FOR MID/LONG DURATION HAZARDS
               .Object@IDPs<-DamageData%>%group_by(sdate)%>%summarise(IDPs=max(IDPs),.groups = 'drop_last')%>%
@@ -283,7 +283,8 @@ setMethod(f="initialize", signature="ODD",
             .Object@bbox <-obj@bbox
             .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
-            .Object@data$nBuildings <- ExtractOSMnBuildings(bbox=bbox)
+            print("Fetching OSM data")
+            .Object@data$nBuildings <- ExtractOSMnBuildings(bbox=bbox, raster(.Object))
             
             print("Adding hazard events")
             # Including minshake polygon per hazard event using getcontour from adehabitatMA package
@@ -396,7 +397,8 @@ setGeneric("DispX", function(ODD,Omega,center, BD_params, LL, sim=F, Method)
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F, 
-                                   Method=list(Np=20,cores=8,cap=-300, kernel_sd=c(0.15,0.03,0.15,0.1), kernel='lognormal')
+                                   Method=list(Np=20,cores=8,cap=-300, 
+                                               kernel_sd=list(displacement=0.15,mortality=0.03,buildDam=0.15,buildDest=0.1), kernel='lognormal')
 ){
   # ... Function description ...
   # LL: Returns 'likelihood' if true or data simulated from model if false
@@ -409,21 +411,11 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
   if(!LL) {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$GDP)))
   } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$GDP) |
-                          !ODD$ISO3C%in%ODD@gmax$iso3))
+                          !ODD$ISO3C%in%ODD@impact$iso3))
   
   BD_data_present <- ifelse(all(is.na(ODD@data$nBuildings)) , F, T)
   # Calculate non-local linear predictor values
   LP<-GetLP(ODD,Omega,Params,Sinc,notnans)
-  
-  #Should move outside loop and resave the odd objects:
-  if(is.null(ODD@gmax$gmax)) {ODD@gmax$gmax <- NaN}
-  if(is.null(ODD@gmax$mortality)) {ODD@gmax$mortality <- NaN}
-  if(is.null(ODD@gmax$buildDam)) {ODD@gmax$buildDam <- NaN}
-  if(is.null(ODD@gmax$buildDest)) {ODD@gmax$buildDest <- NaN}
-  if(is.null(ODD@gmax$qualifier)){ODD@gmax$qualifier <- NA}
-  if(is.null(ODD@gmax$qualifierMort)){ODD@gmax$qualifierMort <- NA}
-  if(is.null(ODD@gmax$qualifierBuildDam)){ODD@gmax$qualifierBuildDam <- NA}
-  if(is.null(ODD@gmax$qualifierBuildDest)){ODD@gmax$qualifierBuildDest <- NA}
   
   # Speed things up a little
   hrange<-grep("hazMean",names(ODD),value = T)
@@ -528,21 +520,40 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   #   Disp[ind,]%<>%qualifierDisp(qualifier = ODD@gmax$qualifier[ODD@gmax$iso3==c],mu = Omega$mu)
   # }
   
+  
   funcy<-function(i,LLout=T, kernel_sd=Method$kernel_sd, kernel=Method$kernel, cap=Method$cap) {
-    tmp<-data.frame(iso3=ODD$ISO3C,IDPs=Dam[,i,1], mort=Dam[,i,2], buildDam=Dam[,i,3], buildDest=Dam[,i,4]) %>% 
-      group_by(iso3) %>% summarise(disp_predictor=floor(sum(IDPs,na.rm = T)), 
-                                 mort_predictor=floor(sum(mort,na.rm = T)),
-                                 buildDam_predictor=floor(sum(buildDam,na.rm = T)),
-                                 buildDest_predictor=floor(sum(buildDest,na.rm = T)),
-                                 .groups = 'drop_last')
-    tmp<-tmp[!is.na(tmp$iso3) & tmp$iso3%in%ODD@gmax$iso3,]
-    tmp%<>%merge(ODD@gmax,by="iso3")%>%arrange(desc(gmax))
-    #print(paste(tmp$nBD_predictor, tmp$buildDestroyed))
-    #print(tmp)
-    if(LLout) {
-      return(LL_IDP(tmp, kernel_sd,  kernel, cap))
+    
+    tmp<-data.frame(iso3=ODD$ISO3C, displacement=Dam[,i,1], mortality=Dam[,i,2], buildDam=Dam[,i,3], buildDest=Dam[,i,4])
+    
+    impact_sampled<-data.frame(iso3 = character(), polygon = numeric(), 
+                               impact = character(), sampled = numeric(), 
+                               observed = numeric(), qualifier = character()) #move outside function?
+    impacts_observed_ii <- which(Model$impacts$labels %in% ODD@impact$impact[which(!is.na(ODD@impact$observed))]) #move outside function? 
+    
+    tmp <- tmp %>% cbind(ODD@data[,Model$impacts$polynames[impacts_observed_ii]])
+    
+    tmp <- tmp[!is.na(tmp$iso3),] #check this on real example?
+  
+    if(LLout) LL <- 0
+    for (j in impacts_observed_ii){
+      tmp_poly <- tmp %>% group_by(!!sym(Model$impacts$polynames[j]), iso3) %>%  #combine this grouping when the polygons are the same across impacts? 
+                          summarise(impact=Model$impacts$labels[j],
+                                    sampled=floor(sum(!!sym(Model$impacts$labels[j]), na.rm = T)),
+                          .groups = 'drop_last') %>% rename(polygon=!!sym(Model$impacts$polynames[j]))
+                          
+      
+      #tmp_poly<-tmp_poly[!is.na(tmp_poly$iso3) & tmp_poly$iso3%in%ODD@impact$iso3,]
+      tmp_poly%<>%merge(ODD@impact %>% filter(impact == Model$impacts$labels[j]),
+                        by=c("iso3", "polygon", "impact")) %>% arrange(desc(observed)) 
+      
+      if(LLout) LL <- LL + LL_IDP(tmp_poly, kernel_sd,  kernel, cap)
+      else {impact_sampled %<>% add_row(tmp_poly)}
     }
-    return(tmp)
+
+    if(LLout) {
+      return(LL)
+    }
+    return(impact_sampled)
   }
   
   if (sim == T){ 
@@ -558,21 +569,26 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     return(lapply(1:Method$Np, funcy, LLout=F))
   }
   
-  outer<-vapply(1:Method$Np,funcy,numeric(length(unique(ODD@gmax$iso3))), kernel_sd=Method$kernel_sd)
+  outer<-vapply(1:Method$Np,funcy,numeric(1), kernel_sd=Method$kernel_sd)
   outer[outer < (-745)]<- -745
   
   
   # Find the best fit solution, not sure what this is for ...
-  if(length(unique(ODD@gmax$iso3))>1) {
-    if(LL)  return(log(rowMeans(exp(outer),na.rm=T)))
-    MLE<-which.max(log(colSums(exp(outer),na.rm=T)))
-  }  else {
-    return(outer) #SMC-CHANGE
-    if(LL)  return(log(mean(exp(outer),na.rm=T)))
-    MLE<-which.max(log(exp(outer)))
-  }
+  # if(NROW(outer)>1) {
+  #   if(LL)  return(log(rowMeans(exp(outer),na.rm=T)))
+  #   MLE<-which.max(log(colSums(exp(outer),na.rm=T)))
+  # }  else {
+  #   return(outer) #SMC-CHANGE
+  #   if(LL)  return(log(mean(exp(outer),na.rm=T)))
+  #   MLE<-which.max(log(exp(outer)))
+  # }
+  
+  if(LL) return(outer)
+  
   if(Method$Np == 1){
     MLE=1
+  } else {
+    MLE <- which.max(outer)
   }
   # Save into ODD object
   # ODD@data$Disp<-Disp[,MLE]*sum(ODD@gmax$gmax)/mean(sum(Disp[,MLE])) %>% round()
@@ -587,11 +603,11 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   
 })
 
-ExtractOSMnBuildings <- function(bbox){
+ExtractOSMnBuildings <- function(bbox, rasterODD){
   #Input: Bounding box of hazard
   #Output: Number of buildings in each of the population grid cells (denoted using ij)
   buildings<-GetOSMbuildings(bbox) #retrieve number of buildings using OpenStreetMaps
-  nBuildings = rasterize(buildings@coords, raster(ODD["Population"]), fun='count')@data@values #LOOSEEND: ensure same rasterization as population
+  nBuildings = rasterize(cbind(buildings$Longitude, buildings$Latitude), rasterODD, fun='count')@data@values #LOOSEEND: ensure same rasterization as population
   nBuildings[is.na(nBuildings)] = 0
   return(nBuildings)
 }

@@ -33,7 +33,7 @@ AlgoParams<-list(Np=20, # Number of Monte Carlo particles
                  t_0 =200,
                  eps = 0.000000001,
                  kernel='lognormal', #options are lognormal or loglaplace
-                 kernel_sd=c(0.15,0.03,0.15,0.1),
+                 kernel_sd=list(displacement=0.15,mortality=0.03,buildDam=0.15,buildDest=0.1),
                  smc_steps = 200, #Number of steps in the ABC-SMC algorithm
                  smc_Npart = 100, #Number of particles in the ABC-SMC algorithm
                  smc_alpha = 0.9,
@@ -316,7 +316,7 @@ abcSmc <- function(AlgoParams, Model, unfinished=F, oldtag=''){
         dist_sample <- sampleDist(dir = dir,Model = Model,
                                   proposed = Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                                   AlgoParams = AlgoParams)
-        d_i <- logTarget2(dist_sample)
+        d_i <- logTarget2(dist_sample, AlgoParams)
         max_d_i <- max(d_i)
         d[n,1] <- log(mean(exp(d_i-max_d_i),na.rm=T))+ max_d_i
       } 
@@ -384,7 +384,7 @@ abcSmc <- function(AlgoParams, Model, unfinished=F, oldtag=''){
         dist_sample <- sampleDist(dir = dir,Model = Model,
                                   proposed = Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                                   AlgoParams = AlgoParams)
-        d_i <- logTarget2(dist_sample)
+        d_i <- logTarget2(dist_sample, AlgoParams)
         max_d_i <- max(d_i)
         d[n,s] <- log(mean(exp(d_i-max_d_i),na.rm=T))+ max_d_i
       }
@@ -481,7 +481,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
       dist_sample <- sampleDist(dir = dir,Model = Model,
                            proposed = Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                            AlgoParams = AlgoParams)
-      d[n,,1] <- logTarget2(dist_sample)
+      d[n,,1] <- logTarget2(dist_sample, AlgoParams)
       #d_full[n,,,1] <- 
     }
     saveRDS(
@@ -585,7 +585,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
         dist_sample <- sampleDist(dir = dir,Model = Model,
                                   proposed = Omega_prop_phys %>% addTransfParams(), 
                                   AlgoParams = AlgoParams)
-        d_prop <- logTarget2(dist_sample)
+        d_prop <- logTarget2(dist_sample, AlgoParams)
         
         if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
           d_prop <- Inf
@@ -676,7 +676,7 @@ initialise_particles <- function(dir, Model, AlgoParams, AlgoResults){
     dist_sample <- sampleDist(dir = dir,Model = Model,
                               proposed = AlgoResults$Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                               AlgoParams = AlgoParams)
-    AlgoResults$d[n,,1] <- logTarget2(dist_sample)
+    AlgoResults$d[n,,1] <- logTarget2(dist_sample, AlgoParams)
     
     end_time <- Sys.time()
     
@@ -723,7 +723,7 @@ initialise_particles_Rmpi <- function(dir, Npart, n_nodes){
     dist_sample <- sampleDist(dir = dir, Model = Model,
                       proposed = Omega_sample_phys_i %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                       AlgoParams = AlgoParams)
-    d_node[n,] = logTarget2(dist_sample) 
+    d_node[n,] = logTarget2(dist_sample, AlgoParams) 
     
     end_time <- Sys.time()
     iter_times <- append(iter_times, end_time-start_time)
@@ -772,7 +772,7 @@ perturb_particles <- function(s, propCOV, AlgoParams, AlgoResults){
       dist_sample <- sampleDist(dir = dir,Model = Model,
                                 proposed = Omega_prop_phys %>% addTransfParams(), 
                                 AlgoParams = AlgoParams)
-      d_prop <- logTarget2(dist_sample)
+      d_prop <- logTarget2(dist_sample, AlgoParams)
       
       if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
         d_prop <- Inf
@@ -811,7 +811,7 @@ perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omeg
       dist_sample <-  sampleDist(dir = dir, Model = Model,
                             proposed = Omega_prop_phys %>% addTransfParams(), 
                             AlgoParams = AlgoParams) 
-      d_prop <- logTarget2(dist_sample)
+      d_prop <- logTarget2(dist_sample, AlgoParams)
       
       acc <- sum(d_prop<tolerance)/sum(d_curr[n,]<tolerance) * modifyAcc(Omega_prop, Omega_curr[n,], Model)
       u <- runif(1)

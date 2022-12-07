@@ -48,8 +48,8 @@ GetOSMbuildings<-function(bbox, BD=NULL,minnum=50,plotty=F,timeout=60){
   # If the bounding box size is too large, separate into pixels
   # I know that an area of 0.01 normally returns decent results
   if(area>0.01){
-    tbuildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout),error=function(e) NULL)
-    if(is.null(tbuildings)) {
+    buildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout),error=function(e) NULL)
+    if(is.null(buildings)) {
       p<-ggplot(as.data.frame(BD),aes(Longitude,Latitude))+stat_bin_2d(drop = F,binwidth = 0.1) #LOOSEEND: will not work if BD has not been passed as an argument
       pg<-(ggplot_build(p))$data[[1]]; rm(p)
       buildings<-data.frame()

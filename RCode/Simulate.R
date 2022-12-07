@@ -30,7 +30,14 @@ setMethod(f="initialize", signature="ODDSim",
                           "p70p100", # top 30% share of Income Distribution
                           "p80p100", # top 20% share of Income Distribution
                           "p90p100" # top 10% share of Income Distribution
-            ))) {
+            ), 
+            impacts <- list(labels = c('mortality', 'displacement', 'buildDam', 'buildDest'), 
+                            qualifiers = c('qualifierMort', 'qualifierDisp', 'qualifierBuildDam', 'qualifierBuildDest'),
+                            sampled = c('mort_sampled', 'disp_sampled', 'buildDam_sampled', 'buildDest_sampled'),
+                            polynames = c('polyMort', 'polyDisp', 'polyBuildDam', 'polyBuildDest'))
+            
+            
+            )) {
             
             if(is.null(lhazSDF)) return(.Object)
             if(!class(lhazSDF[[length(lhazSDF)]])[1]=="HAZARD") return(.Object)
@@ -45,15 +52,20 @@ setMethod(f="initialize", signature="ODDSim",
             
             if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
             if(.Object@hazard%in%c("EQ","TC")){
-              .Object@gmax<-DamageData%>%group_by(iso3)%>%
-                summarise(gmax=max(gmax),
-                          qualifier=ifelse(all(is.na(gmax)), NA_character_, qualifierDisp[which.max(gmax)]))#,
-                          #mortality=max(mortality),
-                          #qualifierMort=ifelse(all(is.na(mortality)), NA_character_, qualifierMort[which.max(mortality)]),
-                          #buildDam=max(buildDam), 
-                          #qualifierBuildDam = ifelse(all(is.na(buildDam)), NA_character_, qualifierBuildDam[which.max(buildDam)]),
-                          #buildDest=max(buildDest), 
-                          #qualifierBuildDest = ifelse(all(is.na(buildDest)), NA_character_, qualifierBuildDest[which.max(buildDest)]))
+              .Object@impact <- data.frame(iso3=character(), polygon=numeric(), impact=character(),
+                                           observed=numeric(), qualifier = character())
+              for (j in 1:length(Model$impacts$labels)){
+                observed_flag <- rbinom(1,1,0.8)
+                while(all(observed_flag==0)){
+                  observed_flag <- rbinom(1,1,0.8)
+                }
+                .Object@impact %<>% add_row(
+                  iso3='ABC',
+                  polygon=1,
+                  impact=Model$impacts$labels[j],
+                  observed= ifelse(observed_flag, 0, NA),
+                  qualifier=ifelse(observed_flag, 'Total', NA_character_))
+              }
               .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
                 transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
             } else {
@@ -124,6 +136,8 @@ setMethod(f="initialize", signature="ODDSim",
             linp<-rep(list(0.),length(unique(.Object@cIndies$iso3)))
             names(linp)<-unique(.Object@cIndies$iso3)
             .Object@modifier<-linp
+            
+            .Object@data[,Model$impacts$polynames] <- 1
             
             print("Checking ODDSim values")
             checkODD(.Object)
@@ -281,7 +295,7 @@ simulateGDP <- function(r){
   
 }
 
-simulateODDSim <- function(miniDam, I0=4.5){ 
+simulateODDSim <- function(miniDam, Model, I0=4.5){ 
   # Simulates hazard, population and GDP data over 120 x 120 grid cells (over the region [-0.5,0.5] x [-0.5,0.5])
   # INPUT: 
   #  - I0: minimum intensity resulting in damage 
@@ -315,7 +329,7 @@ simulateODDSim <- function(miniDam, I0=4.5){
   PopSim <- simulatePopulation(r)
   GDPSim <- simulateGDP(r)
   
-  ODDSim <- new('ODDSim', lhazSDF=lhazdat,DamageData=miniDam, PopSim=PopSim, GDPSim=GDPSim)
+  ODDSim <- new('ODDSim', lhazSDF=lhazdat,DamageData=miniDam, PopSim=PopSim, GDPSim=GDPSim, Model=Model)
   
   return(ODDSim)
 }
@@ -343,7 +357,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   BDpaths = c()
   for(ev in unique(DamageData$eventid)){
     miniDam<-DamageData%>%filter(eventid==ev)
-    ODDSim <- simulateODDSim(miniDam, I0=I0)
+    ODDSim <- simulateODDSim(miniDam, Model, I0=I0)
     if (is.null(ODDSim)){
       next
     }
@@ -374,18 +388,12 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
     ODDSim %<>% DispX(Omega %>% addTransfParams(), Model$center, Model$BD_params, LL=FALSE, sim=T,
-                      Method=list(Np=1,cores=1,cap=-300, epsilon=AlgoParams$epsilon_min, kernel='lognormal'))
+                      Method=list(Np=1,cores=1,cap=-300,  kernel_sd=list(displacement=0.15,mortality=0.03,buildDam=0.15,buildDest=0.1), kernel='lognormal'))
     
     #take these simulations as the actual values
-    ODDSim@gmax <- ODDSim@predictDisp %>% transmute(iso3='ABC',
-                                                    gmax = disp_predictor, #round(rlnormTrunc(1,log(disp_predictor+k), sdlog=0.1, min=k)) - k,
-                                                    qualifier = ifelse(is.na(gmax), NA, 'total'),
-                                                    mortality = mort_predictor, #round(rlnormTrunc(1,log(mort_predictor+k), sdlog=0.03, min=k)) - k,
-                                                    qualifierMort = ifelse(is.na(mort_predictor), NA, 'total'), 
-                                                    buildDest = buildDest_predictor, #round(rlnormTrunc(1,log(nBD_predictor+k), sdlog=0.1, min=k)) - k,
-                                                    qualifierBuildDest = ifelse(is.na(buildDest), NA, 'total'),
-                                                    buildDam = buildDam_predictor, 
-                                                    qualifierBuildDam = ifelse(is.na(buildDam), NA, 'total'))
+    ODDSim@impact <- data.frame(impact=character(), iso3=character(), qualifier=character(), value=numeric())
+    ODDSim@impact <- ODDSim@predictDisp %>% mutate(observed=sampled, qualifier = ifelse(is.na(sampled), NA, 'total'))
+    ODDSim@impact %<>% dplyr::select(-sampled)
     
     #overwrite ODDSim with the updated
     saveRDS(ODDSim, paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))

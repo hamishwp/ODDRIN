@@ -4,176 +4,137 @@
 
 library('openxlsx')
 
-getDisaggImpact <- function(DisaggEvent, disaggregate=FALSE){
+cleanSubNatData <- function(SubNatData){
+  SubNatData$source_date <- openxlsx::convertToDate(SubNatData$source_date)
+  SubNatData$sdate <- openxlsx::convertToDate(SubNatData$sdate)
+  SubNatData$fdate <- openxlsx::convertToDate(SubNatData$fdate)
+  SubNatData$mortality <- as.integer(SubNatData$mortality)
+  SubNatData$displacement <- as.integer(SubNatData$displacement)
+  SubNatData$buildDam <- as.integer(SubNatData$buildDam)
+  SubNatData$buildDest <- as.integer(SubNatData$buildDest)
+  return(SubNatData)
+}
+
+getSubNatImpact <- function(SubNatEvent, subnational=TRUE){
   #Use data from EQ_subnational.xlsx to generate data for 'impact' slot in ODD object
   #   - impact has one row per impact and aggregation level
   #   - also creates polygons_list such that polygons_list[[i]] is the sf_polygon corresponding to the polygon with id i. 
-  #NEED TO EDIT TO ALLOW FOR DOUBLE COUNTING (allow overlaps!)
+
   impact <- data.frame(iso3 = character(), polygon = numeric(), impact = character(), 
-             observed = numeric(), qualifier = character())
+                       observed = numeric(), qualifier = character())
+  
   polygons_list <- list()
+  nans_polygon_id <- c()
   
-  DisaggEvent_national <- DisaggEvent %>% filter(is.na(Region) & is.na(Subregion))
-  
-  if (disaggregate){ #use getbb() to source polygons corresponding to the disaggregated regions
-    DisaggEvent_local <- DisaggEvent %>% filter(!is.na(Region) | !is.na(Subregion))
-    DisaggEvent_local$polygon_name <- paste0(ifelse(is.na(DisaggEvent_local$Subregion),'',paste0(DisaggEvent_local$Subregion,', ')), 
-                                             ifelse(is.na(DisaggEvent_local$Region),'',paste0(DisaggEvent_local$Region,', ')), 
-                                             ifelse(DisaggEvent_local$country=='TOTAL','',DisaggEvent_local$country))
-    
-    DisaggEvent_local %<>% group_by(polygon_name) %>% mutate(polygon_id=cur_group_id()) %>% ungroup()
-    for (i in sort(unique(DisaggEvent_local$polygon_id))){
-      polygon_name <- DisaggEvent_local$polygon_name[which(DisaggEvent_local$polygon_id == i)[1]]
-      polygon <- getbb(polygon_name, format_out='sf_polygon')
-      if(NROW(polygon)>1){
-        print(paste('Multiple Polygons for', polygon_name))
-        polygons_list[[i]] <- polygon[1,]
-      } else {
-        polygons_list[[i]] <- polygon
-      }
-      # plot polygons to make sure they all seem reasonable!
+  if (!subnational){
+    SubNatEvent <- SubNatEvent %>% filter(is.na(Region) & is.na(Subregion))
+    i = 1
+    for (iso3 in unique(SubNatEvent$iso3)){
+      SubNatEvent$polygon_id <- i
+      polygons_list[[i]] <- list(polygon_name=countrycode(iso3, origin='iso3c', destination='country.name'), sf_polygon=NULL)
+      i = i + 1
     }
-    if (length(polygons_list)>0){
-      notnans_polygon_id <- which(sapply(polygons_list, function(x) !is.null(x)))
-      DisaggEvent_local %<>% filter(polygon_id %in% notnans_polygon_id) 
-    } else {
-      DisaggEvent_local <- DisaggEvent_local[0,]
+  } else { 
+    SubNatEvent$polygon_name <- paste0(ifelse(is.na(SubNatEvent$Subregion),'',paste0(SubNatEvent$Subregion,', ')), 
+                                             ifelse(is.na(SubNatEvent$Region),'',paste0(SubNatEvent$Region,', ')), 
+                                             ifelse(SubNatEvent$country=='TOTAL','',SubNatEvent$country))
+    
+    SubNatEvent %<>% group_by(polygon_name) %>% mutate(polygon_id=cur_group_id()) %>% ungroup()
+    
+    for (i in sort(unique(SubNatEvent$polygon_id))){
+      polygon_name <- SubNatEvent$polygon_name[which(SubNatEvent$polygon_id == i)[1]]
+      if (grepl(',', polygon_name, fixed = TRUE)){ #check if subnational by searching for comma in polygon name
+        polygon <- getbb(polygon_name, format_out='sf_polygon')
+        if(NROW(polygon)>1){
+          print(paste('Multiple Polygons for', polygon_name))
+          polygons_list[[i]] <- list(polygon_name = polygon_name, sf_polygon = polygon[1,])
+        } else {
+          polygons_list[[i]] <- list(polygon_name = polygon_name, sf_polygon = polygon)
+        }
+        if (is.null(polygons_list[[i]]$sf_polygon)) nans_polygon_id %<>% append(i)
+        
+        # should plot polygons here to make sure they all seem reasonable!
+      } else {
+        polygons_list[[i]] <- list(polygon_name = polygon_name, sf_polygon = NULL)
+      }
     }
   }
   
+  SubNatEvent %<>% filter(!(polygon_id %in% nans_polygon_id))
+  
   for (impact_type in Model$impacts$labels){
     
-      notnans_national <- which(!is.na(DisaggEvent_national[,impact_type]))
-      notnans_local <- which(!is.na(DisaggEvent_local[,impact_type]))
-        if (NROW(DisaggEvent_national[notnans_national,])>0){
-        national_source_selected <- c()
-        for (i in 1:length(unique(DisaggEvent_national[notnans_national, ]$iso3))){
-          notnans_national_iso3filter <- notnans_national[which(DisaggEvent_national[notnans_national, ]$iso3==unique(DisaggEvent_national[notnans_national,]$iso3)[i])]
-          if (DisaggEvent_national[notnans_national_iso3filter,]$iso3[1]=='TOT'){
-            if ( length(unique(DisaggEvent_national[notnans_national,]$iso3)) > 1 | length(notnans_local) > 0 ){
-              next #don't mix local/national and total observations over the same impact type
-            }
-          }
-          national_source_selected <- append(national_source_selected, notnans_national_iso3filter[1])
-          if(length(notnans_national_iso3filter)>1){ #if multiple different sources
-            if(!all(pull(DisaggEvent_national[notnans_national_iso3filter[1],impact_type])==pull(DisaggEvent_national[notnans_national_iso3filter,impact_type]))){ #if conflicting values, choose one
-              cat(paste('Please select between the following',length(notnans_national_iso3filter),'sources, by typing the id of the chosen source and pressing return.\n',
-                        'If you would like to select more than one source, please separate each id with a comma\n')) #haven't yet included this functionality
-              if(impact_type == 'buildDam' || impact_type == 'buildDest'){
-                print(cbind(id=1:length(notnans_national_iso3filter), DisaggEvent_national[notnans_national_iso3filter,c('event_name', 'source_type', 'source_date', 'building_type', impact_type, 'notes', paste0(impact_type,'_term'))]))
-              } else {
-                print(cbind(id=1:length(notnans_national_iso3filter), DisaggEvent_national[notnans_national_iso3filter,c('event_name', 'source_type', 'source_date', impact_type, 'notes', paste0(impact_type,'_term'))]))
-              }
-              id_chosen <- as.integer(readline(prompt='id selected: '))
-              national_source_selected[length(national_source_selected)] <- notnans_national_iso3filter[id_chosen]
-            }
-          }
+    notnans <- which(!is.na(SubNatEvent[,impact_type]))
+    
+    if (length(notnans)>0){
+      SubNatEvent[notnans,'source_id'] <- notnans
+      sources_selected <- c()
+      SubNatEvent_by_polygon <- SubNatEvent[notnans,] %>% group_by(polygon_id) %>% group_split()
+      for (i in 1:length(SubNatEvent_by_polygon)){
+        if(NROW(SubNatEvent_by_polygon[[i]])==1){#only one source for that polygon
+          sources_selected %<>% append(SubNatEvent_by_polygon[[i]]$source_id) 
+          next
+        } 
+        if(length(unique(pull(SubNatEvent_by_polygon[[i]][,impact_type])))==1){ #all matching, so just take first
+          sources_selected %<>% append(SubNatEvent_by_polygon[[i]]$source_id[1])
+          next
         }
-        if(!disaggregate | (length(notnans_local) == 0)){
-          impact %<>% rbind(DisaggEvent_national[national_source_selected,] %>% dplyr::select(iso3=iso3,observed=!!sym(impact_type), 
-                                                                                              qualifier=paste0(impact_type, '_qualifier')) %>% 
-                              cbind(polygon=0, impact=impact_type)) #need to match polygon = 0 with national in ODD object creation
+        cat(paste('Please select between the following sources, by typing the id of the chosen source and pressing return.\n',
+                  'If you would like to select more than one source, please separate each id with a comma and we will use the mean \n')) 
+        if(impact_type == 'buildDam' || impact_type == 'buildDest'){
+          print(cbind(id=1:NROW(SubNatEvent_by_polygon[[i]]), SubNatEvent_by_polygon[[i]][,c('event_name', 'source_type', 'source_date', 'building_type', impact_type, 'notes', paste0(impact_type,'_term'))]))
+        } else {
+          print(cbind(id=1:NROW(SubNatEvent_by_polygon[[i]]), SubNatEvent_by_polygon[[i]][,c('event_name', 'source_type', 'source_date', impact_type, 'notes', paste0(impact_type,'_term'))]))
         }
+        ids_chosen <- as.integer(unlist(strsplit(readline(prompt='id selected: '), ",")))
+        
+        if (length(ids_chosen)>1){
+          observed_mean <- round(mean(pull(SubNatEvent_by_polygon[[i]][ids_chosen, impact_type])))
+          SubNatEvent[SubNatEvent_by_polygon[[i]]$source_id[ids_chosen[1]], impact_type] <- observed_mean
+          ids_chosen <- ids_chosen[1]
+        } 
+        sources_selected %<>% append(SubNatEvent_by_polygon[[i]]$source_id[ids_chosen])
       }
-      
-      if (disaggregate & (length(notnans_local) > 0)){
-        #find which polygons overlap
-        intersections <- matrix(FALSE, nrow=length(notnans_local), ncol=length(notnans_local))
-        for(i in 1:NROW(intersections)){
-          for(j in 1:i){
-            intersections[i,j] <- st_intersects(polygons_list[[DisaggEvent_local$polygon_id[notnans_local[i]]]], polygons_list[[DisaggEvent_local$polygon_id[notnans_local[j]]]], sparse=FALSE)
-            next
-          }
-        }
-        diag(intersections) <- FALSE
-        #remove overlapping polygons
-        while(!all(!intersections)){ #while there are still overlapping polygons
-          intersect_ij <- which(intersections, arr.ind=TRUE)[1,]
-          
-          #if polygons are equal then choose manually
-          if(DisaggEvent_local$polygon_id[intersect_ij[1]] == DisaggEvent_local$polygon_id[intersect_ij[2]]){
-            cat(paste('Please select between the following sources, by typing the id of the chosen source and pressing return.\n',
-                      'If you would like to select more than one source, please separate each id with a comma\n')) #haven't yet included this functionality
-            if(impact_type == 'buildDam' || impact_type == 'buildDest'){
-              print(cbind(id=1:2, DisaggEvent_local[intersections_ij[1],c('polygon', 'source_type', 'source_date', 'building_type', impact_type, 'notes', paste0(impact_type,'_term'))]))
-            } else {
-              print(cbind(id=1:2, DisaggEvent_local[intersections_ij[2],c('polygon', 'source_type', 'source_date', impact_type, 'notes', paste0(impact_type,'_term'))]))
-            }
-            id_chosen <- as.integer(readline(prompt='id selected: '))
-            source_removed <- intersections_ij[-id_chosen]
-            intersections <- intersections[-source_removed,-source_removed]
-            notnans_local <- notnans_local[-source_removed]
-            next
-          }
-          smaller_ij <- which.min(as.numeric(st_area(polygons_list[[DisaggEvent_local$polygon_id[intersect_ij[1]]]]),st_area(polygons_list[[DisaggEvent_local$polygon_id[intersect_ij[2]]]])))
-          intersections <- intersections[-intersect_ij[smaller_ij],-intersect_ij[smaller_ij]]
-          notnans_local <- notnans_local[-intersect_ij[smaller_ij]]
-        }
-        
-        for (i in notnans_local){
-          impact %<>% rbind(DisaggEvent_local[i,] %>% transmute(iso3=iso3,
-                                                                    observed=!!sym(impact_type), 
-                                                                    qualifier=!!sym(paste0(impact_type, '_qualifier')),
-                                                                    polygon=polygon_id) %>% 
-                              cbind(impact=impact_type)) #need to match polygon = 0 with national in ODD object creation   
-        }
-        
-        #need to match iso3 here
-        if (length(notnans_national)>0){
-          for (iso3_filter in DisaggEvent_national[national_source_selected,]$iso3){
-            impact %<>% rbind(DisaggEvent_national[national_source_selected,] %>% filter(iso3==iso3_filter) %>% 
-                                                  transmute(iso3=iso3,
-                                                            observed=!!sym(impact_type)-sum(impact %>% 
-                                                                                              filter((polygon>0) & (impact== impact_type) & (iso3==iso3_filter)) %>% 
-                                                                                              pull(observed)), 
-                                                                                            qualifier=!!sym(paste0(impact_type, '_qualifier'))) %>% 
-                                cbind(polygon=-1, impact=impact_type))
-            if(any((impact %>% filter(impact==impact_type) %>% pull(observed)) < 0)){
-              warning(paste('Sum of disaggregated impacts for', impact_type ,'is larger than aggregated'))
-            }
-          }
-        }
-     }
+      impact %<>% rbind(SubNatEvent[sources_selected,] %>% transmute(iso3=iso3,
+                                                                         impact=impact_type,
+                                                                         observed=!!sym(impact_type), 
+                                                                         qualifier=!!sym(paste0(impact_type, '_qualifier')), 
+                                                                         polygon=polygon_id))
+    }
   }
   return(list(impact=impact, polygons_list=polygons_list))
 }
 
-updateODDdisagg <- function(dir, ODDy, event_date, disagg_file='IIDIPUS_Input/EQ_Subnational.xlsx'){
+updateODDSubNat <- function(dir, ODDy, event_date, subnat_file='IIDIPUS_Input/EQ_SubNational.xlsx'){
   #Update ODD object using subnational data:
   #   - Edit 'impact' slot to include subnational data from EQ_subnational.xlsx
   #   - Adds columns for each impact (e.g. polyMort) to ODD@data which identifies the polygon to which each pixel belongs for that impact
-  DisaggData <- read.xlsx(paste0(dir, disagg_file), colNames = TRUE , na.strings = c("","NA"))
-  DisaggData$source_date <- openxlsx::convertToDate(DisaggData$source_date)
-  DisaggData$sdate <- openxlsx::convertToDate(DisaggData$sdate)
-  DisaggData$fdate <- openxlsx::convertToDate(DisaggData$fdate)
-  DisaggData$mortality <- as.integer(DisaggData$mortality)
-  DisaggData$displacement <- as.integer(DisaggData$displacement)
-  DisaggData$buildDam <- as.integer(DisaggData$buildDam)
-  DisaggData$buildDest <- as.integer(DisaggData$buildDest)
+  SubNatData <- read.xlsx(paste0(dir, subnat_file), colNames = TRUE , na.strings = c("","NA"))
+  SubNatData %<>% cleanSubNatData()
   
   # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
-  DisaggData_match <- DisaggData %>% group_by(event_name, sdate) %>% filter(
+  SubNatData_match <- SubNatData %>% group_by(event_name, sdate) %>% filter(
     length(intersect(iso3,unique(ODDy@data$ISO3C)))>0,
     sdate > (event_date - 3) &  fdate < (event_date + 3) #NEED TO FIX HAZDATES
   ) %>% group_split()
   
   id_chosen <- 1
-  if(length(DisaggData_match)>1){
-    cat(paste('Please select between the following',length(DisaggData_match),'events by typing the id of the chosen source and pressing return.\n'))
+  if(length(SubNatData_match)>1){
+    cat(paste('Please select between the following',length(SubNatData_match),'events by typing the id of the chosen source and pressing return.\n'))
     print('Desired Event:')
     print(paste('Event Date:', event_date, 'Countries:', paste(unique(ODDy@data$ISO3C[!is.na(ODDy@data$ISO3C)], na.rm=TRUE), collapse=" ")))
-    for(i in 1:length(DisaggData_match)){
+    for(i in 1:length(SubNatData_match)){
       print(paste0('Option ', i,':'))
-      print(DisaggData_match[[i]][1, c('event_name', 'iso3', 'sdate', 'fdate', 'notes')])
+      print(SubNatData_match[[i]][1, c('event_name', 'iso3', 'sdate', 'fdate', 'notes')])
     }
     id_chosen <- as.integer(readline(prompt='id selected: '))
   }
-  DisaggEvent <- DisaggData_match[[id_chosen]]
+  SubNatEvent <- SubNatData_match[[id_chosen]]
   
-  DisaggImpact <- getDisaggImpact(DisaggEvent, disaggregate=TRUE)
-  ODDy@impact <- DisaggImpact$impact
+  SubNatImpact <- getSubNatImpact(SubNatEvent, subnational=TRUE)
+  ODDy@impact <- SubNatImpact$impact
   #ODDy@impact$observed <- as.integer(ODDy@impact$observed)
-  ODDy <- addODDPolygons(ODDy, DisaggImpact$polygons_list)
+  ODDy <- addODDPolygons(ODDy, SubNatImpact$polygons_list)
   
   return(ODDy)
 }
@@ -182,25 +143,35 @@ addODDPolygons <- function(ODDy, polygons_list){
   #Input: 
   #  - ODD Object containing a slot named 'impact' with rows corresponding to different impacts in different polygons
   # Output
-  #  - ODD Object with each pixel labelled with the polygon ids to which it is assigned for each impact
+  #  - 
+  polygons_indexes <- list()
   
-  ODDy@data[,Model$impacts$polynames[which(Model$impacts$labels %in% ODDy@impact$impact)]] <- -1 #initially allocate to the 'remainder'/'total'
-  
-  for (i in 1:NROW(ODDy@impact)){
-    impact_type <- ODDy@impact[i,'impact']
-    polygon_id <- ODDy@impact[i,'polygon']
-    poly_label <- Model$impacts$polynames[which(Model$impacts$labels==impact_type)]
-    if (polygon_id > 0){
-      inPolyInds <- inPoly((polygons_list[[polygon_id]] %>% as("Spatial"))@polygons[[1]], pop = ODDy@coords)
-      if(length(inPolyInds)==0) warning(paste('Region not found in impacted area. Polygon id: ', polygon_id))
-      if(any(ODDy@data[inPolyInds,poly_label] != -1)) warning('Trying to assign a pixel to two polygons for the same impact')
-      ODDy@data[inPolyInds,poly_label] <- ODDy@impact[i,'polygon']
-    } else if (polygon_id == 0){
-      inPolyInds <- which(ODDy@data$ISO3C==ODDy@impact[i,'iso3'])
-      if(any(ODDy@data[inPolyInds,poly_label] != -1)) warning('Trying to assign a pixel to two polygons for the same impact')
-      ODDy@data[inPolyInds,poly_label] <- ODDy@impact[i,'polygon']
+  for (i in 1:length(polygons_list)){
+    if(!grepl(',', polygons_list[[i]]$polygon_name, fixed = TRUE)){ #check if subnational by searching for comma in polygon name
+      if (polygons_list[[i]]$polygon_name=='TOTAL'){
+        inPolyInds <- which(!is.na(tmp$iso3))
+        polygons_indexes[[i]] <- list(name=polygons_list[[i]]$polygon_name, indexes = inPolyInds)
+      } else {
+        iso3 <- countrycode(polygons_list[[i]]$polygon_name, origin='country.name', destination='iso3c')
+        inPolyInds <- which(ODDy@data$ISO3C == iso3)
+        polygons_indexes[[i]] <- list(name=polygons_list[[i]]$polygon_name, indexes = inPolyInds)
+      }
+    } else {
+      if(!is.null(polygons_list[[i]]$sf_polygon)){
+        inPolyInds <- inPoly((polygons_list[[i]]$sf_polygon %>% as("Spatial"))@polygons[[1]], pop = ODDy@coords)
+        if(length(inPolyInds)==0) warning(paste('Region not found in impacted area. Polygon name: ', polygons_list[[i]]$polygon_name))
+        polygons_indexes[[i]] <- list(name=polygons_list[[i]]$polygon_name, indexes = inPolyInds)
+      }
     }
   }
+  #what about national?
+  # } else if (polygon_id == 0){
+  #   inPolyInds <- which(ODDy@data$ISO3C==ODDy@impact[i,'iso3'])
+  #   if(any(ODDy@data[inPolyInds,poly_label] != -1)) warning('Trying to assign a pixel to two polygons for the same impact')
+  #   ODDy@data[inPolyInds,poly_label] <- ODDy@impact[i,'polygon']
+  # }
+
+  ODDy@polygons <- polygons_indexes
   
   return(ODDy)
   
@@ -208,7 +179,6 @@ addODDPolygons <- function(ODDy, polygons_list){
 
 inPoly<-function(poly, pop, iii = 1, sumFn = "sum"){
   #determines which pixels are inside a polygon
-  
   if(any(class(pop) == "SpatialPointsDataFrame") | any(class(pop) == "SpatialPixelsDataFrame")){
     coords<-pop@coords
     data<-pop@data
@@ -239,7 +209,7 @@ inPoly<-function(poly, pop, iii = 1, sumFn = "sum"){
   return(indies = which(insidepoly == "TRUE"))
 }
 
-updateAllODDdisagg <- function(dir){
+updateAllODDSubNat <- function(dir){
   #updates all the current ODD objects:
   
   #folderin<-paste0(dir, "IIDIPUS_Input/ODDobjects/")
@@ -249,39 +219,33 @@ updateAllODDdisagg <- function(dir){
     event_date <- as.Date(substr(ODD_file, 3, 10), "%Y%m%d") #seems to be some issues with ODD@hazdate
     #ODDy <- readRDS(paste0(dir,"IIDIPUS_Input/ODDobjects/", ODD_file))
     ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/IIDIPUS_InputRealwithMort/ODDobjects/', ODD_file))
-    ODDy <- updateODDdisagg(dir, ODDy, event_date)
+    ODDy <- updateODDSubNat(dir, ODDy, event_date)
   }
 }
 
-getDisaggData <- function(dir, haz="EQ",extractedData=T){
+getSubNatData <- function(dir, haz="EQ",extractedData=T){
   #works through EQ_Subnational.xlsx and, for each event, either updates the current ODD object or creates a new ODD object
   
   #existingODDloc <- paste0(dir, "IIDIPUS_Input/ODDobjects/")
   existingODDloc <-"/home/manderso/Documents/GitHub/IIDIPUS_InputRealwithMort/ODDobjects/"
   existingODDfiles <- na.omit(list.files(path=existingODDloc,pattern=Model$haz,recursive = T, ignore.case = T)) 
   
-  disagg_file='IIDIPUS_Input/EQ_Subnational.xlsx'
-  DisaggData <- read.xlsx(paste0(dir, disagg_file), colNames = TRUE , na.strings = c("","NA"))
-  DisaggData$source_date <- openxlsx::convertToDate(DisaggData$source_date)
-  DisaggData$sdate <- openxlsx::convertToDate(DisaggData$sdate)
-  DisaggData$fdate <- openxlsx::convertToDate(DisaggData$fdate)
-  DisaggData$mortality <- as.integer(DisaggData$mortality)
-  DisaggData$displacement <- as.integer(DisaggData$displacement)
-  DisaggData$buildDam <- as.integer(DisaggData$buildDam)
-  DisaggData$buildDest <- as.integer(DisaggData$buildDest)
+  subnat_file='IIDIPUS_Input/EQ_SubNational.xlsx'
+  SubNatData <- read.xlsx(paste0(dir, subnat_file), colNames = TRUE , na.strings = c("","NA"))
+  SubNatData %<>% cleanSubNatData()
   
   # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
-  DisaggDataByEvent <- DisaggData %>% group_by(event_name, sdate) %>% group_split()
+  SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% group_split()
   
   # Extract all building damage points
   Damage<-ExtractBDfiles(dir = dir,haz = haz)
   
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
-  for (i in 1:length(DisaggDataByEvent)){
+  for (i in 1:length(SubNatDataByEvent)){
     
     # Subset displacement and disaster database objects
-    miniDam<-DisaggDataByEvent[[i]]
+    miniDam<-SubNatDataByEvent[[i]]
     
     miniDamSimplified <- data.frame(iso3=unique(miniDam$iso3), sdate=miniDam$sdate[1], 
                           fdate=miniDam$fdate[1], eventid=i, hazard=miniDam$hazard[1])
@@ -299,7 +263,7 @@ getDisaggData <- function(dir, haz="EQ",extractedData=T){
       print('Using the data:')
       print(head(miniDam))
       
-      ODDy <- updateODDdisagg(dir, ODDy, miniDam$sdate[1])
+      ODDy <- updateODDsubnat(dir, ODDy, miniDam$sdate[1])
       #save ODDy here
       next
     }
@@ -323,7 +287,7 @@ getDisaggData <- function(dir, haz="EQ",extractedData=T){
     ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified),error=function(e) NULL)
     if(is.null(ODDy)) {print(paste0("ODD FAIL: ",ev, " ",unique(miniDam$iso3)[1]," ", unique(miniDam$sdate)[1])) ;next}
     
-    ODDy <- updateODDdisagg(dir, ODDy, miniDam$sdate[1])
+    ODDy <- updateODDsubnat(dir, ODDy, miniDam$sdate[1])
     
     # Create a unique hazard event name
     namer<-paste0(ODDy@hazard,
@@ -370,25 +334,21 @@ getDisaggData <- function(dir, haz="EQ",extractedData=T){
 # -----------------------------------------------------------------------------------------
 
 # Loop through and check EQ Disagg Data for errors/issues
-disagg_file='IIDIPUS_Input/EQ_Subnational.xlsx'
-DisaggData <- read.xlsx(paste0(dir, disagg_file), colNames = TRUE , na.strings = c("","NA"))
-DisaggData$source_date <- openxlsx::convertToDate(DisaggData$source_date)
-DisaggData$sdate <- openxlsx::convertToDate(DisaggData$sdate)
-DisaggData$fdate <- openxlsx::convertToDate(DisaggData$fdate)
-DisaggData$mortality <- as.integer(DisaggData$mortality)
-DisaggData$displacement <- as.integer(DisaggData$displacement)
-DisaggData$buildDam <- as.integer(DisaggData$buildDam)
-DisaggData$buildDest <- as.integer(DisaggData$buildDest)
+subnat_file='IIDIPUS_Input/EQ_SubNational.xlsx'
+SubNatData <- read.xlsx(paste0(dir, subnat_file), colNames = TRUE , na.strings = c("","NA"))
+SubNatData %<>% cleanSubNatData()
 
 # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
-DisaggDataByEvent <- DisaggData %>% group_by(event_name, sdate) %>% group_split()
+SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% group_split()
 
-for (i in 1:length(DisaggDataByEvent)){
+for (i in 1:length(SubNatDataByEvent)){
   
-  miniDam<-DisaggDataByEvent[[i]]
+  miniDam<-SubNatDataByEvent[[i]]
   print(miniDam[, c('sdate', 'iso3', 'Region', 'Subregion', 'source', 'mortality', 'displacement', 'buildDam', 'buildDest')])
   miniDamSimplified <- data.frame(iso3=unique(miniDam$iso3), sdate=miniDam$sdate[1], 
                                   fdate=miniDam$fdate[1], eventid=i, hazard=miniDam$hazard[1])
+  #miniDamSimplified$sdate <-miniDamSimplified$sdate - 3
+  #miniDamSimplified$fdate <-miniDamSimplified$fdate + 3
   maxdate<-miniDamSimplified$sdate[1]-5
   if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
   
@@ -409,7 +369,7 @@ for (i in 1:length(DisaggDataByEvent)){
   
   plot(ODDy@data$Population, ODDy@data$nBuildings)
   
-  ODDy <- updateODDdisagg(dir, ODDy, miniDam$sdate[1])
+  ODDy <- updateODDSubNat(dir, ODDy, miniDam$sdate[1])
   
   DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
 }

@@ -521,39 +521,47 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   # }
   
   
-  funcy<-function(i,LLout=T, kernel_sd=Method$kernel_sd, kernel=Method$kernel, cap=Method$cap) {
+  funcy<-function(i,LLout=T, kernel_sd=Method$kernel_sd, kernel=Method$kernel, cap=Method$cap,polygons_indexes=ODD@polygons) {
     
     tmp<-data.frame(iso3=ODD$ISO3C, displacement=Dam[,i,1], mortality=Dam[,i,2], buildDam=Dam[,i,3], buildDest=Dam[,i,4])
+    impact_sampled<-data.frame(polygon = numeric(), impact = character(), sampled = numeric())
     
-    impact_sampled<-data.frame(iso3 = character(), polygon = numeric(), 
-                               impact = character(), sampled = numeric(), 
-                               observed = numeric(), qualifier = character()) #move outside function?
-    impacts_observed_ii <- which(Model$impacts$labels %in% ODD@impact$impact[which(!is.na(ODD@impact$observed))]) #move outside function? 
-    
-    tmp <- tmp %>% cbind(ODD@data[,Model$impacts$polynames[impacts_observed_ii]])
-    
-    tmp <- tmp[!is.na(tmp$iso3),] #check this on real example?
-  
-    if(LLout) LL <- 0
-    for (j in impacts_observed_ii){
-      tmp_poly <- tmp %>% group_by(!!sym(Model$impacts$polynames[j]), iso3) %>%  #combine this grouping when the polygons are the same across impacts? 
-                          summarise(impact=Model$impacts$labels[j],
-                                    sampled=floor(sum(!!sym(Model$impacts$labels[j]), na.rm = T)),
-                          .groups = 'drop_last') %>% rename(polygon=!!sym(Model$impacts$polynames[j]))
-                          
-      
-      #tmp_poly<-tmp_poly[!is.na(tmp_poly$iso3) & tmp_poly$iso3%in%ODD@impact$iso3,]
-      tmp_poly%<>%merge(ODD@impact %>% filter(impact == Model$impacts$labels[j]),
-                        by=c("iso3", "polygon", "impact")) %>% arrange(desc(observed)) 
-      
-      if(LLout) LL <- LL + LL_IDP(tmp_poly, kernel_sd,  kernel, cap)
-      else {impact_sampled %<>% add_row(tmp_poly)}
+    for (polygon_id in unique(ODD@impact$polygon)){
+      polygon_impacts <- ODD@impact$impact[which(ODD@impact$polygon==polygon_id)]
+      for (impact in polygon_impacts){
+        impact_sampled %<>% rbind(data.frame(polygon=polygon_id, 
+                                             impact=impact,
+                                             sampled= floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact], na.rm=T))))
+      }
     }
-
-    if(LLout) {
-      return(LL)
-    }
-    return(impact_sampled)
+    impact_obs_sampled <- merge(impact_sampled, ODD@impact, by=c("polygon", "impact")) %>% arrange(desc(observed)) 
+    if(LLout) return(LL_IDP(impact_obs_sampled, kernel_sd,  kernel, cap))
+    return(impact_obs_sampled)
+    
+    # impacts_observed_ii <- which(Model$impacts$labels %in% ODD@impact$impact[which(!is.na(ODD@impact$observed))]) #move outside function? 
+    # tmp <- tmp %>% cbind(ODD@data[,Model$impacts$polynames[impacts_observed_ii]])
+    # tmp <- tmp[!is.na(tmp$iso3),] #check this on real example?
+    # 
+    # if(LLout) LL <- 0
+    # for (j in impacts_observed_ii){
+    #   tmp_poly <- tmp %>% group_by(!!sym(Model$impacts$polynames[j]), iso3) %>%  #combine this grouping when the polygons are the same across impacts? 
+    #                       summarise(impact=Model$impacts$labels[j],
+    #                                 sampled=floor(sum(!!sym(Model$impacts$labels[j]), na.rm = T)),
+    #                       .groups = 'drop_last') %>% rename(polygon=!!sym(Model$impacts$polynames[j]))
+    #                       
+    #   
+    #   #tmp_poly<-tmp_poly[!is.na(tmp_poly$iso3) & tmp_poly$iso3%in%ODD@impact$iso3,]
+    #   tmp_poly%<>%merge(ODD@impact %>% filter(impact == Model$impacts$labels[j]),
+    #                     by=c("iso3", "polygon", "impact")) %>% arrange(desc(observed)) 
+    #   
+    #   if(LLout) LL <- LL + LL_IDP(tmp_poly, kernel_sd,  kernel, cap)
+    #   else {impact_sampled %<>% add_row(tmp_poly)}
+    # }
+    # 
+    # if(LLout) {
+    #   return(LL)
+    # }
+    # return(impact_sampled)
   }
   
   if (sim == T){ 

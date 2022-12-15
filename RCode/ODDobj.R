@@ -255,8 +255,9 @@ setMethod(f="initialize", signature="ODD",
 	    if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
             if(.Object@hazard%in%c("EQ","TC")){
               if(!is.null(DamageData$gmax)){
+                #If using subnational data, @impact is overwritten separately later in GetSubNationalData.R
                 .Object@impact<-DamageData%>%group_by(iso3)%>%
-                  summarise(gmax=max(gmax),qualifier=qualifierDisp[which.max(gmax)]) #LOOSEEND change to be displacement specific
+                  summarise(gmax=max(gmax),qualifier=qualifierDisp[which.max(gmax)]) 
                 .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
                   transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
               }

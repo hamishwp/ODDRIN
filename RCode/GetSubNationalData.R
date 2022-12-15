@@ -2,7 +2,9 @@
 ### ODDpolys ###
 ################
 
-library('openxlsx')
+
+
+library(openxlsx)
 library(ecochange)
 
 cleanSubNatData <- function(SubNatData){
@@ -18,15 +20,14 @@ cleanSubNatData <- function(SubNatData){
 }
 
 getPolyData <- function(polygon_name, subregion, region, country, iso3){
-  # Inputs:
-  #    - Polygon_name (this is just used to label the polygon at the end)
-  #    - Strings naming the subregion (GADM level 2)/region (GADM level 1)/country (GADM level 0), with any missing set to NA
-  #    - ISO3 code
-  # Output: a list containing
-  #    - $polygon_name set to polygon_name
-  #    - $sf_polygon set to a polygon (that works with the sf package) corresponding to this region, or NULL if polygon not found
+  # Uses getGADM() or getbb() to retrieve the polygon of a region
   # Details:
-  #    - Attempts to use ecochange::getGADM() function but if this fails will attempt the osmdata::getbb() function (need to add this functionality)
+  #    - Polygon_name is just used to label the polygon at the end (and isn't used to actually find the region)
+  #    - Any missing values for subregion or region should be set to NA
+  #    - Returns a list containing:
+  #         - $polygon_name set to polygon_name
+  #         - $sf_polygon set to a polygon (that works with the sf package) corresponding to this region, or NULL if polygon not found
+  #    - Attempts to use ecochange::getGADM() function but if this fails will attempt the osmdata::getbb() function
 
   GADM_level <- 2
   GADM_array <- c(subregion, region, country)
@@ -71,7 +72,7 @@ getPolyData <- function(polygon_name, subregion, region, country, iso3){
 }
 
 getSubNatImpact <- function(SubNatEvent, subnational=TRUE){
-  # Uses data from SubNatEvent to populate the 'impact' slot in ODD object
+  # Uses data from SubNatEvent to populate the 'impact' slot in an ODD object
   #  - Impact has one row per impact and region (and source)
   #  - Also creates polygons_list such that polygons_list[[i]] is the sf_polygon corresponding to the polygon with id i. 
 
@@ -381,62 +382,62 @@ getSubNatData <- function(dir, haz="EQ",extractedData=T, subnat_file= 'EQ_SubNat
 
 # -----------------------------------------------------------------------------------------
 
-# Loop through and check EQ Disagg Data for errors/issues
+# # # Loop through and check EQ Disagg Data for errors/issues
+# # 
+# subnat_file='IIDIPUS_Input/EQ_SubNational.xlsx'
+# SubNatData <- read.xlsx(paste0(dir, subnat_file), colNames = TRUE , na.strings = c("","NA"))
+# SubNatData %<>% cleanSubNatData()
+# 
+# # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
+# SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% group_split()
+# 
+# for (i in 1:length(SubNatDataByEvent)){
+# 
+#   miniDam<-SubNatDataByEvent[[i]]
+#   print(miniDam[, c('sdate', 'iso3', 'Region', 'Subregion', 'source', 'mortality', 'displacement', 'buildDam', 'buildDest')])
+#   miniDamSimplified <- data.frame(iso3=unique(miniDam$iso3), sdate=miniDam$sdate[1],
+#                                   fdate=miniDam$fdate[1], eventid=i, hazard=miniDam$hazard[1])
+#   #miniDamSimplified$sdate <-miniDamSimplified$sdate - 3
+#   #miniDamSimplified$fdate <-miniDamSimplified$fdate + 3
+#   maxdate<-miniDamSimplified$sdate[1]-5
+#   if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
+# 
+#   # Match displacement and hazard data and extract hazard maps
+#   # HazSDF includes SpatialPixelDataFrame object of hazmean & hazsd per date
+#   # (list of each, bbox-cropped to remove M < minmag)
+#   #lhazSDF<-tryCatch(GetDisaster(miniDam,miniDACS),error=function(e) NULL)
+#   lhazSDF<-tryCatch(GetDisaster(miniDamSimplified),error=function(e) NULL)
+#   if(is.null(lhazSDF)) {
+#     print(paste0("Warning: no hazard data found for event ", unique(miniDam$iso3),
+#                  " ",unique(miniDam$hazard), " ", min(miniDam$sdate) ))
+#     next
+#   }
+# 
+#   ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified),error=function(e) NULL)
+#   if(is.null(ODDy)) {print(paste0("ODD FAIL: ",ev, " ",unique(miniDam$iso3)[1]," ", unique(miniDam$sdate)[1])) ;next}
+# 
+# 
+#   plot(ODDy@data$Population, ODDy@data$nBuildings)
+# 
+#   ODDy <- updateODDSubNat(dir, ODDy, miniDam$sdate[1])
+# 
+#   DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
+# }
 
-subnat_file='IIDIPUS_Input/EQ_SubNational.xlsx'
-SubNatData <- read.xlsx(paste0(dir, subnat_file), colNames = TRUE , na.strings = c("","NA"))
-SubNatData %<>% cleanSubNatData()
-
-# Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
-SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% group_split()
-
-for (i in 1:length(SubNatDataByEvent)){
-  
-  miniDam<-SubNatDataByEvent[[i]]
-  print(miniDam[, c('sdate', 'iso3', 'Region', 'Subregion', 'source', 'mortality', 'displacement', 'buildDam', 'buildDest')])
-  miniDamSimplified <- data.frame(iso3=unique(miniDam$iso3), sdate=miniDam$sdate[1], 
-                                  fdate=miniDam$fdate[1], eventid=i, hazard=miniDam$hazard[1])
-  #miniDamSimplified$sdate <-miniDamSimplified$sdate - 3
-  #miniDamSimplified$fdate <-miniDamSimplified$fdate + 3
-  maxdate<-miniDamSimplified$sdate[1]-5
-  if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
-  
-  # Match displacement and hazard data and extract hazard maps
-  # HazSDF includes SpatialPixelDataFrame object of hazmean & hazsd per date 
-  # (list of each, bbox-cropped to remove M < minmag)
-  #lhazSDF<-tryCatch(GetDisaster(miniDam,miniDACS),error=function(e) NULL)
-  lhazSDF<-tryCatch(GetDisaster(miniDamSimplified),error=function(e) NULL)
-  if(is.null(lhazSDF)) {
-    print(paste0("Warning: no hazard data found for event ", unique(miniDam$iso3),
-                 " ",unique(miniDam$hazard), " ", min(miniDam$sdate) ))
-    next
-  }
-  
-  ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified),error=function(e) NULL)
-  if(is.null(ODDy)) {print(paste0("ODD FAIL: ",ev, " ",unique(miniDam$iso3)[1]," ", unique(miniDam$sdate)[1])) ;next}
-  
-  
-  plot(ODDy@data$Population, ODDy@data$nBuildings)
-  
-  ODDy <- updateODDSubNat(dir, ODDy, miniDam$sdate[1])
-  
-  DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
-}
-
-# -------------------------------------------------------------
-
-# Check regions
-
-subnat_file='/home/manderso/Downloads/EQ_SubNational.xlsx'
-SubNatData <- read.xlsx(subnat_file, colNames = TRUE , na.strings = c("","NA"))
-SubNatData %<>% cleanSubNatData()
-
-for (i in 616:660){
-  if(!is.na(SubNatData$Subregion[i]) | !is.na(SubNatData$Region[i])){
-    polyname <- paste(SubNatData$Subregion[i], SubNatData$Region[i])
-    getPolyData(polyname, SubNatData$Subregion[i], SubNatData$Region[i], SubNatData$country[i], SubNatData$iso3[i])
-  }
-}
+# # -------------------------------------------------------------
+# 
+# # Loop through events and check which regions can be found using getbb()/getGADM()
+# 
+# subnat_file='/home/manderso/Downloads/EQ_SubNational.xlsx'
+# SubNatData <- read.xlsx(subnat_file, colNames = TRUE , na.strings = c("","NA"))
+# SubNatData %<>% cleanSubNatData()
+# 
+# for (i in 616:660){
+#   if(!is.na(SubNatData$Subregion[i]) | !is.na(SubNatData$Region[i])){
+#     polyname <- paste(SubNatData$Subregion[i], SubNatData$Region[i])
+#     getPolyData(polyname, SubNatData$Subregion[i], SubNatData$Region[i], SubNatData$country[i], SubNatData$iso3[i])
+#   }
+# }
 
 
 

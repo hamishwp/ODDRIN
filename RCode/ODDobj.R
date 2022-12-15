@@ -283,9 +283,6 @@ setMethod(f="initialize", signature="ODD",
             .Object@bbox <-obj@bbox
             .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
-            print("Fetching OSM data")
-            .Object@data$nBuildings <- ExtractOSMnBuildings(bbox=bbox, raster(.Object))
-            
             print("Adding hazard events")
             # Including minshake polygon per hazard event using getcontour from adehabitatMA package
             .Object%<>%AddHazSDF(lhazSDF)
@@ -330,6 +327,9 @@ setMethod(f="initialize", signature="ODD",
                                    #The modifier is exponentiated in GetLP() so 
                                    #shouldn't it be set to 0 by default?
                                    #Same in BDSim
+            
+            print("Fetching OSM data")
+            .Object@data$nBuildings <- getOSMBuildingCount(.Object)
             
             print("Checking ODD values")
             checkODD(.Object)
@@ -538,30 +538,6 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     if(LLout) return(LL_IDP(impact_obs_sampled, kernel_sd,  kernel, cap))
     return(impact_obs_sampled)
     
-    # impacts_observed_ii <- which(Model$impacts$labels %in% ODD@impact$impact[which(!is.na(ODD@impact$observed))]) #move outside function? 
-    # tmp <- tmp %>% cbind(ODD@data[,Model$impacts$polynames[impacts_observed_ii]])
-    # tmp <- tmp[!is.na(tmp$iso3),] #check this on real example?
-    # 
-    # if(LLout) LL <- 0
-    # for (j in impacts_observed_ii){
-    #   tmp_poly <- tmp %>% group_by(!!sym(Model$impacts$polynames[j]), iso3) %>%  #combine this grouping when the polygons are the same across impacts? 
-    #                       summarise(impact=Model$impacts$labels[j],
-    #                                 sampled=floor(sum(!!sym(Model$impacts$labels[j]), na.rm = T)),
-    #                       .groups = 'drop_last') %>% rename(polygon=!!sym(Model$impacts$polynames[j]))
-    #                       
-    #   
-    #   #tmp_poly<-tmp_poly[!is.na(tmp_poly$iso3) & tmp_poly$iso3%in%ODD@impact$iso3,]
-    #   tmp_poly%<>%merge(ODD@impact %>% filter(impact == Model$impacts$labels[j]),
-    #                     by=c("iso3", "polygon", "impact")) %>% arrange(desc(observed)) 
-    #   
-    #   if(LLout) LL <- LL + LL_IDP(tmp_poly, kernel_sd,  kernel, cap)
-    #   else {impact_sampled %<>% add_row(tmp_poly)}
-    # }
-    # 
-    # if(LLout) {
-    #   return(LL)
-    # }
-    # return(impact_sampled)
   }
   
   if (sim == T){ 
@@ -610,15 +586,6 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   return(ODD)
   
 })
-
-ExtractOSMnBuildings <- function(bbox, rasterODD){
-  #Input: Bounding box of hazard
-  #Output: Number of buildings in each of the population grid cells (denoted using ij)
-  buildings<-GetOSMbuildings(bbox) #retrieve number of buildings using OpenStreetMaps
-  nBuildings = rasterize(cbind(buildings$Longitude, buildings$Latitude), rasterODD, fun='count')@data@values #LOOSEEND: ensure same rasterization as population
-  nBuildings[is.na(nBuildings)] = 0
-  return(nBuildings)
-}
 
 GroupODDyBoundaries<-function(ODDy,boundaries){
   

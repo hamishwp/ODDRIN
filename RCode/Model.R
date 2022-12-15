@@ -90,8 +90,9 @@ Model$links<-list(
   dollar=list(M='ab_bounded',k='ab_bounded'),
   theta=list(e='ab_bounded'), #list(e=0.25),
   # rho=list(A='exp',H='exp'),
-  eps=list(eps='ab_bounded')#,xi='exp')
+  eps=list(eps='ab_bounded')#,#,xi='exp')
   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
+  #lp=list(A='ab_bounded', B='ab_bounded', C='ab_bounded', D='ab_bounded', E='ab_bounded') # add linear predictor terms for testing
 )
 
 # Model$links<-list(
@@ -142,8 +143,9 @@ Model$unlinks<-list(
   dollar=list(M='ab_bounded_inv',k='ab_bounded_inv'),
   theta=list(e='ab_bounded_inv'), #list(e=0.25),
   # rho=list(A='log',H='log'),
-  eps=list(eps='ab_bounded_inv')#,xi='log')
+  eps=list(eps='ab_bounded_inv')#,#,xi='log')
   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
+  #lp=list(A='ab_bounded_inv', B='ab_bounded_inv', C='ab_bounded_inv', D='ab_bounded_inv', E='ab_bounded_inv')
 )
 
 Model$acceptTrans <- list(
@@ -159,8 +161,9 @@ Model$acceptTrans <- list(
   dollar=list(M='ab_bounded_acc',k='ab_bounded_acc'),
   theta=list(e='ab_bounded_acc'), #list(e=0.25),
   # rho=list(A=NA,H=NA),
-  eps=list(eps='ab_bounded_acc')#,xi=NA)
+  eps=list(eps='ab_bounded_acc')#,#,xi=NA)
   # mu=list(muplus=NA,muminus=NA,sigplus=NA,sigminus=NA)
+  #lp=list(A='ab_bounded_acc', B='ab_bounded_acc', C='ab_bounded_acc', D='ab_bounded_acc', E='ab_bounded_acc')
 )
 
 # names(Model$unlinks$beta)[1]<-paste0("HA.NAT.",haz)
@@ -178,8 +181,9 @@ Model$skeleton <- list(
   dollar=list(M=NA,k=NA),
   theta=list(e=NA), #list(e=0.25),
   # rho=list(A=NA,H=NA),
-  eps=list(eps=NA)#,xi=NA)
+  eps=list(eps=NA)#,#,xi=NA)
   # mu=list(muplus=NA,muminus=NA,sigplus=NA,sigminus=NA)
+  #lp=list(A=NA, B=NA, C=NA, D=NA, E=NA)
 )
 # names(Model$skeleton$beta)[1]<-paste0("HA.NAT.",haz)
 
@@ -197,7 +201,9 @@ Model$par_lb <- c(6,
                   -3,  #dollar M
                   0,   #dollar k
                   0.1, #theta_e
-                  0) #epsilon
+                  0)#, #epsilon
+                  #-1, -1, -1, -1, -1) 
+
 Model$par_ub <- c(9.5, 
                   6, 
                   10.5, 
@@ -211,7 +217,8 @@ Model$par_ub <- c(9.5,
                   0,  #dollar M
                   10, #dollar k
                   1, #theta_e
-                  1) #epsilon
+                  1)#, #epsilon
+                  #1, 1, 1, 1, 1) 
 
 
 # Get the binary regression function
@@ -243,8 +250,7 @@ Model$center<-ExtractCentering(dir,haz,T)
 
 Model$impacts <- list(labels = c('mortality', 'displacement', 'buildDam', 'buildDest'), 
                       qualifiers = c('qualifierMort', 'qualifierDisp', 'qualifierBuildDam', 'qualifierBuildDest'),
-                      sampled = c('mort_sampled', 'disp_sampled', 'buildDam_sampled', 'buildDest_sampled'),
-                      polynames = c('polyMort', 'polyDisp', 'polyBuildDam', 'polyBuildDest'))
+                      sampled = c('mort_sampled', 'disp_sampled', 'buildDam_sampled', 'buildDest_sampled'))
 
 #Modifiers to capture change in probability of building damage from 1st to subsequent events
 #e.g. We may expect P(Unaffected -> Damaged) is smaller in an aftershock as the building has been strong
@@ -331,7 +337,13 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans){
     names(linp)<-names(ODD@modifier)
   } else { # National vulnerability
     linp<-rep(list(1.),length(unique(ODD@cIndies$iso3)))
-    names(linp)<-unique(ODD@cIndies$iso3)
+    
+    #testing convergence using dummy linear predictor terms:
+    #for (iso3_filter in unique(ODD@cIndies$iso3)){
+    #  linp_values <- (ODD@cIndies %>% dplyr::filter(iso3==iso3_filter))$value[1:5]
+    #  linp[i] <- sum(exp((linp_values-5) * as.numeric(Omega$lp)))
+    #}
+    #names(linp)<-unique(ODD@cIndies$iso3)
     #llinpred(Params[c(unique(ODD@cIndies$iso3))],Omega$beta,Params$center,Params$fIndies)
   }
   # Calculate possible dollar (GDP*income_dist) linear predictor values

@@ -18,12 +18,12 @@
 ##########################################################################
 
 # Methodology parameters required
-AlgoParams<-list(Np=20, # Number of Monte Carlo particles
-                 cores=8, # Number of parallelised threads per event
+AlgoParams<-list(Np=10, # Number of Monte Carlo particles
+                 cores=6, # Number of parallelised threads per event
                  NestedCores=1, # How many cores are to be used inside the ODD displacement calculations?
-                 AllParallel=F, # Do you want fully-nested (data) parallelisation?
-                 itermax=2000, # How many iterations do we want?
-                 ABC=1, # Approximate Bayesian Computation rejection
+                 AllParallel=T, # Do you want fully-nested (data) parallelisation?
+                 itermax=10000, # How many iterations do we want?
+                 ABC=0, # Approximate Bayesian Computation rejection
                  cap=-300, # if log values are too low, then log(mean(exp(LL)))=-Inf
                  GreedyStart=0, # How sure are we of the initial covariance matrix for accepted parameters? (Larger -> more confident)
                  Pstar=0.234, # Adaptive metropolis acceptance rate
@@ -33,9 +33,9 @@ AlgoParams<-list(Np=20, # Number of Monte Carlo particles
                  t_0 =200,
                  eps = 0.000000001,
                  kernel='lognormal', #options are lognormal or loglaplace
-                 kernel_sd=list(displacement=0.15,mortality=0.03,buildDam=0.15,buildDest=0.1),
+                 kernel_sd=list(displacement=0.15,mortality=0.03,buildDam=0.15,buildDest=0.1), 
                  smc_steps = 200, #Number of steps in the ABC-SMC algorithm
-                 smc_Npart = 100, #Number of particles in the ABC-SMC algorithm
+                 smc_Npart = 1000, #Number of particles in the ABC-SMC algorithm
                  smc_alpha = 0.9,
                  n_nodes=1
                  )
@@ -45,7 +45,7 @@ if(is.null(AlgoParams$AllParallel)){
   } else AlgoParams$AllParallel<-F
 }
 # Choose the parameterisation algorithm - the string must match the function name exactly
-Algorithm<-"AMCMC" # "NelderMeadOptim", "AMCMC"
+Algorithm<- "delmoral_parallel" # "NelderMeadOptim", "AMCMC"
 
 # Metropolis-Hastings proposal distribution, given old values and covariance matrix
 multvarNormProp <- function(xt, propPars){
@@ -497,7 +497,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     s_start = 2 # continue the algorithm from s = 2
     n_start = 1
   } else { #Collect relevant information from the unfinished sample
-    output_unfinished <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2022-09-15_121638') #readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",oldtag))
+    output_unfinished <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",oldtag))
     s_finish = max(which(colSums(!is.na(output_unfinished$omegastore[,1,]))>0)) #find last completed step
     n_finish = max(which(!is.na(output_unfinished$omegastore[,1,s_finish])))
     W[,1:s_finish] <- output_unfinished$W[,1:s_finish]
@@ -514,7 +514,9 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     }
     s_start = ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
     n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
-    tolerance = ifelse(n_finish==Npart, output_unfinished$tolerancestore[s_finish], output_unfinished$tolerancestore[s_finish-1])
+    tolerancestore=tolerancestore
+    essstore=essstore
+    tolerance = ifelse(n_finish==Npart, output_unfinished$tolerancestore[length(output_unfinished$tolerancestore)], output_unfinished$tolerancestore[length(output_unfinished$tolerancestore)-1])
   }
   
   for (s in s_start:steps){
@@ -615,7 +617,7 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     
     n_start = 1
     
-    par(mfrow=c(4,4))
+    par(mfrow=c(4,5))
     for (i in 1:n_x){
       plot(rep(1:s,each=Npart),Omega_sample_phys[,i,1:s], ylim=c(min(Omega_sample_phys[,i,1:s], unlist(Omega)[i]), max(Omega_sample_phys[,i,1:s], unlist(Omega)[i])),
            main=names(unlist(Omega))[i], xlab='step', ylab='')

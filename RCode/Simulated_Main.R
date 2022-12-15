@@ -21,13 +21,13 @@ Omega <- list(Lambda1 = list(nu=8,omega=4.9),
               Pdens = list(M=0.01988616, k = 6.473428),
               dollar = list(M = -0.41271, k = 6.473428),
               theta = list(e=0.2359788),
-              eps = list(eps=0.01304351))
+              eps = list(eps=0.01304351) )#,
+              #lp = list(A=-0.9,B=0.5, C=0.2, D=0, E=-0.3)) #include linear predictor terms for testing
 
 Model$center <- simulateDataSet(100, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)
+
 #After generating the simulated data, need to move 'from 'centerings' 
 #and 'ODDobjects' from 'IIDIPUS_SimInput' to 'IIDIPUS_Input'
-
-
 
 main_simulated <- function(){
   #ODDpaths<-ExtractData(Model$haz,dir,extractedData)
@@ -35,28 +35,14 @@ main_simulated <- function(){
   
   # Parameterise... Here we go!
   
-  AlgoParams$AllParallel <- TRUE
-  AlgoParams$cores <- 6
-  AlgoParams$Np <- 10
-  AlgoParams$ABC <- 0
-  AlgoParams$itermax <- 10000
-  AlgoParams$smc_Npart <- 1000
-  AlgoParams$epsilon_max <- AlgoParams$epsilon_min
-  
   iVals<-GetInitVals(dir,Model,AlgoParams)
-  AlgoParams$ABC <- 1
-  output <- AMCMC(dir=dir,
+
+  output <- delmoral_parallel(dir=dir,
                       Model=Model,
                       iVals=iVals,
                       AlgoParams=AlgoParams, 
                       unfinished=F)
   
-  # output <- AMCMC(dir=dir,
-  #                 Model=Model,
-  #                 iVals=iVals,
-  #                 AlgoParams=AlgoParams, 
-  #                 unfinished=T, 
-  #                 tag='2022-06-22_141021')
   
   Omega_MAP = output$PhysicalValues
   

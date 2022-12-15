@@ -33,8 +33,7 @@ setMethod(f="initialize", signature="ODDSim",
             ), 
             impacts <- list(labels = c('mortality', 'displacement', 'buildDam', 'buildDest'), 
                             qualifiers = c('qualifierMort', 'qualifierDisp', 'qualifierBuildDam', 'qualifierBuildDest'),
-                            sampled = c('mort_sampled', 'disp_sampled', 'buildDam_sampled', 'buildDest_sampled'),
-                            polynames = c('polyMort', 'polyDisp', 'polyBuildDam', 'polyBuildDest'))
+                            sampled = c('mort_sampled', 'disp_sampled', 'buildDam_sampled', 'buildDest_sampled'))
             
             
             )) {
@@ -47,25 +46,30 @@ setMethod(f="initialize", signature="ODDSim",
             else if(lhazSDF$hazard_info$hazard=="FL") Model$INFORM_vars%<>%c("HA.NAT.FL")
             else stop("Not currently prepared for hazards other than EQ, TC or FL")
             
+            
             .Object@dir<-dir
             .Object@hazard<-lhazSDF$hazard_info$hazard
+            
+            n_polygons <- runif(1, 2, 10)
             
             if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
             if(.Object@hazard%in%c("EQ","TC")){
               .Object@impact <- data.frame(iso3=character(), polygon=numeric(), impact=character(),
                                            observed=numeric(), qualifier = character())
               for (j in 1:length(Model$impacts$labels)){
-                observed_flag <- rbinom(1,1,0.8)
-                while(all(observed_flag==0)){
-                  observed_flag <- rbinom(1,1,0.8)
+                n_poly_observed <- runif(1, 1, n_polygons)
+                for (i in 1:n_poly_observed){
+                  .Object@impact %<>% add_row(
+                    iso3='ABC',
+                    polygon=i,
+                    impact=Model$impacts$labels[j],
+                    observed= 0,
+                    qualifier=ifelse(rbinom(1,1,0.8), 'Total', NA_character_))
                 }
-                .Object@impact %<>% add_row(
-                  iso3='ABC',
-                  polygon=1,
-                  impact=Model$impacts$labels[j],
-                  observed= ifelse(observed_flag, 0, NA),
-                  qualifier=ifelse(observed_flag, 'Total', NA_character_))
               }
+              #remove about half as currently simulated data is very populated compared to real data
+              .Object@impact <- .Object@impact[sample(1:NROW(.Object@impact),round(NROW(.Object@impact)/2), replace=F), ]
+              
               .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
                 transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
             } else {
@@ -137,7 +141,13 @@ setMethod(f="initialize", signature="ODDSim",
             names(linp)<-unique(.Object@cIndies$iso3)
             .Object@modifier<-linp
             
-            .Object@data[,Model$impacts$polynames] <- 1
+            polygons_list <- list()
+            polygons_list[[1]] <- list(name='Polygon 1', indexes = 1:length(.Object@data$ISO3C))
+            for (i in 2:n_polygons){
+              polygons_list[[i]] <- list(name=paste('Polygon',i), indexes = sample(1:length(.Object@data$ISO3C), runif(1, 1, length(.Object@data$ISO3C)), replace=F))
+            }
+              
+            .Object@polygons <- polygons_list
             
             print("Checking ODDSim values")
             checkODD(.Object)

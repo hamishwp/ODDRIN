@@ -81,6 +81,27 @@ GetOSMbuildings<-function(bbox, BD=NULL,minnum=50,plotty=F,timeout=60){
   
 }
 
+getOSMBuildingCount <- function(ODDy){
+  #ODDy <- readRDS('/home/manderso/Documents/GitHub/IIDIPUS_InputRealwithMort/ODDobjects/EQ20131015PHL_-13')
+  bbox <- ODDy@bbox
+  buildings<-GetOSMbuildingsODD(ODDy, timeout=60)
+  rastered <- rasterize(cbind(buildings$Longitude, buildings$Latitude), raster(ODDy), fun='count')
+  rastered_spdf <- as(rastered, "SpatialPixelsDataFrame")
+  
+  data <- ODDy@data
+  data$Longitude <-  round(ODDy@coords[,1], 8)
+  data$Latitude <- round(ODDy@coords[,2], 8)
+  data$id <- 1:NROW(data)
+  data <- merge(data, data.frame(Longitude=round(rastered_spdf@coords[,1], 8), Latitude=round(rastered_spdf@coords[,2], 8), Buildings_OSM = rastered_spdf@data$layer), 
+                by=c('Latitude', 'Longitude'), all.x = TRUE)
+  data <- data[order(data$id),]
+  data$Buildings_OSM[which(is.na(data$ISO3C))] <- NA
+  #ODDy@data <- dplyr::select(data, -c(Longitude, Latitude, id))
+  
+  return(data$Buildings_OSM)
+}
+
+
 GetOSMbuildingsODD<-function(ODD,bbox=NULL,minnum=50,plotty=F,timeout=60){
   
   if(is.null(bbox)) bbox<-ODD@bbox

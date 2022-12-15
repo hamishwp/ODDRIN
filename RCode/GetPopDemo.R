@@ -501,6 +501,38 @@ readFBpop<-function(bbox,saveloc="/tmp/tmp_hrsl.tif"){
   
 }
 
+getFBbuildings <- function(ODDy){
+  
+  #ODDy <- readRDS('/home/manderso/Documents/GitHub/IIDIPUS_InputRealwithMort/ODDobjects/EQ20110222NZL_-1')
+  bbox <- ODDy@bbox
+  FBpop <- readFBpop(bbox)
+  rastered <- rasterize(FBpop, raster(ODDy), 'Population', fun='sum')
+  rastered_spdf <- as(rastered, "SpatialPixelsDataFrame")
+  
+  data <- ODDy@data
+  data$Longitude <-  ODDy@coords[,1]
+  data$Latitude <- ODDy@coords[,2]
+  data$id <- 1:NROW(data)
+  data <- merge(data, data.frame(Longitude=rastered_spdf@coords[,1], Latitude=rastered_spdf@coords[,2], FBPop2 = rastered_spdf@data$layer), 
+                by=c('Latitude', 'Longitude'), all.x = TRUE)
+  data <- data[order(data$id),]
+  data$FBPop2[which(is.na(data$ISO3C))] <- NA
+  ODDy@data <- dplyr::select(data, -c(Longitude, Latitude, id))
+  
+  #need to retrieve aveHouseholdSize from Global Data Lab
+  ODDy@data$nHouses <- ODDy@data$FBPop / 4 #replace 4 with ODDy@data$aveHouseholdSize from global data lab
+  
+  # Concerns:
+  # - Granularity. Need number of houses to be an integer - rounding produces a fair bit of coarseness. Not so much an issue in dense areas, but e.g. in Canterbury 
+  #   35% of cells have populations between 0 and 4 which is less than the average household size. 
+  # - date of data vs date of event
+  # - Meta Data for Good and SEDAC population data disagree a fair amount. 
+  # - Assume Meta Data for Good is working with residential buildings
+  # - Missing average household size data from Global Data Lab for some countries
+  
+}
+
+
 ######################################################################################
 # Aggregate the FB population data onto SEDACs grid
 ######################################################################################
@@ -523,10 +555,10 @@ ParAggFBPopSEDAC<-function(ODDy,arrayz,ncores=8, funcy="sum",namer="FBPop", napo
     if(kk==ncores) iiis<-floor((kk-1L)*length(ijs)/ncores+1L):length(ijs)
     ijs<-ijs[iiis]
     
-    inds<-arrayz$Longitude< (min(ODDy@coords[ijs,1]) - grid$cellsize[1])&
-      arrayz$Longitude>=(max(ODDy@coords[ijs,1]) + grid$cellsize[1])&
-      arrayz$Latitude< (min(ODDy@coords[ijs,2]) - grid$cellsize[2])&
-      arrayz$Latitude>=(max(ODDy@coords[ijs,2]) + grid$cellsize[2])
+    inds<-arrayz$Longitude< (min(ODDy@coords[ijs,1]) - grid$cellsize[1]/2)&
+      arrayz$Longitude>=(max(ODDy@coords[ijs,1]) + grid$cellsize[1]/2)&
+      arrayz$Latitude< (min(ODDy@coords[ijs,2]) - grid$cellsize[2]/2)&
+      arrayz$Latitude>=(max(ODDy@coords[ijs,2]) + grid$cellsize[2]/2)
     
     tmp<-arrayz[!inds,]
     
@@ -534,10 +566,10 @@ ParAggFBPopSEDAC<-function(ODDy,arrayz,ncores=8, funcy="sum",namer="FBPop", napo
     i<-1
     for (z in ijs){
       
-      inds<-tmp$Longitude< (ODDy@coords[z,1] + grid$cellsize[1])&
-        tmp$Longitude>=(ODDy@coords[z,1] - grid$cellsize[1])&
-        tmp$Latitude< (ODDy@coords[z,2] + grid$cellsize[2])&
-        tmp$Latitude>=(ODDy@coords[z,2] - grid$cellsize[2])
+      inds<-tmp$Longitude< (ODDy@coords[z,1] + grid$cellsize[1]/2)&
+        tmp$Longitude>=(ODDy@coords[z,1] - grid$cellsize[1]/2)&
+        tmp$Latitude< (ODDy@coords[z,2] + grid$cellsize[2]/2)&
+        tmp$Latitude>=(ODDy@coords[z,2] - grid$cellsize[2]/2)
       output[i]<-funcy(tmp$Population[inds])
       
       tmp<-tmp[!inds,]
@@ -578,10 +610,10 @@ AggFBPopSEDAC<-function(ODDy,arrayz,iso3=NULL,funcy="sum",namer="FBPop", napop=T
   # Along the Longitude, parallelised over latitude arrays
   for (z in ijs){
     
-    inds<-arrayz$Longitude< (ODDy@coords[z,1] + grid$cellsize[1])&
-      arrayz$Longitude>=(ODDy@coords[z,1] - grid$cellsize[1])&
-      arrayz$Latitude< (ODDy@coords[z,2] + grid$cellsize[2])&
-      arrayz$Latitude>=(ODDy@coords[z,2] - grid$cellsize[2])
+    inds<-arrayz$Longitude< (ODDy@coords[z,1] + grid$cellsize[1]/2)&
+      arrayz$Longitude>=(ODDy@coords[z,1] - grid$cellsize[1]/2)&
+      arrayz$Latitude< (ODDy@coords[z,2] + grid$cellsize[2]/2)&
+      arrayz$Latitude>=(ODDy@coords[z,2] - grid$cellsize[2]/2)
     ODDy@data$array[z]<-funcy(arrayz$Population[inds])
     
     arrayz<-arrayz[!inds,]
@@ -597,10 +629,10 @@ AggFBPopSEDAC<-function(ODDy,arrayz,iso3=NULL,funcy="sum",namer="FBPop", napop=T
 GridUpFBPop<-function(ODDy,ncores=2,funcy="sum",namer="FBPop"){
 
   indies<-!is.na(ODDy@data$Population)
-  bbox<-c((min(ODDy@coords[indies,1]) - ODDy@grid@cellsize[1]),
-          (min(ODDy@coords[indies,2]) - ODDy@grid@cellsize[2]),
-          (max(ODDy@coords[indies,1]) + ODDy@grid@cellsize[1]),
-          (max(ODDy@coords[indies,2]) + ODDy@grid@cellsize[2]))
+  bbox<-c((min(ODDy@coords[indies,1]) - ODDy@grid@cellsize[1]/2),
+          (min(ODDy@coords[indies,2]) - ODDy@grid@cellsize[2]/2),
+          (max(ODDy@coords[indies,1]) + ODDy@grid@cellsize[1]/2),
+          (max(ODDy@coords[indies,2]) + ODDy@grid@cellsize[2]/2))
   
   FBpop<-readFBpop(bbox)
   

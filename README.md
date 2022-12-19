@@ -168,7 +168,7 @@ In order to install the full ODDRIN package for Linux and Mac distributions, ope
 
     sudo apt-get install libcurl4-openssl-dev libxml2-dev libjq-dev libprotobuf-dev
                          libv8-dev protobuf-compiler openjdk-8-jdk libssh-dev libssl-dev
-                         libgdal-dev libudunits2-dev
+                         libgdal-dev libudunits2-dev libopenmpi-dev
                          
 ```
 

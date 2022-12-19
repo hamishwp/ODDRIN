@@ -2,6 +2,10 @@
 library(raster)
 # library(geosphere)
 
+returnX<-function(x,a=NULL,b=NULL) x
+negexp <-function(x) -exp(x)
+logneg <-function(x) log(-x)
+
 # # 2D DENSITY PLOT WITH MODIFIED COLOUR AXIS
 # ggplot(as.data.frame(buildings),aes(Longitude,Latitude))+
 #   stat_density_2d(aes(fill = ..level..),breaks=c(0,0.5,1,3,5,10,30,50,100,300), 

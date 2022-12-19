@@ -26,12 +26,6 @@ Model$haz<-haz
 # Get linear predictor variables (currently the same for both building damage and human displacement)
 if(haz%in%c("EQ","TC","FL")) {
   # Form a list of the different components used in the linear predictor
-  INFORM_vars<-c("CC.INS.GOV.GE", # Government Effectiveness
-                 "VU.SEV.AD", # Economic Dependency Vulnerability
-                 "CC.INS.DRR", # Disaster Risk Reduction
-                 "VU.SEV.PD", # Multi-dimensional Poverty
-                 "CC.INF.PHY" # Physical Infrastructure
-  )
   INFORM_vars%<>%c(grep(haz,c("HA.NAT.EQ","HA.NAT.TC","HA.NAT.FL"),value = T))
   # MUST BE SAME LENGTH AND CORRESPOND EXACTLY TO INFORM_vars + HAZ.NAT.EQ/TC/FL + Sinc/dollar,
   fIndies<-list(CC.INS.GOV.GE=returnX, # Government Effectiveness

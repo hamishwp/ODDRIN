@@ -3,7 +3,7 @@ library(raster)
 library(geosphere)
 library(terra)
 
-returnX<-function(x) x
+returnX<-function(x,a=NULL,b=NULL) x
 negexp <-function(x) -exp(x)
 logneg <-function(x) log(-x)
 
@@ -270,6 +270,59 @@ convMat2SPDF<-function(array,name=NULL,crs="WGS84"){
   
 }
 
+# Function to extract the coordinates of all the polygons
+extractPolyCoords<-function(ADM){
+  coords<-data.frame()
+  for(i in 1:length(ADM@polygons)){
+    for(j in 1:length(ADM@polygons[[i]]@Polygons)){
+      coords%<>%rbind(data.frame(LONGITUDE=ADM@polygons[[1]]@Polygons[[1]]@coords[,1],
+                                 LATITUDE=ADM@polygons[[1]]@Polygons[[1]]@coords[,2],
+                                 i=i,j=j))
+    }
+  }
+  return(coords)
+}
+# Find which coordinates of an S4 spatial object lie inside (or on the boundary of) a spatial polygon file
+inPoly<-function(poly,pop,iii=1,sumFn="sum",reducer=NULL){
+  
+  Ifin<-rep(F,nrow(pop@data))
+  if(is.null(reducer)) reducer<-!Ifin
+  
+  pop<-pop[reducer,]
+  
+  if(any(class(pop)=="SpatialPointsDataFrame") | any(class(pop)=="SpatialPixelsDataFrame")){
+    coords<-pop@coords
+    data<-pop@data
+  } else {
+    coords<-as.data.frame(pop[,c("LONGITUDE","LATITUDE")])
+    data<-as.data.frame(pop)
+  }
+  
+  insidepoly<-rep(FALSE,nrow(pop))
+  
+  for (i in 1:length(poly@Polygons)){
+    # Get rid of values outside the bounding box first
+    minipoly<-rep(FALSE,length(insidepoly))
+    indies<-coords[,1]>=min(poly@Polygons[[i]]@coords[,1]) &
+      coords[,1]<=max(poly@Polygons[[i]]@coords[,1]) &
+      coords[,2]>=min(poly@Polygons[[i]]@coords[,2]) &
+      coords[,2]<=max(poly@Polygons[[i]]@coords[,2])
+    # Now we only need to calculate a few points that lie inside the polygon!
+    minipoly[indies]<-sp::point.in.polygon(coords[indies,1],
+                                           coords[indies,2],
+                                           poly@Polygons[[i]]@coords[,1],
+                                           poly@Polygons[[i]]@coords[,2])>0
+    # Add to the total
+    insidepoly<- insidepoly | minipoly
+  }
+  
+  outer<-match.fun(sumFn)(data[insidepoly,iii],na.rm=T)
+  
+  Ifin[reducer]<-insidepoly
+  
+  return(list(vals=outer,indies=Ifin))
+}
+
 # Assumes 9 income distribution percentiles
 SplitSamplePop<-function(Pop,n=1){
   k<-length(Pop)
@@ -459,6 +512,15 @@ ggmap_bbox <- function(map,bbox) {
   attr(map, "bb")$ur.lat <- bbox["ymax"]
   attr(map, "bb")$ur.lon <- bbox["xmax"]
   map
+}
+
+GetExtent<-function(ADM,expander=NULL){
+  bbox<-ADM@bbox
+  # Expand the bounding box, useful for the interpolation
+  if(!is.null(expander)) bbox%<>%expandBbox(1.1)
+  ext<-as(extent(bbox[c(1,3,2,4)]), 'SpatialPolygons')
+  crs(ext) <- "+proj=longlat +datum=WGS84 +no_defs"  
+  return(ext)
 }
 
 # Remove unnecessary columns that arise with the R st_multipolygon format

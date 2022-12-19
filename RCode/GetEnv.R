@@ -1,9 +1,5 @@
 # Where is the main folder with all the code and data
-<<<<<<< HEAD
-dir<-directory<-"/home/hamishwp/Documents/BEAST/Coding/Oxford/ODDRIN/"
-=======
-dir<-directory<-"/home/manderso/Documents/GitHub/ODDRIN/"
->>>>>>> master
+dir<-directory<-"/home/manderso/Documents/GitHub/ODDRIN/" #"/home/hamishwp/Documents/BEAST/Coding/Oxford/ODDRIN/"
 # Set the working directory from your environment variables
 setwd(directory)
 # Directory of the Data for Good data, e.g. Disaster Mapping, 4G connectivity, etc

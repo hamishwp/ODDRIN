@@ -19,11 +19,7 @@ GetSourceFiles<-function(packred){
     source('RCode/GetDisaster.R')
     # IDP estimate related:
     source('RCode/GetDisplacements.R')
-<<<<<<< HEAD
     # source('RCode/GetHelix.R')
-=======
-    #source('RCode/GetHelix.R')
->>>>>>> master
     # Demography & population related:
     source('RCode/GetPopDemo.R')
     source('RCode/GetSocioEconomic.R')
@@ -89,7 +85,7 @@ GetODDPackages<-function(packred){
   
   
   new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-  if(length(new.packages)) install.packages(new.packages, repos='http://cran.us.r-project.org')
+  if(length(new.packages)>0) install.packages(new.packages, repos='http://cran.us.r-project.org')
   
   # devtools::install_github('daroczig/fbRads')
   # if(length(list.of.packages[!("openrouteservice" %in% installed.packages()[,"Package"])])){devtools::install_github("rCarto/osrm")}

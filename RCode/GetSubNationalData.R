@@ -146,7 +146,7 @@ getSubNatImpact <- function(SubNatEvent, subnational=TRUE){
         } 
         sources_selected %<>% append(SubNatEvent_by_polygon[[i]]$source_id[ids_chosen])
       }
-      impact %<>% rbind(SubNatEvent[sources_selected,] %>% transmute(iso3=iso3,
+      impact %<>% rbind(SubNatEvent[sources_selected,] %>% transmute(iso3=iso3, sdate=sdate,
                                                                          impact=impact_type,
                                                                          observed=!!sym(impact_type), 
                                                                          qualifier=!!sym(paste0(impact_type, '_qualifier')), 
@@ -224,38 +224,6 @@ addODDPolygons <- function(ODDy, polygons_list){
   
   return(ODDy)
   
-}
-
-inPoly<-function(poly, pop, iii = 1, sumFn = "sum"){
-  #determines which pixels are inside a polygon
-  if(any(class(pop) == "SpatialPointsDataFrame") | any(class(pop) == "SpatialPixelsDataFrame")){
-    coords<-pop@coords
-    data<-pop@data
-  } else {
-    coords<-as.data.frame(pop[,c("Longitude","Latitude")])
-    data<-as.data.frame(pop)
-  }
-  
-  insidepoly<-rep(FALSE,nrow(pop))
-  
-  for (i in 1:length(poly@Polygons)){
-    # Get rid of values outside the bounding box first
-    minipoly<-rep(FALSE,length(insidepoly))
-    indies<-coords[,1]>=min(poly@Polygons[[i]]@coords[,1]) &
-      coords[,1]<=max(poly@Polygons[[i]]@coords[,1]) &
-      coords[,2]>=min(poly@Polygons[[i]]@coords[,2]) &
-      coords[,2]<=max(poly@Polygons[[i]]@coords[,2])
-    # Now we only need to calculate a few points that lie inside the polygon!
-    minipoly[indies]<-sp::point.in.polygon(coords[indies,1],
-                                           coords[indies,2],
-                                           poly@Polygons[[i]]@coords[,1],
-                                           poly@Polygons[[i]]@coords[,2])>0
-    # Add to the total
-    insidepoly<- insidepoly | minipoly
-  }
-  #outer<-match.fun(sumFn)(data[insidepoly,iii],na.rm=T)
-  #return(list(vals=outer,indies=insidepoly))
-  return(indies = which(insidepoly == "TRUE"))
 }
 
 updateAllODDSubNat <- function(dir, subnat_file='EQ_SubNational.xlsx'){

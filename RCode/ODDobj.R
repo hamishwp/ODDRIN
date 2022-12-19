@@ -29,7 +29,7 @@ source('RCode/Functions.R')
 source('RCode/Model.R')
 source('RCode/GetPopDemo.R')
 source('RCode/GetSocioEconomic.R')
-source('RCode/GetINFORM.R')
+source('RCode/AddVulnerability.R')
 library(devtools)
 library(parallel)
 library(doParallel)
@@ -53,39 +53,6 @@ Genx0y0<-function(ODDobj){
   yo<-ODDobj@coords[1:ODDobj@grid@cells.dim[2]*ODDobj@grid@cells.dim[1]-ODDobj@grid@cells.dim[1]+1,2]
   
   return(list(xo=xo,yo=yo))
-}
-
-AddGDP<-function(ODDobj,inds=NULL,GDP=NULL){
-  
-  if(is.null(GDP)) GDP<-GetKummu(ODDobj@dir,c(ODDobj@bbox))
-  # Minimise computation if only one GDP value is found
-  if(length(unique(GDP@data$GDP))==1) { #LOOSEEND: should be GDP@data$X2015 ? 
-    ODDobj$GDP<-rep(unique(GDP@data$GDP),length(ODDobj@data$Population))
-    ODDobj$GDP[is.na(ODDobj$Population)]<-NA
-    return(ODDobj)
-  }
-  ODDobj$GDP<-NA
-  # interpolate data onto a regular grid
-  if(!is.null(inds)) {
-    ODDobj$GDP[inds]<-GDP%>%raster%>%raster::extract(ODDobj@coords[inds,])
-  } else {
-    ODDobj$GDP<-GDP%>%raster%>%raster::extract(ODDobj@coords)
-  }
-  
-  # The Kummu dataset is not high resolution, 
-  # Therefore, sometimes Pop data exists but GDP doesn't
-  # We fix this by using the nearest-neighbour extrapolation
-  GDP%<>%as.data.frame()
-  for (i in which(!is.na(ODDobj$Population)&is.na(ODDobj$GDP))){
-    # Find the index of the closest non-NA GDP value by longitude & latitude
-    # NOTE: the end term is to ensure NA's are removed
-    iminnie<-which.min((ODDobj@coords[i,1]-GDP[,2])^2*(ODDobj@coords[i,2]-GDP[,3])^2 + GDP[,1]/GDP[,1])
-    ODDobj$GDP[i]<-GDP[iminnie,1]
-  }
-  
-  return(ODDobj)
-
-  
 }
 
 setClass("ODD", 
@@ -217,12 +184,6 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
 setMethod(f="initialize", signature="ODD",
           # definition=function(.Object,bbox,lhazSDF,dater=NULL,dir=directory,
           definition=function(.Object,lhazSDF=NULL,DamageData=NULL,dir="./",Model=list(
-            INFORM_vars=c("CC.INS.GOV.GE", # Government Effectiveness
-                          "VU.SEV.AD", # Economic Dependency Vulnerability
-                          "CC.INS.DRR", # Disaster Risk Reduction
-                          "VU.SEV.PD", # Multi-dimensional Poverty
-                          "CC.INF.PHY" # Physical Infrastructure
-            ), 
             fIndies=list(CC.INS.GOV.GE=returnX, # Government Effectiveness
                          VU.SEV.AD=returnX, # Economic Dependency Vulnerability
                          CC.INS.DRR=returnX, # Disaster Risk Reduction
@@ -244,15 +205,29 @@ setMethod(f="initialize", signature="ODD",
             if(is.null(lhazSDF)) return(.Object)
             if(!class(lhazSDF[[length(lhazSDF)]])[1]=="HAZARD") return(.Object)
             
+            
+            
+            
+            
+            
+            stop("hazard frequency linked to correct hazard here, remove INFORM crap")
+            stop("Also remove INFORM crap from Model.R")
             if(lhazSDF$hazard_info$hazard=="EQ") Model$INFORM_vars%<>%c("HA.NAT.EQ")
             else if(lhazSDF$hazard_info$hazard=="TC") Model$INFORM_vars%<>%c("HA.NAT.TC")
             else if(lhazSDF$hazard_info$hazard=="FL") Model$INFORM_vars%<>%c("HA.NAT.FL")
             else stop("Not currently prepared for hazards other than EQ, TC or FL")
             
+            
+            
+            
+            
+            
+            
+            
             .Object@dir<-dir
             .Object@hazard<-lhazSDF$hazard_info$hazard
 
-	    if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
+	          if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
             if(.Object@hazard%in%c("EQ","TC")){
               if(!is.null(DamageData$gmax)){
                 #If using subnational data, @impact is overwritten separately later in GetSubNationalData.R
@@ -270,7 +245,7 @@ setMethod(f="initialize", signature="ODD",
             # This bounding box is taken as the minimum region that encompasses all hazard events in HAZARD object:
             bbox<-lhazSDF$hazard_info$bbox
             dater<-min(lhazSDF$hazard_info$sdate)
-	    .Object@hazdates<-lhazSDF$hazard_info$eventdates
+	          .Object@hazdates<-lhazSDF$hazard_info$eventdates
 
             year<-AsYear(dater)
             
@@ -291,43 +266,90 @@ setMethod(f="initialize", signature="ODD",
             # Extract empty indices to save time
             inds<-!is.na(.Object$Population)
             
-            print("Fetching GDP-PPP data")
-            .Object%<>%AddGDP(inds)
-            
             print("Filter spatial data per country")
             .Object@data$ISO3C<-NA_character_
             .Object@data$ISO3C[inds]<-coords2country(.Object@coords[inds,])
             iso3c<-unique(.Object@data$ISO3C) ; iso3c<-iso3c[!is.na(iso3c)]
             
-            print("Interpolate population & GDP values")
+            print("Interpolate population values")
             # Note there are as many values returned as iso3c codes (returns as data.frame with columns 'iso3' and 'factor')
             Popfactors<-InterpPopWB(iso3c,dater)
-            GDPfactors<-InterpGDPWB(iso3c,dater)
             for (iso in iso3c){
               indie<-.Object@data$ISO3C==iso & !is.na(.Object@data$ISO3C)
               .Object@data$Population[indie]%<>%
                 multiply_by(Popfactors$factor[Popfactors$iso3==iso])
-              .Object@data$GDP[indie]%<>%
-                multiply_by(Popfactors$factor[Popfactors$iso3==iso])
             }
             
-            print("Extract country indicators - INFORM:")
-            # INFORM (Joint Research Center - JRC) data:
-            INFORM<-InterpINFORMdata(Model$INFORM_vars,max(dater,as.Date("2014-10-22")),iso=iso3c)
             # World Income Database (WID) data:
             if(year==AsYear(Sys.Date())) year<-AsYear(Sys.Date())-1
             print("Extract country indicators - WID:")
             WID<-GetWID_perc(Model$WID_perc,iso3c,year)
+            
+            
+            
+            
+            
+            
+            
+            stop("Add the full variables to the cIndies data.frame")
             # Bind it all together!
-            .Object@cIndies<-rbind(INFORM,WID)
+            .Object@cIndies<-WID
+            
+            
+            
+            
+            
+            # Here we add the vulnerabilities used in the linear predictor
+            .Object%<>%AddVuln()
+            
+            
+            
+            
+            
+            
+            print("Fetching GDP-PPP data")
+            .Object%<>%AddGDP(inds)
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            stop("Sort out fIndies both here and in the input to initialize function")
             .Object@fIndies<-Model$fIndies
             
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            stop("Sort out this section on defining the linear predictor")
             linp<-rep(list(1.),length(unique(.Object@cIndies$iso3)))
             names(linp)<-unique(.Object@cIndies$iso3)
             .Object@modifier<-linp #LOOSEEND: setting modifier to 1 by default.
                                    #The modifier is exponentiated in GetLP() so 
                                    #shouldn't it be set to 0 by default?
                                    #Same in BDSim
+            
+            
+            
+            
+            
+            
+            
+            
             
             print("Fetching OSM data")
             .Object@data$nBuildings <- getOSMBuildingCount(.Object)

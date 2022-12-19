@@ -50,6 +50,7 @@ AutoQuake<-function(input,extras=T){
   # Predict displacement (ODDobj.R)
   ODDy%<>%DispX(Omega = input$Omega, 
                 center = input$Model$center, 
+                BD_params = Model$BD_params,
                 LL = F, # Do not return the log-likelihood, but the displacement prediction
                 Method = input$AlgoParams) 
   # Make plots and store them in a specific folder (ODDobj.R)

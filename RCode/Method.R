@@ -18,18 +18,26 @@
 ##########################################################################
 
 # Methodology parameters required
-AlgoParams<-list(Np=20, # Number of Monte Carlo particles
-                 cores=8, # Number of parallelised threads per event
+AlgoParams<-list(Np=10, # Number of Monte Carlo particles
+                 cores=6, # Number of parallelised threads per event
                  NestedCores=1, # How many cores are to be used inside the ODD displacement calculations?
-                 AllParallel=F, # Do you want fully-nested (data) parallelisation?
-                 itermax=2000, # How many iterations do we want?
-                 ABC=-500, # Approximate Bayesian Computation rejection
+                 AllParallel=T, # Do you want fully-nested (data) parallelisation?
+                 itermax=10000, # How many iterations do we want?
+                 ABC=0, # Approximate Bayesian Computation rejection
                  cap=-300, # if log values are too low, then log(mean(exp(LL)))=-Inf
                  GreedyStart=0, # How sure are we of the initial covariance matrix for accepted parameters? (Larger -> more confident)
                  Pstar=0.234, # Adaptive metropolis acceptance rate
                  gamzy0=0.2, # How quickly do the rejected parameters start having an influence on the covariance? (like GreedyStart) 
                  epsilon=50, # Do we still want values at larger numbers of iterations to have an influence on the covariance?
-                 minVar=1e-4 # Prevent certain parameters from being too sure of themselves
+                 minVar=1e-4, # Prevent certain parameters from being too sure of themselves
+                 t_0 =200,
+                 eps = 0.000000001,
+                 kernel='lognormal', #options are lognormal or loglaplace
+                 kernel_sd=list(displacement=0.15,mortality=0.03,buildDam=0.15,buildDest=0.1), 
+                 smc_steps = 200, #Number of steps in the ABC-SMC algorithm
+                 smc_Npart = 1000, #Number of particles in the ABC-SMC algorithm
+                 smc_alpha = 0.9,
+                 n_nodes=1
                  )
 		 
 if(is.null(AlgoParams$AllParallel)){
@@ -37,7 +45,7 @@ if(is.null(AlgoParams$AllParallel)){
   } else AlgoParams$AllParallel<-F
 }
 # Choose the parameterisation algorithm - the string must match the function name exactly
-Algorithm<-"AMCMC" # "NelderMeadOptim"
+Algorithm<- "delmoral_parallel" # "NelderMeadOptim", "AMCMC"
 
 # Metropolis-Hastings proposal distribution, given old values and covariance matrix
 multvarNormProp <- function(xt, propPars){
@@ -55,7 +63,7 @@ Proposed2Physical<-function(proposed,Model,index=NULL){
   if(is.null(index)) index<-1:length(Model$links)
   # Link functions to convert values into useable/physical values
   for (i in index)  {
-    proposed[i] <- match.fun(Model$links[[names(proposed)[i]]])(proposed[i])
+    proposed[i] <- match.fun(Model$links[[names(proposed)[i]]])(proposed[i], Model$par_lb[i],Model$par_ub[i])
   }
   # Reshape into desired structure
   proposed%>%relist(skeleton=Model$skeleton)
@@ -70,11 +78,15 @@ Physical2Proposed<-function(proposed,Model,index=NULL){
   if(is.null(index)) index<-1:length(Model$unlinks)
   # Link functions to convert values into useable/physical values
   for (i in index)  {
-    proposed[i] <- match.fun(Model$unlinks[[names(proposed)[i]]])(proposed[i])
+    proposed[i] <- match.fun(Model$unlinks[[names(proposed)[i]]])(proposed[i], Model$par_lb[i],Model$par_ub[i])
   }
   # Reshape into desired structure
   proposed%>%relist(skeleton=Model$skeleton)
   
+}
+
+Array2Physical <- function(array, Model){
+  return(array %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model))
 }
 
 # Generate the Adaptive Metropolis Global Scaling Factor discount factor
@@ -89,124 +101,928 @@ checkLTargs<-function(Model,iVals,AlgoParams){
   if(length(unlist(iVals$x0))!=nrow(iVals$COV) | length(unlist(iVals$x0))!=ncol(iVals$COV)) stop("Mismatching initial values and initial covariance matrix")
 }
 
-# Sampling the posterior of the model parameters
-# (proper developers would split this, but I need to see all the goods!)
-AMCMC<-function(dir,Model,iVals,AlgoParams){
-  # purpose : Generalised Adaptative Metropolis-Hastings Algorithm with Global Adaptative Scaling
-  # Details : Christian L. Muller, (ETH) 'Exploring the common concepts of a-MCMC and cov matrix
-  #           adaptation schemes', Dagstuhl Seminar Proceedings, 2010.
-  #           Uses the multivariate Gaussian distribution as proposal, 
-  #           whereby the proposal covariance is updated at every iteration.
+modifyAcc <- function(xNew, xPrev, Model){
+  xNew %<>% relist(Model$skeleton) %>% unlist() %>% Proposed2Physical(Model) %>% unlist()
+  xPrev %<>% relist(Model$skeleton) %>% unlist() %>% Proposed2Physical(Model) %>% unlist()
+  Model$acceptTrans%<>%unlist()
+  index<-1:length(unlist(Model$unlinks))
+  product <- 1
+  for (i in index){
+    product <- product * match.fun(Model$acceptTrans[[names(xNew)[i]]])(xNew[i], xPrev[i], Model$par_lb[i],Model$par_ub[i])
+  }
+  return(product)
+}
+
+AMCMC <-function(dir, Model, iVals, AlgoParams, unfinished=F, tag=''){
   
   # Set Random Number Generator (RNG) initial seed
-  set.seed(round(runif(1,0,100000)))
+  set.seed(round(runif(1,0,100000))) 
   # Check no mistakes have been made in the model, methodology and initial values
   checkLTargs(Model,iVals,AlgoParams)
+  AlgoParams$Np <- 10
+  AlgoParams$itermax <- 100000
   
-  ###### Initialisations ######
-  Lgsf<-0
-  # NOTE: WE APPLY LINK FUNCTIONS TO INITIAL GUESS (VALUES ARE IN PARAMETER SPACE, NOT PHYSICAL SPACE)
-  xPrev<-propMu<-unlist(iVals$x0)
-  if(!is.null(Model$links)) iVals$x0%<>%unlist()%>%Proposed2Physical(Model)
-  # NOTE: COVARIANCE MATRIX IS ALSO IN PARAMETER SPACE, NOT PHYSICAL SPACE
-  propCOV<-iVals$COV
-  normCOV<-sum(propCOV*t(propCOV))
-  n <- length(xPrev) + 1
-  output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n+1)
-  xNew <- rep(NA,n-1)
+  xPrev<-unlist(Omega %>% Physical2Proposed(Model=Model)) #unlist(iVals$x0)
+  n_x <- length(xPrev)
+  s_d = (2.38)^2/n_x
+  eps = diag(AlgoParams$eps, nrow=n_x)
+  
+  if (!unfinished){
+    xbar_tminus1 <- xPrev
+    output <- matrix(NA, nrow=AlgoParams$itermax, ncol=n_x+1)
+    C_0 = diag(0.0001, nrow=n_x) / exp(xPrev) #iVals$COV 
+    propCOV <- diag(n_x)
+    it <- 1
+    epsilon <- AlgoParams$epsilon_max
+  } else {
+    output <- readRDS(paste0(dir, '/IIDIPUS_Results/output_', tag)) 
+    xbar_tminus1 <- readRDS(paste0(dir, '/IIDIPUS_Results/xbar_tminus1_', tag)) 
+    propCOV <- readRDS(paste0(dir, '/IIDIPUS_Results/covariance_', tag)) 
+    it <- min(which(is.na(output[,1])))-1
+    xPrev[1:n_x] <- unlist(Physical2Proposed(relist(output[it, 2:NCOL(output)], skeleton=Model$skeleton), Model))
+    if((it-1) > AlgoParams$t_0){
+      epsilon <- AlgoParams$epsilon_min
+    } else {
+      epsilon <- AlgoParams$epsilon_max - (it-1) * (AlgoParams$epsilon_max-AlgoParams$epsilon_min)/AlgoParams$t_0
+    }
+  }
+  C_0 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2022-09-08_134604')$propCOV / 2
+  xNew <- rep(NA,n_x)
   lTargNew<-alpha<-c()
   # Create file names with unique names for storage reasons
   tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
-  # Generate Adaptive Metropolis Global Scaling Factor iterative vector
-  gamzy <- GenerateGamzy(AlgoParams)
-  ##############################
-  print(unlist(iVals$x0))
+  
   # Find first log-target value using initial values
-  output[1, ] <- c(TRUE,logTarget(dir = dir,Model = Model,
-                             proposed = iVals$x0,AlgoParams = AlgoParams),
-                   xPrev)
-  lTargOld<-output[1,2]
-  # print(output[1,])
+  lTargOld_Np <- colSums(logTarget(dir = dir,Model = Model,
+                             proposed = xPrev %>% Proposed2Physical(Model),AlgoParams = AlgoParams, kernel_sd=AlgoParams$kernel_sd))
+  
+  lTargOld_Max <- max(lTargOld_Np, na.rm=T)
+  lTargOld <- log(mean(exp(lTargOld_Np-lTargOld_Max), na.rm=T)) + lTargOld_Max
+  
+  output[it,] <- c(lTargOld, unlist(xPrev  %>% Proposed2Physical(Model)))
+  
   # Start the iterations!
-  it <- 2
+  it <- it + 1
   while (it <= AlgoParams$itermax){
     print(it)
+    t <- it - 1
+  
     # Parameter proposal
-    xNew<-multvarNormProp(xt=xPrev, propPars=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))
+    xNew <- xPrev
+    if (t > AlgoParams$t_0){
+      xNew <- multvarNormProp(xt=xPrev, propPars=propCOV)
+      if(any(xNew < -20) || any(xNew > 20)){
+        next
+      }
+      epsilon <- AlgoParams$epsilon_min
+    } else {
+      xNew <- multvarNormProp(xt=xPrev, propPars=C_0)
+      epsilon <- AlgoParams$epsilon_max - t * (AlgoParams$epsilon_max-AlgoParams$epsilon_min)/AlgoParams$t_0
+    }
+    
+    # Check proposal is within the parameter space:
+    #if(any(xNew < Model$par_lb) | any(xNew > Model$par_ub) ){
+    #  output[it,] <- c(lTargOld, xPrev)
+    #  propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
+    #  xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
+    #  it <- it + 1 
+    #  next
+    #}
+    
     # Convert parameters to physical/useable values
     if(!is.null(Model$links)) xProp<-xNew%>%Proposed2Physical(Model)
+    
+    start.time <- Sys.time()
+    
     # Calculate log-target value
-    lTargNew <- tryCatch(logTarget(dir = dir,Model = Model,proposed = xProp,
-                                   AlgoParams = AlgoParams), error=function(e) NA)
-    print(lTargNew)
+    lTargNew_Np <- tryCatch(colSums(logTarget(dir = dir,Model = Model,proposed = xProp,
+                                   AlgoParams = AlgoParams, kernel_sd= AlgoParams$kernel_sd)), error=function(e) NA)
+    
+    lTargNew_Max <- max(lTargNew_Np, na.rm=T)
+    lTargNew <- log(mean(exp(lTargNew_Np-lTargNew_Max), na.rm=T)) + lTargNew_Max
+    
+    end.time <- Sys.time()
+    time.taken <- end.time - start.time
+    print(time.taken)
+    
     # Check if we have a NaN
     if(is.na(lTargNew)|is.infinite(lTargNew)) {
-      output[it,] <- c(FALSE, lTargNew, xNew)
-      it <- it + 1
+      output[it,] <- c(lTargOld, xPrev %>% Proposed2Physical(Model) %>% unlist())
+      propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
+      xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
+      it <- it + 1 
       next
     }
+    
+    #if proposed log likelihood is close to the old log likelihood, then resample the old log likelihood
+    if (lTargNew > (lTargOld - 50) || (t <= AlgoParams$t_0 & t %% 10 == 0 )){
+      lTargOld_Np <- tryCatch(colSums(logTarget(dir = dir,Model = Model,proposed = xPrev %>%Proposed2Physical(Model),
+                                     AlgoParams = AlgoParams)), error=function(e) NA)
+      lTargOld_Max <- max(lTargOld_Np, na.rm=T)
+      lTargOld <- log(mean(exp(lTargOld_Np-lTargOld_Max), na.rm=T)) + lTargOld_Max
+    }
+    
     # Prepare for acceptance
     u <- runif(1)
+    
     # Acceptance probability
-    alpha <- min(c(exp(lTargNew - lTargOld),1))
+    alpha <- min(exp(lTargNew - lTargOld) * modifyAcc(xNew, xPrev, Model), 1)
+    
     # Metropolis Acceptance Algorithm
     if (alpha>=u) { # Accepted!
-      output[it,] <- c(TRUE, lTargNew, xNew)
-      # Only update the comparative logTarget value if it was accepted
-      lTargOld <- lTargNew
-      # Store this for next time!
+      print('ACCEPTED!')
       xPrev<-xNew
-    } else {  # Rejected
-      # output[it,] <- c(FALSE, lTargNew, xNew)
-      output[it,] <- output[(it-1),]
-      if(it<=AlgoParams$GreedyStart) {it <- it + 1; next}
-    }
-    # Global Scaling Factor (GSF), mean & covariance update
-    Lgsf <- Lgsf + gamzy[it]*(alpha-AlgoParams$Pstar)
-    propMu <- propMu + gamzy[it]*(xPrev - propMu)
-    propCOV <- propCOV + gamzy[it]*((xPrev - propMu)%*%t(xPrev - propMu) - propCOV)
-    propCOV[is.na(propCOV)|is.infinite(propCOV)]<-0
+      lTargOld <- lTargNew
+    } 
     
-    print(paste0("Total covariance = ",sum(exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV)))))
-    print(paste0("Global Scaling Factor, r = ",exp(2*Lgsf)))
-    print(paste0(round(it*100/itermax),"% done. LL = ",output[it,1]))
+    propCOV <- (t-1)/t * propCOV + s_d/(t+1) * (xPrev - xbar_tminus1) %*% t(xPrev - xbar_tminus1) + s_d /t * eps
+    xbar_tminus1 <- (t * xbar_tminus1 + xPrev)/(t+1)
+    
+    print(paste0(round(it*100/AlgoParams$itermax),"% done. LL = ",lTargOld))
     print(" ")
+    
+    output[it,] <- c(lTargOld, xPrev %>% Proposed2Physical(Model) %>% unlist())
+    
+    par(mfrow=c(4,4))
+    # Plot S-curves for the actual and current
+    plot_S_curves(Omega,  xPrev %>% Proposed2Physical(Model))
+    
+    #create trace plots
+    for(i in 1:n_x){
+      ylim=c(min(unlist(Omega)[i], output[1:it,i+1]), max(unlist(Omega)[i], output[1:it,i+1]))
+      plot(output[1:it,i+1], type='l', ylab='', ylim=ylim)
+      abline(h=unlist(Omega)[i], col='red')
+    }
+    
+    plot(output[ifelse(it>500,500,1):it,1], type='l', ylab='')
+    
+    print(paste('Single Chain R-Hat', paste(round(apply(output[round(it/2):it,2:(n_x+1)],2, rhat, split = TRUE), digits=2), collapse=' ')))
+    print(paste('ESS', paste(round(apply(output[min(1000, round(it/2)):it,2:(n_x+1)],2, ess_basic), digits=2), collapse=' ')))
+    
     
     # Save log-target and parameters
     saveRDS(output,paste0(dir,"IIDIPUS_Results/output_",tag))
     # Save covariance matrix
     saveRDS(propCOV,paste0(dir,"IIDIPUS_Results/covariance_",tag))
     
+    saveRDS(xbar_tminus1,paste0(dir,"IIDIPUS_Results/xbar_tminus1_",tag))
+    print(cov2cor(propCOV))
+    
     it <- it + 1
   }
   
-  return(list(PhysicalValues=output[max(output[,1],na.rm = T),2:ncol(output)], # MAP value 
-              OptimisationOut=output,
-              COVARIANCE=exp(2*Lgsf)*propCOV*normCOV/sum(propCOV*t(propCOV))))
-  
+  return(list(PhysicalValues=output[which.max(output[,1]),2:ncol(output)] %>% 
+                relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model), # MAP value 
+              OptimisationOut=output))
 }
+
+Algorithm <- match.fun('AMCMC')
+
+abcSmc <- function(AlgoParams, Model, unfinished=F, oldtag=''){
+  #Input: 
+  # - AlgoParams: Parameters describing the ABC-SMC Algorithm (e.g. the ABC rejection threshold for higher level priors)
+  # - Model: Describes the data simulation and calculation of the distance measure 
+  # - Unfinished: If TRUE, then include oldtag - the tag (end of the filename) of an unfinished ABC-SMC run to be completed.
+  # Output:
+  # - A list containing the parameter values for each particle at each step of the ABC-SMC algorithm, as well as the
+  #   corresponding weights, distances and final perturbation kernel. 
+  # Details:
+  # - Uses the algorithm described on left of Page 5 of Beaument et al., 2007: https://arxiv.org/pdf/0805.2256.pdf
+  # - Uses the multivariate perturbation kernel described in Filippi et al., 2012: https://arxiv.org/pdf/1106.6280.pdf
+  
+
+  steps = AlgoParams$smc_steps
+  Npart = AlgoParams$smc_Npart
+  
+  start_time <- Sys.time()
+  n_x <- length(Model$par_lb) #n_x = number of parameters
+  Omega_sample <- array(NA, dim=c(Npart, n_x, steps)) #store sampled parameters on the transformed space
+  Omega_sample_phys <- array(NA, dim=c(Npart, n_x, steps)) #store sampled parameters on the untransformed space
+  W <- array(NA, dim=c(Npart, steps))
+  d <- array(Inf, dim=c(Npart, steps))
+  
+  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
+  
+  if(unfinished==F){ #Initialize and perform sampling for s=1
+    W[,1] <- 1/Npart # Give each particle an equal weight
+    for (n in 1:Npart){
+      print(paste('Step: 1, Particle:', n))
+      while(d[n,1] > 200000){ 
+        #draw initial particle values from the prior and ensure that they satisfy the higher level prior
+        Omega_sample[n,,1] <- HLPrior_sample(Model, AlgoParams)
+        Omega_sample_phys[n,,1] <-  Omega_sample[n,,1] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
+        #calculate distance
+        
+        dist_sample <- sampleDist(dir = dir,Model = Model,
+                                  proposed = Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
+                                  AlgoParams = AlgoParams)
+        d_i <- logTarget2(dist_sample, AlgoParams)
+        max_d_i <- max(d_i)
+        d[n,1] <- log(mean(exp(d_i-max_d_i),na.rm=T))+ max_d_i
+      } 
+    }
+    saveRDS(
+      list(d=d, 
+           Omega_sample_phys=Omega_sample_phys,
+           Omega_sample=Omega_sample,
+           propCOV=array(0, dim=c(n_x,n_x)),
+           W=W),
+      paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
+    )  
+    s_start = 2 # continue the algorithm from s = 2
+    n_start = 1
+  } else { #Collect relevant information from the unfinished sample
+    output_unfinished <- readRDS(paste0(dir,"AWS_IIDIPUS_Results/abcsmc_",oldtag))
+    s_finish = max(which(colSums(!is.na(output_unfinished$Omega_sample_phys[,1,]))>0)) #find last completed step
+    n_finish = max(which(!is.na(output_unfinished$Omega_sample_phys[,1,s_finish])))
+    W[,1:s_finish] <- output_unfinished$W[,1:s_finish]
+    d[,1:s_finish] <- output_unfinished$d[,1:s_finish]
+    propCOV <- output_unfinished$propCOV
+    Omega_sample_phys[,,1:s_finish] <- output_unfinished$Omega_sample_phys[,,1:s_finish]
+    Omega_sample[,,1:s_finish] <- output_unfinished$Omega_sample[,,1:s_finish]
+    
+    s_start = ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
+    n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
+  }
+
+  for (s in s_start:steps){
+    
+    #record and print time for each step
+    end_time <- Sys.time()
+    print(paste('Time:', end_time-start_time))
+    start_time <- Sys.time()
+    
+    #update the tolerance using the 80th quantile
+    tolerance <- quantile(d[,s-1], probs=0.8)
+    print(paste('      Step:', s, ', New tolerance is:', tolerance))
+    
+    #calculate perturbation covariance using Filippi et al., 2012
+    tilda_i <- which(d[,s-1] < tolerance) #identify old particles that fall within the new tolerance
+    Omega_tilda <- Omega_sample[tilda_i,,s-1] 
+    W_tilda <- W[tilda_i,s-1]
+    W_tilda <- W_tilda/sum(W_tilda) #normalise weights
+    
+    propCOV <- matrix(0, n_x, n_x)
+    for(i in 1:Npart){
+      for(k in 1:length(tilda_i)){
+        propCOV <- propCOV + W[i,s-1] * W_tilda[k] * ((Omega_tilda[k,]-Omega_sample[i,,s-1]) %*% t(Omega_tilda[k,]-Omega_sample[i,,s-1]))
+      }
+    }
+    
+    for(n in n_start:Npart){
+      print(paste(' Step:', s, ', Particle:', n))
+      d[n,s] <- tolerance + 1
+      while (d[n,s] > tolerance){ 
+        weighted_sample <- sample(1:Npart, 1, prob=W[,s-1]) #draw weighted sample from the previous population
+        Omega_sample[n,,s] <- multvarNormProp(xt=Omega_sample[weighted_sample,,s-1], propPars=propCOV) #perturb the proposal
+        
+        Omega_sample_phys[n,,s] <-  Omega_sample[n,,s] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% 
+                                          Proposed2Physical(Model) %>% unlist() #convert to physical space
+        
+        HP<- Model$HighLevelPriors(Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), Model)
+        if (HP> AlgoParams$ABC) next
+        dist_sample <- sampleDist(dir = dir,Model = Model,
+                                  proposed = Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
+                                  AlgoParams = AlgoParams)
+        d_i <- logTarget2(dist_sample, AlgoParams)
+        max_d_i <- max(d_i)
+        d[n,s] <- log(mean(exp(d_i-max_d_i),na.rm=T))+ max_d_i
+      }
+      
+      W[n,s] <- 1/sum(W[,s-1]*apply(-sweep(Omega_sample[,,s-1], 2, Omega_sample[n,,s]), 1, dmvnorm, mean=rep(0,n_x), sigma=propCOV)) #update weight
+      saveRDS(
+        list(d=d, 
+             Omega_sample_phys=Omega_sample_phys,
+             Omega_sample=Omega_sample,
+             propCOV=propCOV,
+             W=W),
+        paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
+      )
+    }
+    W[,s] <- W[,s]/sum(W[,s]) #normalise weights
+    print(paste('Normalised Weights', W[,s]))
+    n_start = 1
+    
+    par(mfrow=c(4,4))
+    for (i in 1:n_x){
+      plot(rep(1:s,each=Npart),Omega_sample_phys[,i,1:s], ylim=c(min(Omega_sample_phys[,i,1:s], unlist(Omega)[i]), max(Omega_sample_phys[,i,1:s], unlist(Omega)[i])),
+           main=names(unlist(Omega))[i], xlab='step', ylab='')
+      abline(h=unlist(Omega)[i], col='red')
+    }
+    par(mfrow=c(1,1))
+    
+    saveRDS(
+      list(d=d, 
+           Omega_sample_phys=Omega_sample_phys,
+           Omega_sample=Omega_sample,
+           propCOV=propCOV,
+           W=W),
+      paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
+    )  
+  }
+}
+
+abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
+  #Input: 
+  # - AlgoParams: Parameters describing the ABC-SMC Algorithm (e.g. the ABC rejection threshold for higher level priors)
+  # - Model: Describes the data simulation and calculation of the distance measure 
+  # - Unfinished: If TRUE, then include oldtag - the tag (end of the filename) of an unfinished ABC-SMC run to be completed.
+  # Output:
+  # - A list containing the parameter values for each particle at each step of the ABC-SMC algorithm, as well as the
+  #   corresponding weights, distances and final perturbation kernel. 
+  # Details:
+  # - Uses the algorithm described in Del Moral et al., 2011: https://link.springer.com/content/pdf/10.1007/s11222-011-9271-y.pdf
+  # - Uses the multivariate perturbation kernel described in Filippi et al., 2012: https://arxiv.org/pdf/1106.6280.pdf
+  
+  steps = AlgoParams$smc_steps
+  Npart = AlgoParams$smc_Npart
+  M = AlgoParams$Np
+  
+  start_time <- Sys.time()
+  n_x <- length(Model$par_lb) #n_x = number of parameters
+  Omega_sample <- array(NA, dim=c(Npart, n_x, steps)) #store sampled parameters on the transformed space
+  Omega_sample_phys <- array(NA, dim=c(Npart, n_x, steps)) #store sampled parameters on the untransformed space
+  W <- array(NA, dim=c(Npart, steps)) #Weights
+  d <- array(Inf, dim=c(Npart, M, steps)) #Distances
+  d_full <- array(0, dim=c(Npart, 178, M, steps))
+  npa=rep(0,Npart) #Number of alive particles (have at least one distance less than the tolerance)
+  tolerance = 10000000 #Ensure all initial distances are less than the tolerance
+  tolerancetarget=1 #LOOSEEND: need to add in an adaptive stopping rule
+  tolerancestore=c(tolerance)
+  essstore=c(Npart)
+  N_T=Npart/2
+  alpha= 0.9 #AlgoParams$smc_alpha
+  
+  tpa<-function(tolerance,x){ #calculate the total proportion of alive particles (have at least one distance less than the tolerance)
+    d<-abs(x)
+    for (i in 1:Npart){
+      count<-0
+      for (j in 1:M){
+        if (d[i,j]<tolerance){
+          count<-count+1
+        }
+      }
+      npa[i]<-count
+    }
+    return(sum(npa>0)/Npart)
+  }
+  
+  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
+  
+  if(unfinished==F){ #Initialize and perform sampling for s=1
+    W[,1] <- 1/Npart # Give each particle an equal weight
+    for (n in 1:Npart){
+      print(paste('Step: 1, Particle:', n))
+      #draw initial particle values from the prior and ensure that they satisfy the higher level prior
+      Omega_sample[n,,1] <- HLPrior_sample(Model, AlgoParams)
+      Omega_sample_phys[n,,1] <-  Omega_sample[n,,1] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
+      #calculate distance
+      #CHECK HLP
+      dist_sample <- sampleDist(dir = dir,Model = Model,
+                           proposed = Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
+                           AlgoParams = AlgoParams)
+      d[n,,1] <- logTarget2(dist_sample, AlgoParams)
+      #d_full[n,,,1] <- 
+    }
+    saveRDS(
+      list(d=d, 
+           d_full=d_full,
+           omegastore=Omega_sample_phys,
+           propCOV=array(0, dim=c(n_x,n_x)),
+           W=W, 
+           tolerancestore = tolerancestore,
+           essstore = essstore),
+      paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
+    )  
+    s_start = 2 # continue the algorithm from s = 2
+    n_start = 1
+  } else { #Collect relevant information from the unfinished sample
+    output_unfinished <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",oldtag))
+    s_finish = max(which(colSums(!is.na(output_unfinished$omegastore[,1,]))>0)) #find last completed step
+    n_finish = max(which(!is.na(output_unfinished$omegastore[,1,s_finish])))
+    W[,1:s_finish] <- output_unfinished$W[,1:s_finish]
+    d[,,1:s_finish] <- output_unfinished$d[,,1:s_finish]
+    #d_full[,,,1:s_finish] <- output_unfinished$d_full[,,,1:s_finish]
+    propCOV <- output_unfinished$propCOV
+    Omega_sample_phys[,,1:s_finish] <- output_unfinished$omegastore[,,1:s_finish]
+    for (n in 1:Npart){
+      for (s in 1:s_finish){
+        #convert particles from the physical to the transformed space
+        if(!is.na(Omega_sample_phys[n,1,s]))
+          Omega_sample[n,,s] <- Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% Physical2Proposed(Model) %>% unlist()
+      }
+    }
+    s_start = ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
+    n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
+    tolerancestore=tolerancestore
+    essstore=essstore
+    tolerance = ifelse(n_finish==Npart, output_unfinished$tolerancestore[length(output_unfinished$tolerancestore)], output_unfinished$tolerancestore[length(output_unfinished$tolerancestore)-1])
+  }
+  
+  for (s in s_start:steps){
+    
+    #record and print time for each step
+    end_time <- Sys.time()
+    print(paste('Time:', end_time-start_time))
+    start_time <- Sys.time()
+    
+    #Find the new tolerance such that alpha proportion of the current alive particles stay alive
+    toleranceold <- tolerance
+    reflevel <- alpha * tpa(toleranceold, d[,,s-1])
+    tolerance<-uniroot(function(tolerance) tpa(tolerance,x=d[,,s-1])-reflevel,c(0,toleranceold))$root
+    print(paste('      Step:', s, ', New tolerance is:', tolerance))
+    if (tolerance<tolerancetarget){
+         tolerance<-tolerancetarget
+    }
+    
+    essstore<-c(essstore, 1/sum(W[,s-1]^2)) #effective sample size
+    tolerancestore<-c(tolerancestore, tolerance)
+    
+    #compute the associated weights
+    npa_old<-rowSums(d[,,s-1]<toleranceold)
+    npa<-rowSums(d[,,s-1]<tolerance)
+    a<-which(npa_old>0)
+    b<-which(npa_old==0)
+    W[a,s]<-W[a,s-1]*npa[a]/npa_old[a]
+    W[b,s]<-rep(0,length(b))
+    W[,s]<-W[,s]/sum(W[,s])
+
+    # resample if necessary
+    if ((sum(W[,s]^2)*N_T)>1){
+         choice<-sample(1:Npart,Npart,replace= TRUE, prob = W[,s])
+         Omega_sample[,,s]<-Omega_sample[choice,,s-1] 
+         Omega_sample_phys[,,s]<-Omega_sample_phys[choice,,s-1] 
+         d[,,s]<-d[choice,,s-1] 
+         #d_full[,,,s]<-d_full[choice,,,s-1] 
+         W[,s]<-rep(1/Npart,Npart) 
+    } else { #these will be perturbed later via a MCMC step. 
+        Omega_sample[,,s]<-Omega_sample[,,s-1] 
+        Omega_sample_phys[,,s]<-Omega_sample_phys[,,s-1] 
+        d[,,s]<-d[,,s-1] 
+        d_full[,,,s]<-d_full[,,,s-1] 
+    }
+    
+    #calculate perturbation covariance based on Filippi et al., 2012
+    tilda_i <- which(rowSums(d[,,s-1]<tolerance)>4) #identify old particles that fall within the new tolerance
+    Omega_tilda <- Omega_sample[tilda_i,,s-1] 
+    W_tilda <- W[tilda_i,s-1]
+    W_tilda <- W_tilda/sum(W_tilda) #normalise weights
+    
+    propCOV <- matrix(0, n_x, n_x)
+    for(i in 1:Npart){
+      for(k in 1:length(tilda_i)){
+        propCOV <- propCOV + W[i,s-1] * W_tilda[k] * ((Omega_tilda[k,]-Omega_sample[i,,s-1]) %*% t(Omega_tilda[k,]-Omega_sample[i,,s-1]))
+      }
+    }
+    
+    for(n in n_start:Npart){
+      print(paste(' Step:', s, ', Particle:', n))
+      if(W[n,s]>0){
+        Omega_prop <- multvarNormProp(xt=Omega_sample[n,,s], propPars=propCOV) #perturb the proposal
+        Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
+        
+        HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
+        if (HP> AlgoParams$ABC) next
+        
+        dist_sample <- sampleDist(dir = dir,Model = Model,
+                                  proposed = Omega_prop_phys %>% addTransfParams(), 
+                                  AlgoParams = AlgoParams)
+        d_prop <- logTarget2(dist_sample, AlgoParams)
+        
+        if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
+          d_prop <- Inf
+        } 
+        
+        #calculate the acceptance probability:
+        acc <- sum(d_prop<tolerance)/sum(d[n,,s]<tolerance) * modifyAcc(Omega_prop, Omega_sample[n,,s], Model)
+        u <- runif(1)
+        if(u < acc){
+          Omega_sample[n,,s] <- Omega_prop
+          Omega_sample_phys[n,,s] <- Omega_sample[n,,s] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
+          #d_full[n,,,s] <- d_full_prop
+          d[n,,s] <- d_prop
+        }
+        saveRDS(
+          list(d=d,
+               d_full=d_full,
+               omegastore=Omega_sample_phys,
+               propCOV=propCOV,
+               W=W,
+               tolerancestore=tolerancestore,
+               essstore=essstore),
+          paste0(dir,"IIDIPUS_Results/abcsmc_",tag)
+        )
+      }
+    }
+    
+    n_start = 1
+    
+    par(mfrow=c(4,5))
+    for (i in 1:n_x){
+      plot(rep(1:s,each=Npart),Omega_sample_phys[,i,1:s], ylim=c(min(Omega_sample_phys[,i,1:s], unlist(Omega)[i]), max(Omega_sample_phys[,i,1:s], unlist(Omega)[i])),
+           main=names(unlist(Omega))[i], xlab='step', ylab='')
+      abline(h=unlist(Omega)[i], col='red')
+    }
+    par(mfrow=c(1,1))
+    
+  }
+}
+
+#----------------------------------------------------------------------------------------------------------------------------
+#---------------------------------------- ABC-SMC PARALLELISED ACROSS NODES -------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------
+
+tpa<-function(tolerance, d){ 
+  #calculate the total proportion of alive particles (have at least one distance less than the tolerance)
+  #d is a matrix, with element (i,j) representing the distance calculated for the jth Monte Carlo data simulation of particle i. 
+  Npart <- NROW(d)
+  M <- NCOL(d)
+  npa <- rep(0,Npart) 
+  for (i in 1:Npart){
+    count<-0
+    for (j in 1:M){
+      if (d[i,j]<tolerance){
+        count<-count+1
+      }
+    }
+    npa[i]<-count
+  }
+  return(sum(npa>0)/Npart)
+}
+
+bcast_ODDRIN <- function(dir, Model, AlgoParams, nslaves){
+  #Broadcast ODDRIN functions and objects to the nodes
+  mpi.spawn.Rslaves(nslaves=nslaves)
+  mpi.bcast.Rfun2slave()
+  mpi.bcast.Robj2slave(dir)
+  directory = dir
+  mpi.bcast.Robj2slave(directory)
+  mpi.bcast.Robj2slave(Model)
+  mpi.bcast.Robj2slave(AlgoParams)
+  
+  #Run GetODDPackages and Simulate.R on the nodes
+  mpi.remote.exec(GetODDPackages, FALSE)
+  mpi.remote.exec(source('RCode/Simulate.R'))
+}
+
+initialise_particles <- function(dir, Model, AlgoParams, AlgoResults){
+  iter_times <- c()
+  for (n in 1:AlgoParams$smc_Npart){
+    print(paste('Step: 1, Particle:', n))
+
+    #draw initial particle values from the prior and ensure that they satisfy the higher level prior
+    AlgoResults$Omega_sample[n,,1] <- HLPrior_sample(Model, AlgoParams)
+    AlgoResults$Omega_sample_phys[n,,1] <-  AlgoResults$Omega_sample[n,,1] %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model) %>% unlist()
+    
+    start_time <- Sys.time()
+    dist_sample <- sampleDist(dir = dir,Model = Model,
+                              proposed = AlgoResults$Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
+                              AlgoParams = AlgoParams)
+    AlgoResults$d[n,,1] <- logTarget2(dist_sample, AlgoParams)
+    
+    end_time <- Sys.time()
+    
+    iter_times <- append(iter_times, end_time-start_time)
+  }
+  AlgoResults$iter_times <- iter_times
+  return(AlgoResults)
+}
+
+initialise_particles_Rmpi <- function(dir, Npart, n_nodes){
+  # Input: 
+  # - dir (working directory), Npart (total number of particles), n_nodes (total number of nodes)
+  # Output:
+  # - A list containing the:
+  #         - parameter values (on both physical and transformed space) of each particle
+  #         - evaluated distances for the simulated data of each particle
+  
+  # Use mpi.comm.rank() to determine which particles the node has been allocated:
+  particle_divisions <- split(1:Npart, sort(1:Npart%%n_nodes))
+  allocated_particles <- particle_divisions[[mpi.comm.rank()]]
+  n_allocated <- length(allocated_particles)
+  
+  n_x <- length(Model$par_lb)
+  
+  #create empty arrays to store parameter values and distances:
+  Omega_sample_node <- array(NA, dim=c(n_allocated, n_x))
+  Omega_sample_phys_node <- array(NA, dim=c(n_allocated, n_x))
+  d_node <- array(Inf, dim=c(n_allocated, AlgoParams$Np))
+  
+  iter_times <- c()
+  
+  for (n in 1:n_allocated){
+    HLP <- Inf
+    #Sample from the parameter ranges until the higher level prior is satisfied:
+    while (HLP > AlgoParams$ABC){
+      Omega_sample_i <- runif(n_x, min=Model$par_lb, max=Model$par_ub) %>% relist(skeleton=Model$skeleton) %>% Physical2Proposed(Model) %>% unlist()
+      Omega_sample_phys_i <-  Omega_sample_i %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
+      HLP = Model$HighLevelPriors(Omega_sample_phys_i %>% relist(skeleton=Model$skeleton) %>% addTransfParams(),Model)
+    }
+    
+    start_time <- Sys.time()
+  
+    #calculate distance
+    dist_sample <- sampleDist(dir = dir, Model = Model,
+                      proposed = Omega_sample_phys_i %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
+                      AlgoParams = AlgoParams)
+    d_node[n,] = logTarget2(dist_sample, AlgoParams) 
+    
+    end_time <- Sys.time()
+    iter_times <- append(iter_times, end_time-start_time)
+    
+    Omega_sample_node[n,] = Omega_sample_i 
+    Omega_sample_phys_node[n,] = Omega_sample_phys_i
+  }
+  return(list(Omega_sample_node=Omega_sample_node,
+              Omega_sample_phys_node=Omega_sample_phys_node,
+              d_node=d_node, 
+              iter_times=iter_times))
+}
+
+
+AlgoStep1 <- function(dir, AlgoParams, AlgoResults){
+  AlgoResults$W[,1] <- 1/AlgoParams$smc_Npart # Give each particle an equal weight
+  start_time <- Sys.time()
+  if(AlgoParams$n_nodes > 1){ #parallelise across nodes
+    node_return <- mpi.remote.exec(initialise_particles_Rmpi, dir, AlgoParams$smc_Npart, AlgoParams$n_nodes)
+    particle_divisions <- split(1:AlgoParams$smc_Npart, sort(1:AlgoParams$smc_Npart%%AlgoParams$n_nodes))
+    for (j in 1:length(node_return)){
+      AlgoResults$Omega_sample[particle_divisions[[j]],,1] <- node_return[[j]]$Omega_sample_node
+      AlgoResults$Omega_sample_phys[particle_divisions[[j]],,1] <- node_return[[j]]$Omega_sample_phys_node
+      AlgoResults$d[particle_divisions[[j]],,1] <- node_return[[j]]$d_node
+      print(node_return[[j]]$iter_times)
+    }
+  } else { #no parallelisation
+    AlgoResults <- initialise_particles(dir, Model, AlgoParams, AlgoResults)
+    print(AlgoResults$iter_times)
+  }
+  AlgoResults$tolerancestore[1] <- max(AlgoResults$d[,,1]) + 1 #set tolerance to larger than maximum distance
+  end_time <- Sys.time()
+  return(AlgoResults)
+}
+
+perturb_particles <- function(s, propCOV, AlgoParams, AlgoResults){
+  for(n in 1:AlgoParams$smc_Npart){
+    print(paste(' Step:', s, ', Particle:', n))
+    if(AlgoResults$W[n,s]>0){
+      Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[n,,s], propPars=propCOV) #perturb the proposal
+      Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
+      
+      HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
+      if (HP> AlgoParams$ABC) next
+      
+      dist_sample <- sampleDist(dir = dir,Model = Model,
+                                proposed = Omega_prop_phys %>% addTransfParams(), 
+                                AlgoParams = AlgoParams)
+      d_prop <- logTarget2(dist_sample, AlgoParams)
+      
+      if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
+        d_prop <- Inf
+      } 
+      
+      #calculate the acceptance probability:
+      acc <- sum(d_prop<AlgoResults$tolerance[s])/sum(AlgoResults$d[n,,s]<AlgoResults$tolerance[s]) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[n,,s], Model)
+      u <- runif(1)
+      if(u < acc){
+        AlgoResults$Omega_sample[n,,s] <- Omega_prop
+        AlgoResults$Omega_sample_phys[n,,s] <- AlgoResults$Omega_sample[n,,s] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
+        AlgoResults$d[n,,s] <- d_prop
+      }
+      saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
+    }
+  }
+  return(AlgoResults)
+}
+
+
+perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omega_phys_curr, d_curr, propCOV, tolerance){
+  particle_divisions <- split(1:Npart, sort(1:Npart%%n_nodes))
+  allocated_particles <- particle_divisions[[mpi.comm.rank()]]
+  n_allocated <- length(allocated_particles)
+  n_x <- length(Model$par_lb)
+  
+  Omega_sample_node <- Omega_curr[allocated_particles,]
+  Omega_sample_phys_node <- Omega_phys_curr[allocated_particles,]
+  d_node <- d_curr[allocated_particles,]
+  
+  for(n in 1:n_allocated){
+    if(W_curr[n]>0){
+      Omega_prop <- multvarNormProp(xt=Omega_curr[n,], propPars=propCOV) #perturb the proposal
+      Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
+      
+      dist_sample <-  sampleDist(dir = dir, Model = Model,
+                            proposed = Omega_prop_phys %>% addTransfParams(), 
+                            AlgoParams = AlgoParams) 
+      d_prop <- logTarget2(dist_sample, AlgoParams)
+      
+      acc <- sum(d_prop<tolerance)/sum(d_curr[n,]<tolerance) * modifyAcc(Omega_prop, Omega_curr[n,], Model)
+      u <- runif(1)
+      if(u < acc){
+        Omega_sample_node[n,] <- Omega_prop
+        Omega_sample_phys_node[n,] <- Omega_sample_node[n,] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
+        d_node[n,] <- d_prop
+      }
+    }
+  }
+  return(list(Omega_sample_node=Omega_sample_node, 
+              Omega_sample_phys_node=Omega_sample_phys_node,
+              d_node=d_node))
+}
+
+retrieve_UnfinishedAlgoResults <- function(dir, oldtag, Npart, AlgoResults){
+  AlgoResults_unfinished <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",oldtag))
+  s_finish = max(which(colSums(!is.na(AlgoResults_unfinished$Omega_sample[,1,]))>0)) #find last completed step
+  n_finish = max(which(!is.na(AlgoResults_unfinished$Omega_sample[,1,s_finish]))) #find last completed particle
+  
+  # carry out these steps in case s differs between the unfinished and current runs
+  AlgoResults$W[,1:s_finish] <- AlgoResults_unfinished$W[,1:s_finish]
+  AlgoResults$d[,,1:s_finish] <- AlgoResults_unfinished$d[,,1:s_finish]
+  AlgoResults$Omega_sample[,,1:s_finish] <- AlgoResults_unfinished$Omega_sample[,,1:s_finish]
+  AlgoResults$Omega_sample_phys[,,1:s_finish] <- AlgoResults_unfinished$Omega_sample_phys[,,1:s_finish]
+  AlgoResults$tolerancestore[1:s_finish] <- AlgoResults_unfinished$tolerancestore[1:s_finish]
+  AlgoResults$essstore[1:s_finish] <- AlgoResults_unfinished$essstore[1:s_finish]
+  s_start = ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
+  n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
+  
+  return(list(
+    AlgoResults=AlgoResults,
+    s_start=s_start,
+    n_start=n_start
+  ))
+}
+
+update_tolerance_and_weights <- function(s, alpha, AlgoResults){
+  #Find the new tolerance such that alpha proportion of the current alive particles stay alive
+  toleranceold <- AlgoResults$tolerance[s-1]
+  d_old <-AlgoResults$d[,,s-1]
+  reflevel <- alpha * tpa(toleranceold, d_old)
+  tolerance<-uniroot(function(tolerance) tpa(tolerance,d=d_old)-reflevel,c(0,toleranceold))$root
+  print(paste('      Step:', s, ', New tolerance is:', tolerance))
+
+  AlgoResults$tolerancestore[s] <- tolerance
+  AlgoResults$essstore[s-1]<- 1/sum(AlgoResults$W[,s-1]^2) #effective sample size
+  
+  #compute the associated weights
+  npa_old<-rowSums(d_old<toleranceold)
+  npa<-rowSums(d_old<tolerance)
+  a<-which(npa_old>0)
+  b<-which(npa_old==0)
+  AlgoResults$W[a,s]<-AlgoResults$W[a,s-1]*npa[a]/npa_old[a]
+  AlgoResults$W[b,s]<-rep(0,length(b))
+  AlgoResults$W[,s]<-AlgoResults$W[,s]/sum(AlgoResults$W[,s])
+  
+  return(AlgoResults)
+}
+
+resample_particles <- function(s, N_T, Npart, AlgoResults){
+  # resample if effective sample size is too low
+  if ((sum(AlgoResults$W[,s]^2)*N_T)>1){
+    choice<- sample(1:Npart,Npart,replace= TRUE, prob = AlgoResults$W[,s])
+    AlgoResults$Omega_sample[,,s] <- AlgoResults$Omega_sample[choice,,s-1] 
+    AlgoResults$Omega_sample_phys[,,s] <- AlgoResults$Omega_sample_phys[choice,,s-1] 
+    AlgoResults$d[,,s] <- AlgoResults$d[choice,,s-1] 
+    AlgoResults$W[,s] <-rep(1/Npart,Npart) 
+  } else { #otherwise do not resample (the particles will be perturbed later via a MCMC step) 
+    AlgoResults$Omega_sample[,,s] <- AlgoResults$Omega_sample[,,s-1] 
+    AlgoResults$Omega_sample_phys[,,s] <- AlgoResults$Omega_sample_phys[,,s-1] 
+    AlgoResults$d[,,s] <- AlgoResults$d[,,s-1] 
+  }
+  return(AlgoResults)
+}
+
+calc_propCOV <- function(s, n_x, Npart, AlgoResults){
+  #calculate perturbation covariance based on Filippi et al., 2012
+  tilda_i <- which(rowSums(AlgoResults$d[,,s-1]<AlgoResults$tolerance[s])>0) #identify old particles that fall within the new tolerance
+  Omega_tilda <- AlgoResults$Omega_sample[tilda_i,,s-1] 
+  W_tilda <- AlgoResults$W[tilda_i,s-1]
+  W_tilda <- W_tilda/sum(W_tilda) #normalise weights
+  
+  propCOV <- matrix(0, n_x, n_x)
+  for(i in 1:Npart){
+    for(k in 1:length(tilda_i)){
+      propCOV <- propCOV + AlgoResults$W[i,s-1] * W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[i,,s-1]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[i,,s-1]))
+    }
+  }
+  return(propCOV)
+}
+
+plot_abcsmc <- function(s, n_x, Npart, Omega_sample_phys, Omega){
+  par(mfrow=c(4,4))
+  for (i in 1:n_x){
+    plot(rep(1:s,each=Npart),Omega_sample_phys[,i,1:s], ylim=c(min(Omega_sample_phys[,i,1:s], unlist(Omega)[i]), max(Omega_sample_phys[,i,1:s], unlist(Omega)[i])),
+         main=names(unlist(Omega))[i], xlab='step', ylab='')
+    abline(h=unlist(Omega)[i], col='red')
+  }
+  par(mfrow=c(1,1))
+}
+
+delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
+  #Input: 
+  # - AlgoParams: Parameters describing the ABC-SMC Algorithm (e.g. the ABC rejection threshold for higher level priors)
+  # - Model: Describes the data simulation and calculation of the distance measure 
+  # - Unfinished: If TRUE, then include oldtag - the tag (end of the filename) of an unfinished ABC-SMC run to be completed.
+  # Output:
+  # - A list containing the parameter values for each particle at each step of the ABC-SMC algorithm, as well as the
+  #   corresponding weights, distances and final perturbation kernel. 
+  # Details:
+  # - Uses the algorithm described in Del Moral et al., 2011: https://link.springer.com/content/pdf/10.1007/s11222-011-9271-y.pdf
+  # - Uses the multivariate perturbation kernel described in Filippi et al., 2012: https://arxiv.org/pdf/1106.6280.pdf
+  
+  n_x <- length(Model$par_lb) #n_x = number of parameters
+  N_T <- AlgoParams$smc_Npart/2
+  tolerancetarget=1 #LOOSEEND: need to add in an adaptive stopping rule
+  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
+  
+  AlgoResults <- list(
+    Omega_sample = array(NA, dim=c(AlgoParams$smc_Npart, n_x, AlgoParams$smc_steps)), #store sampled parameters on the transformed space
+    Omega_sample_phys = array(NA, dim=c(AlgoParams$smc_Npart, n_x, AlgoParams$smc_steps)), #store sampled parameters on the untransformed space
+    W = array(NA, dim=c(AlgoParams$smc_Npart, AlgoParams$smc_steps)), #Weights
+    d = array(Inf, dim=c(AlgoParams$smc_Npart, AlgoParams$Np, AlgoParams$smc_steps)), #Distances
+    tolerancestore=array(NA, AlgoParams$smc_steps),
+    essstore=array(NA, AlgoParams$smc_steps)
+  )
+  
+  if (AlgoParams$n_nodes > 1) bcast_ODDRIN(dir, Model, AlgoParams, nslaves=AlgoParams$n_nodes)
+  
+  start_time <- Sys.time()
+  
+  if(unfinished==F){ 
+    #Initialize and perform sampling for s=1
+    AlgoResults <- AlgoStep1(dir, AlgoParams, AlgoResults)
+    saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))  
+    s_start = 2 # continue the algorithm from s = 2
+  } else { 
+    #Collect relevant information from the unfinished sample
+    UnfinishedAlgoResults <- retrieve_UnfinishedAlgoResults(dir, oldtag, AlgoParams$smc_Npart, AlgoResults)
+    AlgoResults <- UnfinishedAlgoResults$AlgoResults
+    s_start <- UnfinishedAlgoResults$s_start
+    n_start <- UnfinishedAlgoResults$n_start
+    saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag)) 
+  }
+  
+  for (s in s_start:AlgoParams$smc_steps){
+    
+    #record and print time for each step
+    end_time <- Sys.time()
+    print(paste('Time:', end_time-start_time))
+    start_time <- Sys.time()
+    
+    AlgoResults <- update_tolerance_and_weights(s, AlgoParams$smc_alpha, AlgoResults)
+    AlgoResults <- resample_particles(s, N_T, AlgoParams$smc_Npart, AlgoResults)
+    propCOV <- calc_propCOV(s, n_x, AlgoParams$smc_Npart, AlgoResults)
+    
+    if(AlgoParams$n_nodes>1){
+      node_return <- mpi.remote.exec(perturb_particles_Rmpi, dir, AlgoParams$smc_Npart, AlgoParams$n_nodes, 
+                                     AlgoResults$W[,s], AlgoResults$Omega_sample[,,s], AlgoResults$Omega_sample_phys[,,s], 
+                                     AlgoResults$d[,,s], propCOV, AlgoResults$tolerance[s])
+      
+      particle_divisions <- split(1:AlgoParams$smc_Npart, sort(1:AlgoParams$smc_Npart%%AlgoParams$n_nodes))
+      
+      for (j in 1:length(node_return)){
+        AlgoResults$Omega_sample[particle_divisions[[j]],,s] <- node_return[[j]]$Omega_sample_node
+        AlgoResults$Omega_sample_phys[particle_divisions[[j]],,s] <- node_return[[j]]$Omega_sample_phys_node
+        AlgoResults$d[particle_divisions[[j]],,s] <- node_return[[j]]$d_node
+      }
+    } else {
+      AlgoResults <- perturb_particles(s, propCOV, AlgoParams, AlgoResults)
+    }
+    
+    print(s)
+    plot_abcsmc(s, n_x, AlgoParams$smc_Npart, AlgoResults$Omega_sample_phys, Omega)
+    
+    saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))  
+  }
+  
+  if (AlgoParams$n_nodes > 1) mpi.close.Rslaves()
+}
+
+#----------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------
+
 
 NelderMeadOptim<-function(dir,Model,iVals,AlgoParams){
   
   # We don't need an initial guess of the covariance matrix for MLE optimisation
   x0=Physical2Proposed(iVals$x0,Model)%>%unlist()
   # Only optimise over the input iVals that are not NAs
-  if(is.null(AlgoParams$indices)) AlgoParams$indices<-length(iVals)
+  if(is.null(AlgoParams$indices)) AlgoParams$indices<-length(x0)
   # Cost function (note that this still includes the priors and ABC rejection, so isn't purely frequentist MLE)
   Fopty<-function(vals){
-    x0[!AlgoParams$indices]<-vals
+    #x0[!AlgoParams$indices]<-vals
+    x0 <- vals
     # Convert proposal in to physical values ODDRIN understands
     x0%<>%Proposed2Physical(Model)
     # Trust me, it's nice to know the parameters tested, this optim algorithm can struggle with stochastic target distributions
     print(unname(unlist(x0)))
     # Posterior calculation
-    posterior<-logTarget(dir,Model,x0,AlgoParams[c("Np","cores")],expLL = F)
+    posterior<-logTarget(dir,Model,x0,AlgoParams,expLL = F)
     print(posterior)
     print("...")
     return(posterior)
   }
   # Optimisation algorithm - Nelder & Mead, 1965, and includes outputting the Hessian
-  output<-optim(par=x0[!AlgoParams$indices],
+  output<-optim(par=x0,
                 fn = Fopty,control = list(maxit = AlgoParams$itermax,
                                           fnscale=-1,
                                           reltol=1.5e-3),
@@ -221,7 +1037,6 @@ NelderMeadOptim<-function(dir,Model,iVals,AlgoParams){
   
 }
 
-Algorithm%<>%match.fun()
 
 # Using the bisection method to generate a new guess
 OptimMd<-function(FFF,x,LLs){
@@ -312,12 +1127,12 @@ SingleEventsModifierCalc<-function(dir,Model,Omega,AlgoParams){
     names(linp)<-unique(ODDy@gmax$iso3)
     ODDy@modifier<-linp
       
-    tLL<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams),
+    tLL<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                   error=function(e) NA)
     
     if(is.na(tLL)) stop(ufiles[i])
     
-    init<-log(tLL@predictDisp$gmax/tLL@predictDisp$predictor)*0.1
+    init<-log(tLL@predictDisp$gmax/tLL@predictDisp$disp_predictor)*0.1
     init[init<lower]<-0.5*lower; init[init>upper]<-0.5*upper; 
     init%<>%as.list()
     names(init)<-as.character(tLL@predictDisp$iso3)
@@ -346,14 +1161,14 @@ SingleEventsModifierCalc<-function(dir,Model,Omega,AlgoParams){
     names(fin)<-as.character(ODDy@gmax$iso3)
     ODDy@modifier<-fin
     
-    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center,LL = F,Method = AlgoParams),
+    ODDy<-tryCatch(DispX(ODD = ODDy,Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                   error=function(e) NA)
     if(is.na(ODDy)) stop(ufiles[i])
     
     modifiers%<>%rbind(data.frame(iso3=ODDy@predictDisp$iso3,modifier=as.numeric(unlist(fin)),
                                   event=ufiles[i],gmax=ODDy@gmax$gmax,
                                   eventid=as.numeric(strsplit(as.character(ufiles[i]),split = "_")[[1]][2]),
-                                  predictor=ODDy@predictDisp$predictor))
+                                  predictor=ODDy@predictDisp$disp_predictor))
     
     saveRDS(ODDy, paste0(dir,"IIDIPUS_Results/ODDobjects/",ufiles[i]))
     saveRDS(modifiers,paste0(dir,"IIDIPUS_Results/ODDobjects/modifiers.Rdata"))
@@ -488,9 +1303,5 @@ CorrelateModifier<-function(modifiers,Model){
 #   
 #   
 # }
-
-
-
-
 
 

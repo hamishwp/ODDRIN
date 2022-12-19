@@ -6,13 +6,37 @@ Displacement_Data
 FBdata
 GRID
 Helix
+<<<<<<< HEAD
 IIDIPUS_Input
 IIDIPUS_Results
+=======
+
+IIDIPUS_Input/
+
+IIDIPUS_SimInput/
+
+IIDIPUS_Results/
+
+Unfinished/
+
+>>>>>>> master
 OSM_Buildings_Objects
 Plots
 Statistical_Inference
 tmp
 UNOSAT_Damage
+<<<<<<< HEAD
+=======
+
+RCode/GetHelix.R
+
+RCode/GetEnv.R
+
+RCode/Examples.R
+
+RCode/.Rhistory
+
+>>>>>>> master
 *.txt
 *.eps
 *.tif

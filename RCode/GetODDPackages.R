@@ -11,7 +11,6 @@ GetSourceFiles<-function(packred){
   source('RCode/HAZARDobj.R')
   
   if(!packred){
-  
     # Basic functions:
     source('RCode/Functions.R')
     # Disaster related:
@@ -20,7 +19,11 @@ GetSourceFiles<-function(packred){
     source('RCode/GetDisaster.R')
     # IDP estimate related:
     source('RCode/GetDisplacements.R')
+<<<<<<< HEAD
     # source('RCode/GetHelix.R')
+=======
+    #source('RCode/GetHelix.R')
+>>>>>>> master
     # Demography & population related:
     source('RCode/GetPopDemo.R')
     source('RCode/GetSocioEconomic.R')
@@ -49,6 +52,13 @@ LoadLibraries<-function(packred){
   library(parallel)
   library(doParallel)
   library(foreach)
+  library(ExtDist)
+  library(EnvStats)
+  library(posterior)
+  library(VGAM)
+  library(mvtnorm)
+  library(abind)
+  library(Rmpi)
   
   if(!packred) {
     library(codetools)
@@ -61,11 +71,13 @@ LoadLibraries<-function(packred){
 
 GetODDPackages<-function(packred){
 
-  list.of.packages <- c("ggplot2","sf","tidyverse","openxlsx","pracma",
+  list.of.packages <- c("dplyr", "ggplot2","sf","tidyverse","openxlsx","pracma",
                         "geojsonR", "tiff", "gstat", "mvtnorm",
                         "RColorBrewer", "geosphere","GGally", "wbstats",
                         "countrycode","rworldmap","rworldxtra","chron","ncdf4",
-                        "GADMTools","akima","adehabitatMA","flexsurv")
+                        "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 
+                        'EnvStats', 'posterior', 'doParallel', 'VGAM', 'abind',
+                        'Rmpi', 'openxlsx', 'ecochange')
   
   if(!packred) list.of.packages<-c(list.of.packages,
                                    "codetools","latex2exp",
@@ -77,7 +89,7 @@ GetODDPackages<-function(packred){
   
   
   new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-  if(length(new.packages)) install.packages(new.packages)
+  if(length(new.packages)) install.packages(new.packages, repos='http://cran.us.r-project.org')
   
   # devtools::install_github('daroczig/fbRads')
   # if(length(list.of.packages[!("openrouteservice" %in% installed.packages()[,"Package"])])){devtools::install_github("rCarto/osrm")}

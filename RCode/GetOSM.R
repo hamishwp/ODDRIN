@@ -40,17 +40,17 @@ ExtractOSMbuild<-function(bbox,timeout=60){
   
 }
 
-GetOSMbuildings<-function(BD,bbox=NULL,minnum=50,plotty=F,timeout=60){
+GetOSMbuildings<-function(bbox, BD=NULL,minnum=50,plotty=F,timeout=60){ 
   
-  if(is.null(bbox)) bbox<-BD@bbox
+  #if(is.null(bbox)) bbox<-BD@bbox
   
   area<-(bbox[4]-bbox[2])*(bbox[3]-bbox[1])
   # If the bounding box size is too large, separate into pixels
   # I know that an area of 0.01 normally returns decent results
   if(area>0.01){
-    tbuildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout),error=function(e) NULL)
-    if(is.null(tbuildings)) {
-      p<-ggplot(as.data.frame(BD),aes(Longitude,Latitude))+stat_bin_2d(drop = F,binwidth = 0.1)
+    buildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout),error=function(e) NULL)
+    if(is.null(buildings)) {
+      p<-ggplot(as.data.frame(BD),aes(Longitude,Latitude))+stat_bin_2d(drop = F,binwidth = 0.1) #LOOSEEND: will not work if BD has not been passed as an argument
       pg<-(ggplot_build(p))$data[[1]]; rm(p)
       buildings<-data.frame()
       for(i in 1:nrow(pg)){
@@ -77,6 +77,69 @@ GetOSMbuildings<-function(BD,bbox=NULL,minnum=50,plotty=F,timeout=60){
                               data = buildings[,c("building.levels","area")],
                               proj4string = crs("+proj=longlat +datum=WGS84 +ellps=WGS84")))
     
+  return(buildings)
+  
+}
+
+getOSMBuildingCount <- function(ODDy){
+  #ODDy <- readRDS('/home/manderso/Documents/GitHub/IIDIPUS_InputRealwithMort/ODDobjects/EQ20131015PHL_-13')
+  bbox <- ODDy@bbox
+  buildings<-GetOSMbuildingsODD(ODDy, timeout=60)
+  rastered <- rasterize(cbind(buildings$Longitude, buildings$Latitude), raster(ODDy), fun='count')
+  rastered_spdf <- as(rastered, "SpatialPixelsDataFrame")
+  
+  data <- ODDy@data
+  data$Longitude <-  round(ODDy@coords[,1], 8)
+  data$Latitude <- round(ODDy@coords[,2], 8)
+  data$id <- 1:NROW(data)
+  data <- merge(data, data.frame(Longitude=round(rastered_spdf@coords[,1], 8), Latitude=round(rastered_spdf@coords[,2], 8), Buildings_OSM = rastered_spdf@data$layer), 
+                by=c('Latitude', 'Longitude'), all.x = TRUE)
+  data <- data[order(data$id),]
+  data$Buildings_OSM[which(is.na(ODD@data$Buildings_OSM))] <- 0
+  data$Buildings_OSM[which(is.na(data$ISO3C))] <- NA
+  #ODDy@data <- dplyr::select(data, -c(Longitude, Latitude, id))
+  
+  return(data$Buildings_OSM)
+}
+
+
+GetOSMbuildingsODD<-function(ODD,bbox=NULL,minnum=50,plotty=F,timeout=60){
+  
+  if(is.null(bbox)) bbox<-ODD@bbox
+  
+  area<-(bbox[4]-bbox[2])*(bbox[3]-bbox[1])
+  # If the bounding box size is too large, separate into pixels
+  # I know that an area of 0.01 normally returns decent results
+  if(area>0.01){
+    tbuildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout),error=function(e) NULL)
+    if(is.null(tbuildings)) {
+      p<-ggplot(as.data.frame(ODD),aes(Longitude,Latitude))+stat_bin_2d(drop = F,binwidth = 0.1)
+      pg<-(ggplot_build(p))$data[[1]]; rm(p)
+      buildings<-data.frame()
+      for(i in 1:nrow(pg)){
+        bbox<-as.double(pg[i,c("xmin","ymin","xmax","ymax")])
+        tbuildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout),error=function(e) NULL)
+        if(is.null(tbuildings)) next
+        buildings%<>%rbind(tbuildings)
+      }
+    }
+  } else {
+    # ensure bbox has an area of at least 0.01
+    bbox<-expandBbox(bbox,0.01,scaling = F)
+    buildings<-ExtractOSMbuild(bbox,timeout=timeout)
+  }
+  # i<-1
+  # while((nrow(buildings)<minnum | sum(!is.na(buildings$building.levels))<minnum) & i<10){
+  #   bbox%<>%expandBbox(1.1,scaling = T)
+  #   buildings%<>%rbind(ExtractOSMbuild(bbox))
+  #   buildings%<>%distinct()
+  #   i<-i+1
+  # }
+  
+  return(SpatialPointsDataFrame(coords = buildings[,c("Longitude","Latitude")],
+                                data = buildings[,c("building.levels","area")],
+                                proj4string = crs("+proj=longlat +datum=WGS84 +ellps=WGS84")))
+  
   return(buildings)
   
 }

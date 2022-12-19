@@ -622,11 +622,11 @@ plotODDy<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=
   
 }
 
-MakeODDPlots<-function(ODDy, input=NULL){
+MakeODDPlots<-function(ODDy, input=NULL,zoomer=7, bbox=NULL){
   
     ODDy@data$Disp[ODDy@data$Disp<1]<-0
   
-    mad_map <- get_stamenmap(ODDy@bbox,source = "stamen",maptype = "toner",zoom=9)
+    mad_map <- get_stamenmap(ODDy@bbox,source = "stamen",maptype = "terrain",zoom=zoomer)
     q<-ggmap(mad_map)
     p1<-q+ geom_raster(data=as.data.frame(ODDy),aes(Longitude,Latitude,fill=Disp),
                        alpha=0.5,interpolate = T, inherit.aes = FALSE) + coord_cartesian() +

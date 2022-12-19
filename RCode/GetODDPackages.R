@@ -20,7 +20,7 @@ GetSourceFiles<-function(packred){
     source('RCode/GetDisaster.R')
     # IDP estimate related:
     source('RCode/GetDisplacements.R')
-    source('RCode/GetHelix.R')
+    # source('RCode/GetHelix.R')
     # Demography & population related:
     source('RCode/GetPopDemo.R')
     source('RCode/GetSocioEconomic.R')

@@ -26,7 +26,7 @@ Model$haz<-haz
 # Get linear predictor variables (currently the same for both building damage and human displacement)
 if(haz%in%c("EQ","TC","FL")) {
   # Form a list of the different components used in the linear predictor
-  INFORM_vars%<>%c(grep(haz,c("HA.NAT.EQ","HA.NAT.TC","HA.NAT.FL"),value = T))
+  # INFORM_vars%<>%c(grep(haz,c("HA.NAT.EQ","HA.NAT.TC","HA.NAT.FL"),value = T))
   # MUST BE SAME LENGTH AND CORRESPOND EXACTLY TO INFORM_vars + HAZ.NAT.EQ/TC/FL + Sinc/dollar,
   fIndies<-list(CC.INS.GOV.GE=returnX, # Government Effectiveness
                 VU.SEV.AD=returnX, # Economic Dependency Vulnerability
@@ -49,7 +49,7 @@ if(haz%in%c("EQ","TC","FL")) {
                  "p90p100" # top 10% share of Income Distribution
   )
   
-  Model%<>%c(list(INFORM_vars=INFORM_vars,WID_perc=WID_perc,fIndies=fIndies))
+  Model%<>%c(list(WID_perc=WID_perc,fIndies=fIndies))
   
 }
 

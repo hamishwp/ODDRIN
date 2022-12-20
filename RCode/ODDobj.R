@@ -34,7 +34,6 @@ library(devtools)
 library(parallel)
 library(doParallel)
 library(foreach)
-install_github('nathanvan/parallelsugar')
 library(parallelsugar)
 
 checkODD<-function(object) {
@@ -210,12 +209,8 @@ setMethod(f="initialize", signature="ODD",
             
             
             
-            stop("hazard frequency linked to correct hazard here, remove INFORM crap")
+            
             stop("Also remove INFORM crap from Model.R")
-            if(lhazSDF$hazard_info$hazard=="EQ") Model$INFORM_vars%<>%c("HA.NAT.EQ")
-            else if(lhazSDF$hazard_info$hazard=="TC") Model$INFORM_vars%<>%c("HA.NAT.TC")
-            else if(lhazSDF$hazard_info$hazard=="FL") Model$INFORM_vars%<>%c("HA.NAT.FL")
-            else stop("Not currently prepared for hazards other than EQ, TC or FL")
             
             
             

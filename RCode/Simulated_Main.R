@@ -21,10 +21,10 @@ Omega <- list(Lambda1 = list(nu=8,omega=4.9),
               Pdens = list(M=0.01988616, k = 6.473428),
               dollar = list(M = -0.41271, k = 6.473428),
               theta = list(e=0.2359788),
-              eps = list(eps=0.01304351) )#,
-              #lp = list(A=-0.9,B=0.5, C=0.2, D=0, E=-0.3)) #include linear predictor terms for testing
+              eps = list(eps=0.01304351),
+              lp = list(ExpectedSchoolYrs=0,LifeExp=0, GrossNatInc=0, Stiff=0, PGA=0)) #include linear predictor terms for testing
 
-Model$center <- simulateDataSet(100, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)
+Model$center <- simulateDataSet(20, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)
 
 #After generating the simulated data, need to move 'from 'centerings' 
 #and 'ODDobjects' from 'IIDIPUS_SimInput' to 'IIDIPUS_Input'

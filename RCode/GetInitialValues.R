@@ -8,6 +8,7 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   ufiles<-list.files(path=path,pattern=haz,recursive = T,ignore.case = T)
   ufiles<-ufiles[grepl(ufiles,pattern = haz)]
   GDP<-nGDP<-0
+  
   for(fff in ufiles){
     ODDy<-readRDS(paste0(path,fff))
 
@@ -16,7 +17,42 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
     
   }
   
-  center<-list(Pdens=log(301),dollar=GDP/nGDP)
+  # # Read in Global Data Lab data and calculate the mean and standard deviation of each variable
+  # # Note that we calculate the mean and sd using all regions (not just those in the training set)
+  # GDLdata <- readGlobalDataLab()
+  
+  ExpectedSchoolYrs_mean <- 11.64138 # mean(GDLdata$ExpectedSchoolYrs); 
+  ExpectedSchoolYrs_sd <- 3.478292 #sd(GDLdata$ExpectedSchoolYrs);
+  LifeExp_mean <- 68.30403 #mean(GDLdata$LifeExp); 
+  LifeExp_sd <- 9.607136 #sd(GDLdata$LifeExp);
+  GrossNatInc_mean <- 8.913694 #mean(log(GDLdata$GrossNatInc)); 
+  GrossNatInc_sd <- 1.18729 #sd(log(GDLdata$GrossNatInc));
+  
+  
+  # # Read in Stiff data and calculate the mean and standard deviation, again using all regions in the dataset:
+  # if(!file.exists(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))) stop("Please download the VS30 dataset (geotiff and auxiliary files) here https://earthquake.usgs.gov/data/vs30/.")
+  # stiff<-raster(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))
+  
+  stiff_mean <- 562.4323 #cellStats(stiff,'mean')
+  stiff_sd <- 143.9429 #cellStats(stiff,'sd')
+  
+  # # Read in GDPA data and calculate the mean and standard deviation, again using all regions in the dataset:
+  # 
+  # if(!file.exists(paste0(dir,"Hazard_Data/gdpga/gdpga.asc"))) stop("Please download the hazard frequency data here: https://sedac.ciesin.columbia.edu/data/set/ndh-earthquake-distribution-peak-ground-acceleration/data-download.  Note you'll have to create a SEDAC account.")
+  # pga<-SortDemoData(paste0(dir,"Hazard_Data/gdpga/gdpga.asc"))
+  # pga%<>%convMat2SPDF(name="PGA")
+  
+  pga_mean <- 5.411167 # mean(pga$PGA, na.rm=T)
+  pga_sd <- 2.918439 # sd(pga$PGA, na.rm=T)
+    
+  center<-list(Pdens=log(301),
+               dollar=GDP/nGDP,
+               ExpectedSchoolYrs=list(mean=ExpectedSchoolYrs_mean, sd=ExpectedSchoolYrs_sd),
+               LifeExp=list(mean=LifeExp_mean, sd=LifeExp_sd),
+               GrossNatInc=list(mean=GrossNatInc_mean, sd=GrossNatInc_sd),
+               Stiff=list(mean=stiff_mean, sd=stiff_sd),
+               PGA=list(mean=pga_mean, sd=pga_sd))
+  
   # center<-list(Gov=98.7,Vuln=51,CC=44,MPI=53.7,Pinf=103,Pexp=112,Sinc=0.2152956,Ik=0.4,A=3.6,H=1.65)
   print(unlist(center))
   

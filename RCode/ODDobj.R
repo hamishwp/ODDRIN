@@ -432,18 +432,18 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
                           !ODD$ISO3C%in%ODD@impact$iso3))
   
   BD_data_present <- ifelse(all(is.na(ODD@data$nBuildings)) , F, T)
+  
   # Calculate non-local linear predictor values
-  LP<-GetLP(ODD,Omega,Params,Sinc,notnans)
+  LP<-GetLP(ODD,Omega,Params,Sinc,notnans) 
   
   # Speed things up a little
   hrange<-grep("hazMean",names(ODD),value = T)
   
   # Function to predict displacement per gridpoint
   CalcDam<-function(ij){
-    iso3c<-ODD@data$ISO3C[ij]
     # Calculate local linear predictor (NOTE: is a vector due to income distribution)
-    locallinp<-LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] #LOOSEEND
-    #locallinp<-rep(1,10) #reducing parameter space while I'm figuring out the MCMC
+    locallinp<- LP[ij,] # LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] 
+    #locallinp<-rep(1,10) #reduces parameter space and removes demographic covariates
 
     # Sample population per income distribution (Assumes 9 percentiles):
     lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) 

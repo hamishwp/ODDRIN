@@ -84,9 +84,9 @@ Model$links<-list(
   dollar=list(M='ab_bounded',k='ab_bounded'),
   theta=list(e='ab_bounded'), #list(e=0.25),
   # rho=list(A='exp',H='exp'),
-  eps=list(eps='ab_bounded')#,#,xi='exp')
+  eps=list(eps='ab_bounded'),#,#,xi='exp')
   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
-  #lp=list(A='ab_bounded', B='ab_bounded', C='ab_bounded', D='ab_bounded', E='ab_bounded') # add linear predictor terms for testing
+  lp=list(ExpectedSchoolYrs='ab_bounded',LifeExp='ab_bounded', GrossNatInc='ab_bounded', Stiff='ab_bounded', PGA='ab_bounded') # add linear predictor terms for testing
 )
 
 # Model$links<-list(
@@ -137,9 +137,9 @@ Model$unlinks<-list(
   dollar=list(M='ab_bounded_inv',k='ab_bounded_inv'),
   theta=list(e='ab_bounded_inv'), #list(e=0.25),
   # rho=list(A='log',H='log'),
-  eps=list(eps='ab_bounded_inv')#,#,xi='log')
+  eps=list(eps='ab_bounded_inv'),#,#,xi='log')
   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
-  #lp=list(A='ab_bounded_inv', B='ab_bounded_inv', C='ab_bounded_inv', D='ab_bounded_inv', E='ab_bounded_inv')
+  lp=list(ExpectedSchoolYrs='ab_bounded_inv',LifeExp='ab_bounded_inv', GrossNatInc='ab_bounded_inv', Stiff='ab_bounded_inv', PGA='ab_bounded_inv')
 )
 
 Model$acceptTrans <- list(
@@ -155,9 +155,9 @@ Model$acceptTrans <- list(
   dollar=list(M='ab_bounded_acc',k='ab_bounded_acc'),
   theta=list(e='ab_bounded_acc'), #list(e=0.25),
   # rho=list(A=NA,H=NA),
-  eps=list(eps='ab_bounded_acc')#,#,xi=NA)
+  eps=list(eps='ab_bounded_acc'),#,#,xi=NA)
   # mu=list(muplus=NA,muminus=NA,sigplus=NA,sigminus=NA)
-  #lp=list(A='ab_bounded_acc', B='ab_bounded_acc', C='ab_bounded_acc', D='ab_bounded_acc', E='ab_bounded_acc')
+  lp=list(ExpectedSchoolYrs='ab_bounded_acc',LifeExp='ab_bounded_acc', GrossNatInc='ab_bounded_acc', Stiff='ab_bounded_acc', PGA='ab_bounded_acc')
 )
 
 # names(Model$unlinks$beta)[1]<-paste0("HA.NAT.",haz)
@@ -175,9 +175,9 @@ Model$skeleton <- list(
   dollar=list(M=NA,k=NA),
   theta=list(e=NA), #list(e=0.25),
   # rho=list(A=NA,H=NA),
-  eps=list(eps=NA)#,#,xi=NA)
+  eps=list(eps=NA),#,#,xi=NA)
   # mu=list(muplus=NA,muminus=NA,sigplus=NA,sigminus=NA)
-  #lp=list(A=NA, B=NA, C=NA, D=NA, E=NA)
+  lp=list(ExpectedSchoolYrs=NA,LifeExp=NA, GrossNatInc=NA, Stiff=NA, PGA=NA)
 )
 # names(Model$skeleton$beta)[1]<-paste0("HA.NAT.",haz)
 
@@ -195,8 +195,8 @@ Model$par_lb <- c(6,
                   -3,  #dollar M
                   0,   #dollar k
                   0.1, #theta_e
-                  0)#, #epsilon
-                  #-1, -1, -1, -1, -1) 
+                  0,# #epsilon
+                  -0.1, -0.1, -0.1, -0.1, -0.1) #lp
 
 Model$par_ub <- c(9.5, 
                   6, 
@@ -211,8 +211,8 @@ Model$par_ub <- c(9.5,
                   0,  #dollar M
                   10, #dollar k
                   1, #theta_e
-                  1)#, #epsilon
-                  #1, 1, 1, 1, 1) 
+                  1,#, #epsilon
+                  0.1, 0.1, 0.1, 0.1, 0.1) #lp
 
 
 # Get the binary regression function
@@ -245,6 +245,8 @@ Model$center<-ExtractCentering(dir,haz,T)
 Model$impacts <- list(labels = c('mortality', 'displacement', 'buildDam', 'buildDest'), 
                       qualifiers = c('qualifierMort', 'qualifierDisp', 'qualifierBuildDam', 'qualifierBuildDest'),
                       sampled = c('mort_sampled', 'disp_sampled', 'buildDam_sampled', 'buildDest_sampled'))
+
+Model$covar <- c('ExpectedSchoolYrs', 'LifeExp','GrossNatInc', 'Stiff', 'PGA')
 
 #Modifiers to capture change in probability of building damage from 1st to subsequent events
 #e.g. We may expect P(Unaffected -> Damaged) is smaller in an aftershock as the building has been strong
@@ -294,7 +296,7 @@ locpred<-function(x,params){
 }
 
 GDPlinp<-function(ODD,Sinc,beta,center,notnans){
-  iGDP<-as.numeric(factor(ODD@data$GDP,levels=unique(ODD@data$GDP)))
+  iGDP<-as.numeric(factor(interaction(ODD@data$GDP, ODD@data$ISO3C), levels=unique(interaction(ODD@data$GDP, ODD@data$ISO3C))))
   dGDP<-data.frame(ind=iGDP[notnans],GDP=ODD@data$GDP[notnans],iso=ODD@data$ISO3C[notnans])
   dGDP%<>%group_by(ind)%>%summarise(value=log(unique(GDP)*(Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"value"]/
                                       Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]) & Sinc$variable=="p50p100","value"])),
@@ -340,6 +342,7 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans){
     #names(linp)<-unique(ODD@cIndies$iso3)
     #llinpred(Params[c(unique(ODD@cIndies$iso3))],Omega$beta,Params$center,Params$fIndies)
   }
+  
   # Calculate possible dollar (GDP*income_dist) linear predictor values
   GDP<-GDPlinp(ODD,Sinc,Omega$dollar,Params$center,notnans)
   # Calculate population density linear predictor values
@@ -347,7 +350,21 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans){
                   Omega$Pdens,
                   Params$center,
                   notnans)
-  return(list(linp=linp,dGDP=GDP$dGDP,iGDP=GDP$iGDP,Plinp=Plinp))
+  
+  LP <- array(NA, dim=c(NROW(ODD@data), 9))
+  
+  for(ij in notnans){
+    iso3c<-ODD@data$ISO3C[ij]
+    LP[ij,] <- GDP$dGDP$linp[GDP$dGDP$ind==GDP$iGDP[ij]]*Plinp[ij]*linp[[iso3c]] 
+  }
+  
+  ODD@data$GrossNatInc[notnans] %<>% log()
+  
+  for (covar in names(Omega$lp)){
+    LP[notnans,] <- LP[notnans,] * exp(Omega$lp[[covar]] * (ODD@data[notnans, covar] - Params$center[[covar]]$mean)/Params$center[[covar]]$sd)
+  }
+  
+  return(LP)
 }
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -468,18 +485,50 @@ fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
 # Log likelihood, posterior and prior distribution calculations
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
+#GetLP_single serves the same purpose as GetLP but works for a single pixel/point
+GetLP_single <- function(Omega, center, covariates){
+  
+  tp<-list(shape=Omega$dollar$k,M=Omega$dollar$M,
+           scale=WeibullScaleFromShape(shape = Omega$dollar$k,center = center$dollar))
+  
+  lp <- Plinpred(covariates$Pdens, Omega$Pdens, center, 1) * locpred(covariates$gdp,tp)
+  
+  covariates$GrossNatInc <- log(covariates$GrossNatInc)
+    
+  for (covar in names(Omega$lp)){
+    lp <- lp * exp(Omega$lp[[covar]] * (covariates[[covar]] - center[[covar]]$mean)/center[[covar]]$sd)
+  }
+  
+  return(lp)
+  
+}
+
 # These high-level priors are to include expert opinion in the 
 # model calculations, not in the individual parameters themselves (for this, see priors)
 Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
   
-  min_gdp <- 2.200571; max_gdp <- 12.40876 #minimum and maximum log gdp from the dataset
-  min_pdens <- 0; max_pdens <- 109043.5 #minimum and maximum population density from the dataset
+  min_gdp <- 2.200571; max_gdp <- 12.40876 #minimum and maximum log gdp from the training dataset
+  min_Pdens <- 0; max_Pdens <- 109043.5 #minimum and maximum population density from the training dataset
+  min_ExpectedSchoolYrs <- 0.342; max_ExpectedSchoolYrs <- 18 #minimum and maximum from all regions in GDL dataset
+  min_LifeExp <- 24.511; max_LifeExp <- 85.413 #minimum and maximum from all regions in GDL dataset
+  min_GrossNatInc <-  5.887395; max_GrossNatInc <- 12.23771 #minimum and maximum from all regions in GDL dataset
+  min_Stiff <- 98; max_Stiff <- 2197 #minimum and maximum from all regions in soil stiffness dataset
+  min_PGA <- 1; max_PGA <- 10 #minimum and maximum from all regions in PGA dataset
   
-  tp<-list(shape=Omega$dollar$k,M=Omega$dollar$M,
-           scale=WeibullScaleFromShape(shape = Omega$dollar$k,center = Model$center$dollar))
-  
-  linp_min <- Plinpred(min_pdens, Omega$Pdens, Model$center, 1) * locpred(max_gdp,tp)
-  linp_max <- Plinpred(max_pdens, Omega$Pdens, Model$center, 1) * locpred(min_gdp,tp)
+  linp_min <- GetLP_single(Omega, Model$center, covariates=list(gdp=max_gdp, 
+                                                                Pdens=min_Pdens, 
+                                                                ExpectedSchoolYrs=max_ExpectedSchoolYrs,
+                                                                LifeExp=max_LifeExp,
+                                                                GrossNatInc=max_GrossNatInc,
+                                                                Stiff=max_Stiff,
+                                                                PGA=max_PGA))
+  linp_max <- GetLP_single(Omega, Model$center, covariates=list(gdp=min_gdp, 
+                                                                Pdens=max_Pdens, 
+                                                                ExpectedSchoolYrs=min_ExpectedSchoolYrs,
+                                                                LifeExp=min_LifeExp,
+                                                                GrossNatInc=min_GrossNatInc,
+                                                                Stiff=min_Stiff,
+                                                                PGA=min_PGA))
   
   if(!is.null(modifier)) lp<-exp(as.numeric(unlist(modifier))) else lp<-1.
   lp <- c(linp_min, 1, linp_max) # lp_range - 0.361022 corresponds to lp for minimum GDP and PDens scaling, 2.861055 corresponds to maximum
@@ -490,6 +539,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     # where DispMort is the sum of the probabilities of displacement and mortality
     # and DamDest is the sum of the probabilities of building damage and destruction.
                      #(Mort, DispMort, Dest, DamDest)
+    
     Upp_bounds_4.6 <- c(0.01, 0.01, 0.01, 0.1)
     Low_bounds_6 <- c(0, 0.001, 0, 0.001)
     Upp_bounds_6 <- c(0.3, 0.5, 0.5, 0.8)
@@ -499,11 +549,12 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
       rbind(apply(D_MortDisp_calc(h_0(I_ij, I0=4.5, theta=Omega$theta) * lp, Omega),2,cumsum), 
             apply(D_DestDam_calc(h_0(I_ij, I0=4.5, theta=Omega$theta) * lp, Omega), 2,cumsum))
     }
+    
     adder <- 0
     adder <- sum(apply(HLP_impacts(4.6, lp, Omega), 2, function (x) sum(x > Upp_bounds_4.6)))
     
     adder <- adder + sum(apply(HLP_impacts(6, lp, Omega), 2, 
-                               function (x) sum(c(x > Upp_bounds_6,x<Low_bounds_6))))
+                               function (x) sum(c(x > Upp_bounds_6, x<Low_bounds_6))))
     
     adder <- adder + sum(apply(HLP_impacts(9, lp, Omega), 2, function (x) sum(x < Low_bounds_9)))
 
@@ -552,11 +603,8 @@ LL_IDP<-function(Y,  kernel_sd, kernel, cap){
     print(paste0("Failed to recognise kernel", AlgoParams$kernel))
     return(-Inf)
   }
-  if(is.finite(LL_impact)){
-    LL = LL + LL_impact
-  } else {
-    LL = LL + cap
-  }
+  LL_impact[which(is.na(LL_impact))] <- cap
+  LL <- sum(LL_impact)
   return(LL)
 }
 

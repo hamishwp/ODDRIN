@@ -50,8 +50,8 @@ SortDemoData<-function(filer,bbox=NULL){
   sizer2<-c(nrows,ncols+1)
   if(!all(length(sizer)==length(sizer2)) || !all(sizer==sizer2)){stop(paste0("ERROR! Incorrect dimensions: Check the population demography file for bounding box ",bbox," in file GetPopDemo.R"))}
   
-  lat<-seq(from=yllcorner+90,by=-cellsize,length.out = nrows) #@@@ LATITUDE @@@#
-  long<-seq(from=xllcorner,by=cellsize,length.out = ncols)    #@@@ LONGITUDE @@@#
+  lat<-seq(from=yllcorner+90-cellsize/2,by=-cellsize,length.out = nrows) #@@@ LATITUDE @@@#
+  long<-seq(from=xllcorner+cellsize/2,by=cellsize,length.out = ncols)    #@@@ LONGITUDE @@@#
   colnames(popdemo)<-long
   row.names(popdemo)<-lat
   
@@ -468,7 +468,7 @@ readFBpop<-function(bbox,saveloc="/tmp/tmp_hrsl.tif"){
   
   # Linux terminal call to extract the FB population data directly from AWS server
   liner<-paste0("gdal_translate  /vsicurl/https://dataforgood-fb-data.s3.amazonaws.com/hrsl-cogs/hrsl_general/hrsl_general-latest.vrt ", 
-  saveloc," -projwin ",strbbox," -projwin_srs EPSG:4326")
+                saveloc," -projwin ",strbbox," -projwin_srs EPSG:4326")
   # Call it!
   system(liner)
   # Now read in the file
@@ -510,18 +510,19 @@ getFBbuildings <- function(ODDy){
   rastered_spdf <- as(rastered, "SpatialPixelsDataFrame")
   
   data <- ODDy@data
-  data$Longitude <-  ODDy@coords[,1]
-  data$Latitude <- ODDy@coords[,2]
+  data$Longitude <-  round(ODDy@coords[,1], 8)
+  data$Latitude <- round(ODDy@coords[,2], 8)
   data$id <- 1:NROW(data)
-  data <- merge(data, data.frame(Longitude=rastered_spdf@coords[,1], Latitude=rastered_spdf@coords[,2], FBPop2 = rastered_spdf@data$layer), 
+  data <- merge(data, data.frame(Longitude=round(rastered_spdf@coords[,1], 8), Latitude=round(rastered_spdf@coords[,2], 8), FBPop2 = rastered_spdf@data$layer), 
                 by=c('Latitude', 'Longitude'), all.x = TRUE)
   data <- data[order(data$id),]
   data$FBPop2[which(is.na(data$ISO3C))] <- NA
-  ODDy@data <- dplyr::select(data, -c(Longitude, Latitude, id))
   
   #need to retrieve aveHouseholdSize from Global Data Lab
-  ODDy@data$nHouses <- ODDy@data$FBPop / 4 #replace 4 with ODDy@data$aveHouseholdSize from global data lab
+  ODDy@data$FBPop2 <- data$FBPop2
+  ODDy@data$nHouses <- data$FBPop2 / 3.17 #replace 3.17 with ODDy@data$aveHouseholdSize from global data lab
   
+  return(ODDy)
   # Concerns:
   # - Granularity. Need number of houses to be an integer - rounding produces a fair bit of coarseness. Not so much an issue in dense areas, but e.g. in Canterbury 
   #   35% of cells have populations between 0 and 4 which is less than the average household size. 
@@ -598,8 +599,8 @@ AggFBPopSEDAC<-function(ODDy,arrayz,iso3=NULL,funcy="sum",namer="FBPop", napop=T
   grid<-as.data.frame(ODDy@grid)
   ODDy@data$array<-NA
   arrayz<-data.frame(Longitude=arrayz@coords[,1],
-                    Latitude=arrayz@coords[,2],
-                    Population=arrayz@data$Population)
+                     Latitude=arrayz@coords[,2],
+                     Population=arrayz@data$Population)
   
   if(napop) {
     if(!is.null(iso3)) ijs<-which(!is.na(ODDy@data$Population) & ODDy@data$ISO3C==iso3) else ijs<-which(!is.na(ODDy@data$Population))
@@ -627,7 +628,7 @@ AggFBPopSEDAC<-function(ODDy,arrayz,iso3=NULL,funcy="sum",namer="FBPop", napop=T
 }
 
 GridUpFBPop<-function(ODDy,ncores=2,funcy="sum",namer="FBPop"){
-
+  
   indies<-!is.na(ODDy@data$Population)
   bbox<-c((min(ODDy@coords[indies,1]) - ODDy@grid@cellsize[1]/2),
           (min(ODDy@coords[indies,2]) - ODDy@grid@cellsize[2]/2),
@@ -692,3 +693,129 @@ ChangeAllSEDACS_FB<-function(folderin="./IIDIPUS_Results/ODDobjects/",folderout=
 #                   mc.cores = cores))
 #   
 # }
+
+# 
+## compare OSM and Meta Data For Good - all very messy and will delete once I've sorted out the building count data
+
+# ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/ODDy_NZL_OSMvsFB')
+# which.max(ODDy@data$nHouses-ODDy@data$Buildings_OSM)
+# ODDy@data$Buildings_OSM[8333]
+# bbox_interest <- t(rbind(ODDy@coords[8333,]-ODDy@grid@cellsize/2, ODDy@coords[8333,]+ODDy@grid@cellsize/2))
+# FBpop_interest<-readFBpop(bbox_interest)
+# FBpop_interest@coords
+# sum(FBpop_interest@data$Population)
+# 
+# 
+# #Compare SEDAC and Meta Data for Good
+# bbox_small <- ODDy@bbox
+# bbox_small[1:2,1:2] <- rbind(c(124.9, 124.95), c(8.9,8.95))
+# SEDAC_small <- GetPopulationBbox(dir, bbox=bbox_small, yr='2020')
+# 
+# buildings<-GetOSMbuildingsODD(ODDy, bbox = ODDy@bbox, timeout=60)
+# rastered <- rasterize(cbind(buildings$Longitude, buildings$Latitude), raster(ODDy), fun='count')
+# rastered_spdf <- as(rastered, "SpatialPixelsDataFrame")
+# 
+# data <- ODDy@data
+# data$Longitude <-  round(ODDy@coords[,1], 8)
+# data$Latitude <- round(ODDy@coords[,2], 8)
+# data$id <- 1:NROW(data)
+# data <- merge(data, data.frame(Longitude=round(rastered_spdf@coords[,1], 8), Latitude=round(rastered_spdf@coords[,2], 8), Buildings_OSM = rastered_spdf@data$layer),
+#               by=c('Latitude', 'Longitude'), all.x = TRUE)
+# data <- data[order(data$id),]
+# data$Buildings_OSM[which(is.na(ODDy@data$Buildings_OSM))] <- 0
+# data$Buildings_OSM[which(is.na(data$ISO3C))] <- NA
+# 
+# OSM_small <-
+# FBpop_small<-readFBpop(SEDAC_small@bbox)
+# plot(SEDAC_small)
+# points(FBpop_small, col='white', pch=20, cex=FBpop_small$Population/5)
+# 
+# 
+# #compare OSM with SEDAC
+# 
+# ODDy <- readRDS('/home/manderso/Documents/GitHub/IIDIPUS_InputRealUnedited/ODDobjects/EQ20170210PHL_816')
+# bbox <- ODDy@bbox
+# FBpop <- readFBpop(bbox)
+# rastered <- rasterize(FBpop, raster(ODDy), 'Population', fun='sum')
+# rastered_spdf <- as(rastered, "SpatialPixelsDataFrame")
+# 
+# data <- ODDy@data
+# data$Longitude <-  round(ODDy@coords[,1], 8)
+# data$Latitude <- round(ODDy@coords[,2], 8)
+# data$id <- 1:NROW(data)
+# data <- merge(data, data.frame(Longitude=round(rastered_spdf@coords[,1], 8), Latitude=round(rastered_spdf@coords[,2], 8), FBPop2 = rastered_spdf@data$layer), 
+#               by=c('Latitude', 'Longitude'), all.x = TRUE)
+# data <- data[order(data$id),]
+# ODDy@data$FBPop2 <- data$FBPop2
+# 
+# bbox_small <- bbox
+# bbox_small[1:2, 1:2] <- rbind(c(125.5, 125.6), c(9.6,9.71))
+# 
+# buildings<-GetOSMbuildingsODD(ODDy, bbox = bbox_small, timeout=60)
+# rastered <- rasterize(cbind(buildings$Longitude, buildings$Latitude), raster(ODDy), fun='count')
+# rastered_spdf <- as(rastered, "SpatialPixelsDataFrame")
+# data <- ODDy@data
+# data$Longitude <-  round(ODDy@coords[,1], 8)
+# data$Latitude <- round(ODDy@coords[,2], 8)
+# data$id <- 1:NROW(data)
+# data <- merge(data, data.frame(Longitude=round(rastered_spdf@coords[,1], 8), Latitude=round(rastered_spdf@coords[,2], 8), Buildings_OSM = rastered_spdf@data$layer),
+#               by=c('Latitude', 'Longitude'), all.x=T)
+# data <- data[order(data$id),]
+# data$Buildings_OSM[which(is.na(ODDy@data$Buildings_OSM))] <- 0
+# data$Buildings_OSM[which(is.na(data$ISO3C))] <- NA
+# 
+# 
+# 
+# OSM_small <-
+#   FBpop_small<-readFBpop(SEDAC_small@bbox)
+# plot(SEDAC_small)
+# points(FBpop_small, col='white', pch=20, cex=FBpop_small$Population/5)
+# 
+# 
+# 
+# 
+# FBpop <- readFBpop(bbox)
+# rastered <- rasterize(FBpop, raster(SEDAC_Pop), 'Population', fun='sum')
+# rastered_spdf <- as(rastered, "SpatialPixelsDataFrame")
+# 
+# data <- SEDAC_Pop@data
+# data$Longitude <-  round(SEDAC_Pop@coords[,1], 8)
+# data$Latitude <- round(SEDAC_Pop@coords[,2], 8)
+# data$id <- 1:NROW(data)
+# data <- merge(data, data.frame(Longitude=round(rastered_spdf@coords[,1], 8), Latitude=round(rastered_spdf@coords[,2], 8), FBPop2 = rastered_spdf@data$layer),
+#               by=c('Latitude', 'Longitude'), all.x = TRUE)
+# data <- data[order(data$id),]
+# data[which(is.na(ODDy@data$ISO3C)),'FBPop2'] <- NA
+# par(mfrow=c(1,1))
+# plot(data$Population, data$FBPop2, xlab='SEDAC Population', ylab='Meta Data for Good Population')
+# abline(0,1)
+# 
+# plot(sort(data$Population/data$FBPop2), ylim=c(0,2))
+# #need to retrieve aveHouseholdSize from Global Data Lab
+# ODDy@data$FBPop2 <- data$FBPop2
+# ODDy@data$nHouses <- data$FBPop2 / 3.17 #replace 3.17 with ODDy@data$aveHouseholdSize from global data lab
+# 
+# rbPal <- colorRampPalette(c('red','blue'))
+# Col <- rbPal(10)[as.numeric(cut(FBpop@data$Population[141000:150000],breaks = 10))]
+# plot(FBpop@coords[141000:150000,1], FBpop@coords[141000:150000,2], col=Col, pch=20, cex=0.1)
+# plot_df <- data.frame(
+#   x =  FBpop@coords[,1],
+#   y = FBpop@coords[,2],
+#   width = .08333333333333333333/30,
+#   height = .08333333333333333333/30,
+#   Pop = FBpop@data$Population
+# )
+# 
+# cols = rainbow(26, s=.6, v=.9)[sample(1:26,26)]
+# 
+# ggplot(plot_df %>% filter(x>172.55 & x < 172.6 & y > -43.6 & y < -43.55), aes(x, y, width, height)) +
+#   geom_tile(aes(fill=as.factor(Pop)))+scale_fill_manual(values=rainbow(length(Pop), s=.6, v=.9)[sample(1:length(Pop),length(Pop))])
+# 
+# SEDAC_Pop_aligned <- SEDAC_Pop@data$Population[1:23986]
+# 
+# plot(ODDy@data$FBPop2, SEDAC_Pop_aligned)
+# SEDAC_Pop_aligned/ODDy@data$FBPop2
+# plot(ODDy@data$Population, SEDAC_Pop_aligned)
+# 
+# plot(ODDy_OSM@data$FBPop2/3.14, ODDy_OSM@data$Buildings_OSM, ylab='Open Street Maps', xlab='Meta Data for good Pop / Ave Household Size')
+# abline(0,1)

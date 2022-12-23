@@ -347,7 +347,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   # Get parameters for model
   Params<-FormParams(BD,list(Np=Method$Np,center=Model$center))
   # Income distribution percentiles & extract income percentile  
-  SincN<-seq(20,90,by = 10); Sinc<-ExtractCIndy(BD,var = paste0("p",SincN,"p100"))
+  SincN<-seq(10,90,by = 10); Sinc<-ExtractCIndy(BD,var = paste0("p",SincN,"p100"))
   # Load buildings file
   # buildings<-readRDS(BD@buildingsfile)
   # Sample income distribution by area*building height?
@@ -358,8 +358,9 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   CalcBD<-function(ij){
     iso3c<-BD@data$ISO3C[ij]
     # Calculate local linear predictor (NOTE: is a scalar - we randomly sample one value)
-    locallinp<-tryCatch(sample(LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]],size=Method$Np, replace=TRUE)*
-    LP$Plinp[ij]*LP$linp[[iso3c]],         error=function(e) NA) #LOOSEEND: Assumes that a house is equally likely to be from each income bracket. 
+    locallinp<-sample(LP[ij,], Method$Np, replace=T)
+    #tryCatch(sample(LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]],size=Method$Np, replace=TRUE)*
+    #LP$Plinp[ij]*LP$linp[[iso3c]],         error=function(e) NA) #LOOSEEND: Assumes that a house is equally likely to be from each income bracket. 
     #locallinp<- LP$dGDP$linp[5]* LP$Plinp[ij]*LP$linp[[iso3c]]
       # if(is.na(locallinp)) stop(ij)
     # locallinp<-1.

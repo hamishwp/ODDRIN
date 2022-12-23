@@ -53,31 +53,7 @@ setMethod(f="initialize", signature="ODDSim",
             n_polygons <- runif(1, 2, 10)
             
             if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
-            if(.Object@hazard%in%c("EQ","TC")){
-              .Object@impact <- data.frame(iso3=character(), polygon=numeric(), impact=character(),
-                                           observed=numeric(), qualifier = character())
-              for (j in 1:length(Model$impacts$labels)){
-                n_poly_observed <- runif(1, 1, n_polygons)
-                for (i in 1:n_poly_observed){
-                  .Object@impact %<>% add_row(
-                    iso3='ABC',
-                    polygon=i,
-                    impact=Model$impacts$labels[j],
-                    observed= 0,
-                    qualifier=ifelse(rbinom(1,1,0.8), 'Total', NA_character_))
-                }
-              }
-              #remove about half as currently simulated data is very populated compared to real data
-              .Object@impact <- .Object@impact[sample(1:NROW(.Object@impact),round(NROW(.Object@impact)/2), replace=F), ]
-              
-              .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
-                transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
-            } else {
-              # THIS IS READY FOR THE IPM APPROACH FOR MID/LONG DURATION HAZARDS
-              .Object@IDPs<-DamageData%>%group_by(sdate)%>%summarise(IDPs=max(IDPs),.groups = 'drop_last')%>%
-                transmute(date=sdate,IDPs=IDPs)
-              # Note that I leave .Object@gmax intentionally blank
-            }
+        
             # This bounding box is taken as the minimum region that encompasses all hazard events in HAZARD object:
             bbox<-lhazSDF$hazard_info$bbox
             dater<-min(lhazSDF$hazard_info$sdate)
@@ -106,35 +82,65 @@ setMethod(f="initialize", signature="ODDSim",
             inds<-!is.na(.Object$Population)
             
             .Object$GDP <- GDPSim
-            
             .Object@data$ISO3C<-NA_character_
-            .Object@data$ISO3C[inds]<-'ABC'
+            .Object@data$ISO3C[inds]<-coords2country(obj@coords)[inds]
             iso3c<-unique(.Object@data$ISO3C) ; iso3c<-iso3c[!is.na(iso3c)]
+            
+            if(length(iso3c)==0){return(NULL)}
+            
+            if(.Object@hazard%in%c("EQ","TC")){
+              .Object@impact <- data.frame(iso3=character(), polygon=numeric(), impact=character(),
+                                           observed=numeric(), qualifier = character())
+              for (j in 1:length(Model$impacts$labels)){
+                n_poly_observed <- runif(1, 1, n_polygons)
+                for (i in 1:n_poly_observed){
+                  .Object@impact %<>% add_row(
+                    iso3=sample(na.omit(.Object@data$ISO3C),1),
+                    polygon=i,
+                    impact=Model$impacts$labels[j],
+                    observed= 0,
+                    qualifier=ifelse(rbinom(1,1,0.8), 'Total', NA_character_))
+                }
+              }
+              #remove about half as currently simulated data is very populated compared to real data
+              .Object@impact <- .Object@impact[sample(1:NROW(.Object@impact),round(NROW(.Object@impact)/2), replace=F), ]
+              
+              .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
+                transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
+            } else {
+              # THIS IS READY FOR THE IPM APPROACH FOR MID/LONG DURATION HAZARDS
+              .Object@IDPs<-DamageData%>%group_by(sdate)%>%summarise(IDPs=max(IDPs),.groups = 'drop_last')%>%
+                transmute(date=sdate,IDPs=IDPs)
+              # Note that I leave .Object@gmax intentionally blank
+            }
             
             # Skip the interpolation of population and GDP values for the simulations
             
-            # Simulate INFORM (Joint Research Center - JRC) data:
-            # Sample the indicators from a uniform distribution on [0,10]
-            # Set some to 0 each with a probability of 0.1 (to mimic presence of zero values in real data).
-            INFORM <- data.frame(iso3='ABC', 
-                                 value=runif(length(Model$INFORM_vars),0,10),
-                                 variable=Model$INFORM_vars)
-            INFORM_missing <- rbernoulli(nrow(INFORM), 0.1)
-            INFORM$value[INFORM_missing]<-0
+            # # Simulate INFORM (Joint Research Center - JRC) data:
+            # # Sample the indicators from a uniform distribution on [0,10]
+            # # Set some to 0 each with a probability of 0.1 (to mimic presence of zero values in real data).
+            # INFORM <- data.frame(iso3='ABC',
+            #                      value=runif(length(Model$INFORM_vars),0,10),
+            #                      variable=Model$INFORM_vars)
+            # INFORM_missing <- rbernoulli(nrow(INFORM), 0.1)
+            # INFORM$value[INFORM_missing]<-0
             
             #Simulate World Income Database (WID) data
             #Simulate a cubic distribution with max given by max_inc (WID data appears close to cubic)
-            max_inc <- runif(1,0.4,0.8)
-            perc <- seq(0.1,0.9,0.1)
-            cubic <- perc^3+runif(1,0.3,1)*perc^2
-            WID <- data.frame(
-              variable=Model$WID_perc,
-              iso3='ABC',
-              value=cubic*max_inc/max(cubic)
-            )
+            WID <- data.frame(variable=numeric(), iso3=character(), value=numeric())
+            for (iso3 in unique(na.omit(.Object@data$ISO3C))){
+              max_inc <- runif(1,0.4,0.8)
+              perc <- seq(0.1,0.9,0.1)
+              cubic <- perc^3+runif(1,0.3,1)*perc^2
+              WID %<>% rbind(data.frame(
+                variable=Model$WID_perc,
+                iso3=iso3,
+                value=cubic*max_inc/max(cubic)
+              ))
+            }
             
             # Bind it all together!
-            .Object@cIndies<-rbind(INFORM,WID)
+            .Object@cIndies<-WID
             .Object@fIndies<-Model$fIndies
             
             linp<-rep(list(0.),length(unique(.Object@cIndies$iso3)))
@@ -149,8 +155,25 @@ setMethod(f="initialize", signature="ODDSim",
               
             .Object@polygons <- polygons_list
             
+            #Add linear predictor data
+            #need to tidy this up, not very reflective of real data to have this much variation within such a small region!
+            ulist <- unique(GDPSim)
+            ExpectedSchoolYrs_vals <- runif(length(ulist), 3, 18)
+            LifeExp_vals <- runif(length(ulist), 30, 85)
+            GrossNatInc_vals <- runif(length(ulist), 6, 12)
+            Stiff_vals <- runif(length(ulist), 98, 2197)
+            PGA_vals <- runif(length(ulist), 1, 10)
+            for(i in 1:length(ulist)){
+              .Object@data$ExpectedSchoolYrs[GDPSim %in% ulist[i]] <- ExpectedSchoolYrs_vals[i]
+              .Object@data$LifeExp[GDPSim %in% ulist[i]] <- LifeExp_vals[i]
+              .Object@data$GrossNatInc[GDPSim %in% ulist[i]] <- GrossNatInc_vals[i]
+              .Object@data$Stiff[GDPSim %in% ulist[i]] <- Stiff_vals[i]
+              .Object@data$PGA[GDPSim %in% ulist[i]] <- PGA_vals[i]
+            }
+            
             print("Checking ODDSim values")
             checkODD(.Object)
+            
             
             return(.Object)
           }
@@ -162,7 +185,7 @@ setMethod(f="initialize", signature="BDSim",
             if(is.null(ODD)) return(.Object)            
             
             .Object@hazard<-ODD@hazard
-            .Object@cIndies<-ODD@cIndies[ODD@cIndies$iso3%in%'ABC',]
+            .Object@cIndies<-ODD@cIndies
             .Object@I0<-ODD@I0
             .Object@hazdates<-ODD@hazdates
             .Object@eventid<-ODD@eventid
@@ -209,7 +232,7 @@ setMethod(f="initialize", signature="BDSim",
             
             print("Filter spatial data per country")
             # We could just copy Damage$iso3 directly, but I don't believe in anyone or anything...
-            if(NROW(.Object@data)>0) .Object@data$ISO3C<-'ABC'
+            if(NROW(.Object@data)>0) .Object@data$ISO3C<-coords2country(.Object@coords)
             
             print("Accessing OSM to sample building height & area")
             # ExtractOSMbuildVol(.Object,ODD)
@@ -290,7 +313,7 @@ simulateGDP <- function(r){
   #   the GDP of the closest point, therefore partitioning the data. This is an attempt to mimic the administrative 
   #   boundaries present in the actual GDP data.
   
-  nRegions = rpois(1, 20) + 1
+  nRegions = rpois(1, 5) + 1
   regionPoints = cbind(runif(nRegions,r@extent@xmin, r@extent@xmax),runif(nRegions,r@extent@ymin, r@extent@ymax))
   GDPperRegion = round(sort(runif(nRegions, 100, 100000)))
   r_mat <- rasterToPoints(r)
@@ -313,10 +336,18 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   # OUTPUT: 
   #  - ODDSim: an object of class ODDSim (the simulated equivalent of an ODD object)
   
-  r <- raster(ncol=10, nrow=10, xmn=-0.25, xmx=0.25, ymn=-0.25,ymx=0.25, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  xmn <- round(runif(1, -180, 179.5)/0.05)*0.05
+  ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
+  r <- raster(ncol=10, nrow=10, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  
+  while(all(is.na(coords2country(as(r, 'SpatialPixelsDataFrame')@coords)))){ #repeat until over a country
+    xmn <- round(runif(1, -180, 179.5)/0.05)*0.05
+    ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
+    r <- raster(ncol=10, nrow=10, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  }
   
   lenny = rgeom(1, 0.8) + 1 #generate number of events according to a geometric distribution
-  bbox = c(-0.25,-0.25,0.25,0.25) 
+  bbox = c(xmn,ymn,xmn+0.5,ymn+0.5) 
   lhazdat<-list(hazard_info=list(bbox=bbox,sdate=min(miniDam$sdate),fdate=max(miniDam$fdate),
                                  NumEvents=lenny,hazard="EQ", I0=I0, eventdates=rep(miniDam$sdate, lenny)))
   for(i in 1:lenny){
@@ -339,7 +370,7 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   PopSim <- simulatePopulation(r)
   GDPSim <- simulateGDP(r)
   
-  ODDSim <- new('ODDSim', lhazSDF=lhazdat,DamageData=miniDam, PopSim=PopSim, GDPSim=GDPSim, Model=Model)
+  ODDSim <- tryCatch(new('ODDSim', lhazSDF=lhazdat,DamageData=miniDam, PopSim=PopSim, GDPSim=GDPSim, Model=Model), error=function(e) NULL)
   
   return(ODDSim)
 }

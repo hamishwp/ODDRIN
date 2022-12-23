@@ -95,7 +95,7 @@ getOSMBuildingCount <- function(ODDy){
   data <- merge(data, data.frame(Longitude=round(rastered_spdf@coords[,1], 8), Latitude=round(rastered_spdf@coords[,2], 8), Buildings_OSM = rastered_spdf@data$layer), 
                 by=c('Latitude', 'Longitude'), all.x = TRUE)
   data <- data[order(data$id),]
-  data$Buildings_OSM[which(is.na(ODD@data$Buildings_OSM))] <- 0
+  data$Buildings_OSM[which(is.na(ODDy@data$Buildings_OSM))] <- 0
   data$Buildings_OSM[which(is.na(data$ISO3C))] <- NA
   #ODDy@data <- dplyr::select(data, -c(Longitude, Latitude, id))
   

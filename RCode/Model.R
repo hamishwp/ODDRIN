@@ -68,6 +68,25 @@ Model$skeleton <- list(
                   LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA) 
 )
 
+Model$Priors <- list( #currently not included in the acceptance probability. 
+  Lambda1=list(nu=list(dist='unif', min=6, max=9.5), 
+               omega=list(dist='unif', min=0, max=6)), 
+  Lambda2=list(nu=list(dist='unif', min=7.5, max=10.5), 
+               omega=list(dist='unif', min=0, max=6)),
+  Lambda3=list(nu=list(dist='unif', min=5, max=9.5), 
+               omega=list(dist='unif', min=0, max=6)),
+  Lambda4=list(nu=list(dist='unif', min=6.5, max=10.5), 
+               omega=list(dist='unif', min=0, max=6)),
+  theta=list(e=list(dist='unif', min=0.1, max=1)), 
+  eps=list(eps=list(dist='unif', min=0, max=1)),
+  vuln_coeff=list(itc=list(dist='norm', mean=0, sd=0.1),
+                  PDens=list(dist='norm', mean=0, sd=0.1),
+                  EQFreq=list(dist='norm', mean=0, sd=0.1),
+                  ExpSchYrs=list(dist='norm', mean=0, sd=0.1),
+                  LifeExp=list(dist='norm', mean=0, sd=0.1),
+                  GNIc=list(dist='norm', mean=0, sd=0.1),
+                  Vs30=list(dist='norm', mean=0, sd=0.1))
+)
 
 Model$links <- Model$skeleton
 Model$unlinks <- Model$skeleton
@@ -133,13 +152,13 @@ Model$par_lb <- c(6, #Lambda1$nu
                   0, #Lambda4$omega 
                   0.1, #theta_e
                   0, #epsilon
-                  -0.05, #itc
-                  -0.05, #PDens
-                  -0.05, #ExpSchYrs
-                  -0.05, #LifeExp
-                  -0.05, #GNIc
-                  -0.05, #Vs30
-                  -0.05 #EQFreq
+                  -1, #itc
+                  -1, #PDens
+                  -1, #ExpSchYrs
+                  -1, #LifeExp
+                  -1, #GNIc
+                  -1, #Vs30
+                  -1 #EQFreq
                   ) 
 
 Model$par_ub <- c(9.5, #Lambda1$nu 
@@ -152,13 +171,13 @@ Model$par_ub <- c(9.5, #Lambda1$nu
                   6, #Lambda4$omega 
                   1, #theta_e
                   1, #epsilon
-                  0.05, #itc
-                  0.05, #PDens
-                  0.05, #ExpSchYrs
-                  0.05, #LifeExp
-                  0.05, #GNIc
-                  0.05, #Vs30
-                  0.05 #EQFreq
+                  1, #itc
+                  1, #PDens
+                  1, #ExpSchYrs
+                  1, #LifeExp
+                  1, #GNIc
+                  1, #Vs30
+                  1 #EQFreq
 )
 
 

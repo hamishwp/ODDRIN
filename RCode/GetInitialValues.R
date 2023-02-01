@@ -178,10 +178,16 @@ HLPrior_sample <- function(Model, AlgoParams){
   HP <- AlgoParams$ABC + 1
   sample <- rep(0, n_x)
   while (HP > AlgoParams$ABC){
-    sample <- runif(n_x, Model$par_lb, Model$par_ub) #generate proposal on the physical space
+    s <- 1
+    for (i in 1:length(Model$Priors)){
+      for (j in 1:length(Model$Priors[[i]])){
+        prior_dist <- Model$Priors[[i]][[j]]
+        sample[s] <- do.call(match.fun(paste0('r', prior_dist$dist)), c(list(n=1), prior_dist[2:length(prior_dist)]))
+        s <- s + 1
+      }
+    }
     HP <- Model$HighLevelPriors(relist(sample,skeleton=Model$skeleton) %>% addTransfParams(),Model) #check higher level prior of the proposal
   }
-  print(sample)
   return(sample %>% relist(Model$skeleton)%>% Physical2Proposed(Model) %>% unlist())
 }
 

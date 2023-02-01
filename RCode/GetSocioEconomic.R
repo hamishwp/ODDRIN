@@ -88,6 +88,7 @@ GetWID_perc<-function(perc,iso3c,year){
   
   # Note that 'j' refers to the income divided equally between spouses 
   # (only chosen because it is the dataset with largest number of entries)
+  perc <- paste0('p',seq(0,90,10), 'p', seq(10,100,10))
   WID<-download_wid(indicators = "sptinc",years=as.character(year),perc = as.character(perc), pop = "j")
   # Filter by most popular variable (usually 'sptinc992j')
   # WID%<>%filter(variable==names(which.max(table(WID$variable))))%>%
@@ -96,11 +97,10 @@ GetWID_perc<-function(perc,iso3c,year){
     dplyr::select(-c(variable,country,year)) %>%
     filter(iso3%in%iso3c)
   
-  WID$value<-1-WID$value
-  names(WID)[names(WID)=="percentile"]<-"variable"
-  
-  mins<-WID%>%group_by(iso3)%>%summarise(mins=min(value),.groups = 'drop_last')
-  for(iso3c in mins$iso3) WID$value[WID$iso3==iso3c & WID$variable!="p10p100"]%<>%subtract(mins$mins[mins$iso3==iso3c])
+  #WID$value<-1-WID$value
+  #names(WID)[names(WID)=="percentile"]<-"variable"
+  #mins<-WID%>%group_by(iso3)%>%summarise(mins=min(value),.groups = 'drop_last')
+  #for(iso3c in mins$iso3) WID$value[WID$iso3==iso3c & WID$variable!="p10p100"]%<>%subtract(mins$mins[mins$iso3==iso3c])
   
   return(WID)
   

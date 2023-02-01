@@ -8,34 +8,19 @@ setClass("BDSim", contains="BD")
 # but some steps involve simulation rather than retrieving the necessary data. 
 setMethod(f="initialize", signature="ODDSim",
           definition=function(.Object,lhazSDF=NULL,DamageData=NULL, PopSim=NULL, GDPSim = NULL, dir="./",Model=list(
-            INFORM_vars=c("CC.INS.GOV.GE", # Government Effectiveness
-                          "VU.SEV.AD", # Economic Dependency Vulnerability
-                          "CC.INS.DRR", # Disaster Risk Reduction
-                          "VU.SEV.PD", # Multi-dimensional Poverty
-                          "CC.INF.PHY" # Physical Infrastructure
-            ), 
-            fIndies=list(CC.INS.GOV.GE=returnX, # Government Effectiveness
-                         VU.SEV.AD=returnX, # Economic Dependency Vulnerability
-                         CC.INS.DRR=returnX, # Disaster Risk Reduction
-                         VU.SEV.PD=returnX, # Multi-dimensional Poverty
-                         CC.INF.PHY=returnX, # Physical Infrastructure
-                         dollar=returnX, # IncomeDistribution*GDP
-                         Pdens=returnX), # IncomeDistribution*GDP
-            WID_perc=   c("p10p100", # top 90% share of Income Distribution
-                          "p20p100", # top 80% share of Income Distribution
-                          "p30p100", # top 70% share of Income Distribution
-                          "p40p100", # top 60% share of Income Distribution
-                          "p50p100", # top 50% share of Income Distribution
-                          "p60p100", # top 40% share of Income Distribution
-                          "p70p100", # top 30% share of Income Distribution
-                          "p80p100", # top 20% share of Income Distribution
-                          "p90p100" # top 10% share of Income Distribution
-            ), 
+            WID_perc<-   c("p0p10", # Bottom 10% share of Income Distribution
+                           "p10p20", # Income share held by 10th - 20th percentiles
+                           "p20p30", # Income share held by 20th - 30th percentiles
+                           "p30p40", # Income share held by 30th - 40th percentiles
+                           "p40p50", # Income share held by 40th - 50th percentiles
+                           "p50p60", # Income share held by 50th - 60th percentiles
+                           "p60p70", # Income share held by 60th - 70th percentiles
+                           "p70p80", # Income share held by 70th - 80th percentiles
+                           "p80p90", # Income share held by 80th - 90th percentiles
+                           "p90p100"), # top 10% share of Income Distribution
             impacts <- list(labels = c('mortality', 'displacement', 'buildDam', 'buildDest'), 
                             qualifiers = c('qualifierMort', 'qualifierDisp', 'qualifierBuildDam', 'qualifierBuildDest'),
                             sampled = c('mort_sampled', 'disp_sampled', 'buildDam_sampled', 'buildDest_sampled'))
-            
-            
             )) {
             
             if(is.null(lhazSDF)) return(.Object)
@@ -130,23 +115,26 @@ setMethod(f="initialize", signature="ODDSim",
             WID <- data.frame(variable=numeric(), iso3=character(), value=numeric())
             for (iso3 in unique(na.omit(.Object@data$ISO3C))){
               max_inc <- runif(1,0.4,0.8)
-              perc <- seq(0.1,0.9,0.1)
+              perc <- seq(0.1,1,0.1)
               cubic <- perc^3+runif(1,0.3,1)*perc^2
               WID %<>% rbind(data.frame(
                 variable=Model$WID_perc,
                 iso3=iso3,
                 value=cubic*max_inc/max(cubic)
               ))
+              mins<-WID%>%group_by(iso3)%>%summarise(mins=min(value),.groups = 'drop_last')
+              for(iso3c in mins$iso3) WID$value[WID$iso3==iso3c & WID$variable!="p0p10"]%<>%subtract(WID$value[WID$iso3==iso3c & WID$variable!="p90p100"])
+              for(iso3c in mins$iso3) WID$value[WID$iso3==iso3c] = (WID$value[WID$iso3==iso3c]/sum(WID$value[WID$iso3==iso3c]))
             }
             
             # Bind it all together!
             .Object@cIndies<-WID
-            .Object@fIndies<-Model$fIndies
-            
-            linp<-rep(list(0.),length(unique(.Object@cIndies$iso3)))
-            names(linp)<-unique(.Object@cIndies$iso3)
-            .Object@modifier<-linp
-            
+            # .Object@fIndies<-Model$fIndies
+            # 
+            # linp<-rep(list(0.),length(unique(.Object@cIndies$iso3)))
+            # names(linp)<-unique(.Object@cIndies$iso3)
+            # .Object@modifier<-linp
+            # 
             polygons_list <- list()
             polygons_list[[1]] <- list(name='Polygon 1', indexes = 1:length(.Object@data$ISO3C))
             for (i in 2:n_polygons){
@@ -158,17 +146,17 @@ setMethod(f="initialize", signature="ODDSim",
             #Add linear predictor data
             #need to tidy this up, not very reflective of real data to have this much variation within such a small region!
             ulist <- unique(GDPSim)
-            ExpectedSchoolYrs_vals <- runif(length(ulist), 3, 18)
+            ExpSchYrs_vals <- runif(length(ulist), 3, 18)
             LifeExp_vals <- runif(length(ulist), 30, 85)
-            GrossNatInc_vals <- runif(length(ulist), 6, 12)
-            Stiff_vals <- runif(length(ulist), 98, 2197)
-            PGA_vals <- runif(length(ulist), 1, 10)
+            GNIc_vals <- exp(runif(length(ulist), 6, 12))
+            Vs30_vals <- runif(length(ulist), 98, 2197)
+            EQFreq_vals <- runif(length(ulist), 1, 10)
             for(i in 1:length(ulist)){
-              .Object@data$ExpectedSchoolYrs[GDPSim %in% ulist[i]] <- ExpectedSchoolYrs_vals[i]
+              .Object@data$ExpSchYrs[GDPSim %in% ulist[i]] <- ExpSchYrs_vals[i]
               .Object@data$LifeExp[GDPSim %in% ulist[i]] <- LifeExp_vals[i]
-              .Object@data$GrossNatInc[GDPSim %in% ulist[i]] <- GrossNatInc_vals[i]
-              .Object@data$Stiff[GDPSim %in% ulist[i]] <- Stiff_vals[i]
-              .Object@data$PGA[GDPSim %in% ulist[i]] <- PGA_vals[i]
+              .Object@data$GNIc[GDPSim %in% ulist[i]] <- GNIc_vals[i]
+              .Object@data$Vs30[GDPSim %in% ulist[i]] <- Vs30_vals[i]
+              .Object@data$EQFreq[GDPSim %in% ulist[i]] <- EQFreq_vals[i]
             }
             
             print("Checking ODDSim values")
@@ -189,7 +177,7 @@ setMethod(f="initialize", signature="BDSim",
             .Object@I0<-ODD@I0
             .Object@hazdates<-ODD@hazdates
             .Object@eventid<-ODD@eventid
-            .Object@fIndies<-ODD@fIndies
+            #.Object@fIndies<-ODD@fIndies
             
             .Object@buildingsfile<-paste0("./IIDIPUS_Input/OSM_Buildings_Objects/",unique(ODD@eventid)[1])
             
@@ -237,9 +225,9 @@ setMethod(f="initialize", signature="BDSim",
             print("Accessing OSM to sample building height & area")
             # ExtractOSMbuildVol(.Object,ODD)
             
-            linp<-rep(list(0.),length(unique(ODD@cIndies$iso3)))
-            names(linp)<-unique(ODD@cIndies$iso3)
-            .Object@modifier<-linp
+            # linp<-rep(list(0.),length(unique(ODD@cIndies$iso3)))
+            # names(linp)<-unique(ODD@cIndies$iso3)
+            # .Object@modifier<-linp
             
             print("Checking BD values")
             # checkBD(.Object)

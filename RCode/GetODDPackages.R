@@ -28,6 +28,7 @@ GetSourceFiles<-function(packred){
     # Damage estimate related:
     source('RCode/GetOSM.R')
     source('RCode/GetSatDamage.R')  
+    source('RCode/GetBuildingCounts.R')
     
   }
   
@@ -55,6 +56,7 @@ LoadLibraries<-function(packred){
   library(mvtnorm)
   library(abind)
   library(Rmpi)
+  library(ecochange)
   
   if(!packred) {
     library(codetools)

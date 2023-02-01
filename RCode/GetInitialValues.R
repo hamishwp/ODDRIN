@@ -4,37 +4,38 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   if(saver & file.exists(paste0(dir, input_folder, "centerings"))) 
         return(readRDS(paste0(dir, input_folder, "centerings")))
   
-  path<-paste0(dir, input_folder, "ODDobjects/")
-  ufiles<-list.files(path=path,pattern=haz,recursive = T,ignore.case = T)
-  ufiles<-ufiles[grepl(ufiles,pattern = haz)]
-  GDP<-nGDP<-0
+  # path<-paste0("/home/manderso/Documents/GitHub/IIDIPUS_InputRealwithMort/ODDobjects/")
+  # ufiles<-list.files(path=path,pattern=haz,recursive = T,ignore.case = T)
+  # ufiles<-ufiles[grepl(ufiles,pattern = haz)]
+  # PDens<-c()
+  # 
+  # for(fff in ufiles){
+  #   ODDy<-readRDS(paste0(path,fff))
+  # 
+  #   PDens<-append(PDens, ODDy@data$Population[!is.na(ODDy@data$Population)])
+  # }
   
-  for(fff in ufiles){
-    ODDy<-readRDS(paste0(path,fff))
-
-    GDP<-GDP+sum(log(ODDy@data$GDP[ODDy@data$GDP>0]),na.rm=T)
-    nGDP<-nGDP+length(ODDy@data$GDP[ODDy@data$GDP>0 & !is.na(ODDy@data$GDP)])
-    
-  }
+  PDens_mean <- 2.874305 #mean(log(PDens+1))
+  PDens_sd <- 1.851233 #sd(log(PDens+1))
   
   # # Read in Global Data Lab data and calculate the mean and standard deviation of each variable
   # # Note that we calculate the mean and sd using all regions (not just those in the training set)
   # GDLdata <- readGlobalDataLab()
   
-  ExpectedSchoolYrs_mean <- 11.64138 # mean(GDLdata$ExpectedSchoolYrs); 
-  ExpectedSchoolYrs_sd <- 3.478292 #sd(GDLdata$ExpectedSchoolYrs);
+  ExpSchYrs_mean <- 11.64138 # mean(GDLdata$ExpectedSchoolYrs); 
+  ExpSchYrs_sd <- 3.478292 #sd(GDLdata$ExpectedSchoolYrs);
   LifeExp_mean <- 68.30403 #mean(GDLdata$LifeExp); 
   LifeExp_sd <- 9.607136 #sd(GDLdata$LifeExp);
-  GrossNatInc_mean <- 8.913694 #mean(log(GDLdata$GrossNatInc)); 
-  GrossNatInc_sd <- 1.18729 #sd(log(GDLdata$GrossNatInc));
+  GNIc_mean <- 8.913694 #mean(log(GDLdata$GrossNatInc)); 
+  GNIc_sd <- 1.18729 #sd(log(GDLdata$GrossNatInc));
   
   
   # # Read in Stiff data and calculate the mean and standard deviation, again using all regions in the dataset:
   # if(!file.exists(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))) stop("Please download the VS30 dataset (geotiff and auxiliary files) here https://earthquake.usgs.gov/data/vs30/.")
   # stiff<-raster(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))
   
-  stiff_mean <- 562.4323 #cellStats(stiff,'mean')
-  stiff_sd <- 143.9429 #cellStats(stiff,'sd')
+  Vs30_mean <- 562.4323 #cellStats(stiff,'mean')
+  Vs30_sd <- 143.9429 #cellStats(stiff,'sd')
   
   # # Read in GDPA data and calculate the mean and standard deviation, again using all regions in the dataset:
   # 
@@ -42,16 +43,15 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   # pga<-SortDemoData(paste0(dir,"Hazard_Data/gdpga/gdpga.asc"))
   # pga%<>%convMat2SPDF(name="PGA")
   
-  pga_mean <- 5.411167 # mean(pga$PGA, na.rm=T)
-  pga_sd <- 2.918439 # sd(pga$PGA, na.rm=T)
+  EQFreq_mean <- 5.411167 # mean(pga$PGA, na.rm=T)
+  EQFreq_sd <- 2.918439 # sd(pga$PGA, na.rm=T)
     
-  center<-list(Pdens=log(301),
-               dollar=GDP/nGDP,
-               ExpectedSchoolYrs=list(mean=ExpectedSchoolYrs_mean, sd=ExpectedSchoolYrs_sd),
+  center<-list(PDens=list(mean=PDens_mean, sd=PDens_sd), #LOOSEEND: CAME UP WITH THIS SD. CHECK
+               ExpSchYrs=list(mean=ExpSchYrs_mean, sd=ExpSchYrs_sd),
                LifeExp=list(mean=LifeExp_mean, sd=LifeExp_sd),
-               GrossNatInc=list(mean=GrossNatInc_mean, sd=GrossNatInc_sd),
-               Stiff=list(mean=stiff_mean, sd=stiff_sd),
-               PGA=list(mean=pga_mean, sd=pga_sd))
+               GNIc=list(mean=GNIc_mean, sd=GNIc_sd),
+               Vs30=list(mean=Vs30_mean, sd=Vs30_sd),
+               EQFreq=list(mean=EQFreq_mean, sd=EQFreq_sd))
   
   # center<-list(Gov=98.7,Vuln=51,CC=44,MPI=53.7,Pinf=103,Pexp=112,Sinc=0.2152956,Ik=0.4,A=3.6,H=1.65)
   print(unlist(center))
@@ -181,6 +181,7 @@ HLPrior_sample <- function(Model, AlgoParams){
     sample <- runif(n_x, Model$par_lb, Model$par_ub) #generate proposal on the physical space
     HP <- Model$HighLevelPriors(relist(sample,skeleton=Model$skeleton) %>% addTransfParams(),Model) #check higher level prior of the proposal
   }
+  print(sample)
   return(sample %>% relist(Model$skeleton)%>% Physical2Proposed(Model) %>% unlist())
 }
 
@@ -406,3 +407,46 @@ HLPrior_sample <- function(Model, AlgoParams){
 #   
 #   return(center)
 # }
+
+
+# path<-paste0("/home/manderso/Documents/GitHub/ODDRIN/PHL_IIDIPUS_Input/ODDobjects/")
+# ufiles<-list.files(path=path,pattern=haz,recursive = T,ignore.case = T)
+# ufiles<-ufiles[grepl(ufiles,pattern = haz)]
+# 
+# for(fff in ufiles){
+#   ODDy<-readRDS(paste0(path,fff))
+#   
+#   ODDy@data$ExpSchYrs <- NULL
+#   ODDy@data$LifeExp <- NULL
+#   ODDy@data$GNIc <- NULL
+#   ODDy@data$EQFreq <- NULL
+#   ODDy@data$Vs30 <- NULL
+#   
+#   ODDy %<>% AddVuln()
+#   plot(ODDy@coords[ODDy@data$Population>0,], col=as.factor(ODDy$GNIc[ODDy@data$Population>0]))
+#   saveRDS(ODDy, paste0(path,fff))
+# }
+
+#plot(ODDy@coords[ODDy@data$Population>0,], col=as.factor(ODDy$GNIc[ODDy@data$Population>0]))
+
+# for(fff in ufiles){
+#   ODDy<-readRDS(paste0(path,fff))
+#   missing_GDL_observed_Pop <- which(!is.na(ODDy@data$Population) & is.na(ODDy@data$ExpSchYrs))
+#   missing_GDL <- which(is.na(ODDy@data$ExpSchYrs))
+#   #assign these with the GDL of the closest pixel if within a distance of 2 arcminutes
+#   for (i in missing_GDL_observed_Pop){
+#     closest <- which.min(rowSums(sweep(ODDy@coords[-missing_GDL,], 2, ODDy@coords[i,], FUN='-')^2 ))
+#     dist <- sqrt(sum((ODDy@coords[i,] - ODDy@coords[-missing_GDL,][closest,])^2))
+#     if (dist < 0.05){
+#       ODDy@data$ExpSchYrs[i] <- ODDy@data$ExpSchYrs[-missing_GDL][closest]
+#       ODDy@data$LifeExp[i] <- ODDy@data$LifeExp[-missing_GDL][closest]
+#       ODDy@data$GNIc[i] <- ODDy@data$GNIc[-missing_GDL][closest]
+#     } else {
+#       stop(paste('GDL data not found for coordinate',ODDy@coords[i,1], ODDy@coords[i,2]))
+#     }
+#   }
+#   
+#   saveRDS(ODDy, paste0(path,fff))
+# }
+
+

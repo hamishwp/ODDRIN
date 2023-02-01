@@ -40,10 +40,16 @@ library(magrittr)
 ###############################################################################################
 SortDemoData<-function(filer,bbox=NULL){
   
-  # print(filer)
-  
   info<-readLines(filer,n = 6); info<-strsplit(info, "\\s+")
-  for (i in 1:6){assign(info[[i]][1],as.numeric(info[[i]][2]))} ; rm(info);
+  for (i in 1:6){ assign(info[[i]][1],as.numeric(info[[i]][2]))}; rm(info)
+  
+  #seems to be numerical discrepancies between nation and population data from SEDACs (on a very, very small order)
+  #correct by rounding xllcorner and yllcorner to the nearest 10 digits, and cellsize to the nearest 1/10000th of an arcsecond
+  xllcorner <- round(xllcorner, digits=10)
+  yllcorner <- round(yllcorner, digits=10)
+  one_tenthousandths_arcsecond <- 1/60/60/10000
+  cellsize <- round(cellsize/one_tenthousandths_arcsecond)*one_tenthousandths_arcsecond
+  
   popdemo<-read.csv(filer,header = FALSE,skip = 6,sep = " ",na.strings = NODATA_value,colClasses = "numeric")
   # dimensions of popdemo: [decreasing(latitude),longitude]
   sizer<-dim(popdemo)
@@ -61,7 +67,7 @@ SortDemoData<-function(filer,bbox=NULL){
   imxlo<-which.min(abs(bbox[3]-long))
   imnla<-which.min(abs(bbox[2]-lat))
   imxla<-which.min(abs(bbox[4]-lat))
-  
+
   popdemo<-popdemo[imxla:imnla,imnlo:imxlo] %>% as.matrix() %>% pracma::rot90(-1)
   
   return(popdemo)
@@ -169,6 +175,7 @@ ExtractSEDACS<-function(strings, bbox){
   
 }
 
+
 # GetSEDACArea<-function(directory){
 #   
 #   cfiler<-paste0(directory,"Demography_Data/Population/gpw-v4-population-count-2015/",
@@ -229,9 +236,16 @@ GetPopulationBbox<-function(directory,bbox,density=F,lowres=FALSE,yr="2015",plot
     
     poploc<-paste0("Demography_Data/Population/gpw-v4-population-",ctds,"-",yr,"/")
     popnom<-paste0("gpw_v4_population_",ctds,"_adjusted_to_2015_unwpp_country_totals_rev11_",yr,"_30_sec_")
+   
     strings<-c(directory,poploc,popnom)
     
+    natloc<-paste0("Demography_Data/Population/gpw-v4-national-identifier-grid-rev11_30_sec_asc/")
+    natnom<-paste0("gpw_v4_national_identifier_grid_rev11_30_sec_")
+    strings_nat <- c(directory, natloc, natnom)
+    
     population<-ExtractSEDACS(strings, bbox) 
+    nations<-ExtractSEDACS(strings_nat,  bbox)
+    nation_names_lookup <- read.csv(paste0(dir, natloc,'gpw_v4_national_identifier_grid_rev11_lookup.txt'), sep='\t')
     
   }
   
@@ -260,10 +274,13 @@ GetPopulationBbox<-function(directory,bbox,density=F,lowres=FALSE,yr="2015",plot
     
   } 
   
-  population%<>%convMat2SPDF(name="Population")
+  population %<>% convMat2SPDF(name="Population")
+  nations %<>% convMat2SPDF(name='ISO_id')
+  nations %<>% merge(nation_names_lookup %>% dplyr::select(Value, ISO3C = ISOCODE), by.x='ISO_id', by.y='Value', all.x=T, sort=F)
+  nations$ISO_id <- NULL
+  pop_with_iso3 <- cbind(population, nations)
   
-  return(population)
-  
+  return(pop_with_iso3)
 }
 
 # GetPopulationBboxSAFE<-function(bbox){

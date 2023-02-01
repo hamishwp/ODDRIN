@@ -49,7 +49,7 @@ Genx0y0<-function(ODDobj){
 setClass("BD", 
          slots = c(hazard="character",
                    cIndies="data.frame",
-                   fIndies="list",
+                   #fIndies="list",
                    I0="numeric",
                    hazdates="Date",
                    eventid="numeric",
@@ -68,7 +68,7 @@ setMethod(f="initialize", signature="BD",
             .Object@I0<-ODD@I0
             .Object@hazdates<-ODD@hazdates
             .Object@eventid<-ODD@eventid
-            .Object@fIndies<-ODD@fIndies
+            #.Object@fIndies<-ODD@fIndies
             
             .Object@buildingsfile<-paste0("./IIDIPUS_Input/OSM_Buildings_Objects/",unique(Damage$event)[1])
             
@@ -347,18 +347,20 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   # Get parameters for model
   Params<-FormParams(BD,list(Np=Method$Np,center=Model$center))
   # Income distribution percentiles & extract income percentile  
-  SincN<-seq(10,90,by = 10); Sinc<-ExtractCIndy(BD,var = paste0("p",SincN,"p100"))
+  SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
+  Sinc<-ExtractCIndy(BD,var = SincN)
   # Load buildings file
   # buildings<-readRDS(BD@buildingsfile)
   # Sample income distribution by area*building height?
   # BD%<>%SampleBuildings(buildings,F)
   # Calculate non-local linear predictor values
-  LP<-GetLP(BD,Omega,Params,Sinc,notnans)
+  LP<-GetLP(BD,Omega,Params,Sinc,notnans, split_GNI=F)
   # for each building in list,
   CalcBD<-function(ij){
     iso3c<-BD@data$ISO3C[ij]
     # Calculate local linear predictor (NOTE: is a scalar - we randomly sample one value)
-    locallinp<-sample(LP[ij,], Method$Np, replace=T)
+    #locallinp<-sample(LP[ij,], Method$Np, replace=T)
+    locallinp <- LP[ij]
     #tryCatch(sample(LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]],size=Method$Np, replace=TRUE)*
     #LP$Plinp[ij]*LP$linp[[iso3c]],         error=function(e) NA) #LOOSEEND: Assumes that a house is equally likely to be from each income bracket. 
     #locallinp<- LP$dGDP$linp[5]* LP$Plinp[ij]*LP$linp[[iso3c]]
@@ -392,22 +394,24 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
       ind <- which(bDamage != 2)
     }
     
-    bPred <- ifelse(bDamage == 0, 'notaffected', 'Damaged')
+    bPred <- ifelse(bDamage > 0, ifelse(bDamage==1,'Damaged', 'Destroyed'),'notaffected')
 
     if(LL) return(bPred!=BD@data$grading[ij]) #return 1 if incorrectly classified
     
     if(sim == F){
-      if(BD@data$grading[ij] == 'notaffected'){
-        return(ifelse(bPred == 'notaffected', 'Correctly classified notaffected', 'Incorrectly classified damaged'))
+      if(BD@data$grading[ij] == 'notaffected'){ # S: refers to simulated value, O: refers to observed value
+        return(ifelse(bPred != 'notaffected', ifelse(bPred=='Damaged','S:Dam,O:NAff','S:Dest,O:NAff'),'S:Naff,O:NAff'))
+      } else if (BD@data$grading[ij] == 'Damaged'){
+        return(ifelse(bPred != 'notaffected', ifelse(bPred=='Damaged','S:Dam,O:Dam','S:Dest,O:Dam'),'S:Naff,O:Dam'))
       } else {
-        return(ifelse(bPred == 'notaffected', 'Incorrectly classified notaffected', 'Correctly classified damaged'))
+        return(ifelse(bPred != 'notaffected', ifelse(bPred=='Damaged','S:Dam,O:Dest','S:Dest,O:Dest'),'S:Naff,O:Dest'))
       }
     }
     if(sim == T) return(bPred)
-    
   }
   
   #LOOSEEND: This should be moved outside of BDX and have the BD objects resaved without possibly the damaged buildings
+  #also need to replace 'Minor', 'Moderate' and 'Severe' with just 'Damaged'
   possiblyDamaged_ij <- which(BD@data$grading=='possible') 
   notnans <- notnans[!notnans %in% possiblyDamaged_ij]
   
@@ -417,12 +421,19 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   }
   # classified<-t(matrix(unlist(mclapply(X = notnans,FUN = predBD,mc.cores = Method$cores)),ncol=length(notnans)))
   classified<-t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans)))
-  CCN <- colSums(classified=='Correctly classified notaffected')
-  CCD <- colSums(classified=='Correctly classified damaged')
-  ICN <- colSums(classified=='Incorrectly classified notaffected')
-  ICD <- colSums(classified=='Incorrectly classified damaged')
   
-  if(sim == F){ return(rbind(CCN, CCD, ICN, ICD))}
+  #find values in contingency table between simulated and observed
+  N11 <- colSums(classified=='S:Naff,O:NAff') #simulated: notaffected, observed: notaffected
+  N12 <- colSums(classified=='S:Dam,O:NAff') #simulated: damaged, observed: notaffected
+  N13 <- colSums(classified=='S:Dest,O:NAff') # ...
+  N21 <- colSums(classified=='S:Naff,O:Dam')
+  N22 <- colSums(classified=='S:Dam,O:Dam')
+  N23 <- colSums(classified=='S:Dest,O:Dam')
+  N31 <- colSums(classified=='S:Naff,O:Dest')
+  N32 <- colSums(classified=='S:Dam,O:Dest')
+  N33 <- colSums(classified=='S:Dest,O:Dest')
+  
+  if(sim == F){ return(rbind(N11, N12, N13, N21, N22, N23, N31, N32, N33))}
   
   # Therefore, sim==F and LL==F
   # Save into the file

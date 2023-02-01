@@ -58,7 +58,7 @@ setClass("ODD",
          slots = c(dir="character",
                    hazard="character",
                    cIndies="data.frame",
-                   fIndies="list",
+                   #fIndies="list",
                    IDPs="data.frame", # includes measurement dates
                    impact="data.frame",
                    alerts="data.frame",
@@ -66,7 +66,7 @@ setClass("ODD",
                    hazdates="Date",
                    eventid="numeric",
                    predictDisp="data.frame",
-                   modifier="list",
+                   #modifier="list",
                    polygons="list"),
          contains = "SpatialPixelsDataFrame")
 
@@ -183,23 +183,17 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
 setMethod(f="initialize", signature="ODD",
           # definition=function(.Object,bbox,lhazSDF,dater=NULL,dir=directory,
           definition=function(.Object,lhazSDF=NULL,DamageData=NULL,dir="./",Model=list(
-            fIndies=list(CC.INS.GOV.GE=returnX, # Government Effectiveness
-                         VU.SEV.AD=returnX, # Economic Dependency Vulnerability
-                         CC.INS.DRR=returnX, # Disaster Risk Reduction
-                         VU.SEV.PD=returnX, # Multi-dimensional Poverty
-                         CC.INF.PHY=returnX, # Physical Infrastructure
-                         dollar=returnX, # IncomeDistribution*GDP
-                         Pdens=returnX), # IncomeDistribution*GDP
-            WID_perc=   c("p10p100", # top 90% share of Income Distribution
-                          "p20p100", # top 80% share of Income Distribution
-                          "p30p100", # top 70% share of Income Distribution
-                          "p40p100", # top 60% share of Income Distribution
-                          "p50p100", # top 50% share of Income Distribution
-                          "p60p100", # top 40% share of Income Distribution
-                          "p70p100", # top 30% share of Income Distribution
-                          "p80p100", # top 20% share of Income Distribution
-                          "p90p100" # top 10% share of Income Distribution
-            ))) {
+            WID_perc=   c("p0p10", # Bottom 10% share of Income Distribution
+                          "p10p20", # Income share held by 10th - 20th percentiles
+                          "p20p30", # Income share held by 20th - 30th percentiles
+                          "p30p40", # Income share held by 30th - 40th percentiles
+                          "p40p50", # Income share held by 40th - 50th percentiles
+                          "p50p60", # Income share held by 50th - 60th percentiles
+                          "p60p70", # Income share held by 60th - 70th percentiles
+                          "p70p80", # Income share held by 70th - 80th percentiles
+                          "p80p90", # Income share held by 80th - 90th percentiles
+                          "p90p100") # top 10% share of Income Distribution
+            )) {
             
             if(is.null(lhazSDF)) return(.Object)
             if(!class(lhazSDF[[length(lhazSDF)]])[1]=="HAZARD") return(.Object)
@@ -207,16 +201,12 @@ setMethod(f="initialize", signature="ODD",
             
             
             
+ 
+            
+            #stop("Also remove INFORM crap from Model.R")
             
             
-            
-            stop("Also remove INFORM crap from Model.R")
-            
-            
-            
-            
-            
-            
+
             
             
             .Object@dir<-dir
@@ -245,7 +235,7 @@ setMethod(f="initialize", signature="ODD",
             year<-AsYear(dater)
             
             print("Fetching population data")
-            obj<-GetPopulationBbox(.Object@dir,bbox=bbox)
+            obj <-GetPopulationBbox(.Object@dir,bbox=bbox)
             .Object@data <- obj@data
             .Object@coords.nrs <-obj@coords.nrs
             .Object@grid <-obj@grid
@@ -262,13 +252,14 @@ setMethod(f="initialize", signature="ODD",
             inds<-!is.na(.Object$Population)
             
             print("Filter spatial data per country")
-            .Object@data$ISO3C<-NA_character_
-            .Object@data$ISO3C[inds]<-coords2country(.Object@coords[inds,])
+            #.Object@data$ISO3C<-NA_character_
+            #.Object@data$ISO3C[inds]<-coords2country(.Object@coords[inds,])
             iso3c<-unique(.Object@data$ISO3C) ; iso3c<-iso3c[!is.na(iso3c)]
-            
+
             print("Interpolate population values")
             # Note there are as many values returned as iso3c codes (returns as data.frame with columns 'iso3' and 'factor')
             Popfactors<-InterpPopWB(iso3c,dater)
+            
             for (iso in iso3c){
               indie<-.Object@data$ISO3C==iso & !is.na(.Object@data$ISO3C)
               .Object@data$Population[indie]%<>%
@@ -286,10 +277,9 @@ setMethod(f="initialize", signature="ODD",
             
             
             
-            stop("Add the full variables to the cIndies data.frame")
+            #stop("Add the full variables to the cIndies data.frame")
             # Bind it all together!
             .Object@cIndies<-WID
-            
             
             
             
@@ -302,8 +292,8 @@ setMethod(f="initialize", signature="ODD",
             
             
             
-            print("Fetching GDP-PPP data")
-            .Object%<>%AddGDP(inds)
+            #print("Fetching GDP-PPP data")
+            #.Object%<>%AddGDP(inds)
             
             
             
@@ -311,43 +301,18 @@ setMethod(f="initialize", signature="ODD",
             
             
             
+            #stop("Sort out building count data")
             
-            
-            
-            stop("Sort out fIndies both here and in the input to initialize function")
-            .Object@fIndies<-Model$fIndies
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            stop("Sort out this section on defining the linear predictor")
-            linp<-rep(list(1.),length(unique(.Object@cIndies$iso3)))
-            names(linp)<-unique(.Object@cIndies$iso3)
-            .Object@modifier<-linp #LOOSEEND: setting modifier to 1 by default.
-                                   #The modifier is exponentiated in GetLP() so 
-                                   #shouldn't it be set to 0 by default?
-                                   #Same in BDSim
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            print("Fetching OSM data")
-            .Object@data$nBuildings <- getOSMBuildingCount(.Object)
+            print("Fetching building count data")
+            .Object%<>%AddBuildingCounts()
+            #scale number of buildings/builtup area by the change in population (assume they scale together)
+            if (!is.null(.Object$nBuildings)){
+              .Object$nBuildings <- round(.Object$nBuildings * (.Object$Population / GetPopulationBbox(dir, bbox, yr=2020)$Population))
+              .Object$nBuildings[which(is.na(.Object$nBuildings))] <- 0
+            }
+            if (!is.null(.Object$nBuiltup)){
+              .Object$nBuiltup <- .Object$nBuiltup * (.Object$Population / GetPopulationBbox(dir, bbox, yr=2020)$Population)
+            }
             
             print("Checking ODD values")
             checkODD(.Object)
@@ -381,34 +346,34 @@ setMethod(f="initialize", signature="ODD",
 ExtractCIndy<- function(ODD,iso = NULL,var=NULL){
   cIndies<-ODD@cIndies
   if(!is.null(iso)) cIndies%<>%filter(iso3%in%iso)
-  if(!is.null(var)) cIndies%<>%filter(variable%in%var)
+  if(!is.null(var)) cIndies%<>%filter(percentile%in%var)
   cIndies
 }
 
 FormParams<-function(ODD,listy){
   
   
+  return(c(listy,list(I0=ODD@I0)))
+  #return(c(listy,list(I0=ODD@I0,fIndies=ODD@fIndies)))
   
-  return(c(listy,list(I0=ODD@I0,fIndies=ODD@fIndies)))
   
   
-  
-  listy%<>%c(list(I0=ODD@I0,fIndies=ODD@fIndies))
-  Ivars<-unique(ODD@cIndies$variable)
-  Params<-listy
-  tParams<-list()
-  for (iso3c in unique(ODD@cIndies$iso3)){
-    # Extract the income distribution stochastic diffusion enhancement variable
-    tParams$Ik<-ExtractCIndy(ODD,iso = iso3c,var = "Ik")$value
-    # Extract all the constant country specific variables
-    tParams$var<-ExtractCIndy(ODD,iso = iso3c,
-                              var = Ivars[!(Ivars=="Ik" | endsWith(Ivars,"p100"))])%>%
-      dplyr::select(-iso3)
-    # tParams$var%<>%rbind(data.frame(value=NA,variable="dollar"))
-    Params[[iso3c]]<-tParams
-  }
-  # names(Params)[(length(listy)+1):length(Params)]<-unique(ODD@cIndies$iso3)
-  return(Params)
+  # listy%<>%c(list(I0=ODD@I0,fIndies=ODD@fIndies))
+  # Ivars<-unique(ODD@cIndies$variable)
+  # Params<-listy
+  # tParams<-list()
+  # for (iso3c in unique(ODD@cIndies$iso3)){
+  #   # Extract the income distribution stochastic diffusion enhancement variable
+  #   tParams$Ik<-ExtractCIndy(ODD,iso = iso3c,var = "Ik")$value
+  #   # Extract all the constant country specific variables
+  #   tParams$var<-ExtractCIndy(ODD,iso = iso3c,
+  #                             var = Ivars[!(Ivars=="Ik" | endsWith(Ivars,"p100"))])%>%
+  #     dplyr::select(-iso3)
+  #   # tParams$var%<>%rbind(data.frame(value=NA,variable="dollar"))
+  #   Params[[iso3c]]<-tParams
+  # }
+  # # names(Params)[(length(listy)+1):length(Params)]<-unique(ODD@cIndies$iso3)
+  # return(Params)
 }
 
 setGeneric("DispX", function(ODD,Omega,center, BD_params, LL, sim=F, Method)
@@ -425,16 +390,26 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   # Extract 0D parameters & speed up loop
   Params<-FormParams(ODD,list(Np=Method$Np,center=center))
   # Income distribution percentiles & extract income percentile  
-  SincN<-seq(10,90,by = 10); Sinc<-ExtractCIndy(ODD,var = paste0("p",SincN,"p100"))
+  SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
+  Sinc<-ExtractCIndy(ODD,var = SincN)
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
-  if(!LL) {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$GDP)))
-  } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$GDP) |
-                          !ODD$ISO3C%in%ODD@impact$iso3))
+  if(!LL) {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$ExpSchYrs)))
+  } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) ))#!ODD$ISO3C%in%ODD@impact$iso3))
   
-  BD_data_present <- ifelse(all(is.na(ODD@data$nBuildings)) , F, T)
+  nBuildings_sample <- array(0, dim=c(NROW(ODD@data), Method$Np))
+  if (!is.null(ODD@data$nBuildings)){
+    nBuildings_sample <- matrix( ODD@data$nBuildings , length(ODD@data$nBuildings) , Method$Np )
+    BD_data_present <- T
+  } else if (!is.null(ODD@data$nBuiltup)){
+    nBuildings_sample <- sampleBuildingsFromBuiltup(ODD@data$nBuiltup, reg_int, reg_mean, reg_sd, Method$Np)
+    BD_data_present <- T
+  } else {
+    BD_data_present <- F
+  }
   
   # Calculate non-local linear predictor values
-  LP<-GetLP(ODD,Omega,Params,Sinc,notnans) 
+  LP<-GetLP(ODD,Omega,Params,Sinc,notnans)
+  LP_buildings <- GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=F) #could be sped up by combining
   
   # Speed things up a little
   hrange<-grep("hazMean",names(ODD),value = T)
@@ -444,7 +419,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     # Calculate local linear predictor (NOTE: is a vector due to income distribution)
     locallinp<- LP[ij,] # LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] 
     #locallinp<-rep(1,10) #reduces parameter space and removes demographic covariates
-
+    locallinp_buildings <- LP_buildings[ij]
     # Sample population per income distribution (Assumes 9 percentiles):
     lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) 
     tPop <-array(0,c(3, Method$Np)) #row 1 = tDisp, #row 2 = tMort, #row 3 = tRem
@@ -495,7 +470,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     #we take locallinp[5] which corresponds to locallinp for the median GDP
     
     nBuild <-array(0,c(3, Method$Np)) #row 1 = nDam, #row 2 = nDest, #row 3 = nRem
-    nBuild[3,]= ODD@data$nBuildings[ij]
+    nBuild[3,]= nBuildings_sample[ij,]
     first_haz = T
     for (h in hrange){
       if(is.na(ODD@data[ij,h])) next
@@ -505,7 +480,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       }
 
       I_ij<-ODD@data[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[5], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp_buildings, error=function(e) NA) #calculate unscaled damage (excluding GDP)
       
       D_DestDam <- D_DestDam_calc(Damage, Omega, first_haz, Model$DestDam_modifiers) #First row of D_DestDam is D_Dest, second row is D_Dam
       D_Rem <- pmax(0, 1 - D_DestDam[1,] - D_DestDam[2,]) #probability of neither damaged nor destroyed. Use pmax to avoid errors caused by numerical accuracy.

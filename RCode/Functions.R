@@ -285,7 +285,7 @@ extractPolyCoords<-function(ADM){
 # Find which coordinates of an S4 spatial object lie inside (or on the boundary of) a spatial polygon file
 inPoly<-function(poly,pop,iii=1,sumFn="sum",reducer=NULL){
   
-  Ifin<-rep(F,nrow(pop@data))
+  Ifin<-rep(F,nrow(pop))
   if(is.null(reducer)) reducer<-!Ifin
   
   pop<-pop[reducer,]
@@ -294,7 +294,7 @@ inPoly<-function(poly,pop,iii=1,sumFn="sum",reducer=NULL){
     coords<-pop@coords
     data<-pop@data
   } else {
-    coords<-as.data.frame(pop[,c("LONGITUDE","LATITUDE")])
+    coords<-as.data.frame(pop[,c("Longitude","Latitude")])
     data<-as.data.frame(pop)
   }
   
@@ -328,7 +328,7 @@ SplitSamplePop<-function(Pop,n=1){
   k<-length(Pop)
   return(array(vapply(Pop,function(tPop) rmultinom(n=n,
                                                    size=(tPop + rbernoulli(n=1,p=tPop%%1)), #LOOSEEND: same size for all Np
-                                                   prob=rep(1/9,9)),FUN.VALUE = numeric(9L*n)),dim = c(9,k*n)))
+                                                   prob=rep(1/8,8)),FUN.VALUE = numeric(8L*n)),dim = c(8,k*n)))
 }
 
 rgammaM<-function(n,mu,sig_percent){

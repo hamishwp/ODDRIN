@@ -24,7 +24,7 @@ GetDisaster<-function(DispData){
     # Extract bounding box of affected countries
     bbox<-countriesbbox(unique(tDisp$iso3))
     # Extract all earthquakes from USGS:
-    return(GetUSGS(bbox=bbox,sdate=min(tDisp$sdate),fdate = max(tDisp$sdate),I0=EQparams$I0,minmag=EQparams$minmag))
+    return(GetUSGS(bbox=bbox,sdate=min(tDisp$sdate),fdate = max(tDisp$fdate),I0=EQparams$I0,minmag=EQparams$minmag))
     
   } else if(all(DispData$hazard=="TC")) {
     

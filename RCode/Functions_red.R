@@ -46,12 +46,12 @@ DateTimeString<-function(){
   return(gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""))
 }
 
-# Assumes 9 income distribution percentiles
+# Assumes 10 income distribution percentiles
 SplitSamplePop<-function(Pop,n=1){
   k<-length(Pop)
   return(array(vapply(Pop,function(tPop) rmultinom(n=n,
                                                    size=(tPop + rbernoulli(n=1,p=tPop%%1)),
-                                                   prob=c(9:1/10)),FUN.VALUE = numeric(9L*n)),dim = c(9,k*n)))
+                                                   prob=rep(1/8,8)),FUN.VALUE = numeric(8L*n)),dim = c(8,k*n)))
 }
 
 rgammaM<-function(n,mu,sig_percent){

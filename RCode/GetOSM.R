@@ -144,6 +144,47 @@ GetOSMbuildingsODD<-function(ODD,bbox=NULL,minnum=50,plotty=F,timeout=60){
   
 }
 
+GetOSMbuildingsBbox<-function(bbox,minnum=50,plotty=F,timeout=60){
+  
+  area<-(bbox[4]-bbox[2])*(bbox[3]-bbox[1])
+  # If the bounding box size is too large, separate into pixels
+  # I know that an area of 0.01 normally returns decent results
+  if(area>0.01){
+    tbuildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout),error=function(e) NULL)
+    if(is.null(tbuildings)) {
+      stepsize <- 0.008333333333333333
+      grid <- expand.grid(seq(bbox[2], bbox[4], stepsize), seq(bbox[1], bbox[3], stepsize))
+      colnames(grid) <- c('Longitude', 'Latitude')
+      p<-ggplot(grid,aes(Longitude,Latitude))+stat_bin_2d(drop = F,binwidth = 0.1)
+      pg<-(ggplot_build(p))$data[[1]]; rm(p)
+      buildings<-data.frame()
+      for(i in 1:nrow(pg)){
+        bbox<-as.double(pg[i,c("xmin","ymin","xmax","ymax")])
+        tbuildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout),error=function(e) NULL)
+        if(is.null(tbuildings)) next
+        buildings%<>%rbind(tbuildings)
+      }
+    }
+  } else {
+    # ensure bbox has an area of at least 0.01
+    bbox<-expandBbox(bbox,0.01,scaling = F)
+    buildings<-ExtractOSMbuild(bbox,timeout=timeout)
+  }
+  # i<-1
+  # while((nrow(buildings)<minnum | sum(!is.na(buildings$building.levels))<minnum) & i<10){
+  #   bbox%<>%expandBbox(1.1,scaling = T)
+  #   buildings%<>%rbind(ExtractOSMbuild(bbox))
+  #   buildings%<>%distinct()
+  #   i<-i+1
+  # }
+  
+  return(SpatialPointsDataFrame(coords = buildings[,c("Longitude","Latitude")],
+                                data = buildings[,c("building.levels","area")],
+                                proj4string = crs("+proj=longlat +datum=WGS84 +ellps=WGS84")))
+  
+  return(buildings)
+  
+}
 
 
 # Could even do like this:

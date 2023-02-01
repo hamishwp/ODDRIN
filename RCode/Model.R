@@ -23,39 +23,22 @@ haz<-"EQ"
 # haz<-"TC"
 Model$haz<-haz
 
-# Get linear predictor variables (currently the same for both building damage and human displacement)
-if(haz%in%c("EQ","TC","FL")) {
-  # Form a list of the different components used in the linear predictor
-  # INFORM_vars%<>%c(grep(haz,c("HA.NAT.EQ","HA.NAT.TC","HA.NAT.FL"),value = T))
-  # MUST BE SAME LENGTH AND CORRESPOND EXACTLY TO INFORM_vars + HAZ.NAT.EQ/TC/FL + Sinc/dollar,
-  fIndies<-list(CC.INS.GOV.GE=returnX, # Government Effectiveness
-                VU.SEV.AD=returnX, # Economic Dependency Vulnerability
-                CC.INS.DRR=returnX, # Disaster Risk Reduction
-                VU.SEV.PD=returnX, # Multi-dimensional Poverty
-                CC.INF.PHY=returnX) # Physical Infrastructure
-                # dollar=returnX, # IncomeDistribution*GDP
-                # Pdens=returnX) # Population Density
-  if(haz=="EQ") {fIndies%<>%c(HA.NAT.EQ=function(x) x*x) # Hazard Exposure)
-  } else if (haz=="TC") {fIndies%<>%c(HA.NAT.TC=function(x) x*x) # Hazard Exposure)
-  } else if (haz=="FL") {fIndies%<>%c(HA.NAT.EQ=function(x) x*x) }# Hazard Exposure)
-  WID_perc<-   c("p10p100", # top 90% share of Income Distribution
-                 "p20p100", # top 80% share of Income Distribution
-                 "p30p100", # top 70% share of Income Distribution
-                 "p40p100", # top 60% share of Income Distribution
-                 "p50p100", # top 50% share of Income Distribution
-                 "p60p100", # top 40% share of Income Distribution
-                 "p70p100", # top 30% share of Income Distribution
-                 "p80p100", # top 20% share of Income Distribution
-                 "p90p100" # top 10% share of Income Distribution
-  )
-  
-  Model%<>%c(list(WID_perc=WID_perc,fIndies=fIndies))
-  
-}
+WID_perc<- c("p0p10", # Bottom 10% share of Income Distribution
+              "p10p20", # Income share held by 10th - 20th percentiles
+              "p20p30", # Income share held by 20th - 30th percentiles
+              "p30p40", # Income share held by 30th - 40th percentiles
+              "p40p50", # Income share held by 40th - 50th percentiles
+              "p50p60", # Income share held by 50th - 60th percentiles
+              "p60p70", # Income share held by 60th - 70th percentiles
+              "p70p80", # Income share held by 70th - 80th percentiles
+              "p80p90", # Income share held by 80th - 90th percentiles
+              "p90p100") # top 10% share of Income Distribution
 
-Model$modifiers$INFORM<- T
-Model$modifiers$WB<-     T
-Model$modifiers$WID<-    T
+Model%<>%c(list(WID_perc=WID_perc))
+
+if(haz=='EQ'){
+  Model$vuln_terms <- c('PDens', 'ExpSchYrs','LifeExp', 'GNIc', 'Vs30', 'EQFreq')
+}
 
 ab_bounded <- function(x, a, b){
   return((b*exp(x)+a)/(exp(x)+1))
@@ -73,180 +56,123 @@ returnX <- function(x,a,b){
   return(x)
 }
 
-# Link functions (MUST BE SAME LENGTH AS OMEGA)
-Model$links<-list(
-  Lambda1=list(nu='ab_bounded',omega='ab_bounded'),
-  Lambda2=list(nu='ab_bounded',omega='ab_bounded'),
-  Lambda3=list(nu='ab_bounded',omega='ab_bounded'),
-  Lambda4=list(nu='ab_bounded',omega='ab_bounded'), 
-  # beta=list(xxx='exp',CC.INS.GOV.GE='exp',VU.SEV.AD='exp',CC.INS.DRR='exp',VU.SEV.PD='exp',CC.INF.PHY='exp'),
-  Pdens=list(M='ab_bounded',k='ab_bounded'),
-  dollar=list(M='ab_bounded',k='ab_bounded'),
-  theta=list(e='ab_bounded'), #list(e=0.25),
-  # rho=list(A='exp',H='exp'),
-  eps=list(eps='ab_bounded'),#,#,xi='exp')
-  # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
-  lp=list(ExpectedSchoolYrs='ab_bounded',LifeExp='ab_bounded', GrossNatInc='ab_bounded', Stiff='ab_bounded', PGA='ab_bounded') # add linear predictor terms for testing
-)
-
-# Model$links<-list(
-#   Lambda1=list(nu='ab_bounded',omega='ab_bounded'),
-#   Lambda2=list(nu='ab_bounded',omega='ab_bounded'),
-#   Lambda3=list(nu='ab_bounded',omega='ab_bounded'),
-#   zeta=list(k='ab_bounded',lambda='ab_bounded'), # zeta=list(k=2.5,lambda=1.6),
-#   #zeta1=list(k='exp',lambda='exp'),
-#   #zeta2=list(k='exp',lambda='exp'),
-#   #zeta3=list(k='exp',lambda='exp'),
-#   # beta=list(xxx='exp',CC.INS.GOV.GE='exp',VU.SEV.AD='exp',CC.INS.DRR='exp',VU.SEV.PD='exp',CC.INF.PHY='exp'),
-#   Pdens=list(M='ab_bounded',k='ab_bounded'),
-#   dollar=list(M='ab_bounded',k='ab_bounded'),
-#   theta=list(e='ab_bounded'), #list(e=0.25),
-#   # rho=list(A='exp',H='exp'),
-#   eps=list(eps='ab_bounded')#,xi='exp')
-#   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
-# )
-
-# And to go the other way....
-# Model$unlinks<-list(
-#   Lambda1=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-#   Lambda2=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-#   Lambda3=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-#   zeta=list(k='ab_bounded_inv',lambda='ab_bounded_inv'), # zeta=list(k=2.5,lambda=1.6),
-#   #zeta1=list(k='log',lambda='log'),
-#   #zeta2=list(k='log',lambda='log'),
-#   #zeta3=list(k='log',lambda='log'),
-#   # beta=list(xxx='log',CC.INS.GOV.GE='log',VU.SEV.AD='log',CC.INS.DRR='log',VU.SEV.PD='log',CC.INF.PHY='log'),
-#   Pdens=list(M='ab_bounded_inv',k='ab_bounded_inv'),
-#   dollar=list(M='ab_bounded_inv',k='ab_bounded_inv'),
-#   theta=list(e='ab_bounded_inv'), #list(e=0.25),
-#   # rho=list(A='log',H='log'),
-#   eps=list(eps='ab_bounded_inv')#,xi='log')
-#   # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
-# )
-
-Model$unlinks<-list(
-  Lambda1=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-  Lambda2=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-  Lambda3=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-  Lambda4=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-  #zeta1=list(k='log',lambda='log'),
-  #zeta2=list(k='log',lambda='log'),
-  #zeta3=list(k='log',lambda='log'),
-  # beta=list(xxx='log',CC.INS.GOV.GE='log',VU.SEV.AD='log',CC.INS.DRR='log',VU.SEV.PD='log',CC.INF.PHY='log'),
-  Pdens=list(M='ab_bounded_inv',k='ab_bounded_inv'),
-  dollar=list(M='ab_bounded_inv',k='ab_bounded_inv'),
-  theta=list(e='ab_bounded_inv'), #list(e=0.25),
-  # rho=list(A='log',H='log'),
-  eps=list(eps='ab_bounded_inv'),#,#,xi='log')
-  # mu=list(muplus='exp',muminus='exp',sigplus='exp',sigminus='exp')
-  lp=list(ExpectedSchoolYrs='ab_bounded_inv',LifeExp='ab_bounded_inv', GrossNatInc='ab_bounded_inv', Stiff='ab_bounded_inv', PGA='ab_bounded_inv')
-)
-
-Model$acceptTrans <- list(
-  Lambda1=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
-  Lambda2=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
-  Lambda3=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
-  Lambda4=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
-  #zeta1=list(k=NA,lambda=NA),
-  #zeta2=list(k=NA,lambda=NA),
-  #zeta3=list(k=NA,lambda=NA),
-  # beta=list(xxx=NA,CC.INS.GOV.GE=NA,VU.SEV.AD=NA,CC.INS.DRR=NA,VU.SEV.PD=NA,CC.INF.PHY=NA),
-  Pdens=list(M='ab_bounded_acc',k='ab_bounded_acc'),
-  dollar=list(M='ab_bounded_acc',k='ab_bounded_acc'),
-  theta=list(e='ab_bounded_acc'), #list(e=0.25),
-  # rho=list(A=NA,H=NA),
-  eps=list(eps='ab_bounded_acc'),#,#,xi=NA)
-  # mu=list(muplus=NA,muminus=NA,sigplus=NA,sigminus=NA)
-  lp=list(ExpectedSchoolYrs='ab_bounded_acc',LifeExp='ab_bounded_acc', GrossNatInc='ab_bounded_acc', Stiff='ab_bounded_acc', PGA='ab_bounded_acc')
-)
-
-# names(Model$unlinks$beta)[1]<-paste0("HA.NAT.",haz)
 # Skeleton
 Model$skeleton <- list(
   Lambda1=list(nu=NA,omega=NA),
   Lambda2=list(nu=NA,omega=NA),
   Lambda3=list(nu=NA,omega=NA),
   Lambda4=list(nu=NA,omega=NA),
-  #zeta1=list(k=NA,lambda=NA),
-  #zeta2=list(k=NA,lambda=NA),
-  #zeta3=list(k=NA,lambda=NA),
-  # beta=list(xxx=NA,CC.INS.GOV.GE=NA,VU.SEV.AD=NA,CC.INS.DRR=NA,VU.SEV.PD=NA,CC.INF.PHY=NA),
-  Pdens=list(M=NA,k=NA),
-  dollar=list(M=NA,k=NA),
-  theta=list(e=NA), #list(e=0.25),
-  # rho=list(A=NA,H=NA),
-  eps=list(eps=NA),#,#,xi=NA)
-  # mu=list(muplus=NA,muminus=NA,sigplus=NA,sigminus=NA)
-  lp=list(ExpectedSchoolYrs=NA,LifeExp=NA, GrossNatInc=NA, Stiff=NA, PGA=NA)
+  theta=list(e=NA),
+  eps=list(eps=NA),
+  vuln_coeff=list(itc=NA,PDens=NA, ExpSchYrs=NA, 
+                  LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA) 
 )
-# names(Model$skeleton$beta)[1]<-paste0("HA.NAT.",haz)
+
+
+Model$links <- Model$skeleton
+Model$unlinks <- Model$skeleton
+Model$acceptTrans <- Model$skeleton 
+
+for (i in 1:length(Model$links)){
+  if (is.list(Model$links[[i]])){
+    for (j in 1:length(Model$links[[i]])){
+      Model$links[[i]][[j]] <- 'ab_bounded'
+      Model$unlinks[[i]][[j]] <- 'ab_bounded_inv'
+      Model$acceptTrans[[i]][[j]] <- 'ab_bounded_acc'
+    }
+  } else {
+    Model$links[[i]] <- 'ab_bounded'
+    Model$unlinks[[i]] <- 'ab_bounded_inv'
+    Model$acceptTrans[[i]] <- 'ab_bounded_acc'
+  }
+}
+
+# Link functions (MUST BE SAME LENGTH AS OMEGA)
+# Model$links<-list(
+#   Lambda1=list(nu='ab_bounded',omega='ab_bounded'),
+#   Lambda2=list(nu='ab_bounded',omega='ab_bounded'),
+#   Lambda3=list(nu='ab_bounded',omega='ab_bounded'),
+#   Lambda4=list(nu='ab_bounded',omega='ab_bounded'), 
+#   theta=list(e='ab_bounded'),
+#   eps=list(eps='ab_bounded'),
+#   vuln_coeff=list(itc='ab_bounded',PDens='ab_bounded', ExpSchYrs='ab_bounded', 
+#                   LifeExp='ab_bounded', GNIc='ab_bounded', Vs30='ab_bounded', EQFreq='ab_bounded') 
+# )
+# 
+# Model$unlinks<-list(
+#   Lambda1=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   Lambda2=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   Lambda3=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   Lambda4=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   theta=list(e='ab_bounded_inv'),
+#   eps=list(eps='ab_bounded_inv'),
+#   vuln_coeff=list(itc='ab_bounded_inv',PDens='ab_bounded_inv', ExpSchYrs='ab_bounded_inv', 
+#                   LifeExp='ab_bounded_inv', GNIc='ab_bounded_inv', Vs30='ab_bounded_inv', 
+#                   EQFreq='ab_bounded_inv'))
+# 
+# Model$acceptTrans <- list(
+#   Lambda1=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
+#   Lambda2=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
+#   Lambda3=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
+#   Lambda4=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
+#   theta=list(e='ab_bounded_acc'), 
+#   eps=list(eps='ab_bounded_acc'),
+#   vuln_coeff=list(itc='ab_bounded_acc',PDens='ab_bounded_acc', ExpSchYrs='ab_bounded_acc', 
+#                   LifeExp='ab_bounded_acc', GNIc='ab_bounded_acc', Vs30='ab_bounded_acc', 
+#                   EQFreq='ab_bounded_acc') 
+# )
 
 #Set lower and upper bounds for the parameters
-Model$par_lb <- c(6,  
-                  0,
-                  7.5, 
-                  0,
-                  6,  
-                  0,  
-                  0,  
-                  0,  
-                  0,  #PDens M
-                  0,  #PDens k
-                  -3,  #dollar M
-                  0,   #dollar k
+Model$par_lb <- c(6, #Lambda1$nu 
+                  0, #Lambda1$omega
+                  7.5, #Lambda2$nu 
+                  0, #Lambda2$omega
+                  6,  #Lambda3$nu 
+                  0, #Lambda3$omega
+                  5, #Lambda4$nu 
+                  0, #Lambda4$omega 
                   0.1, #theta_e
-                  0,# #epsilon
-                  -0.1, -0.1, -0.1, -0.1, -0.1) #lp
+                  0, #epsilon
+                  -0.05, #itc
+                  -0.05, #PDens
+                  -0.05, #ExpSchYrs
+                  -0.05, #LifeExp
+                  -0.05, #GNIc
+                  -0.05, #Vs30
+                  -0.05 #EQFreq
+                  ) 
 
-Model$par_ub <- c(9.5, 
-                  6, 
-                  10.5, 
-                  6, 
-                  9.5, 
-                  6, 
-                  10, 
-                  6, 
-                  3, #PDens M
-                  10, #PDens k 
-                  0,  #dollar M
-                  10, #dollar k
+Model$par_ub <- c(9.5, #Lambda1$nu 
+                  6, #Lambda1$omega
+                  10.5, #Lambda2$nu 
+                  6, #Lambda2$omega
+                  9.5,  #Lambda3$nu 
+                  6, #Lambda3$omega
+                  10, #Lambda4$nu 
+                  6, #Lambda4$omega 
                   1, #theta_e
-                  1,#, #epsilon
-                  0.1, 0.1, 0.1, 0.1, 0.1) #lp
+                  1, #epsilon
+                  0.05, #itc
+                  0.05, #PDens
+                  0.05, #ExpSchYrs
+                  0.05, #LifeExp
+                  0.05, #GNIc
+                  0.05, #Vs30
+                  0.05 #EQFreq
+)
 
 
 # Get the binary regression function
-Model$BinR<-"weibull" # "gompertz"
+ Model$BinR<-"weibull" # "gompertz" #currently not implemented, only have option for normal cdf
 
 # Implement higher order Bayesian priors?
 # Model$higherpriors<-TRUE
-
-# Get the building damage beta distribution parameters
-Model$BD_params<-list(functions=list(
-  destroyed="dbeta",
-  severe="dbeta",
-  moderate="dbeta",
-  possible="dbeta",
-  notaffected="dbeta"
-  # damaged="alldamaged" # damaged is a combination of all categories except 'notaffected'
-),
-Params=list(
-  destroyed=list(shape1=40,shape2=2),
-  severe=list(shape1=40,shape2=25),
-  moderate=list(shape1=15,shape2=30),
-  possible=list(shape1=3,shape2=100),
-  notaffected=list(shape1=0.05,shape2=100)
-  # damaged=list() # damaged is a combination of all categories except 'notaffected'
-)
-)
 
 Model$center<-ExtractCentering(dir,haz,T)
 
 Model$impacts <- list(labels = c('mortality', 'displacement', 'buildDam', 'buildDest'), 
                       qualifiers = c('qualifierMort', 'qualifierDisp', 'qualifierBuildDam', 'qualifierBuildDest'),
                       sampled = c('mort_sampled', 'disp_sampled', 'buildDam_sampled', 'buildDest_sampled'))
-
-Model$covar <- c('ExpectedSchoolYrs', 'LifeExp','GrossNatInc', 'Stiff', 'PGA')
 
 #Modifiers to capture change in probability of building damage from 1st to subsequent events
 #e.g. We may expect P(Unaffected -> Damaged) is smaller in an aftershock as the building has been strong
@@ -264,107 +190,118 @@ Model$DestDam_modifiers <- c(1,1,1)
 # Linear predictor calculations (act to modify the expected damage values)
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-# Linear predictor function - ugly, but very fast!
-llinpred<-function(Params,beta,center,func) { # Note all of these are vectors, not single values
-  # if(is.null(func)) func<-replicate(length(beta),function(x) x)
-  linp<-list()
-  for(j in 1:length(Params)) {
-    vars<-Params[[j]]$var
-    # This part uses the name of the variable to search for the following:
-    # 1) link function - func, 2) centering value - center, 3) linear predictor parameterisation - beta
-    linp[[names(Params[j])]]<-prod(exp(vapply(1:nrow(vars),
-                                function(i) beta[[vars$variable[i]]]*(do.call(func[[vars$variable[i]]],
-                                                                              list(vars$value[i]-center[[vars$variable[i]]] ))),
-                                FUN.VALUE = numeric(1))))
-  }
-  return(linp)
-}
+# # Linear predictor function - ugly, but very fast!
+# llinpred<-function(Params,beta,center,func) { # Note all of these are vectors, not single values
+#   # if(is.null(func)) func<-replicate(length(beta),function(x) x)
+#   linp<-list()
+#   for(j in 1:length(Params)) {
+#     vars<-Params[[j]]$var
+#     # This part uses the name of the variable to search for the following:
+#     # 1) link function - func, 2) centering value - center, 3) linear predictor parameterisation - beta
+#     linp[[names(Params[j])]]<-prod(exp(vapply(1:nrow(vars),
+#                                 function(i) beta[[vars$variable[i]]]*(do.call(func[[vars$variable[i]]],
+#                                                                               list(vars$value[i]-center[[vars$variable[i]]] ))),
+#                                 FUN.VALUE = numeric(1))))
+#   }
+#   return(linp)
+# }
+# 
+# # Quicker version of llinpred for when only one vars$variable exists
+# dlinpred<-function(vars,beta,center,func) { # Note all of these are vectors, not single values
+#   # Quicker version of llinpred for when only one vars$variable exists
+#   return(exp(beta[[vars$variable[1]]]*(do.call(func[[vars$variable[1]]],list(vars$value-center[[vars$variable[1]]] )))))
+# }
+# 
+# WeibullScaleFromShape<-function(shape,center){
+#   # Scale parameter
+#   return(center/(log(2)^(1/shape)))
+# }
+# # Linear predictor for subnational variables
+# locpred<-function(x,params){
+#   exp(params$M*(pweibull(x,shape=params$shape,scale=params$scale)-0.5))
+# }
+# 
+# GDPlinp<-function(ODD,Sinc,beta,center,notnans){
+#   iGDP<-as.numeric(factor(interaction(ODD@data$GDP, ODD@data$ISO3C), levels=unique(interaction(ODD@data$GDP, ODD@data$ISO3C))))
+#   dGDP<-data.frame(ind=iGDP[notnans],GDP=ODD@data$GDP[notnans],iso=ODD@data$ISO3C[notnans])
+#   dGDP%<>%group_by(ind)%>%summarise(value=log(unique(GDP)*(Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"value"]/
+#                                       Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]) & Sinc$variable=="p50p100","value"])),
+#                               income=Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"variable"],
+#                               variable="dollar",
+#                               iso3c=unique(dGDP$iso[dGDP$ind==unique(ind)]),.groups = 'drop_last')
+#   dGDP$linp<-rep(NA_real_,nrow(dGDP))
+#   # Autocalculate the Weibull scale parameter using the shape and centering values
+#   tp<-list(shape=beta$k,M=beta$M,
+#         scale=WeibullScaleFromShape(shape = beta$k,center = center$dollar))
+#   dGDP$linp[which(!is.na(dGDP$ind))]<-locpred(dGDP$value[!is.na(dGDP$ind)],tp)
+#   # dGDP$linp[which(!is.na(dGDP$ind))]<-dlinpred(dGDP[!is.na(dGDP$ind),],beta,center,fIndies)
+#   
+#   return(list(dGDP=dplyr::select(dGDP,c(ind,income,linp)),iGDP=iGDP))
+# }
+# 
+# Plinpred<-function(Pdens,beta,center,notnans){
+#   
+#   Plinp<-rep(NA_real_,length(Pdens))
+#   # Plinp[notnans]<-dlinpred(data.frame(variable=rep("Pdens",length(Pdens[notnans])),value=log(Pdens[notnans]+1)),beta,center,fIndies)
+#   # Autocalculate the Weibull scale parameter using the shape and centering values
+#   tp<-list(shape=beta$k,M=beta$M,
+#         scale=WeibullScaleFromShape(shape = beta$k,center = center$Pdens))
+#   Plinp[notnans]<-locpred(log(Pdens[notnans]+1),tp)
+#   return(Plinp)
+#   
+# }
 
-# Quicker version of llinpred for when only one vars$variable exists
-dlinpred<-function(vars,beta,center,func) { # Note all of these are vectors, not single values
-  # Quicker version of llinpred for when only one vars$variable exists
-  return(exp(beta[[vars$variable[1]]]*(do.call(func[[vars$variable[1]]],list(vars$value-center[[vars$variable[1]]] )))))
-}
-
-WeibullScaleFromShape<-function(shape,center){
-  # Scale parameter
-  return(center/(log(2)^(1/shape)))
-}
-# Linear predictor for subnational variables
-locpred<-function(x,params){
-  exp(params$M*(pweibull(x,shape=params$shape,scale=params$scale)-0.5))
-}
-
-GDPlinp<-function(ODD,Sinc,beta,center,notnans){
-  iGDP<-as.numeric(factor(interaction(ODD@data$GDP, ODD@data$ISO3C), levels=unique(interaction(ODD@data$GDP, ODD@data$ISO3C))))
-  dGDP<-data.frame(ind=iGDP[notnans],GDP=ODD@data$GDP[notnans],iso=ODD@data$ISO3C[notnans])
-  dGDP%<>%group_by(ind)%>%summarise(value=log(unique(GDP)*(Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"value"]/
-                                      Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]) & Sinc$variable=="p50p100","value"])),
-                              income=Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"variable"],
-                              variable="dollar",
-                              iso3c=unique(dGDP$iso[dGDP$ind==unique(ind)]),.groups = 'drop_last')
-  dGDP$linp<-rep(NA_real_,nrow(dGDP))
-  # Autocalculate the Weibull scale parameter using the shape and centering values
-  tp<-list(shape=beta$k,M=beta$M,
-        scale=WeibullScaleFromShape(shape = beta$k,center = center$dollar))
-  dGDP$linp[which(!is.na(dGDP$ind))]<-locpred(dGDP$value[!is.na(dGDP$ind)],tp)
-  # dGDP$linp[which(!is.na(dGDP$ind))]<-dlinpred(dGDP[!is.na(dGDP$ind),],beta,center,fIndies)
+GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
   
-  return(list(dGDP=dplyr::select(dGDP,c(ind,income,linp)),iGDP=iGDP))
-}
-
-Plinpred<-function(Pdens,beta,center,notnans){
+  LP_ij <- array(NA, dim=NROW(ODD@data))
   
-  Plinp<-rep(NA_real_,length(Pdens))
-  # Plinp[notnans]<-dlinpred(data.frame(variable=rep("Pdens",length(Pdens[notnans])),value=log(Pdens[notnans]+1)),beta,center,fIndies)
-  # Autocalculate the Weibull scale parameter using the shape and centering values
-  tp<-list(shape=beta$k,M=beta$M,
-        scale=WeibullScaleFromShape(shape = beta$k,center = center$Pdens))
-  Plinp[notnans]<-locpred(log(Pdens[notnans]+1),tp)
-  return(Plinp)
+  LP_ij[notnans] <- 0 # Omega$vuln_coeff$itc #intercept term
   
-}
-
-GetLP<-function(ODD,Omega,Params,Sinc,notnans){
+  #could perform all centering outside before model fitting? may allow a bit of speedup
   
-  # Calculate national vulnerability or apply modifier parameter
-  if(!is.null(tryCatch(ODD@modifier,error=function(e) NULL))){ # Modifier parameter
-    linp<-as.list(exp(as.numeric(unlist(ODD@modifier))))
-    names(linp)<-names(ODD@modifier)
-  } else { # National vulnerability
-    linp<-rep(list(1.),length(unique(ODD@cIndies$iso3)))
-    
-    #testing convergence using dummy linear predictor terms:
-    #for (iso3_filter in unique(ODD@cIndies$iso3)){
-    #  linp_values <- (ODD@cIndies %>% dplyr::filter(iso3==iso3_filter))$value[1:5]
-    #  linp[i] <- sum(exp((linp_values-5) * as.numeric(Omega$lp)))
-    #}
-    #names(linp)<-unique(ODD@cIndies$iso3)
-    #llinpred(Params[c(unique(ODD@cIndies$iso3))],Omega$beta,Params$center,Params$fIndies)
+  #Population density term:
+  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff$PDens * ((log(ODD@data$Population[notnans]+1) - Params$center$PDens$mean)/Params$center$PDens$sd)
+  for (vuln_term in names(Omega$vuln_coeff)[!(names(Omega$vuln_coeff) %in%  c('itc', 'PDens', 'GNIc'))]){
+    #All remaining terms except GNIc:
+    LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff[[vuln_term]] * ((ODD@data[notnans, vuln_term] - Params$center[[vuln_term]]$mean)/Params$center[[vuln_term]]$sd)
   }
   
-  # Calculate possible dollar (GDP*income_dist) linear predictor values
-  GDP<-GDPlinp(ODD,Sinc,Omega$dollar,Params$center,notnans)
-  # Calculate population density linear predictor values
-  Plinp<-Plinpred(ODD@data$Population,
-                  Omega$Pdens,
-                  Params$center,
-                  notnans)
+  #GNIc:
   
-  LP <- array(NA, dim=c(NROW(ODD@data), 9))
-  
-  for(ij in notnans){
-    iso3c<-ODD@data$ISO3C[ij]
-    LP[ij,] <- GDP$dGDP$linp[GDP$dGDP$ind==GDP$iGDP[ij]]*Plinp[ij]*linp[[iso3c]] 
+  if (!split_GNI){ #don't split into the eight GNIc deciles:  
+    LP_ij[notnans] <-  LP_ij[notnans] + Omega$vuln_coeff$GNIc * (log(ODD@data$GNIc[notnans]) - Params$center$GNIc$mean)/Params$center$GNIc$sd
+    return(LP_ij)
   }
   
-  ODD@data$GrossNatInc[notnans] %<>% log()
+  LP_ijs <- array(NA, dim=c(NROW(ODD@data),8))
   
-  for (covar in names(Omega$lp)){
-    LP[notnans,] <- LP[notnans,] * exp(Omega$lp[[covar]] * (ODD@data[notnans, covar] - Params$center[[covar]]$mean)/Params$center[[covar]]$sd)
+  get_GNIc_vuln <- function(ij){
+    vuln_GNIc_ij <- Omega$vuln_coeff$GNIc * (log(ODD@data$GNIc[ij] * Sinc[Sinc$iso3==ODD@data$ISO3C[ij],]$value * 12.5) - Params$center$GNIc$mean)/Params$center$GNIc$sd
+    return(vuln_GNIc_ij)
+  }
+
+  LP_ijs[notnans,] <- sweep(t(vapply(t(notnans), get_GNIc_vuln, numeric(8))), 1, LP_ij[notnans], '+')
+  
+  return(exp(LP_ijs))
+}
+
+# GetLP_single is the equivalent of GetLP for a single grid-cell ij 
+# Used in higher-level prior to calculate linear predictor for a given set of vulnerability terms
+GetLP_single <- function(Omega, center, vuln_terms){
+  
+  LP_ij <- 0 # Omega$vuln_coeff$itc 
+  
+  LP_ij <- LP_ij + Omega$vuln_coeff$PDens * ((log(vuln_terms[['PDens']]+1) - center$PDens$mean)/center$PDens$sd)
+  
+  for (vuln_term in names(Omega$vuln_coeff)[!(names(Omega$vuln_coeff) %in%  c('itc', 'PDens', 'GNIc'))]){
+    #All remaining terms except GNIc:
+    LP_ij <- LP_ij + Omega$vuln_coeff[[vuln_term]] * ((vuln_terms[[vuln_term]] - center[[vuln_term]]$mean)/center[[vuln_term]]$sd)
   }
   
-  return(LP)
+  LP_ij <- LP_ij + Omega$vuln_coeff$GNIc * (log(vuln_terms[['GNIc']]) - center$GNIc$mean)/center$GNIc$sd
+  
+  return(exp(LP_ij))
+  
 }
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -485,50 +422,30 @@ fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
 # Log likelihood, posterior and prior distribution calculations
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-#GetLP_single serves the same purpose as GetLP but works for a single pixel/point
-GetLP_single <- function(Omega, center, covariates){
-  
-  tp<-list(shape=Omega$dollar$k,M=Omega$dollar$M,
-           scale=WeibullScaleFromShape(shape = Omega$dollar$k,center = center$dollar))
-  
-  lp <- Plinpred(covariates$Pdens, Omega$Pdens, center, 1) * locpred(covariates$gdp,tp)
-  
-  covariates$GrossNatInc <- log(covariates$GrossNatInc)
-    
-  for (covar in names(Omega$lp)){
-    lp <- lp * exp(Omega$lp[[covar]] * (covariates[[covar]] - center[[covar]]$mean)/center[[covar]]$sd)
-  }
-  
-  return(lp)
-  
-}
-
 # These high-level priors are to include expert opinion in the 
 # model calculations, not in the individual parameters themselves (for this, see priors)
 Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
   
-  min_gdp <- 2.200571; max_gdp <- 12.40876 #minimum and maximum log gdp from the training dataset
-  min_Pdens <- 0; max_Pdens <- 109043.5 #minimum and maximum population density from the training dataset
-  min_ExpectedSchoolYrs <- 0.342; max_ExpectedSchoolYrs <- 18 #minimum and maximum from all regions in GDL dataset
+  min_PDens <- 0; max_PDens <- 109043.5 #minimum and maximum population density from the training dataset
+  min_ExpSchYrs <- 0.342; max_ExpSchYrs <- 18 #minimum and maximum from all regions in GDL dataset
   min_LifeExp <- 24.511; max_LifeExp <- 85.413 #minimum and maximum from all regions in GDL dataset
-  min_GrossNatInc <-  5.887395; max_GrossNatInc <- 12.23771 #minimum and maximum from all regions in GDL dataset
-  min_Stiff <- 98; max_Stiff <- 2197 #minimum and maximum from all regions in soil stiffness dataset
-  min_PGA <- 1; max_PGA <- 10 #minimum and maximum from all regions in PGA dataset
+  min_GNIc <- exp(5.887395); max_GNIc <- exp(12.23771) #minimum and maximum from all regions in GDL dataset
+  min_Vs30 <- 98; max_Vs30 <- 2197 #minimum and maximum from all regions in soil stiffness dataset
+  min_EQFreq <- 1; max_EQFreq <- 10 #minimum and maximum from all regions in PGA dataset
   
-  linp_min <- GetLP_single(Omega, Model$center, covariates=list(gdp=max_gdp, 
-                                                                Pdens=min_Pdens, 
-                                                                ExpectedSchoolYrs=max_ExpectedSchoolYrs,
-                                                                LifeExp=max_LifeExp,
-                                                                GrossNatInc=max_GrossNatInc,
-                                                                Stiff=max_Stiff,
-                                                                PGA=max_PGA))
-  linp_max <- GetLP_single(Omega, Model$center, covariates=list(gdp=min_gdp, 
-                                                                Pdens=max_Pdens, 
-                                                                ExpectedSchoolYrs=min_ExpectedSchoolYrs,
-                                                                LifeExp=min_LifeExp,
-                                                                GrossNatInc=min_GrossNatInc,
-                                                                Stiff=min_Stiff,
-                                                                PGA=min_PGA))
+  linp_min <- GetLP_single(Omega, Model$center, vuln_terms=list(PDens=ifelse(Omega$vuln_coeff$PDens>0, min_PDens, max_PDens), 
+                                                                ExpSchYrs=ifelse(Omega$vuln_coeff$ExpSchYrs>0, min_ExpSchYrs, max_ExpSchYrs),
+                                                                LifeExp=ifelse(Omega$vuln_coeff$LifeExp>0, min_LifeExp, max_LifeExp),
+                                                                GNIc=ifelse(Omega$vuln_coeff$GNIc>0, min_GNIc, max_GNIc),
+                                                                Vs30=ifelse(Omega$vuln_coeff$Vs30>0, min_Vs30, max_Vs30),
+                                                                EQFreq=ifelse(Omega$vuln_coeff$EQFreq>0, min_EQFreq, max_EQFreq)))
+  
+  linp_max <- GetLP_single(Omega, Model$center, vuln_terms=list(PDens=ifelse(Omega$vuln_coeff$PDens<0, min_PDens, max_PDens), 
+                                                                ExpSchYrs=ifelse(Omega$vuln_coeff$ExpSchYrs<0, min_ExpSchYrs, max_ExpSchYrs),
+                                                                LifeExp=ifelse(Omega$vuln_coeff$LifeExp<0, min_LifeExp, max_LifeExp),
+                                                                GNIc=ifelse(Omega$vuln_coeff$GNIc<0, min_GNIc, max_GNIc),
+                                                                Vs30=ifelse(Omega$vuln_coeff$Vs30<0, min_Vs30, max_Vs30),
+                                                                EQFreq=ifelse(Omega$vuln_coeff$EQFreq<0, min_EQFreq, max_EQFreq)))
   
   if(!is.null(modifier)) lp<-exp(as.numeric(unlist(modifier))) else lp<-1.
   lp <- c(linp_min, 1, linp_max) # lp_range - 0.361022 corresponds to lp for minimum GDP and PDens scaling, 2.861055 corresponds to maximum
@@ -543,7 +460,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     Upp_bounds_4.6 <- c(0.01, 0.01, 0.01, 0.1)
     Low_bounds_6 <- c(0, 0.001, 0, 0.001)
     Upp_bounds_6 <- c(0.3, 0.5, 0.5, 0.8)
-    Low_bounds_9 <- c(0.1,0.4,0.2,0.4)
+    Low_bounds_9 <- c(0.05,0.3,0.1,0.4)
     
     HLP_impacts <- function(I_ij, lp, Omega){
       rbind(apply(D_MortDisp_calc(h_0(I_ij, I0=4.5, theta=Omega$theta) * lp, Omega),2,cumsum), 
@@ -592,13 +509,14 @@ LL_IDP<-function(Y,  kernel_sd, kernel, cap){
   LL <- 0
   k <- 10
   cap <- -100
-  #impacts_observed <- intersect(which(Model$impacts$labels %in% colnames(Y)), which(predictions %in% colnames(Y)))
 
   if (kernel == 'loglaplace'){ #use a laplace kernel 
     LL_impact = log(dloglap(Y[,'observed']+k, location.ald = log(Y[,'sampled']+k), scale.ald = kernel_sd[[Y[1,'impact']]], tau = 0.5, log = FALSE)/
          (1-ploglap(k, location.ald = log(Y[,'sampled']+k), scale.ald = kernel_sd[[Y[1,'impact']]], tau = 0.5, log = FALSE)))
   } else if (kernel == 'lognormal'){ #use a lognormal kernel 
     LL_impact = log(dlnormTrunc(Y[,'observed']+k, log(Y[,'sampled']+k), sdlog=kernel_sd[[Y[1,'impact']]], min=k))
+  } else if (kernel =='log'){
+    LL_impact = abs(log(Y[,'observed']+k) - log(Y[,'sampled']+k)) * kernel_sd[[Y[1,'impact']]]
   } else {
     print(paste0("Failed to recognise kernel", AlgoParams$kernel))
     return(-Inf)
@@ -630,6 +548,13 @@ LL_IDP<-function(Y,  kernel_sd, kernel, cap){
 # plot(xrang, normval, col='red', type='l', xlab='Displacement', ylab="'Likelihood' assigned to simulated data")
 # abline(v=xobs1)
 # abline(v=xobs2)
+
+# x <- 100
+# dist_calc <- function(bound, x){
+#   return(1*abs(log(bound+10)-log(x+10)))
+# }
+# uniroot(function(bound) dist_calc(bound,x=x)-1,c(-10,x))$root
+# uniroot(function(bound) dist_calc(bound,x=x)-1,c(x,x*100))$root
 
 LL_beta_apply<-function(b,value,BD_params) do.call(BD_params$functions[[value]],as.list(c(x=b,unlist(BD_params$Params[[value]]))))
 
@@ -886,7 +811,7 @@ sampleDisps <-function(dir,Model,proposed,AlgoParams){
       # Extract the ODD object
       ODDy<-readRDS(paste0(folderin,filer))
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
-      ODDy@fIndies<-Model$fIndies
+      #ODDy@fIndies<-Model$fIndies
       ODDy@impact%<>%as.data.frame.list()
       # Apply DispX
       tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
@@ -952,7 +877,7 @@ sampleBDDist <- function(dir,Model,proposed,AlgoParams,expLL=T){
       BDy<-readRDS(paste0(folderin,filer))
       if(nrow(BDy@data)==0){return()}
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
-      BDy@fIndies<-Model$fIndies
+      #BDy@fIndies<-Model$fIndies
       # Apply BDX
       tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,Model = Model,Method=AlgoParams, LL=F),
                     error=function(e) NA)
@@ -1018,13 +943,19 @@ logTarget2 <- function(dist_sample, AlgoParams){
   LL_disps <- unlist(mclapply(dist_sample$Disps,FUN = sumLLs,mc.cores = 1)) # sum log likelihoods
   
   sumBD_dists <- function(BDDists_p){
-    IC <- which(names(BDDists_p) == 'ICN' | names(BDDists_p) == 'ICD')
-    sum(BDDists_p[IC])
+    Dist_0.5 <- which(names(BDDists_p) %in% c('N12', 'N21', 'N23', 'N32'))
+    Dist_1 <- which(names(BDDists_p) %in% c('N13', 'N31'))
+    return(0.5*sum(BDDists_p[Dist_0.5])+sum(BDDists_p[Dist_1]))
   }
   
-  LL_BD <- apply(dist_sample$BDDists, 2, sumBD_dists)
-  
-  dist_tot <- -LL_disps + LL_BD 
+  if (length(dist_sample$BD_dists > 0)){
+    LL_BD <- apply(dist_sample$BDDists, 2, sumBD_dists)
+  } else {
+    LL_BD <- 0
+  }
+
+  print(paste0('Dist_agg: ',LL_disps, ' Dist_sat: ', LL_BD))
+  dist_tot <- LL_disps + LL_BD 
   
   return(dist_tot)
 }

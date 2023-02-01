@@ -111,7 +111,11 @@ GetUSGS_id<-function(USGSid,titlz="tmp",I0=4.5,minmag=5){
 GetUSGSdatetime<-function(USGSid){
   url<-paste0("https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=",USGSid,"&format=geojson")
   tmp<-FROM_GeoJson(url)
-  return(as.Date(tmp$properties$products$dyfi[[1]]$properties$eventtime))
+  eventtime <- tmp$properties$products$dyfi[[1]]$properties$eventtime
+  if(is.null(eventtime)){
+    eventtime <- tmp$properties$products$shakemap[[1]]$properties$eventtime
+  }
+  return(as.Date(eventtime))
 }
 
 # Extract EQ data from USGS for a specified event
@@ -144,8 +148,8 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
   } else {
     # Automatically assign end date if not specified (or badly specified)
     if(is.null(fdate)) {
-      fdate=min(Sys.Date(),(as.Date(sdate)+10))}
-    else fdate=min(Sys.Date(),as.Date(fdate)+1)
+      fdate=min(Sys.Date(),(as.Date(sdate)+10))
+    } else fdate=min(Sys.Date(),as.Date(fdate)+1)
     # Search through the USGS events
     USGS<-SearchUSGSbbox(bbox,sdate,fdate,minmag)  
     lenny<-length(USGS$features)

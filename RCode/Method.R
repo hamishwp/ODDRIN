@@ -18,7 +18,7 @@
 ##########################################################################
 
 # Methodology parameters required
-AlgoParams<-list(Np=10, # Number of Monte Carlo particles
+AlgoParams<-list(Np=5, # Number of Monte Carlo particles
                  cores=6, # Number of parallelised threads per event
                  NestedCores=1, # How many cores are to be used inside the ODD displacement calculations?
                  AllParallel=T, # Do you want fully-nested (data) parallelisation?
@@ -32,8 +32,8 @@ AlgoParams<-list(Np=10, # Number of Monte Carlo particles
                  minVar=1e-4, # Prevent certain parameters from being too sure of themselves
                  t_0 =200,
                  eps = 0.000000001,
-                 kernel='lognormal', #options are lognormal or loglaplace
-                 kernel_sd=list(displacement=0.15,mortality=0.03,buildDam=0.15,buildDest=0.1), 
+                 kernel='log', #options are lognormal, loglaplace or log
+                 kernel_sd=list(displacement=1,mortality=20,buildDam=4,buildDest=4), 
                  smc_steps = 200, #Number of steps in the ABC-SMC algorithm
                  smc_Npart = 1000, #Number of particles in the ABC-SMC algorithm
                  smc_alpha = 0.9,
@@ -765,7 +765,7 @@ perturb_particles <- function(s, propCOV, AlgoParams, AlgoResults){
   for(n in 1:AlgoParams$smc_Npart){
     print(paste(' Step:', s, ', Particle:', n))
     if(AlgoResults$W[n,s]>0){
-      Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[n,,s], propPars=propCOV) #perturb the proposal
+      Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[n,,s], propPars=propCOV[[n]]) #perturb the proposal
       Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
       
       HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
@@ -831,8 +831,8 @@ perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omeg
 
 retrieve_UnfinishedAlgoResults <- function(dir, oldtag, Npart, AlgoResults){
   AlgoResults_unfinished <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",oldtag))
-  s_finish = max(which(colSums(!is.na(AlgoResults_unfinished$Omega_sample[,1,]))>0)) #find last completed step
-  n_finish = max(which(!is.na(AlgoResults_unfinished$Omega_sample[,1,s_finish]))) #find last completed particle
+  s_finish = max(which(colSums(is.na(AlgoResults_unfinished$Omega_sample[,1,]))==0)) #find last completed step
+  #n_finish = max(which(!is.na(AlgoResults_unfinished$Omega_sample[,1,s_finish]))) #find last completed particle
   
   # carry out these steps in case s differs between the unfinished and current runs
   AlgoResults$W[,1:s_finish] <- AlgoResults_unfinished$W[,1:s_finish]
@@ -841,13 +841,12 @@ retrieve_UnfinishedAlgoResults <- function(dir, oldtag, Npart, AlgoResults){
   AlgoResults$Omega_sample_phys[,,1:s_finish] <- AlgoResults_unfinished$Omega_sample_phys[,,1:s_finish]
   AlgoResults$tolerancestore[1:s_finish] <- AlgoResults_unfinished$tolerancestore[1:s_finish]
   AlgoResults$essstore[1:s_finish] <- AlgoResults_unfinished$essstore[1:s_finish]
-  s_start = ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
-  n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
+  s_start = s_finish + 1 #ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
+  #n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
   
   return(list(
     AlgoResults=AlgoResults,
-    s_start=s_start,
-    n_start=n_start
+    s_start=s_start
   ))
 }
 
@@ -897,17 +896,18 @@ calc_propCOV <- function(s, n_x, Npart, AlgoResults){
   W_tilda <- AlgoResults$W[tilda_i,s-1]
   W_tilda <- W_tilda/sum(W_tilda) #normalise weights
   
-  propCOV <- matrix(0, n_x, n_x)
-  for(i in 1:Npart){
+  propCOV <- list()
+  for (n in 1:Npart){
+    propCOV[[n]] <- matrix(0, n_x, n_x)
     for(k in 1:length(tilda_i)){
-      propCOV <- propCOV + AlgoResults$W[i,s-1] * W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[i,,s-1]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[i,,s-1]))
+      propCOV[[n]] <- propCOV[[n]] + W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]))
     }
   }
   return(propCOV)
 }
 
 plot_abcsmc <- function(s, n_x, Npart, Omega_sample_phys, Omega){
-  par(mfrow=c(4,4))
+  par(mfrow=c(5,4))
   for (i in 1:n_x){
     plot(rep(1:s,each=Npart),Omega_sample_phys[,i,1:s], ylim=c(min(Omega_sample_phys[,i,1:s], unlist(Omega)[i]), max(Omega_sample_phys[,i,1:s], unlist(Omega)[i])),
          main=names(unlist(Omega))[i], xlab='step', ylab='')
@@ -956,7 +956,6 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     UnfinishedAlgoResults <- retrieve_UnfinishedAlgoResults(dir, oldtag, AlgoParams$smc_Npart, AlgoResults)
     AlgoResults <- UnfinishedAlgoResults$AlgoResults
     s_start <- UnfinishedAlgoResults$s_start
-    n_start <- UnfinishedAlgoResults$n_start
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag)) 
   }
   

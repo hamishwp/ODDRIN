@@ -481,7 +481,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     Upp_bounds_4.6 <- c(0.01, 0.01, 0.01, 0.1)
     Low_bounds_6 <- c(0, 0.001, 0, 0.001)
     Upp_bounds_6 <- c(0.3, 0.5, 0.5, 0.8)
-    Low_bounds_9 <- c(0.05,0.3,0.1,0.4)
+    Low_bounds_9 <- c(0.001,0.1,0.01,0.2)
     
     HLP_impacts <- function(I_ij, lp, Omega){
       rbind(apply(D_MortDisp_calc(h_0(I_ij, I0=4.5, theta=Omega$theta) * lp, Omega),2,cumsum), 

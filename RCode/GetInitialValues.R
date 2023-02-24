@@ -415,25 +415,19 @@ HLPrior_sample <- function(Model, AlgoParams){
 # }
 
 
-# path<-paste0("/home/manderso/Documents/GitHub/ODDRIN/PHL_IIDIPUS_Input/ODDobjects/")
+# path<-paste0("/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NoBuildingDat/ODDobjects/")
 # ufiles<-list.files(path=path,pattern=haz,recursive = T,ignore.case = T)
 # ufiles<-ufiles[grepl(ufiles,pattern = haz)]
 # 
 # for(fff in ufiles){
 #   ODDy<-readRDS(paste0(path,fff))
-#   
-#   ODDy@data$ExpSchYrs <- NULL
-#   ODDy@data$LifeExp <- NULL
-#   ODDy@data$GNIc <- NULL
-#   ODDy@data$EQFreq <- NULL
-#   ODDy@data$Vs30 <- NULL
-#   
-#   ODDy %<>% AddVuln()
-#   plot(ODDy@coords[ODDy@data$Population>0,], col=as.factor(ODDy$GNIc[ODDy@data$Population>0]))
-#   saveRDS(ODDy, paste0(path,fff))
+# 
+#   if(any(is.na(ODDy$GNIc)&!is.na(ODDy$ISO3C))) print(fff)
 # }
 
-#plot(ODDy@coords[ODDy@data$Population>0,], col=as.factor(ODDy$GNIc[ODDy@data$Population>0]))
+
+# rbPal <- colorRampPalette(c('red','blue'))
+# plot(ODDy@coords[ODDy@data$Population>0,], col=rbPal(20)[as.numeric(cut(ODDy$EQFreq[ODDy@data$Population>0],breaks = 20))])
 
 # for(fff in ufiles){
 #   ODDy<-readRDS(paste0(path,fff))

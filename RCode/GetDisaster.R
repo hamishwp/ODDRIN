@@ -14,15 +14,15 @@ ExtractParams<-function(haz="EQ"){
   stop("Hazard type not recognised")
 }
 
-GetDisaster<-function(DispData){
+GetDisaster<-function(DispData, bbox=NULL, EQparams=NULL){
   if(all(DispData$hazard=="EQ")) {
     
     # Just in case multiple hazards are run simultaneously
     tDisp<-DispData%>%filter(hazard=="EQ")
     # Extract standard (or user modified) EQ parameters
-    EQparams<-ExtractParams("EQ")
+    if(is.null(EQparams)) EQparams<-ExtractParams("EQ")
     # Extract bounding box of affected countries
-    bbox<-countriesbbox(unique(tDisp$iso3))
+    if(is.null(bbox)) bbox<-countriesbbox(unique(tDisp$iso3))
     # Extract all earthquakes from USGS:
     return(GetUSGS(bbox=bbox,sdate=min(tDisp$sdate),fdate = max(tDisp$fdate),I0=EQparams$I0,minmag=EQparams$minmag))
     

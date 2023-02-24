@@ -26,8 +26,9 @@ ExtractOSMbuild<-function(bbox,timeout=60){
   obj<-obj[inds,]
   # obj%<>%st_as_sf()
   # st_crs(obj)<-st_crs("urn:ogc:def:crs:EPSG::4326")
-  obj%<>%dplyr::select(building.levels,geometry,name)
-  obj$building.levels%<>%as.numeric()
+  obj%<>%dplyr::select(geometry)
+  #obj%<>%dplyr::select(building.levels,geometry,name)
+  #obj$building.levels%<>%as.numeric()
   # sf::sf_use_s2(FALSE)
   obj$area<-as.double(st_area(st_as_sf(obj$geometry)))
   # obj$area<-vapply(1:nrow(obj),function(i) st_area(st_as_sf(obj$geometry[i])),FUN.VALUE = numeric(1))
@@ -154,7 +155,25 @@ GetOSMbuildingsBbox<-function(bbox,minnum=50,plotty=F,timeout=60){
     if(is.null(tbuildings)) {
       stepsize <- 0.008333333333333333
       grid <- expand.grid(seq(bbox[2], bbox[4], stepsize), seq(bbox[1], bbox[3], stepsize))
-      colnames(grid) <- c('Longitude', 'Latitude')
+      colnames(grid) <- c('Latitude', 'Longitude')
+      p<-ggplot(grid,aes(Longitude,Latitude))+stat_bin_2d(drop = F,binwidth = 0.1)
+      pg<-(ggplot_build(p))$data[[1]]; rm(p)
+      buildings<-data.frame()
+      for(i in 1:nrow(pg)){
+        bbox<-as.double(pg[i,c("xmin","ymin","xmax","ymax")])
+        tbuildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout*2),error=function(e) NULL)
+        if(is.null(tbuildings)) next
+        buildings%<>%rbind(tbuildings)
+      }
+    }
+  } else {
+    # ensure bbox has an area of at least 0.01
+    bbox<-expandBbox(bbox,0.01,scaling = F)
+    buildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout),error=function(e) NULL)
+    if(is.null(buildings)) {
+      stepsize <- 0.008333333333333333
+      grid <- expand.grid(seq(bbox[2], bbox[4], stepsize), seq(bbox[1], bbox[3], stepsize))
+      colnames(grid) <- c('Latitude', 'Longitude')
       p<-ggplot(grid,aes(Longitude,Latitude))+stat_bin_2d(drop = F,binwidth = 0.1)
       pg<-(ggplot_build(p))$data[[1]]; rm(p)
       buildings<-data.frame()
@@ -165,10 +184,6 @@ GetOSMbuildingsBbox<-function(bbox,minnum=50,plotty=F,timeout=60){
         buildings%<>%rbind(tbuildings)
       }
     }
-  } else {
-    # ensure bbox has an area of at least 0.01
-    bbox<-expandBbox(bbox,0.01,scaling = F)
-    buildings<-ExtractOSMbuild(bbox,timeout=timeout)
   }
   # i<-1
   # while((nrow(buildings)<minnum | sum(!is.na(buildings$building.levels))<minnum) & i<10){
@@ -179,7 +194,7 @@ GetOSMbuildingsBbox<-function(bbox,minnum=50,plotty=F,timeout=60){
   # }
   
   return(SpatialPointsDataFrame(coords = buildings[,c("Longitude","Latitude")],
-                                data = buildings[,c("building.levels","area")],
+                                data = buildings[,c("Longitude", "Latitude", "area")],
                                 proj4string = crs("+proj=longlat +datum=WGS84 +ellps=WGS84")))
   
   return(buildings)

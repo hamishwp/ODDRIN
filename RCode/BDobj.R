@@ -336,9 +336,8 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   # Only calculate buildings with all key parameters
   hrange<-grep("hazMean",names(BD),value = T)
   
-  if(!LL) {notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$GDP)) | all(is.na(BD@data[,hrange])))
-  } else notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$GDP) | 
-                     is.na(BD@data$grading) | all(is.na(BD@data[,hrange]))))
+  if(!LL) {notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | all(is.na(BD@data[,hrange]))))
+  } else notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$grading) | all(is.na(BD@data[,hrange]))))
   BD<-BD[notnans,] ; notnans<-1:nrow(BD)
   if(nrow(BD) ==0){
     if(LL){return(0)}

@@ -24,7 +24,7 @@ Omega <- list(Lambda1 = list(nu=8,omega=4.9),
               #intercept term itc is redundant
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
-  
+
 Model$center <- simulateDataSet(20, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)
 
 #After generating the simulated data, need to move 'from 'centerings' 

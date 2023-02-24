@@ -1,5 +1,6 @@
-library(sqldf)
-
+library(data.table)
+library(jsonlite)
+library(geojsonio)
 
 merge_rastered_spdf <- function(raster1_spdf, raster2_spdf, added_var_name){
   data <- raster1_spdf@data
@@ -15,49 +16,99 @@ merge_rastered_spdf <- function(raster1_spdf, raster2_spdf, added_var_name){
   return(data)
 }
 
-AddOpenBuildingCounts <- function(ODD){
+AddOpenBuildingCounts <- function(ODD, isos_openbuildings){
   lon_min <- ODD@bbox[1,1]; lon_max <- ODD@bbox[1,2]
   lat_min <- ODD@bbox[2,1]; lat_max <- ODD@bbox[2,2]
-  iso3_unique <- unique(ODD$ISO3C)[!is.na(unique(ODD$ISO3C))]
-  open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/open_buildings_v2_points_your_own_wkt_polygon_',iso3_unique[1],'.csv')
-  if(!file.exists(open_buildings_file)){
-    stop('Download Open Buildings data from: https://colab.research.google.com/github/google-research/google-research/blob/master/building_detection/open_buildings_download_region_polygons.ipynb')
-          #When downloading, insert the polygon bounding the country of interest into your_own_wkt_polygon field
-          # alternatively, can select the region_border_source and country, although this doesn't seem to work well when working with small islands in Philippines
-          # select 'points' in the data_type field
-  }
-  building_locs <- read.csv.sql(open_buildings_file,
-                                paste0("select longitude, latitude from file where latitude > ", lat_min, ' AND longitude > ', lon_min, 
-                                       ' AND latitude < ',lat_max, ' AND longitude < ', lon_max))
   
-  if (length(iso3_unique) > 1){
+  indies_open_buildings <- which(ODD$ISO3C %in% isos_openbuildings)
+  
+  iso3_unique <- unique(ODD$ISO3C)[!is.na(unique(ODD$ISO3C))]
+
+  open_buildings_files <- paste0(dir, 'Demography_Data/Buildings/open_buildings_v2_points_your_own_wkt_polygon_',iso3_unique,gsub("-", "", ODD@hazdates[1]),'.csv')
+
+  event_match <- ifelse(any(file.exists(open_buildings_files)), T, F)
+  if(event_match){
+    open_buildings_file <- open_buildings_files[which(file.exists(open_buildings_files))]
+  } else {
+    open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/open_buildings_v2_points_your_own_wkt_polygon_',iso3_unique[1],'.csv')
+    if(!file.exists(open_buildings_file)){
+      stop('Download Open Buildings data from: https://colab.research.google.com/github/google-research/google-research/blob/master/building_detection/open_buildings_download_region_polygons.ipynb')
+    }
+    #When downloading, insert the polygon bounding the country of interest into your_own_wkt_polygon field
+    # alternatively, can select the region_border_source and country, although this doesn't seem to work well when working with small islands in Philippines (and potentially other small regions)
+    # select 'points' in the data_type field
+  }
+  # doesn't work once files exceed a certain size:
+  # building_locs <- read.csv.sql(open_buildings_file,
+  #                               paste0("select longitude, latitude from file where latitude > ", lat_min, ' AND longitude > ', lon_min, 
+  #                                      ' AND latitude < ',lat_max, ' AND longitude < ', lon_max))
+  
+  building_locs <- data.frame(latitude=double(), longitude=double())
+  i <- 1
+  nrows_file <- as.integer(strsplit(system(paste0('wc -l ', open_buildings_file), intern=T), ' ')[[1]][1])
+  nrow_tmp <- 50000000
+  nchunks <- ceiling(nrows_file/nrow_tmp)
+  for (j in 1:nchunks){
+    tmp <- fread(open_buildings_file,skip=i, nrows=nrow_tmp, select=c(1,2), col.names=c('latitude', 'longitude'))
+    building_locs %<>% rbind(tmp %>% filter(latitude > lat_min, longitude > lon_min, latitude < lat_max, longitude < lon_max)) 
+    i <- i + nrow_tmp
+  }
+  
+  if (length(iso3_unique) > 1 & event_match==F){
     for (i in 2:length(iso3_unique)){
       open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/open_buildings_v2_points_your_own_wkt_polygon_',iso3_unique[i],'.csv')
       if(!file.exists(open_buildings_file)){
         stop('Download Open Buildings data from: https://colab.research.google.com/github/google-research/google-research/blob/master/building_detection/open_buildings_download_region_polygons.ipynb')
         #follow download instructions above
       }
-      building_locs %<>% rbind(read.csv.sql(open_buildings_file,
-                                    paste0("select longitude, latitude from file where latitude > ", lat_min, ' AND longitude > ', lon_min, 
-                                           ' AND latitude < ',lat_max, ' AND longitude < ', lon_max)))
+      i <- 1
+      nrows_file <- as.integer(strsplit(system(paste0('wc -l ', open_buildings_file), intern=T), ' ')[[1]][1])
+      nrow_tmp <- 50000000
+      nchunks <- ceiling(nrows_file/nrow_tmp)
+      for (j in 1:nchunks){
+        tmp <- fread(open_buildings_file,skip=i, nrows=nrow_tmp, select=c(1,2), col.names=c('latitude', 'longitude'))
+        building_locs %<>% rbind(tmp %>% filter(latitude > lat_min, longitude > lon_min, latitude < lat_max, longitude < lon_max))
+        i <- i + nrow_tmp
+      }
     }
   }
+  building_locs <- building_locs[,c('longitude', 'latitude')]
   
   rastered_buildings <- rasterize(building_locs, raster(ODD), 1, fun='count')
   rastered_buildings_spdf <- as(rastered_buildings, "SpatialPixelsDataFrame")
   
   ODD@data <- merge_rastered_spdf(ODD, rastered_buildings_spdf, 'nBuildings')
+  if (!event_match){
+    ODD$nBuildings[indies_open_buildings[which(is.na(ODD$nBuildings[indies_open_buildings]))]] <- 0
+    ODD$nBuildings[-indies_open_buildings] <- NA
+  } else {
+    ODD$nBuildings[which(is.na(ODD$nBuildings))] <- 0
+  }
+  
+  sedacs2020 <- GetPopulationBbox(dir, ODD@bbox, yr=2020)
+  population2020 <- merge(ODD@coords, cbind(sedacs2020@coords, population2020=sedacs2020$Population), by=c('Longitude', 'Latitude'), all.x=T, sort=F)
+  nonzero_pop <- which(population2020$population2020 > 0)
+  ODD$nBuildings[nonzero_pop] <- round(ODD$nBuildings[nonzero_pop] * (ODD$Population[nonzero_pop] / population2020$population2020[nonzero_pop]))
+  
   return(ODD)
 }
 
 AddBuildingCounts <- function(ODD){
+  isos_openbuildings <- c('BGD', 'COD', 'IDN', 'NPL', 'PHL', 'TLS', 'MOZ', 'LAO', 'DZA', 'TZA')
+  isos_bingbuildings <- c('COL', 'ECU', 'USA')
   iso3_unique <- unique(ODD$ISO3C)[!is.na(unique(ODD$ISO3C))]
-  if (all(iso3_unique %in% c('BGD', 'COD', 'IDN', 'NPL', 'PHL'))){
-    ODD %<>% AddOpenBuildingCounts()
-  } else if (all(iso3_unique %in% c('CHN', 'IND'))){
-    stop('Functionality not yet added for building counts in countries not covered by Open Buildings')
-    ODD %<>% AddFBBuildingEstimates()
-  } else {
+  if (any(iso3_unique %in% isos_openbuildings)){
+    ODD %<>% AddOpenBuildingCounts(isos_openbuildings)
+  } 
+  if (any(iso3_unique %in% isos_bingbuildings)){
+    ODD %<>% AddBingBuildingCounts(isos_bingbuildings)
+  } 
+  if (is.null(ODD$nBuildings)) ODD$nBuildings <- NA
+  missing_building_counts <- which(!is.na(ODD$ISO3C) & is.na(ODD$nBuildings))
+  if (length(missing_building_counts)>0){
+    stop(paste('Missing data for rows ', missing_building_counts, 'of countries:', unique(ODD$ISO3C[missing_building_counts])))
+  } 
+  else {
     return(ODD)
   }
 }
@@ -75,22 +126,221 @@ ReplaceBuildingCounts <- function(){
   }
 }
 
-AddFBBuildingEstimates <- function(ODD){
-  bbox <- ODD@bbox
-  FBpop<-readFBpop(bbox) # Get Population estimates from Meta Data for Good
-  rastered_FBpop_builtup <- rasterize(FBpop, raster(ODD), 'Population', fun='count')
-  ODD@data <- merge_rastered_spdf(SEDAC, as(rastered_FBpop_builtup, "SpatialPixelsDataFrame"), 'nBuiltup')
+resave_geojsonl <- function(iso3, USA_state=NULL){
+  #reads in geojsonl file for a country and saves a simplified RDS
+  if (iso3 != 'USA'){
+    open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/',iso3,'.geojsonl')
+    if (!file.exists(open_buildings_file)) stop('Download Bing Building Footprint data from: https://www.microsoft.com/en-us/maps/building-footprints')
+    tmp_df <- new.env()
+    stream_in(file(open_buildings_file), handler = function(df){
+      idx <- as.character(length(tmp_df) + 1)
+      tmp_df[[idx]] <- sapply(df$coordinates, function(poly_coords) poly_coords[1,1,])
+      #just take the first coordinate of the polygon 
+      # might not be quite so accurate but shouldn't make too much difference and does speed up the process
+    })
+    building_footprints <- t(do.call(cbind, as.list(tmp_df)))
+    colnames(building_footprints) <- c('longitude', 'latitude')
+    saveRDS(building_footprints, paste0(dir, 'Demography_Data/Buildings/',iso3,'.RDS'))
+  } else {
+    open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/',USA_state,'.geojson')
+    spdf <- geojson_read(open_buildings_file,  what = "sp")
+    building_footprints <- t(sapply(spdf@polygons, function(poly) poly@labpt))
+    building_footprints %<>% data.frame() 
+    colnames(building_footprints) <- c('longitude', 'latitude')
+    saveRDS(building_footprints, paste0(dir, 'Demography_Data/Buildings/',USA_state,'.RDS'))
+  }
+}
+
+
+AddBingBuildingCounts <- function(ODD, isos_bingbuildings){
+  lon_min <- ODD@bbox[1,1]; lon_max <- ODD@bbox[1,2]
+  lat_min <- ODD@bbox[2,1]; lat_max <- ODD@bbox[2,2]
+  
+  iso3_unique <- unique(ODD$ISO3C)[!is.na(unique(ODD$ISO3C))]
+  
+  indies_bing_buildings <- which(ODD$ISO3C %in% isos_bingbuildings)
+  
+  open_buildings_files <- c()
+  for (iso3 in iso3_unique){
+    if (iso3 !='USA'){
+      open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/',countrycode(iso3, origin='iso3c', destination='country.name'),'.RDS')
+      if (!file.exists(open_buildings_file)){
+        resave_geojsonl(iso3)
+      }
+    } else {
+      if (lon_min > -114.06 & lon_max < -109.04 & lat_min > 37 & lat_max < 42){
+        open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/Utah.RDS')
+      } else {
+        stop('So far only have building count data matching one event in Utah')
+      }
+    }
+    open_buildings_files <- append(open_buildings_files, open_buildings_file)
+  }
+  
+  building_locs <- data.frame(latitude=double(), longitude=double())
+  
+  for(fff in open_buildings_files){
+    building_footprints <- data.frame(readRDS(fff))
+  
+    nrow_tmp <- 500000
+    nrow_bf <- NROW(building_footprints)
+    nchunks <- ceiling(nrow_bf/nrow_tmp)
+    for (j in 1:nchunks){
+      #tmp <- t(sapply(building_footprints$coordinates[((j-1)*nrow_tmp+1):min(j*nrow_tmp,nrow_bf)], function(poly_coords) poly_coords[1,1,]))
+      #colnames(tmp) <- c('longitude', 'latitude')
+      tmp = building_footprints[((j-1)*nrow_tmp+1):min(j*nrow_tmp,nrow_bf),]
+      building_locs %<>% rbind(tmp %>% filter(latitude > lat_min, longitude > lon_min, latitude < lat_max, longitude < lon_max)) 
+    }
+  }
+  
+  rastered_buildings <- rasterize(building_locs, raster(ODD), 1, fun='count')
+  rastered_buildings_spdf <- as(rastered_buildings, "SpatialPixelsDataFrame")
+  
+  ODD@data <- merge_rastered_spdf(ODD, rastered_buildings_spdf, 'nBuildings')
+
+  ODD$nBuildings[indies_bing_buildings[which(is.na(ODD$nBuildings[indies_bing_buildings]))]] <- 0
+  ODD$nBuildings[-indies_bing_buildings] <- NA
+  
+  sedacs2020 <- GetPopulationBbox(dir, ODD@bbox, yr=2020)
+  population2020 <- merge(ODD@coords, cbind(sedacs2020@coords, population2020=sedacs2020$Population), by=c('Longitude', 'Latitude'), all.x=T, sort=F)
+  nonzero_pop <- which(population2020$population2020 > 0)
+  ODD$nBuildings[nonzero_pop] <- round(ODD$nBuildings[nonzero_pop] * (ODD$Population[nonzero_pop] / population2020$population2020[nonzero_pop]))
+  
   return(ODD)
 }
 
-sampleBuildingsFromBuiltup <- function(nBuiltup, reg_int, reg_coef, reg_sd, Np, notnans){
-  nBuildings_sample <- array(0, dim=c(length(nBuiltup),Np))
-  notnans <- notnans[!(notnans %in% which(nBuiltup==0))] #could there also be any NA values? 
-  for (ij in notnans){
-    nBuildings_sample[ij,] <- round(rlnorm(Np, reg_int+reg_coef*log(nBuiltup[ij]), reg_sd))
-  }
+
+
+# filename <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NoBuildingDat/ODDobjects/EQ20150425NPL_14'
+# ODDy <- readRDS(filename)
+# ODDy %<>% AddBuildingCounts()
+# # #
+# cr <- colorRamp(c("green", "black"))
+# plot(ODDy@coords[which(!is.na(ODDy$Population)),], col=rgb(cr(ODDy$nBuildings[which(!is.na(ODDy$Population))]/max(ODDy$nBuildings, na.rm=T)), max=255))
+# points(ODDy@coords[which(ODDy$nBuildings==0),], col='red')
+# #
+# saveRDS(ODDy, filename)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+AddFBBuildingEstimates <- function(ODD, isos_osm){
+  indies_osm <- which(ODD$ISO3C %in% isos_osm)
+
+  bbox <- ODD@bbox 
+  #resize bbox to avoid loading unnecessary FB data
+  bbox[1,1] <- min(ODD@coords[indies_osm,1]); bbox[1,2] <- max(ODD@coords[indies_osm,1])
+  bbox[2,1] <- min(ODD@coords[indies_osm,2]); bbox[2,2] <- max(ODD@coords[indies_osm,2])
+  
+  FBpop<-readFBpop(bbox) # Get Population estimates from Meta Data for Good
+  rastered_FBpop_builtup <- rasterize(FBpop, raster(ODD), 'Population', fun='count')
+  data_with_builtup <- merge_rastered_spdf(SEDAC, as(rastered_FBpop_builtup, "SpatialPixelsDataFrame"), 'nBuiltup')
+  ODD@data$nBuiltup <- NA
+  ODD@data[indies_osm] <- ODD@data_with_builtup[indies_osm,]
+  return(ODD)
+}
+
+
+sampleBuildingsFromBuiltup <- function(nBuiltup, iso3c, reg_coefs, Np){
+  
+  n_pixels <- NROW(nBuildings_sample)
+  reg_coefs <- merge(iso3c, reg_coefs, all.x <- T, sort = F)
+  
+  nBuildings_sample <- matrix(rlnorm(Np * n_pixels, rep(reg_coefs[,2] + reg_coefs[,3] * log(nBuiltup), Np), rep(reg_coefs[,4], Np) ), nrow=n_pixels)
+  
   return(nBuildings_sample)
 }
+
+getBuildSamplingCoefs <- function(filename){
+  nBuildSamplingCoefs <- readRDS(paste0(dir, filename))
+  return(nSamplingModelCoefs)
+}
+
+addRegCoefs <- function(iso3, bbox_list, filename){
+  nBuildSamplingCoefs <- readRDS(paste0(dir, filename))
+  
+  #read in OSM data for the polygon
+  #lognormal regression against nBuiltup
+  #save output to file 
+  
+  train_dat <- data.frame(iso3 = character(), nBuiltup = integer(), nBuildings_OSM = integer(), bbox_i = integer())
+  for(i in 1:length(bbox_list)){
+    SEDACS_grid <- GetPopulationBbox(dir, bbox_list[[i]])
+    #make sure all pixels are fully inside bbox
+    SEDACS_grid <- SEDACS_grid[-which(SEDACS_grid@coords[,1] - SEDACS_grid@grid@cellsize/2 < bbox_list[[i]][1,1] |
+                       SEDACS_grid@coords[,1] + SEDACS_grid@grid@cellsize/2 > bbox_list[[i]][1,2] |                                               
+                       SEDACS_grid@coords[,2] - SEDACS_grid@grid@cellsize/2 < bbox_list[[i]][2,1] |     
+                       SEDACS_grid@coords[,2] + SEDACS_grid@grid@cellsize/2 > bbox_list[[i]][2,2]),] 
+    
+    FBpop <-readFBpop( bbox_list[[i]])
+    rastered_FBpop_builtup <- rasterize(FBpop, raster(SEDACS_grid), 'Population', fun='count') 
+    FB_SEDACS_merged <- merge_rastered_spdf(SEDACS_grid, as(rastered_FBpop_builtup, "SpatialPixelsDataFrame"), 'nBuiltup')
+    
+    OSM_buildings<-GetOSMbuildingsBbox(bbox_list[[i]], timeout=60) 
+    rastered_OSM_count <- rasterize(cbind(OSM_buildings$Longitude, OSM_buildings$Latitude), raster(SEDACS_grid), fun='count') # Get OSM building counts
+    OSM_SEDACS_merged <- merge_rastered_spdf(SEDACS_grid, as(rastered_OSM_count, "SpatialPixelsDataFrame"), 'nBuildings_OSM')
+    
+    #SEDACS_grid %<>% AddBuildingCounts()
+    train_dat %<>% rbind(data.frame(iso3=SEDACS_grid$ISO3C, nBuiltup=FB_SEDACS_merged$nBuiltup, nBuildings_OSM=OSM_SEDACS_merged$nBuildings_OSM, bbox_i = i))
+    
+  }
+  
+  lnorm_fit <- lm(log(nBuildings_OSM) ~ log(nBuiltup), data=train_dat)
+  
+  iso3_coefs <- c(iso3, lnorm_fit$coefficients[1], lnorm_fit$coefficients[2], sigma(lnorm_fit))
+  
+  match_index <- which(iso3==nBuildSamplingCoefs$iso3c)
+  if (length(match_index) > 0){
+    print(paste('Updating Building Count Sampling Coefficients for ', iso3))
+    nBuildSamplingCoefs[match_index,] <- iso3_coefs
+  } else {
+    nBuildSamplingCoefs %<>% rbind(iso3_coefs)
+  }
+  saveRDS(nBuildSamplingCoefs, paste0(dir, filename))
+  
+  return(nBuildSamplingCoefs)
+}
+
+
+
+
+# plot(train_dat$nBuiltup, train_dat$nBuildings_OSM, col=train_dat$bbox_i)
+# plot(log(train_dat$nBuiltup), log(train_dat$nBuildings_OSM), col=train_dat$bbox_i)
+# 
+# #INDIA: 
+# bbox_list <- list(rbind(c(88.69,88.86), c(22.14,22.29)), 
+#                   rbind(c(76.99, 77.098), c(28.412,28.511)),
+#                   rbind(c(75.34, 75.462), c(11.947,12.054)),
+#                   rbind(c(72.997, 73.0335), c(20.232,20.307)))
+#
+
+# INDIA (by road completeness):
+# bbox_list <- list(rbind(c(73.07,73.20), c(19.16,19.275)), 
+#                   rbind(c(73.724, 73.865), c(19.95,20.036)),
+#                   rbind(c(76.143, 76.30), c(10.492,10.622)))
+
+
+# #PHILIPPINES:
+# bbox_list <- list(rbind(c(120.414, 120.658), c(15.534, 15.659)),
+#                   rbind(c(120.877, 120.984), c(14.28, 14.36)))
+
+  #BANGLADESH:
 
 # loon_GADM <- getGADM('Loon', level=2, country='PHL')
 # building_locs_spdf <- SpatialPointsDataFrame(building_locs, data.frame(id=1:NROW(building_locs)))

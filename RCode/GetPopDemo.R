@@ -44,10 +44,10 @@ SortDemoData<-function(filer,bbox=NULL){
   for (i in 1:6){ assign(info[[i]][1],as.numeric(info[[i]][2]))}; rm(info)
   
   #seems to be numerical discrepancies between nation and population data from SEDACs (on a very, very small order)
-  #correct by rounding xllcorner and yllcorner to the nearest 10 digits, and cellsize to the nearest 1/10000th of an arcsecond
-  xllcorner <- round(xllcorner, digits=10)
-  yllcorner <- round(yllcorner, digits=10)
+  #correct by rounding xllcorner, yllcorner, and cellsize to the nearest 1/10000th of an arcsecond
   one_tenthousandths_arcsecond <- 1/60/60/10000
+  xllcorner <- round(xllcorner/one_tenthousandths_arcsecond)*one_tenthousandths_arcsecond
+  yllcorner <- round(yllcorner/one_tenthousandths_arcsecond)*one_tenthousandths_arcsecond
   cellsize <- round(cellsize/one_tenthousandths_arcsecond)*one_tenthousandths_arcsecond
   
   popdemo<-read.csv(filer,header = FALSE,skip = 6,sep = " ",na.strings = NODATA_value,colClasses = "numeric")
@@ -56,7 +56,8 @@ SortDemoData<-function(filer,bbox=NULL){
   sizer2<-c(nrows,ncols+1)
   if(!all(length(sizer)==length(sizer2)) || !all(sizer==sizer2)){stop(paste0("ERROR! Incorrect dimensions: Check the population demography file for bounding box ",bbox," in file GetPopDemo.R"))}
   
-  lat<-seq(from=yllcorner+90-cellsize/2,by=-cellsize,length.out = nrows) #@@@ LATITUDE @@@#
+  lat<-rev(seq(from=yllcorner+cellsize/2,by=cellsize, length.out=nrows))
+  #lat<-seq(from=yllcorner+90-cellsize/2,by=-cellsize,length.out = nrows) #@@@ LATITUDE @@@# This doesn't work when we're not working with exact quadrants
   long<-seq(from=xllcorner+cellsize/2,by=cellsize,length.out = ncols)    #@@@ LONGITUDE @@@#
   colnames(popdemo)<-long
   row.names(popdemo)<-lat

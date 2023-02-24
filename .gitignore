@@ -17,6 +17,12 @@ IIDIPUS_SimInput/
 
 IIDIPUS_Results/
 
+IIDIPUS_Input_All/
+
+IIDIPUS_Input_BuildingDat/
+
+IIDIPUS_Input_NoBuildingDat/
+
 Unfinished/
 
 >>>>>>> master

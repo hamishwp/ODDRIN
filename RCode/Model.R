@@ -106,6 +106,8 @@ for (i in 1:length(Model$links)){
   }
 }
 
+#Model$nBuildSamplingCoefs <- getBuildSamplingCoefs('Demography_Data/Buildings/nBuildModelCoefs')
+
 # Link functions (MUST BE SAME LENGTH AS OMEGA)
 # Model$links<-list(
 #   Lambda1=list(nu='ab_bounded',omega='ab_bounded'),
@@ -967,7 +969,7 @@ logTarget2 <- function(dist_sample, AlgoParams){
     return(0.5*sum(BDDists_p[Dist_0.5])+sum(BDDists_p[Dist_1]))
   }
   
-  if (length(dist_sample$BD_dists > 0)){
+  if (length(dist_sample$BDDists) > 0){
     LL_BD <- apply(dist_sample$BDDists, 2, sumBD_dists)
   } else {
     LL_BD <- 0

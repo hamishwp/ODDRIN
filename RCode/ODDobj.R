@@ -249,12 +249,14 @@ setMethod(f="initialize", signature="ODD",
             .Object%<>%AddHazSDF(lhazSDF)
             
             # Extract empty indices to save time
-            inds<-!is.na(.Object$Population)
+            inds<-which(!is.na(.Object$Population))
+            .Object@data$ISO3C[-inds] <- NA
             
             print("Filter spatial data per country")
             #.Object@data$ISO3C<-NA_character_
             #.Object@data$ISO3C[inds]<-coords2country(.Object@coords[inds,])
             iso3c<-unique(.Object@data$ISO3C) ; iso3c<-iso3c[!is.na(iso3c)]
+            
 
             print("Interpolate population values")
             # Note there are as many values returned as iso3c codes (returns as data.frame with columns 'iso3' and 'factor')
@@ -269,50 +271,24 @@ setMethod(f="initialize", signature="ODD",
             # World Income Database (WID) data:
             if(year==AsYear(Sys.Date())) year<-AsYear(Sys.Date())-1
             print("Extract country indicators - WID:")
+            
             WID<-GetWID_perc(Model$WID_perc,iso3c,year)
-            
-            
-            
-            
-            
             
             
             #stop("Add the full variables to the cIndies data.frame")
             # Bind it all together!
             .Object@cIndies<-WID
             
-            
-            
-            
             # Here we add the vulnerabilities used in the linear predictor
             .Object%<>%AddVuln()
-            
-            
-            
-            
             
             
             #print("Fetching GDP-PPP data")
             #.Object%<>%AddGDP(inds)
             
             
-            
-            
-            
-            
-            
-            #stop("Sort out building count data")
-            
-            print("Fetching building count data")
-            .Object%<>%AddBuildingCounts()
-            #scale number of buildings/builtup area by the change in population (assume they scale together)
-            if (!is.null(.Object$nBuildings)){
-              .Object$nBuildings <- round(.Object$nBuildings * (.Object$Population / GetPopulationBbox(dir, bbox, yr=2020)$Population))
-              .Object$nBuildings[which(is.na(.Object$nBuildings))] <- 0
-            }
-            if (!is.null(.Object$nBuiltup)){
-              .Object$nBuiltup <- .Object$nBuiltup * (.Object$Population / GetPopulationBbox(dir, bbox, yr=2020)$Population)
-            }
+            # # print("Fetching building count data")
+            # .Object%<>%AddBuildingCounts()
             
             print("Checking ODD values")
             checkODD(.Object)
@@ -398,10 +374,12 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   
   nBuildings_sample <- array(0, dim=c(NROW(ODD@data), Method$Np))
   if (!is.null(ODD@data$nBuildings)){
-    nBuildings_sample <- matrix( ODD@data$nBuildings , length(ODD@data$nBuildings) , Method$Np )
+    indies_openbuildings <- which(!is.na(ODD@data$nBuildings))
+    nBuildings_sample[indies_openbuildings,] <- matrix(ODD@data$nBuildings[indies_openbuildings] , length(ODD@data$nBuildings[indies_openbuildings]), Method$Np)
     BD_data_present <- T
   } else if (!is.null(ODD@data$nBuiltup)){
-    nBuildings_sample <- sampleBuildingsFromBuiltup(ODD@data$nBuiltup, reg_int, reg_mean, reg_sd, Method$Np)
+    indies_osm <- which(ODD@data$nBuiltup > 0)
+    nBuildings_sample[indies_osm,] <- sampleBuildingsFromBuiltup(ODD$nBuiltup[indies_osm], ODD$ISO3C[indies_osm], reg_coefs, Method$Np)
     BD_data_present <- T
   } else {
     BD_data_present <- F

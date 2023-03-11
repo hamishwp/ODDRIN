@@ -26,10 +26,10 @@ setMethod(f="initialize", signature="ODDSim",
             if(is.null(lhazSDF)) return(.Object)
             if(!class(lhazSDF[[length(lhazSDF)]])[1]=="HAZARD") return(.Object)
             
-            if(lhazSDF$hazard_info$hazard=="EQ") Model$INFORM_vars%<>%c("HA.NAT.EQ")
-            else if(lhazSDF$hazard_info$hazard=="TC") Model$INFORM_vars%<>%c("HA.NAT.TC")
-            else if(lhazSDF$hazard_info$hazard=="FL") Model$INFORM_vars%<>%c("HA.NAT.FL")
-            else stop("Not currently prepared for hazards other than EQ, TC or FL")
+            if(lhazSDF$hazard_info$hazard=="EQ"){ Model$INFORM_vars%<>%c("HA.NAT.EQ")
+            } else if(lhazSDF$hazard_info$hazard=="TC"){Model$INFORM_vars%<>%c("HA.NAT.TC")
+            } else if(lhazSDF$hazard_info$hazard=="FL"){Model$INFORM_vars%<>%c("HA.NAT.FL")
+            } else stop("Not currently prepared for hazards other than EQ, TC or FL")
             
             
             .Object@dir<-dir
@@ -52,8 +52,8 @@ setMethod(f="initialize", signature="ODDSim",
             .Object@grid <-obj@grid
             .Object@grid.index <-obj@grid.index
             .Object@coords <-obj@coords
-            .Object@bbox <-obj@bbox
-            .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            .Object@bbox <-obj@bbox 
+            .Object@proj4string <- PopSim@proj4string # crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
             
             .Object@data$nBuildings <- round(runif(1,0.2,1) * PopSim$Population + rnorm(length(PopSim$Population),0,20))
@@ -118,7 +118,7 @@ setMethod(f="initialize", signature="ODDSim",
               perc <- seq(0.1,1,0.1)
               cubic <- perc^3+runif(1,0.3,1)*perc^2
               WID %<>% rbind(data.frame(
-                variable=Model$WID_perc,
+                percentile=Model$WID_perc,
                 iso3=iso3,
                 value=cubic*max_inc/max(cubic)
               ))
@@ -206,13 +206,13 @@ setMethod(f="initialize", signature="BDSim",
             print("Forming SpatialPointsDataFrame from building damage data")
             Damage<-SpatialPointsDataFrame(coords = Damage[,c("Longitude","Latitude")],
                                            data = Damage[,c("grading","Confidence")],
-                                           proj4string = crs("+proj=longlat +datum=WGS84 +ellps=WGS84"))
+                                           proj4string = ODD@proj4string)
             
             .Object@data <- Damage@data
             .Object@coords.nrs <-Damage@coords.nrs
             .Object@coords <-Damage@coords
             .Object@bbox <-Damage@bbox
-            .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            .Object@proj4string <-Damage@proj4string #crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             rm(Damage)
             
             print("Interpolating population density, hazard & GDP-PPP data")
@@ -248,7 +248,7 @@ simulateEvent <- function(r, I0 = 4.5){
   
   maxMag = runif(1, 6, 10)
   sigma = runif(1, 3, 5)
-  r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, n=r@nrows)) 
+  r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, s=r@nrows)) 
   r <- r * (maxMag/r@data@max)
   sd <- setValues(r, runif(r@ncols*r@nrows, 0.8,1.1))
   names(r) <- 'mmi_mean'

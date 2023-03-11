@@ -148,9 +148,9 @@ Model$par_lb <- c(6, #Lambda1$nu
                   0, #Lambda1$omega
                   7.5, #Lambda2$nu 
                   0, #Lambda2$omega
-                  6,  #Lambda3$nu 
+                  5,  #Lambda3$nu 
                   0, #Lambda3$omega
-                  5, #Lambda4$nu 
+                  6.5, #Lambda4$nu 
                   0, #Lambda4$omega 
                   0.1, #theta_e
                   0, #epsilon
@@ -169,7 +169,7 @@ Model$par_ub <- c(9.5, #Lambda1$nu
                   6, #Lambda2$omega
                   9.5,  #Lambda3$nu 
                   6, #Lambda3$omega
-                  10, #Lambda4$nu 
+                  10.5, #Lambda4$nu 
                   6, #Lambda4$omega 
                   1, #theta_e
                   1, #epsilon
@@ -273,6 +273,8 @@ Model$DestDam_modifiers <- c(1,1,1)
 # }
 
 GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
+  if (split_GNI){return(array(1, dim=c(NROW(ODD@data), 8)))}
+  else {return(rep(1, NROW(ODD@data)))}
   
   LP_ij <- array(NA, dim=NROW(ODD@data))
   
@@ -309,7 +311,7 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
 # GetLP_single is the equivalent of GetLP for a single grid-cell ij 
 # Used in higher-level prior to calculate linear predictor for a given set of vulnerability terms
 GetLP_single <- function(Omega, center, vuln_terms){
-  
+  return(1)
   LP_ij <- 0 # Omega$vuln_coeff$itc 
   
   LP_ij <- LP_ij + Omega$vuln_coeff$PDens * ((log(vuln_terms[['PDens']]+1) - center$PDens$mean)/center$PDens$sd)
@@ -359,10 +361,10 @@ addTransfParams <- function(Omega, I0=4.5){
   Omega$Lambda2$loc <- h_0(Omega$Lambda2$nu, I0, Omega$theta)
   Omega$Lambda3$loc <- h_0(Omega$Lambda3$nu, I0, Omega$theta)
   Omega$Lambda4$loc <- h_0(Omega$Lambda4$nu, I0, Omega$theta)
-  Omega$Lambda1$sd <- exp(Omega$theta$e*Omega$Lambda1$omega)/6
-  Omega$Lambda2$sd <- exp(Omega$theta$e*Omega$Lambda2$omega)/6
-  Omega$Lambda3$sd <- exp(Omega$theta$e*Omega$Lambda3$omega)/6
-  Omega$Lambda4$sd <- exp(Omega$theta$e*Omega$Lambda4$omega)/6
+  Omega$Lambda1$sd <- (exp(Omega$theta$e*Omega$Lambda1$omega)-1)/6
+  Omega$Lambda2$sd <- (exp(Omega$theta$e*Omega$Lambda2$omega)-1)/6
+  Omega$Lambda3$sd <- (exp(Omega$theta$e*Omega$Lambda3$omega)-1)/6
+  Omega$Lambda4$sd <- (exp(Omega$theta$e*Omega$Lambda4$omega)-1)/6
   return(Omega)
 }
 
@@ -473,10 +475,9 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
   if(Model$haz=="EQ"){
   
     # Lower and upper bounds on the impacts at I_ij = 4.6, 6, and 9
-    # in the order (DispMort, Mort, DamDest, Dest),
+    # in the order (Mort, DispMort, Dest, DamDest),
     # where DispMort is the sum of the probabilities of displacement and mortality
     # and DamDest is the sum of the probabilities of building damage and destruction.
-                     #(Mort, DispMort, Dest, DamDest)
     
     Upp_bounds_4.6 <- c(0.01, 0.01, 0.01, 0.1)
     Low_bounds_6 <- c(0, 0.001, 0, 0.001)
@@ -570,13 +571,14 @@ LL_IDP<-function(Y,  kernel_sd, kernel, cap){
 # abline(v=xobs1)
 # abline(v=xobs2)
 
-# x <- 100
-# dist_calc <- function(bound, x){
-#   return(1*abs(log(bound+10)-log(x+10)))
+# for (x in c(1,100,10000)){
+#   dist_calc <- function(bound, x){
+#     return(1.2*abs(log(bound+10)-log(x+10)))
+#   }
+#   print(uniroot(function(bound) dist_calc(bound,x=x)-1,c(-10,x))$root)
+#   print(uniroot(function(bound) dist_calc(bound,x=x)-1,c(x,x*100))$root)
 # }
-# uniroot(function(bound) dist_calc(bound,x=x)-1,c(-10,x))$root
-# uniroot(function(bound) dist_calc(bound,x=x)-1,c(x,x*100))$root
-
+# 
 LL_beta_apply<-function(b,value,BD_params) do.call(BD_params$functions[[value]],as.list(c(x=b,unlist(BD_params$Params[[value]]))))
 
 BDprob<-function(b,BD_params){

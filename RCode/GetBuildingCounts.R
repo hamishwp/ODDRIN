@@ -1,3 +1,4 @@
+#install.packages(c('data.table', 'jsonlite', 'geojsonio'))
 library(data.table)
 library(jsonlite)
 library(geojsonio)

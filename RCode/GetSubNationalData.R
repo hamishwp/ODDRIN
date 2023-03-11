@@ -5,6 +5,7 @@
 
 
 library(openxlsx)
+library(tidyxl)
 library(rgeos)
 library(sfheaders)
 
@@ -17,6 +18,30 @@ cleanSubNatData <- function(SubNatData){
   SubNatData$displacement <- as.integer(SubNatData$displacement)
   SubNatData$buildDam <- as.integer(SubNatData$buildDam)
   SubNatData$buildDest <- as.integer(SubNatData$buildDest)
+  return(SubNatData)
+}
+
+readSubNatData <- function(subnat_file){
+  # Clean data from xlsx file by converting data to the appropriate formats/data types
+  SubNatData <-  read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+  x <- xlsx_cells(paste0(dir, 'IIDIPUS_Input/', subnat_file))
+  formats <- xlsx_formats(paste0(dir, 'IIDIPUS_Input/', subnat_file))
+
+  red_cells <- x %>% filter(local_format_id %in% which(formats$local$fill$patternFill$fgColor$rgb == "FFFF0000")) %>% dplyr::select(row, col)
+  red_cells$row <- red_cells$row - 1
+  red_cells <- red_cells[-which(red_cells$col > NCOL(SubNatData)), ]
+  SubNatData[as.matrix(red_cells)] <- NA
+  
+  SubNatData <- SubNatData[rowSums(is.na(SubNatData)) != ncol(SubNatData), ]
+  
+  SubNatData$source_date <- openxlsx::convertToDate(SubNatData$source_date)
+  SubNatData$sdate <- openxlsx::convertToDate(SubNatData$sdate)
+  SubNatData$fdate <- openxlsx::convertToDate(SubNatData$fdate)
+  SubNatData$mortality <- as.integer(SubNatData$mortality)
+  SubNatData$displacement <- as.integer(SubNatData$displacement)
+  SubNatData$buildDam <- as.integer(SubNatData$buildDam)
+  SubNatData$buildDest <- as.integer(SubNatData$buildDest)
+  
   return(SubNatData)
 }
 
@@ -61,7 +86,7 @@ getPolyData <- function(polygon_name, subregion, region, country, iso3){
     
     #attempt getbb()
     if(GADM_level != 0) GADM_array <- c(GADM_array, country)
-    polygon <- getbb(paste(GADM_array, collapse=','), format_out='sf_polygon')
+    polygon <- tryCatch(getbb(paste(GADM_array, collapse=','), format_out='sf_polygon'), error=function(e) NULL) 
     if (!is.null(polygon)){
       if(!is.null(polygon$multipolygon)) polygon <- polygon$multipolygon
       if (NROW(polygon)> 1){
@@ -164,8 +189,8 @@ updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, subnat_file='EQ
   #   - Edit the 'impact' slot to include subnational data from the provided spreadsheet (default is EQ_subnational.xlsx)
   #   - Edit the 'polygons' slot to identify the pixels belonging to each polygon for which we have impact data
   
-  SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
-  SubNatData %<>% cleanSubNatData()
+  #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+  SubNatData <- readSubNatData(subnat_file)
   
   # Use event date and iso3 to identify the event in subnat data that correspond to the ODD object
   # (note that all rows for the same event in SubNatData should have the same name and sdate!)
@@ -189,8 +214,12 @@ updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, subnat_file='EQ
   SubNatEvent <- SubNatData_match[[id_chosen]]
   
   SubNatImpact <- getSubNatImpact(SubNatEvent, subnational=TRUE) #populate the 'impact' slot in ODDy using the national and subnational data
-  ODDy@impact <- SubNatImpact$impact
+  
+  #remove overlapping polygons using SubNatImpact$impact and SubNatImpact$polygons_list
+  #find the polygons and complements we want to use for each impact type and add to ODDy@impact
+  
   ODDy <- addODDPolygons(ODDy, SubNatImpact$polygons_list) #populate the 'polygons' slot in ODDy using the regions for which we have impact data
+  ODDy <- addODDImpact(ODDy, SubNatImpact$impact)
   
   return(ODDy)
 }
@@ -270,12 +299,122 @@ addODDPolygons <- function(ODDy, polygons_list){
       }
     }
   }
-
+  
+  polygons_indexes <- remove_overlaps(polygons_indexes, polygons_list, ODDy@coords)
   ODDy@polygons <- polygons_indexes
   
   return(ODDy)
   
 }
+
+remove_overlaps <- function(polygons_indexes, polygons_list, coords){
+  #find which polygons have intersecting indexes but not intersecting sf polygons
+  #this may be the case for pixels lying on the border which have been allocated to two polygons
+  #in this case, allocate the pixel to the polygon in which its center lies
+  if (length(polygons_indexes) == 1) return(polygons_indexes)
+  
+  for(i in 2:length(polygons_indexes)){
+    for(j in 1:(i-1)){
+      if (length(polygons_indexes[[i]]$indexes) == 0 | length(polygons_indexes[[j]]$indexes) == 0) next
+      #WHAT TO DO IF POLYGON OR ISO3
+      if (!grepl(',', polygons_list[[i]]$polygon_name, fixed = TRUE) | !grepl(',', polygons_list[[j]]$polygon_name, fixed = TRUE)){
+        next
+      } 
+      polygons_intersect <- gIntersects(polygons_list[[i]]$sf_polygon, polygons_list[[j]]$sf_polygon)
+      polygons_touch <- gTouches(polygons_list[[i]]$sf_polygon, polygons_list[[j]]$sf_polygon)
+      indexes_intersect <- intersect(polygons_indexes[[i]]$indexes, polygons_indexes[[j]]$indexes)
+      
+      if((!polygons_intersect | polygons_touch) & (length(indexes_intersect) > 0) ){
+        print('intersecting polys')
+        allocated_poly_i <- c()
+        allocated_poly_j <- c()
+        for (index in indexes_intersect){
+          spatial_points <- SpatialPoints(coords, proj4string = CRS(proj4string(ODDy)))
+          if (gDistance(spatial_points[index], polygons_list[[i]]$sf_polygon) < 
+              gDistance(spatial_points[index], polygons_list[[j]]$sf_polygon)){
+            allocated_poly_i %<>% append(index)
+          } else {allocated_poly_j %<>% append(index)}
+        }
+        polygons_indexes[[i]]$indexes <- polygons_indexes[[i]]$indexes[! polygons_indexes[[i]]$indexes %in% allocated_poly_j]
+        polygons_indexes[[j]]$indexes <- polygons_indexes[[j]]$indexes[! polygons_indexes[[j]]$indexes %in% allocated_poly_i]
+      }
+    }
+  }
+
+  return(polygons_indexes)
+  
+}
+
+addODDImpact <- function(ODDy, impact){
+  impact_updated <- impact[0,]
+  impact_by_type <- impact %>% group_by(impact) %>% group_split()
+  for (k in 1:length(impact_by_type)){
+    impact_selected <- impact_by_type[[k]]
+    if (NROW(impact_selected) == 1){
+      impact_updated %<>% rbind(impact_selected)
+      next
+    } 
+    intersections <- matrix(FALSE, nrow=length(ODDy@polygons), ncol=length(ODDy@polygons))
+    for(i in impact_selected$polygon){
+      for(j in impact_selected$polygon[which(impact_selected$polygon<i)]){
+        intersections[i,j] <- length(intersect(ODDy@polygons[[i]]$indexes, ODDy@polygons[[j]]$indexes)) > 0
+      }
+    }
+    while(!all(!intersections)){ #while there are still overlapping polygons
+      intersect_ij <- which(intersections, arr.ind=TRUE)[1,]
+      i <- intersect_ij[1]; j <- intersect_ij[2]
+      poly_i_indexes <- ODDy@polygons[[i]]$indexes
+      poly_j_indexes <- ODDy@polygons[[j]]$indexes
+      intersecting_indexes <- intersect(poly_i_indexes, poly_j_indexes)
+      smaller_ij <- c(i,j)[which.min(c(length(poly_i_indexes),length(poly_j_indexes)))] #find smaller region
+      larger_ij <- c(i,j)[which(!c(i,j) %in% smaller_ij)] #find larger region
+      if (length(intersecting_indexes)!= length(ODDy@polygons[[smaller_ij]]$indexes)){
+        stop('One polygon does not completely consume the other')
+      }
+      complement_name <- paste0(ODDy@polygons[[larger_ij]]$name, ' excluding (', ODDy@polygons[[smaller_ij]]$name,')')
+      complement_indexes <- ODDy@polygons[[larger_ij]]$indexes[which(! ODDy@polygons[[larger_ij]]$indexes %in% intersecting_indexes)]
+      complement_value <- impact_selected$observed[which(impact_selected$polygon==larger_ij)] - impact_selected$observed[which(impact_selected$polygon==smaller_ij)]
+      #find if polygon exists
+      if (complement_name %in% sapply(ODDy@polygons, function(x) x$name)){
+        new_polygon_id <- which(complement_name == sapply(ODDy@polygons, function(x) x$name))
+      } else {
+        new_polygon_id <- length(ODDy@polygons) + 1
+        ODDy@polygons[[new_polygon_id]] <- list(name=complement_name, indexes=complement_indexes)
+      }
+      impact_selected$observed[which(impact_selected$polygon==larger_ij)] <- complement_value
+      impact_selected$polygon[which(impact_selected$polygon==larger_ij)] <- new_polygon_id
+      
+      intersections <- matrix(FALSE, nrow=length(ODDy@polygons), ncol=length(ODDy@polygons))
+      for(i in impact_selected$polygon){
+        for(j in impact_selected$polygon[which(impact_selected$polygon<i)]){
+          intersections[i,j] <- length(intersect(ODDy@polygons[[i]]$indexes, ODDy@polygons[[j]]$indexes)) > 0
+        }
+      }
+    }
+    indexes_impact <- list()
+    for (i in NROW(impact_selected)){
+      indexes_impact[[i]] <- ODDy@polygons[[impact_selected$polygon[i]]]$indexes
+    }
+    if (length(Reduce(intersect, indexes_impact)) > 0){
+      stop('Overlapping polygons')
+    }
+    impact_updated %<>% rbind(impact_selected)
+  }
+  ODDy@impact <- impact_updated
+  
+  #remove obsolete polygons
+  polygons_obsolete <- which(!1:length(ODDy@polygons) %in% ODDy@impact$polygon)
+  id_matches <- data.frame(polygon= (1:length(ODDy@polygons))[! 1:length(ODDy@polygons) %in% polygons_obsolete],
+                           polygon_new= 1:(length(ODDy@polygons)-length(polygons_obsolete)))
+  
+  ODDy@impact %<>% merge(id_matches)
+  ODDy@impact$polygon <- NULL
+  colnames(ODDy@impact)[which(colnames(ODDy@impact)=='polygon_new')] <- 'polygon'
+  ODDy@polygons <- ODDy@polygons[which(! 1:length(ODDy@polygons) %in% polygons_obsolete)]
+    
+  return(ODDy)
+}
+
 
 # plot(ODDy@coords[inPolyInds,])
 # points(ODDy@coords[which(ODDy$Population>0),], col='green', pch=16)
@@ -306,8 +445,8 @@ getSubNatData <- function(dir, haz="EQ",extractedData=T, subnat_file= 'EQ_SubNat
   existingODDloc <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NoBuildingDat/ODDobjects'
   existingODDfiles <- append(existingODDfiles, na.omit(list.files(path=existingODDloc,pattern=Model$haz,recursive = T, ignore.case = T)) )
   
-  SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
-  SubNatData %<>% cleanSubNatData()
+  #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+  SubNatData <- readSubNatData(subnat_file)
   
   # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
   SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% group_split()
@@ -317,6 +456,9 @@ getSubNatData <- function(dir, haz="EQ",extractedData=T, subnat_file= 'EQ_SubNat
   
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
+  
+  which(sapply(SubNatDataByEvent, function(x) return('TWN' %in% x$iso3)))
+  
   for (i in 1:length(SubNatDataByEvent)){
     
     # Subset displacement and disaster database objects
@@ -331,7 +473,7 @@ getSubNatData <- function(dir, haz="EQ",extractedData=T, subnat_file= 'EQ_SubNat
     if( any(filename_options %in% substr(existingODDfiles, 1, 13))){
       matched_index <- match(filename_options, substr(existingODDfiles, 1, 13))
       file_match <- existingODDfiles[matched_index[which(!is.na(matched_index ))]]
-      ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NoBuildingDat/ODDobjects/', file_match))
+      ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_BuildingDat/ODDobjects/', file_match))
       print('Updating the event')
       event_date <- as.Date(substr(file_match, 3, 10), "%Y%m%d") 
       print(paste('Event Date:', event_date, 'Countries:', paste(unique(ODDy@data$ISO3C[!is.na(ODDy@data$ISO3C)], na.rm=TRUE), collapse=" ")))
@@ -351,7 +493,13 @@ getSubNatData <- function(dir, haz="EQ",extractedData=T, subnat_file= 'EQ_SubNat
     # HazSDF includes SpatialPixelDataFrame object of hazmean & hazsd per date 
     # (list of each, bbox-cropped to remove M < minmag)
     #lhazSDF<-tryCatch(GetDisaster(miniDam,miniDACS),error=function(e) NULL)
-    lhazSDF<-GetDisaster(miniDamSimplified) #, bbox=c(140,-9,147.5,-3)) #, EQparams=list(I0=4.5,minmag=4.5))
+    bbox<-countriesbbox(unique(miniDamSimplified$iso3))
+    bbox[1] <- max(bbox[1]-5, -180)
+    bbox[2] <- max(bbox[2]-5, -90)
+    bbox[3] <- min(bbox[3]+5, 180)
+    bbox[4] <- min(bbox[4]+5, 90)
+    # lhazSDF <- GetDisaster(miniDamSimplified, bbox = c(160, -11.8, 163, -9.7))
+    lhazSDF<-GetDisaster(miniDamSimplified,bbox=bbox) #, bbox=c(140,-9,147.5,-3)) #, EQparams=list(I0=4.5,minmag=4.5))
     
     if(is.null(lhazSDF)) {
       print(paste0("Warning: no hazard data found for event ", unique(miniDam$iso3),
@@ -409,12 +557,123 @@ getSubNatData <- function(dir, haz="EQ",extractedData=T, subnat_file= 'EQ_SubNat
   
 }
 
+# Re-do subnational impact data without double counting
+redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNational.xlsx'){
+  # Works through EQ_Subnational.xlsx and, for each event, either updates the existing ODD object or, if
+  # no corresponding existing ODD object can be found, creates a new ODD object.
+
+  #existingODDloc <- paste0(dir, "IIDIPUS_Input/ODDobjects/")
+  existingODDloc <-"/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All/ODDobjects"
+  existingODDfiles <- na.omit(list.files(path=existingODDloc,pattern=Model$haz,recursive = T, ignore.case = T))
+
+  #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+  SubNatData <- readSubNatData(subnat_file)
+
+  # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
+  SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% group_split()
+
+  # Extract all building damage points
+  Damage<-ExtractBDfiles(dir = dir,haz = haz)
+  
+  DispData <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/DispData_EQ_V2.Rdata')
+
+  # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
+  path<-data.frame()
+  for (i in 1:10){
+
+    # Subset displacement and disaster database objects
+    miniDam<-SubNatDataByEvent[[i]]
+    print(miniDam)
+    miniDamSimplified <- data.frame(iso3=unique(miniDam$iso3), sdate=miniDam$sdate[1],
+                                    fdate=miniDam$fdate[1], eventid=i, hazard=miniDam$hazard[1])
+
+    #CHECK IF EXISTING ODD OBJECT AND UPDATE INSTEAD:
+    filename_options <- paste0( miniDam$hazard[1], rep(gsub("-", "", seq(miniDam$sdate[1]-2, miniDam$sdate[1]+2, by='days')), each=length(miniDamSimplified$iso3)), miniDamSimplified$iso3)
+
+    if( any(filename_options %in% substr(existingODDfiles, 1, 13))){
+      matched_index <- match(filename_options, substr(existingODDfiles, 1, 13))
+      file_match <- existingODDfiles[matched_index[which(!is.na(matched_index ))]]
+      ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All/ODDobjects/', file_match))
+      print('Checking hazards for the event')
+      event_date <- as.Date(substr(file_match, 3, 10), "%Y%m%d")
+      print(paste('Event Date:', event_date, 'Countries:', paste(unique(ODDy@data$ISO3C[!is.na(ODDy@data$ISO3C)], na.rm=TRUE), collapse=" ")))
+      print('Using the data:')
+      print(head(miniDam))
+    } else {
+      print(paste('No ODD object match found for ', miniDamSimplified))
+      stop()
+    }
+    
+    
+    ODDy_with_impact <- updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1])
+    
+    if(is.null(ODDy_with_impact)) stop()
+    ODDy <- ODDy_with_impact
+    
+    # Create a unique hazard event name
+    namer<-paste0(ODDy@hazard,
+                  str_remove_all(as.character.Date(min(ODDy@hazdates)),"-"),
+                  unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
+                  "_",i)
+    
+    iso3_ODDy <- unique(ODDy$ISO3C)
+    iso3_ODDy <- iso3_ODDy[which(!is.na(iso3_ODDy))]
+    
+    iso3_impact <- unique(ODDy@impact$iso3)
+    
+    if(any(!iso3_ODDy %in% iso3_impact)){
+      stop(paste('No impact data found for an affected country'))
+    }
+    
+    # Save out objects to save on RAM
+    ODDpath<-paste0(dir,"IIDIPUS_Input_All_ODD_Edited/ODDobjects/",namer)
+    saveRDS(ODDy,ODDpath)
+    
+    maxdate<-miniDamSimplified$sdate[1]-5
+    if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
+    
+    DispData_event <- filter(DispData, (iso3 %in% iso3_ODDy) &  (as.Date(sdate) >= maxdate) & (as.Date(sdate) <= mindate))
+    if (NROW(DispData_event)==0){
+      stop('Event not found in disp data')
+    }
+    lhazSDF <- GetUSGS_id(DispData_event$USGSid)
+    cellsize <- 0.008333333333333
+    if (lhazSDF@bbox[1,1] < (ODDy@bbox[1,1]-cellsize) | lhazSDF@bbox[1,2] > (ODDy@bbox[1,2]+cellsize) | lhazSDF@bbox[2,1] < (ODDy@bbox[2,1]-cellsize) | lhazSDF@bbox[2,2] > (ODDy@bbox[2,2]+cellsize)){
+      stop('BBOX not contained')
+    }
+    
+    # Save some RAM
+    rm(ODDy,ODDy_with_impact)
+  }
+
+  return(path)
+
+}
+
+library(randomcoloR)
+par(mfrow=c(2,2))
+
+impact_by_type <- ODDy@impact %>% group_by(impact) %>% group_split()
+for (i in 1:length(impact_by_type)){
+  impact_filtered <- impact_by_type[[i]]
+  ncols <- NROW(impact_filtered)
+  palette <- distinctColorPalette(ncols)
+  plot(ODDy@coords[ODDy@polygons[[impact_filtered$polygon[1]]]$indexes,], col='black', 
+       xlim=ODDy@bbox[1,], ylim=ODDy@bbox[2,], main=impact_filtered$impact[1])
+  if (ncols>1){
+    for (ij in 2:ncols){
+      points(ODDy@coords[ODDy@polygons[[impact_filtered$polygon[ij]]]$indexes,], col=palette[ij])
+    }
+  }
+}
+
+
 #download Philippines ODD objects from scratch
 # getSubNatDataFiltered <- function(dir, haz="EQ",subnat_file= 'EQ_SubNational.xlsx', iso_filter='IRN'){
 #   # Works through EQ_Subnational.xlsx and creates a new ODD object for each event in The Philippines
 #   
-#   SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
-#   SubNatData %<>% cleanSubNatData()
+#   #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+#   SubNatData <- readSubNatData(subnat_file)
 #   
 #   # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
 #   SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% filter(iso_filter %in% iso3) %>% group_split()
@@ -510,8 +769,8 @@ getSubNatData <- function(dir, haz="EQ",extractedData=T, subnat_file= 'EQ_SubNat
 #   existingODDloc <-"/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All/ODDobjects"
 #   existingODDfiles <- na.omit(list.files(path=existingODDloc,pattern=Model$haz,recursive = T, ignore.case = T)) 
 #   
-#   SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
-#   SubNatData %<>% cleanSubNatData()
+#   #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+#   SubNatData <- readSubNatData(subnat_file)
 #   
 #   # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
 #   SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% group_split()
@@ -618,10 +877,10 @@ getSubNatData <- function(dir, haz="EQ",extractedData=T, subnat_file= 'EQ_SubNat
 # library(randomcoloR)
 # ncols <- length(ODDy@polygons)
 # palette <- distinctColorPalette(ncols)
-# plot(ODDy@coords[ODDy@polygons[[4]]$indexes,], col='black')
+# plot(ODDy@coords[ODDy@polygons[[45]]$indexes,], col='black')
 # 
-# for (ij in c(2:5)){
-#   Sys.sleep(1)
+# for (ij in c(9, 16, 30, 43, 66, 56)){
+#   Sys.sleep(2)
 #   points(ODDy@coords[ODDy@polygons[[ij]]$indexes,], col=palette[ij])
 # }
 # plot(ODDy@coords[which(!is.na(ODDy$ISO3C)),])
@@ -632,8 +891,8 @@ getSubNatData <- function(dir, haz="EQ",extractedData=T, subnat_file= 'EQ_SubNat
 # # # Loop through and check EQ Disagg Data for errors/issues
 # # 
 # subnat_file='IIDIPUS_Input/EQ_SubNational.xlsx'
-# SubNatData <- read.xlsx(paste0(dir, subnat_file), colNames = TRUE , na.strings = c("","NA"))
-# SubNatData %<>% cleanSubNatData()
+# #SubNatData <- read.xlsx(paste0(dir, subnat_file), colNames = TRUE , na.strings = c("","NA"))
+# SubNatData <- readSubNatData(subnat_file)
 # 
 # # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
 # SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% group_split()
@@ -676,8 +935,8 @@ getSubNatData <- function(dir, haz="EQ",extractedData=T, subnat_file= 'EQ_SubNat
 # # Loop through events and check which regions can be found using getbb()/getGADM()
 # 
 # subnat_file='/home/manderso/Downloads/EQ_SubNational.xlsx'
-# SubNatData <- read.xlsx(subnat_file, colNames = TRUE , na.strings = c("","NA"))
-# SubNatData %<>% cleanSubNatData()
+# #SubNatData <- read.xlsx(subnat_file, colNames = TRUE , na.strings = c("","NA"))
+# SubNatData <- readSubNatData(subnat_file)
 # 
 # for (i in 616:660){
 #   if(!is.na(SubNatData$Subregion[i]) | !is.na(SubNatData$Region[i])){

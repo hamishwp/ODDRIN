@@ -94,6 +94,11 @@ GetUSGS_id<-function(USGSid,titlz="tmp",I0=4.5,minmag=5){
   
   # Extract the date of the event
   sdate<-as.Date(tmp$properties$products$dyfi[[1]]$properties$eventtime)
+  
+  if(length(sdate)==0){
+    sdate <- as.Date(tmp$properties$products$shakemap[[1]]$properties$eventtime)
+  }
+  
   print(sdate)
   
   return(new("HAZARD",

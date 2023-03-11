@@ -14,18 +14,17 @@ source('RCode/Simulate.R')
 
 
 #Parameterise the model and simulate the data:
-Omega <- list(Lambda1 = list(nu=8,omega=4.9),
-              Lambda2 = list(nu= 9.8, omega=5.7),
-              Lambda3 = list(nu=7.5,omega=4.1),
-              Lambda4 = list(nu=9.4, omega=5.2),
-              theta = list(e=0.2359788),
-              eps = list(eps=0.01304351),
-              vuln_coeff = list(itc=1, PDens=0.01, ExpSchYrs=0,LifeExp=-0.02, GNIc=-0.045, Vs30=-0.001, EQFreq=-0.01)) 
-              #intercept term itc is redundant
+Omega <- list(Lambda1 = list(nu=8,omega=5),
+              Lambda2 = list(nu= 9.993061, omega=6.170249),
+              Lambda3 = list(nu=7.5,omega=5),
+              Lambda4 = list(nu=9.4, omega=6.5),
+              theta = list(e=0.4),
+              eps = list(eps=0.1),
+              vuln_coeff = list(itc=0, PDens=0, ExpSchYrs=0,LifeExp=0, GNIc=0, Vs30=0, EQFreq=0)) 
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 
-Model$center <- simulateDataSet(20, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)
+Model$center <- simulateDataSet(50, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)
 
 #After generating the simulated data, need to move 'from 'centerings' 
 #and 'ODDobjects' from 'IIDIPUS_SimInput' to 'IIDIPUS_Input'
@@ -74,3 +73,5 @@ grid.arrange(plotODDy(ODDSim, var='Population') + xlim(-0.25,0.25) + ylim(-0.25,
 grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
              plotODDy(ODDSim, var='Mort') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
              plotODDy(ODDSim, var='nBD') + xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)
+
+

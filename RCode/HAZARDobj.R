@@ -56,6 +56,8 @@ setMethod(f="initialize", signature="HAZARD",
               e <- as(raster::extent(c(bbox[c(1,3,2,4)])), 'SpatialPolygons')
               proj4string(e) <- "+proj=longlat +datum=WGS84 +ellps=WGS84"
               obj%<>%raster::crop(e)
+              obj %<>% SpatialPixelsDataFrame(obj@data) #raster::crop() now seems to be returning a spatial points data frame
+              colnames(obj@coords) <- c('Longitude', 'Latitude')
               # Allocate the spatial data from a SpatialPixelsDataFrame object
               .Object@data <- obj@data
               .Object@coords.nrs <-obj@coords.nrs

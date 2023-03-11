@@ -244,6 +244,7 @@ setMethod(f="initialize", signature="ODD",
             .Object@bbox <-obj@bbox
             .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
+          
             print("Adding hazard events")
             # Including minshake polygon per hazard event using getcontour from adehabitatMA package
             .Object%<>%AddHazSDF(lhazSDF)
@@ -257,8 +258,9 @@ setMethod(f="initialize", signature="ODD",
             #.Object@data$ISO3C[inds]<-coords2country(.Object@coords[inds,])
             iso3c<-unique(.Object@data$ISO3C) ; iso3c<-iso3c[!is.na(iso3c)]
             
-
+           
             print("Interpolate population values")
+  
             # Note there are as many values returned as iso3c codes (returns as data.frame with columns 'iso3' and 'factor')
             Popfactors<-InterpPopWB(iso3c,dater)
             
@@ -289,7 +291,6 @@ setMethod(f="initialize", signature="ODD",
             
             # # print("Fetching building count data")
             # .Object%<>%AddBuildingCounts()
-            
             print("Checking ODD values")
             checkODD(.Object)
             
@@ -442,7 +443,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     tPop[tPop>ODD@data$Population[ij]]<-floor(ODD@data$Population[ij])
     
     #if no building destruction data:
-    if(!BD_data_present) return(rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np))) #return total displacement and mortality, set number of buildings destroyed to NA
+    if(!BD_data_present) return(rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np), rep(NA, Method$Np))) #return total displacement and mortality, set number of buildings damaged and destroyed to NA
     
     #otherwise, sample from the model for the number of buildings destroyed:
     #we take locallinp[5] which corresponds to locallinp for the median GDP

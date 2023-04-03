@@ -459,7 +459,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
 
 #plot the S-curve for a given parameterisation (and optionally compare to a second)
 plot_S_curves <- function(Omega, Omega_curr=NULL){
-  Intensity <- seq(4,9.5,0.01)
+  Intensity <- seq(4,12,0.01)
   I0 = 4.5
   D_MortDisp <- D_MortDisp_calc(h_0(Intensity, I0, Omega$theta), Omega %>% addTransfParams())
   D_Mort <- D_MortDisp[1,]

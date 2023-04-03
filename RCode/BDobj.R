@@ -354,6 +354,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   # BD%<>%SampleBuildings(buildings,F)
   # Calculate non-local linear predictor values
   LP<-GetLP(BD,Omega,Params,Sinc,notnans, split_GNI=F)
+  eps_event <- stochastic(Method$Np,Omega$eps$eps_event)
   # for each building in list,
   CalcBD<-function(ij){
     iso3c<-BD@data$ISO3C[ij]
@@ -384,7 +385,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
       #             sd = BD@data[ij,paste0("hazSD",h)]/10)
       
       I_ij<-BD@data[ij,h]
-      Damage <-fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp
+      Damage <-fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp*eps_event
       D_DestDam <- D_DestDam_calc(Damage, Omega, first_haz, Model$DestDam_modifiers, ind_dam)
       D_DestDamUnaf <- rbind(D_DestDam, pmax(0,1-colSums(D_DestDam)))
       

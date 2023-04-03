@@ -650,6 +650,39 @@ redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNatio
 
 }
 
+# Rename sub-national impact data
+redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNational.xlsx'){
+  # Works through EQ_Subnational.xlsx and, for each event, either updates the existing ODD object or, if
+  # no corresponding existing ODD object can be found, creates a new ODD object.
+  
+  #existingODDloc <- paste0(dir, "IIDIPUS_Input/ODDobjects/")
+  existingODDloc <-"/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All/ODDobjects"
+  existingODDfiles <- na.omit(list.files(path=existingODDloc,pattern=Model$haz,recursive = T, ignore.case = T))
+  
+  #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+  SubNatData <- readSubNatData(subnat_file)
+  
+  # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
+  SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% group_split()
+  
+  
+  for (file in existingODDfiles[49]){
+    ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All/ODDobjects/', file))
+    
+    i <-  which(sapply(SubNatDataByEvent, function(x) return(any((ODDy$ISO3C %>% unique()) %in% x$iso3) & (ODDy@hazdates[1] >= x$sdate[1]-1) & (ODDy@hazdates[1] <= x$fdate[1]+1))))
+    if (length(i) != 1){
+      stop()
+    }
+   filename_new <-  gsub("\\_.*",paste0('_',i),file)
+   saveRDS(ODDy, paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Renamed/ODDobjects/', filename_new)) 
+   if(file.exists(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All/BDobjects/', file))){
+     BDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All/BDobjects/', file))
+     saveRDS(BDy, paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Renamed/BDobjects/', filename_new)) 
+   }
+  }
+  
+}
+
 library(randomcoloR)
 par(mfrow=c(2,2))
 

@@ -12,16 +12,16 @@ source('RCode/Method.R')
 #Extract the functions for generating the simulations
 source('RCode/Simulate.R')
 
-
 #Parameterise the model and simulate the data:
-Omega <- list(Lambda1 = list(nu=8,omega=5),
-              Lambda2 = list(nu= 9.993061, omega=6.170249),
-              Lambda3 = list(nu=7.5,omega=5),
-              Lambda4 = list(nu=9.4, omega=6.5),
+Omega <- list(Lambda1 = list(nu=9,omega=1.1),
+              Lambda2 = list(nu= 10.8, omega=0.88),
+              Lambda3 = list(nu=8.5,omega=1.1),
+              Lambda4 = list(nu=9.8, omega=0.85),
               theta = list(e=0.4),
-              eps = list(eps=0.1),
-              vuln_coeff = list(itc=0, PDens=0, ExpSchYrs=0,LifeExp=0, GNIc=0, Vs30=0, EQFreq=0)) 
+              eps = list(eps_pixel=0.05, eps_event=0.1),
+              vuln_coeff = list(itc=1, PDens=0, ExpSchYrs=0,LifeExp=0, GNIc=0, Vs30=0, EQFreq=0)) 
 
+plot_S_curves(Omega)
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 
 Model$center <- simulateDataSet(50, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)

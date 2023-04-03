@@ -327,7 +327,7 @@ inPoly<-function(poly,pop,iii=1,sumFn="sum",reducer=NULL){
 SplitSamplePop<-function(Pop,n=1){
   k<-length(Pop)
   return(array(vapply(Pop,function(tPop) rmultinom(n=n,
-                                                   size=(tPop + rbernoulli(n=1,p=tPop%%1)), #LOOSEEND: same size for all Np
+                                                   size=(tPop + rbinom(n=1,p=tPop%%1,size=1)), #LOOSEEND: same size for all Np
                                                    prob=rep(1/8,8)),FUN.VALUE = numeric(8L*n)),dim = c(8,k*n)))
 }
 

@@ -63,7 +63,7 @@ Model$skeleton <- list(
   Lambda3=list(nu=NA,omega=NA),
   Lambda4=list(nu=NA,omega=NA),
   theta=list(e=NA),
-  eps=list(eps=NA),
+  eps=list(eps_pixel=NA, eps_event=NA),
   vuln_coeff=list(itc=NA,PDens=NA, ExpSchYrs=NA, 
                   LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA) 
 )
@@ -78,7 +78,8 @@ Model$Priors <- list( #currently not included in the acceptance probability.
   Lambda4=list(nu=list(dist='unif', min=6.5, max=10.5), 
                omega=list(dist='unif', min=0, max=6)),
   theta=list(e=list(dist='unif', min=0.1, max=1)), 
-  eps=list(eps=list(dist='unif', min=0, max=1)),
+  eps=list(eps_pixel=list(dist='unif', min=0, max=0.5),
+           eps_event=list(dist='unif', min=0, max=1)),
   vuln_coeff=list(itc=list(dist='norm', mean=0, sd=0.1),
                   PDens=list(dist='norm', mean=0, sd=0.1),
                   EQFreq=list(dist='norm', mean=0, sd=0.1),
@@ -153,7 +154,8 @@ Model$par_lb <- c(6, #Lambda1$nu
                   6.5, #Lambda4$nu 
                   0, #Lambda4$omega 
                   0.1, #theta_e
-                  0, #epsilon
+                  0, #epsilon_pixel
+                  0, #epsilon_event
                   -1, #itc
                   -1, #PDens
                   -1, #ExpSchYrs
@@ -172,7 +174,8 @@ Model$par_ub <- c(9.5, #Lambda1$nu
                   10.5, #Lambda4$nu 
                   6, #Lambda4$omega 
                   1, #theta_e
-                  1, #epsilon
+                  0.5, #epsilon_pixel
+                  1, #epsilon_event
                   1, #itc
                   1, #PDens
                   1, #ExpSchYrs
@@ -273,12 +276,12 @@ Model$DestDam_modifiers <- c(1,1,1)
 # }
 
 GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
-  if (split_GNI){return(array(1, dim=c(NROW(ODD@data), 8)))}
-  else {return(rep(1, NROW(ODD@data)))}
+  #if (split_GNI){return(array(1, dim=c(NROW(ODD@data), 8)))}
+  #else {return(rep(1, NROW(ODD@data)))}
   
   LP_ij <- array(NA, dim=NROW(ODD@data))
   
-  LP_ij[notnans] <- 0 # Omega$vuln_coeff$itc #intercept term
+  LP_ij[notnans] <- Omega$vuln_coeff$itc #intercept term
   
   #could perform all centering outside before model fitting? may allow a bit of speedup
   
@@ -305,14 +308,14 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
 
   LP_ijs[notnans,] <- sweep(t(vapply(t(notnans), get_GNIc_vuln, numeric(8))), 1, LP_ij[notnans], '+')
   
-  return(exp(LP_ijs))
+  return(LP_ijs)
 }
 
 # GetLP_single is the equivalent of GetLP for a single grid-cell ij 
 # Used in higher-level prior to calculate linear predictor for a given set of vulnerability terms
 GetLP_single <- function(Omega, center, vuln_terms){
-  return(1)
-  LP_ij <- 0 # Omega$vuln_coeff$itc 
+  #return(1)
+  LP_ij <- Omega$vuln_coeff$itc 
   
   LP_ij <- LP_ij + Omega$vuln_coeff$PDens * ((log(vuln_terms[['PDens']]+1) - center$PDens$mean)/center$PDens$sd)
   
@@ -323,7 +326,7 @@ GetLP_single <- function(Omega, center, vuln_terms){
   
   LP_ij <- LP_ij + Omega$vuln_coeff$GNIc * (log(vuln_terms[['GNIc']]) - center$GNIc$mean)/center$GNIc$sd
   
-  return(exp(LP_ij))
+  return(LP_ij)
   
 }
 
@@ -339,32 +342,32 @@ if(Model$BinR=="weibull") {
 } else stop("Incorrect binary regression function name, try e.g. 'weibull'")
 # Stochastic damage function process
 stochastic<-function(n,eps){
-  return(rgammaM(n = n,mu = 1, sig_percent = eps$eps ))
+  return(rgammaM(n = n,mu = 1, sig_percent = eps ))
 }
 
 # Baseline hazard function h_0
 h_0<-function(I,I0,theta){
   ind<-I>I0
   h<-rep(0,length(I))
-  h[ind]<- exp( theta$e * (I[ind]-I0) ) -1
+  h[ind]<- I[ind]-I0
   return(h)
 }
 
 # Calculate the unscaled damage function
 fDamUnscaled<-function(I,Params,Omega){ 
   (h_0(I,Params$I0,Omega$theta) * 
-     stochastic(Params$Np,Omega$eps)) %>%return()
+     stochastic(Params$Np,Omega$eps$eps_pixel)) %>%return()
 }
 
 addTransfParams <- function(Omega, I0=4.5){
-  Omega$Lambda1$loc <- h_0(Omega$Lambda1$nu, I0, Omega$theta)
-  Omega$Lambda2$loc <- h_0(Omega$Lambda2$nu, I0, Omega$theta)
-  Omega$Lambda3$loc <- h_0(Omega$Lambda3$nu, I0, Omega$theta)
-  Omega$Lambda4$loc <- h_0(Omega$Lambda4$nu, I0, Omega$theta)
-  Omega$Lambda1$sd <- (exp(Omega$theta$e*Omega$Lambda1$omega)-1)/6
-  Omega$Lambda2$sd <- (exp(Omega$theta$e*Omega$Lambda2$omega)-1)/6
-  Omega$Lambda3$sd <- (exp(Omega$theta$e*Omega$Lambda3$omega)-1)/6
-  Omega$Lambda4$sd <- (exp(Omega$theta$e*Omega$Lambda4$omega)-1)/6
+  Omega$Lambda1$loc <- Omega$Lambda1$nu - I0 #h_0(Omega$Lambda1$nu, I0, Omega$theta)
+  Omega$Lambda2$loc <- Omega$Lambda2$nu - I0 #h_0(Omega$Lambda2$nu, I0, Omega$theta)
+  Omega$Lambda3$loc <- Omega$Lambda3$nu - I0 #h_0(Omega$Lambda3$nu, I0, Omega$theta)
+  Omega$Lambda4$loc <- Omega$Lambda4$nu - I0 #h_0(Omega$Lambda4$nu, I0, Omega$theta)
+  Omega$Lambda1$sd <- Omega$Lambda1$omega #(exp(Omega$theta$e*Omega$Lambda1$omega)-1)/6
+  Omega$Lambda2$sd <- Omega$Lambda2$omega #(exp(Omega$theta$e*Omega$Lambda2$omega)-1)/6
+  Omega$Lambda3$sd <- Omega$Lambda3$omega #(exp(Omega$theta$e*Omega$Lambda3$omega)-1)/6
+  Omega$Lambda4$sd <- Omega$Lambda4$omega #(exp(Omega$theta$e*Omega$Lambda4$omega)-1)/6
   return(Omega)
 }
 
@@ -470,8 +473,8 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
                                                                 Vs30=ifelse(Omega$vuln_coeff$Vs30<0, min_Vs30, max_Vs30),
                                                                 EQFreq=ifelse(Omega$vuln_coeff$EQFreq<0, min_EQFreq, max_EQFreq)))
   
-  if(!is.null(modifier)) lp<-exp(as.numeric(unlist(modifier))) else lp<-1.
-  lp <- c(linp_min, 1, linp_max) # lp_range - 0.361022 corresponds to lp for minimum GDP and PDens scaling, 2.861055 corresponds to maximum
+  #if(!is.null(modifier)) lp<-exp(as.numeric(unlist(modifier))) else lp<-1.
+  lp <- c(linp_min, linp_max) # lp_range - 0.361022 corresponds to lp for minimum GDP and PDens scaling, 2.861055 corresponds to maximum
   if(Model$haz=="EQ"){
   
     # Lower and upper bounds on the impacts at I_ij = 4.6, 6, and 9
@@ -496,6 +499,10 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
                                function (x) sum(c(x > Upp_bounds_6, x<Low_bounds_6))))
     
     adder <- adder + sum(apply(HLP_impacts(9, lp, Omega), 2, function (x) sum(x < Low_bounds_9)))
+    
+    #check that at intensity 7, D_disp > D_mort and D_builddam > D_builddest
+    impact_intens_7 <- HLP_impacts(7, lp, Omega)
+    adder <- adder + sum(impact_intens_7[1,] > impact_intens_7[2,]) + sum(impact_intens_7[3,] > impact_intens_7[4,])
 
     return(adder) #looseend: need to address when including modifiers
     #return(adder)

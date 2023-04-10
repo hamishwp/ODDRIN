@@ -12,17 +12,26 @@ source('RCode/Method.R')
 #Extract the functions for generating the simulations
 source('RCode/Simulate.R')
 
-#Parameterise the model and simulate the data:
-Omega <- list(Lambda1 = list(nu=9,omega=1.1),
-              Lambda2 = list(nu= 10.8, omega=0.88),
-              Lambda3 = list(nu=8.5,omega=1.1),
-              Lambda4 = list(nu=9.8, omega=0.85),
-              theta = list(e=0.4),
-              eps = list(eps_pixel=0.05, eps_event=0.1),
-              vuln_coeff = list(itc=1, PDens=0, ExpSchYrs=0,LifeExp=0, GNIc=0, Vs30=0, EQFreq=0)) 
 
-plot_S_curves(Omega)
+#Parameterise the model and simulate the data:
+Omega <- list(Lambda1 = list(mu=9, sigma=1.1),
+              Lambda2 = list(mu=10.8, sigma=0.88),
+              Lambda3 = list(mu=8.5, sigma=1.1),
+              Lambda4 = list(mu=9.8, sigma=0.85),
+              eps = list(local=0.05, hazard=0.15),
+              vuln_coeff = list(itc=1, PDens=0, ExpSchYrs=0,LifeExp=0, GNIc=0.03, Vs30=0, EQFreq=0),
+              check = list(check=0.5)) 
+
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
+
+
+# start_time <- Sys.time()
+dist_sample <- sampleDist(dir = dir,Model = Model,
+                          proposed = Omega %>% addTransfParams(),
+                          AlgoParams = AlgoParams)
+d_i <- logTarget2(dist_sample, AlgoParams)
+# end_time <- Sys.time()
+# print(paste('Time:', end_time-start_time))
 
 Model$center <- simulateDataSet(50, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)
 

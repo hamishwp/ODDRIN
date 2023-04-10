@@ -58,35 +58,35 @@ returnX <- function(x,a,b){
 
 # Skeleton
 Model$skeleton <- list(
-  Lambda1=list(nu=NA,omega=NA),
-  Lambda2=list(nu=NA,omega=NA),
-  Lambda3=list(nu=NA,omega=NA),
-  Lambda4=list(nu=NA,omega=NA),
-  theta=list(e=NA),
-  eps=list(eps_pixel=NA, eps_event=NA),
-  vuln_coeff=list(itc=NA,PDens=NA, ExpSchYrs=NA, 
-                  LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA) 
+  Lambda1=list(mu=NA,sd=NA),
+  Lambda2=list(mu=NA,sd=NA),
+  Lambda3=list(mu=NA,sd=NA),
+  Lambda4=list(mu=NA,sd=NA),
+  eps=list(local=NA,hazard=NA),
+  vuln_coeff=list(PDens=NA, ExpSchYrs=NA, 
+                  LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA),
+  check=list(check=NA)
 )
 
 Model$Priors <- list( #currently not included in the acceptance probability. 
-  Lambda1=list(nu=list(dist='unif', min=6, max=9.5), 
-               omega=list(dist='unif', min=0, max=6)), 
-  Lambda2=list(nu=list(dist='unif', min=7.5, max=10.5), 
-               omega=list(dist='unif', min=0, max=6)),
-  Lambda3=list(nu=list(dist='unif', min=5, max=9.5), 
-               omega=list(dist='unif', min=0, max=6)),
-  Lambda4=list(nu=list(dist='unif', min=6.5, max=10.5), 
-               omega=list(dist='unif', min=0, max=6)),
-  theta=list(e=list(dist='unif', min=0.1, max=1)), 
-  eps=list(eps_pixel=list(dist='unif', min=0, max=0.5),
-           eps_event=list(dist='unif', min=0, max=1)),
-  vuln_coeff=list(itc=list(dist='norm', mean=0, sd=0.1),
-                  PDens=list(dist='norm', mean=0, sd=0.1),
-                  EQFreq=list(dist='norm', mean=0, sd=0.1),
-                  ExpSchYrs=list(dist='norm', mean=0, sd=0.1),
-                  LifeExp=list(dist='norm', mean=0, sd=0.1),
-                  GNIc=list(dist='norm', mean=0, sd=0.1),
-                  Vs30=list(dist='norm', mean=0, sd=0.1))
+  Lambda1=list(mu=list(dist='unif', min=6.5, max=9.5), 
+               sigma=list(dist='unif', min=0, max=2)), 
+  Lambda2=list(mu=list(dist='unif', min=8, max=12.5), 
+               sigma=list(dist='unif', min=0, max=2)),
+  Lambda3=list(mu=list(dist='unif', min=5.5, max=9), 
+               sigma=list(dist='unif', min=0, max=2)),
+  Lambda4=list(mu=list(dist='unif', min=7.5, max=11.5), 
+               sigma=list(dist='unif', min=0, max=2)),
+  eps=list(local=list(dist='unif', min=0, max=0.5),
+           hazard=list(dist='unif', min=0, max=0.5)),
+  vuln_coeff=list(itc=list(dist='unif', min=0.9, max=1.1),
+                  PDens=list(dist='unif', min=-0.15, max=0.15),
+                  EQFreq=list(dist='unif', min=-0.15, max=0.15),
+                  ExpSchYrs=list(dist='unif', min=-0.15, max=0.15),
+                  LifeExp=list(dist='unif', min=-0.15, max=0.15),
+                  GNIc=list(dist='unif', min=-0.15, max=0.15),
+                  Vs30=list(dist='unif', min=-0.15, max=0.15)),
+  check=list(check=list(dist='unif', min=0.1, max=1))
 )
 
 Model$links <- Model$skeleton
@@ -145,44 +145,42 @@ for (i in 1:length(Model$links)){
 # )
 
 #Set lower and upper bounds for the parameters
-Model$par_lb <- c(6, #Lambda1$nu 
-                  0, #Lambda1$omega
-                  7.5, #Lambda2$nu 
-                  0, #Lambda2$omega
-                  5,  #Lambda3$nu 
-                  0, #Lambda3$omega
-                  6.5, #Lambda4$nu 
-                  0, #Lambda4$omega 
-                  0.1, #theta_e
-                  0, #epsilon_pixel
-                  0, #epsilon_event
-                  -1, #itc
-                  -1, #PDens
-                  -1, #ExpSchYrs
-                  -1, #LifeExp
-                  -1, #GNIc
-                  -1, #Vs30
-                  -1 #EQFreq
+Model$par_lb <- c(6.5, #Lambda1$mu 
+                  0, #Lambda1$sigma
+                  8, #Lambda2$mu 
+                  0, #Lambda2$sigma
+                  5.5,  #Lambda3$mu 
+                  0, #Lambda3$sigma
+                  7.5, #Lambda4$mu 
+                  0, #Lambda4$sigma
+                  0, #epsilon_local
+                  0, #epsilon_hazard
+                  -0.15, #PDens
+                  -0.15, #ExpSchYrs
+                  -0.15, #LifeExp
+                  -0.15, #GNIc
+                  -0.15, #Vs30
+                  -0.15, #EQFreq
+                  0 #check
                   ) 
 
-Model$par_ub <- c(9.5, #Lambda1$nu 
-                  6, #Lambda1$omega
-                  10.5, #Lambda2$nu 
-                  6, #Lambda2$omega
-                  9.5,  #Lambda3$nu 
-                  6, #Lambda3$omega
-                  10.5, #Lambda4$nu 
-                  6, #Lambda4$omega 
-                  1, #theta_e
-                  0.5, #epsilon_pixel
-                  1, #epsilon_event
-                  1, #itc
-                  1, #PDens
-                  1, #ExpSchYrs
-                  1, #LifeExp
-                  1, #GNIc
-                  1, #Vs30
-                  1 #EQFreq
+Model$par_ub <- c(9.5, #Lambda1$mu 
+                  2, #Lambda1$sigma
+                  12.5, #Lambda2$mu 
+                  2, #Lambda2$sigma
+                  9.5,  #Lambda3$mu 
+                  2, #Lambda3$sigma
+                  11.5, #Lambda4$mu 
+                  2, #Lambda4$sigma
+                  0.5, #epsilon_local
+                  0.5, #epsilon_hazard
+                  0.15, #PDens
+                  0.15, #ExpSchYrs
+                  0.15, #LifeExp
+                  0.15, #GNIc
+                  0.15, #Vs30
+                  0.15, #EQFreq
+                  1 #check
 )
 
 
@@ -281,7 +279,7 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
   
   LP_ij <- array(NA, dim=NROW(ODD@data))
   
-  LP_ij[notnans] <- Omega$vuln_coeff$itc #intercept term
+  LP_ij[notnans] <- 1 # Omega$vuln_coeff$itc #intercept term
   
   #could perform all centering outside before model fitting? may allow a bit of speedup
   
@@ -315,7 +313,7 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
 # Used in higher-level prior to calculate linear predictor for a given set of vulnerability terms
 GetLP_single <- function(Omega, center, vuln_terms){
   #return(1)
-  LP_ij <- Omega$vuln_coeff$itc 
+  LP_ij <- 1 #Omega$vuln_coeff$itc 
   
   LP_ij <- LP_ij + Omega$vuln_coeff$PDens * ((log(vuln_terms[['PDens']]+1) - center$PDens$mean)/center$PDens$sd)
   
@@ -356,25 +354,21 @@ h_0<-function(I,I0,theta){
 # Calculate the unscaled damage function
 fDamUnscaled<-function(I,Params,Omega){ 
   (h_0(I,Params$I0,Omega$theta) * 
-     stochastic(Params$Np,Omega$eps$eps_pixel)) %>%return()
+     stochastic(Params$Np,Omega$eps$local)) %>%return()
 }
 
 addTransfParams <- function(Omega, I0=4.5){
-  Omega$Lambda1$loc <- Omega$Lambda1$nu - I0 #h_0(Omega$Lambda1$nu, I0, Omega$theta)
-  Omega$Lambda2$loc <- Omega$Lambda2$nu - I0 #h_0(Omega$Lambda2$nu, I0, Omega$theta)
-  Omega$Lambda3$loc <- Omega$Lambda3$nu - I0 #h_0(Omega$Lambda3$nu, I0, Omega$theta)
-  Omega$Lambda4$loc <- Omega$Lambda4$nu - I0 #h_0(Omega$Lambda4$nu, I0, Omega$theta)
-  Omega$Lambda1$sd <- Omega$Lambda1$omega #(exp(Omega$theta$e*Omega$Lambda1$omega)-1)/6
-  Omega$Lambda2$sd <- Omega$Lambda2$omega #(exp(Omega$theta$e*Omega$Lambda2$omega)-1)/6
-  Omega$Lambda3$sd <- Omega$Lambda3$omega #(exp(Omega$theta$e*Omega$Lambda3$omega)-1)/6
-  Omega$Lambda4$sd <- Omega$Lambda4$omega #(exp(Omega$theta$e*Omega$Lambda4$omega)-1)/6
+  Omega$Lambda1$loc <- Omega$Lambda1$mu - I0 #h_0(Omega$Lambda1$nu, I0, Omega$theta)
+  Omega$Lambda2$loc <- Omega$Lambda2$mu - I0 #h_0(Omega$Lambda2$nu, I0, Omega$theta)
+  Omega$Lambda3$loc <- Omega$Lambda3$mu - I0 #h_0(Omega$Lambda3$nu, I0, Omega$theta)
+  Omega$Lambda4$loc <- Omega$Lambda4$mu - I0 #h_0(Omega$Lambda4$nu, I0, Omega$theta)
   return(Omega)
 }
 
 # Calculate Mortality and Displacement probabilities from the unscaled damage
 D_MortDisp_calc <- function(Damage, Omega){
-  D_Mort_and_Disp <- pnorm(Damage, mean = Omega$Lambda1$loc, sd = Omega$Lambda1$sd)
-  D_Mort <- pnorm(Damage, mean = Omega$Lambda2$loc, sd = Omega$Lambda2$sd)
+  D_Mort_and_Disp <- pnorm(Damage, mean = Omega$Lambda1$loc, sd = Omega$Lambda1$sigma)
+  D_Mort <- pnorm(Damage, mean = Omega$Lambda2$loc, sd = Omega$Lambda2$sigma)
   D_Disp <- D_Mort_and_Disp - D_Mort
   D_Disp <- ifelse(D_Disp<0, 0, D_Disp)
   return(rbind(D_Mort, D_Disp))
@@ -383,22 +377,22 @@ D_MortDisp_calc <- function(Damage, Omega){
 # Calculate Mortality and Displacement probabilities from the unscaled damage
 D_DestDam_calc <- function(Damage, Omega, first_haz=T, DestDam_modifiers = c(1,1,1), ind_dam=c()){
   if(first_haz == T){
-    D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sd)
-    D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sd)
+    D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sigma)
+    D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma)
     D_Dam <- D_Dest_and_Dam - D_Dest
     D_Dam <- ifelse(D_Dam<0, 0, D_Dam)
   } else {
     if (length(ind_dam>0)){
       D_Dest_and_Dam <- D_Dam <- D_Dest <- rep(0, length(Damage))
-      D_Dest_and_Dam[-ind_dam] <- pnorm(Damage[-ind_dam], mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sd) ^ DestDam_modifiers[1]
-      D_Dest[-ind_dam] <- pnorm(Damage[-ind_dam], mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sd) ^ DestDam_modifiers[2]
+      D_Dest_and_Dam[-ind_dam] <- pnorm(Damage[-ind_dam], mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sigma) ^ DestDam_modifiers[1]
+      D_Dest[-ind_dam] <- pnorm(Damage[-ind_dam], mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma) ^ DestDam_modifiers[2]
       D_Dest_and_Dam[ind_dam] <- 1
-      D_Dest[ind_dam] <- pnorm(Damage[ind_dam], mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sd) ^ DestDam_modifiers[3]
+      D_Dest[ind_dam] <- pnorm(Damage[ind_dam], mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma) ^ DestDam_modifiers[3]
       D_Dam <- D_Dest_and_Dam - D_Dest
       D_Dam <- ifelse(D_Dam<0, 0, D_Dam)
     } else {
-      D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sd) ^ DestDam_modifiers[1]
-      D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sd) ^ DestDam_modifiers[2]
+      D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sigma) ^ DestDam_modifiers[1]
+      D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma) ^ DestDam_modifiers[2]
       D_Dam <- D_Dest_and_Dam - D_Dest
       D_Dam <- ifelse(D_Dam<0, 0, D_Dam)
     }
@@ -410,6 +404,7 @@ D_DestDam_calc <- function(Damage, Omega, first_haz=T, DestDam_modifiers = c(1,1
 hBD<-function(Ab,Population,rho,center){
   exp(-rho$A*(log(Ab)-center$A) - rho$H*(log(Population)-center$H))
 }
+
 # For building damage assessment data
 fDamageBuilding<-function(BD,I,Params,Omega,linp,Ik){
   fDamUnscaled(I,Params,Omega)*linp#*hBD(BD$Ab,BD$Population,Omega$rho,Params$center[c("A","H")]),

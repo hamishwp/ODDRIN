@@ -389,11 +389,14 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   # Calculate non-local linear predictor values
   LP<-GetLP(ODD,Omega,Params,Sinc,notnans)
   LP_buildings <- GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=F) #could be sped up by combining
-  
-  eps_event <- stochastic(Method$Np,Omega$eps$eps_event)
     
   # Speed things up a little
   hrange<-grep("hazMean",names(ODD),value = T)
+  
+  eps_event <- array(0, dim=c(length(hrange), Method$Np))
+  for (h in 1:length(hrange)){
+    eps_event[h,] <- stochastic(Method$Np,Omega$eps$hazard)
+  }
   
   # Function to predict displacement per gridpoint
   CalcDam<-function(ij){
@@ -405,12 +408,13 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) 
     tPop <-array(0,c(3, Method$Np)) #row 1 = tDisp, #row 2 = tMort, #row 3 = tRem
     tPop[3,]=colSums(lPopS)
-    for(h in hrange){
+    for(h_i in 1:length(hrange)){
+      h <- hrange[h_i]
       # for(h in c(1)){
       if(is.na(ODD@data[ij,h])) next
       # Resample population based on who is remaining
       ind<-tPop[3,]>0
-      if(h!=hrange[1]) {
+      if(h_i!=1) {
         if(sum(ind)==0) break #if no remaining population, skip modelling
         if(length(lPopS[,ind])==0) break #if no remaining population, skip modelling
         #if(sum(ind)>1) sumz<-colSums(lPopS[,ind])
@@ -429,7 +433,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       for (s in 1:length(SincN)){
         if(all(lPopS[s,]==0)) next
         # Predict damage at coordinate {i,j} (vector with MC particles)
-        Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[s] * eps_event, error=function(e) NA)
+        Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[s] * eps_event[h_i,], error=function(e) NA)
         if(any(is.na(Damage))) print(ij)
         
         #LOOSEEND: Include [ind] here 
@@ -453,20 +457,21 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     nBuild <-array(0,c(3, Method$Np)) #row 1 = nDam, #row 2 = nDest, #row 3 = nRem
     nBuild[3,]= nBuildings_sample[ij,]
     first_haz = T
-    for (h in hrange){
+    for (h_i in 1:length(hrange)){
+      h <- hrange[h_i]
       if(is.na(ODD@data[ij,h])) next
-      if(h!=hrange[1]) {
+      if(h_i!=1) {
         first_haz = F
         if(all(nBuild[3,]==0)) break #if no remaining buildings, skip modelling LOOSEEND
       }
 
       I_ij<-ODD@data[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp_buildings*eps_event, error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp_buildings*eps_event[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
       
       D_DestDam <- D_DestDam_calc(Damage, Omega, first_haz, Model$DestDam_modifiers) #First row of D_DestDam is D_Dest, second row is D_Dam
       D_Rem <- pmax(0, 1 - D_DestDam[1,] - D_DestDam[2,]) #probability of neither damaged nor destroyed. Use pmax to avoid errors caused by numerical accuracy.
       
-      if (h != hrange[1]){
+      if (h_i != 1){
         n_DamtoDest <- fBD(nBuild[2,], D_DestDam[1,] ^ (Model$DestDam_modifiers[3]/Model$DestDam_modifiers[2]))
         nBuild[1,] <- nBuild[1, ] + n_DamtoDest
         nBuild[2,] <- nBuild[2, ] - n_DamtoDest

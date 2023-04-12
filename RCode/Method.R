@@ -765,8 +765,11 @@ perturb_particles <- function(s, propCOV, AlgoParams, AlgoResults){
   for(n in 1:AlgoParams$smc_Npart){
     print(paste(' Step:', s, ', Particle:', n))
     if(AlgoResults$W[n,s]>0){
-      Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[n,,s], propPars=propCOV[[n]]) #perturb the proposal
+      #Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[n,,s], propPars=propCOV[[n]]) #perturb the proposal
+      Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[n,,s], propPars=propCOV) #perturb the proposal
       Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
+      
+      if (any(unlist(Omega_prop_phys) < Model$par_lb) | any(unlist(Omega_prop_phys) > Model$par_ub)) next
       
       HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
       if (HP> AlgoParams$ABC) next
@@ -896,14 +899,22 @@ calc_propCOV <- function(s, n_x, Npart, AlgoResults){
   W_tilda <- AlgoResults$W[tilda_i,s-1]
   W_tilda <- W_tilda/sum(W_tilda) #normalise weights
   
-  propCOV <- list()
+  # propCOV <- list()
+  # for (n in 1:Npart){
+  #   propCOV[[n]] <- matrix(0, n_x, n_x)
+  #   for(k in 1:length(tilda_i)){
+  #     propCOV[[n]] <- propCOV[[n]] + W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]))
+  #   }
+  # }
+  
+  #check that the indexes are right here!
+  propCOV <- matrix(0, nrow=n_x, ncol=n_x)
   for (n in 1:Npart){
-    propCOV[[n]] <- matrix(0, n_x, n_x)
     for(k in 1:length(tilda_i)){
-      propCOV[[n]] <- propCOV[[n]] + W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]))
+      propCOV <- propCOV + AlgoResults$W[n,s] * W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]))
     }
   }
-  return(propCOV)
+  return(propCOV/3)
 }
 
 plot_abcsmc <- function(s, n_x, Npart, Omega_sample_phys, Omega){
@@ -913,6 +924,7 @@ plot_abcsmc <- function(s, n_x, Npart, Omega_sample_phys, Omega){
          main=names(unlist(Omega))[i], xlab='step', ylab='')
     abline(h=unlist(Omega)[i], col='red')
   }
+  hist(AlgoResults$Omega_sample_phys[,17,s])
   par(mfrow=c(1,1))
 }
 
@@ -941,6 +953,8 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     tolerancestore=array(NA, AlgoParams$smc_steps),
     essstore=array(NA, AlgoParams$smc_steps)
   )
+  
+  #AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/1000Part_Step1')
   
   if (AlgoParams$n_nodes > 1) bcast_ODDRIN(dir, Model, AlgoParams, nslaves=AlgoParams$n_nodes)
   
@@ -987,6 +1001,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     }
     
     print(s)
+    
     plot_abcsmc(s, n_x, AlgoParams$smc_Npart, AlgoResults$Omega_sample_phys, Omega)
     
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))  
@@ -994,6 +1009,18 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
   
   if (AlgoParams$n_nodes > 1) mpi.close.Rslaves()
 }
+
+# sampleDist <- function(dir, Model, proposed, AlgoParams){
+#   return(rep(sum(abs(unlist(proposed)[1:16] - unlist(Omega)[1:16])), AlgoParams$Np) + rnorm(5,0,0.05))
+# }  
+# 
+# logTarget2 <- function(dist_sample, AlgoParams){
+#   return(dist_sample)
+# }  
+#   
+# for (i in 1:1000){
+#   AlgoResults$Omega_sample[i,,1] <- unlist(Physical2Proposed(AlgoResults$Omega_sample_phys[i,,1] %>% relist(skeleton=Model$skeleton), Model))
+# }
 
 #----------------------------------------------------------------------------------------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------

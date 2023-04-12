@@ -19,7 +19,7 @@ Omega <- list(Lambda1 = list(mu=9, sigma=1.1),
               Lambda3 = list(mu=8.5, sigma=1.1),
               Lambda4 = list(mu=9.8, sigma=0.85),
               eps = list(local=0.05, hazard=0.15),
-              vuln_coeff = list(itc=1, PDens=0, ExpSchYrs=0,LifeExp=0, GNIc=0.03, Vs30=0, EQFreq=0),
+              vuln_coeff = list(PDens=0, ExpSchYrs=0,LifeExp=0, GNIc=0.03, Vs30=0, EQFreq=0),
               check = list(check=0.5)) 
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
@@ -77,7 +77,7 @@ main_simulated <- function(){
 #Names: ODDSim.png, Sim DispMortBD.png  
 #Size: 1500 x 700
 grid.arrange(plotODDy(ODDSim, var='Population') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
-             plotODDy(ODDSim, var='GDP')+ xlim(-0.25,0.25) + ylim(-0.25,0.25), 
+             plotODDy(ODDSim, var='GNI')+ xlim(-0.25,0.25) + ylim(-0.25,0.25), 
              plotODDy(ODDSim, var='nBuildings')+ xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)
 grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
              plotODDy(ODDSim, var='Mort') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 

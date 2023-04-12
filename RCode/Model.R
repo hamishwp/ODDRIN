@@ -58,10 +58,10 @@ returnX <- function(x,a,b){
 
 # Skeleton
 Model$skeleton <- list(
-  Lambda1=list(mu=NA,sd=NA),
-  Lambda2=list(mu=NA,sd=NA),
-  Lambda3=list(mu=NA,sd=NA),
-  Lambda4=list(mu=NA,sd=NA),
+  Lambda1=list(mu=NA,sigma=NA),
+  Lambda2=list(mu=NA,sigma=NA),
+  Lambda3=list(mu=NA,sigma=NA),
+  Lambda4=list(mu=NA,sigma=NA),
   eps=list(local=NA,hazard=NA),
   vuln_coeff=list(PDens=NA, ExpSchYrs=NA, 
                   LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA),
@@ -79,14 +79,13 @@ Model$Priors <- list( #currently not included in the acceptance probability.
                sigma=list(dist='unif', min=0, max=2)),
   eps=list(local=list(dist='unif', min=0, max=0.5),
            hazard=list(dist='unif', min=0, max=0.5)),
-  vuln_coeff=list(itc=list(dist='unif', min=0.9, max=1.1),
-                  PDens=list(dist='unif', min=-0.15, max=0.15),
+  vuln_coeff=list(PDens=list(dist='unif', min=-0.15, max=0.15),
                   EQFreq=list(dist='unif', min=-0.15, max=0.15),
                   ExpSchYrs=list(dist='unif', min=-0.15, max=0.15),
                   LifeExp=list(dist='unif', min=-0.15, max=0.15),
                   GNIc=list(dist='unif', min=-0.15, max=0.15),
                   Vs30=list(dist='unif', min=-0.15, max=0.15)),
-  check=list(check=list(dist='unif', min=0.1, max=1))
+  check=list(check=list(dist='unif', min=0, max=1))
 )
 
 Model$links <- Model$skeleton

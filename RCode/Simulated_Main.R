@@ -18,7 +18,7 @@ Omega <- list(Lambda1 = list(mu=9, sigma=1.1),
               Lambda2 = list(mu=10.8, sigma=0.88),
               Lambda3 = list(mu=8.5, sigma=1.1),
               Lambda4 = list(mu=9.8, sigma=0.85),
-              eps = list(local=0.05, hazard=0.15),
+              eps = list(local=0.05, hazard=0.1),
               vuln_coeff = list(PDens=0, ExpSchYrs=0,LifeExp=0, GNIc=0.03, Vs30=0, EQFreq=0),
               check = list(check=0.5)) 
 

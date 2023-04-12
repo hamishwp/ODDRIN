@@ -73,7 +73,7 @@ Model$Priors <- list( #currently not included in the acceptance probability.
                sigma=list(dist='unif', min=0, max=2)), 
   Lambda2=list(mu=list(dist='unif', min=8, max=12.5), 
                sigma=list(dist='unif', min=0, max=2)),
-  Lambda3=list(mu=list(dist='unif', min=5.5, max=9), 
+  Lambda3=list(mu=list(dist='unif', min=5.5, max=9.5), 
                sigma=list(dist='unif', min=0, max=2)),
   Lambda4=list(mu=list(dist='unif', min=7.5, max=11.5), 
                sigma=list(dist='unif', min=0, max=2)),

@@ -314,7 +314,7 @@ print("MAKE SURE TO REPLACE THE LAST ROUND OF model=ZIpois IN GLM_MORTALITY")
 
 # Then do multivariate model for displacement and mortality for both CNNs and GLMs
 
-
+# Then do multivariate model for displacement and mortality for both CNNs and GLMs BY ADDING BUILDING DESTROUCTION TO DAMAGED
 
 
 

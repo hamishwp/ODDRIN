@@ -1206,10 +1206,91 @@ SingleEventsModifierCalc<-function(dir,Model,Omega,AlgoParams){
 }
 
 # Used to correlate the vulnerability variables with the modifier term
-LMFeatureSelection<-function(output,Nb=12,intercept=F,fn="+",nlim=3,weights=NULL){
+LMFeatureSelection<-function(output,Nb=30,GLMer="LM",intercept=F,fn="+",nlim=3,weights=NULL,ncores=4){
   # Nb - Number of times LM is run with different samples of training vs test data
   # intercept - do we include an intercept in the equation?
   
+  # Setup the GLM here:
+  if(GLMer=="LM"){
+    modely<-function(equation,train,test) {
+      datar<-na.omit(rbind(train,test))
+      modeler<-glm(formula = as.formula(equation),data = datar,family = gaussian(link = "identity"))
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
+      
+      data.frame(StandErr=StandErr,
+                 AIC=AIC(modeler),
+                 BIC=BIC(modeler))
+    }
+      
+  } else if(GLMer=="pois"){
+    modely<-function(equation,train,test) {
+      datar<-na.omit(rbind(train,test))
+      modeler<-glm(formula = as.formula(equation),data = datar,family = poisson())
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
+      
+      data.frame(StandErr=StandErr,
+                 AIC=AIC(modeler),
+                 BIC=BIC(modeler))
+    }
+  
+  } else if(GLMer=="lognorm"){
+    modely<-function(equation,train,test) {
+      datar<-na.omit(rbind(train,test))
+      datar$Y<-log(datar$Y+10)
+      modeler<-glm(formula = as.formula(equation),data = datar,family = gaussian(link = "identity"))
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
+      
+      data.frame(StandErr=StandErr,
+                 AIC=AIC(modeler),
+                 BIC=BIC(modeler))
+    }
+    
+  } else if(GLMer=="HurdlePois"){
+    modely<-function(equation,train,test) {
+      datar<-na.omit(rbind(train,test))
+      modeler<-pscl::hurdle(formula = as.formula(equation),data = datar,dist="poisson")
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
+      
+      data.frame(StandErr=StandErr,
+                 AIC=AIC(modeler),
+                 BIC=BIC(modeler))
+    }
+    
+  } else if(GLMer=="HurdleNegBin"){
+    modely<-function(equation,train,test) {
+      datar<-na.omit(rbind(train,test))
+      modeler<-pscl::hurdle(formula = as.formula(equation),data = datar,dist="negbin")
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
+      
+      data.frame(StandErr=StandErr,
+                 AIC=AIC(modeler),
+                 BIC=BIC(modeler))
+    }
+    
+  } else if(GLMer=="ZInegbin"){
+    modely<-function(equation,train,test) {
+      datar<-na.omit(rbind(train,test))
+      modeler<-pscl::zeroinfl(formula = as.formula(equation),data = datar,dist="negbin")
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
+      
+      data.frame(StandErr=StandErr,
+                 AIC=AIC(modeler),
+                 BIC=BIC(modeler))
+    }
+    
+  } else if(GLMer=="ZIpois"){
+    modely<-function(equation,train,test) {
+      datar<-na.omit(rbind(train,test))
+      modeler<-pscl::zeroinfl(formula = as.formula(equation),data = datar,dist="poisson")
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
+      
+      data.frame(StandErr=StandErr,
+                 AIC=AIC(modeler),
+                 BIC=BIC(modeler))
+    }
+    
+  } else stop("Regression model not recognised")
+    
   # Use 80% of the observations as training and 20% for testing
   Ns <- floor(0.80*nrow(output))
   # List of variables in the output data.frame
@@ -1217,34 +1298,39 @@ LMFeatureSelection<-function(output,Nb=12,intercept=F,fn="+",nlim=3,weights=NULL
   # The parts of the LM that never change
   if(!intercept) eqn_base<-c("Y ~ ","+0") else eqn_base<-c("Y ~ ","")
   # Store the LM outputs
-  prediction<-data.frame(eqn=NULL,AIC=NULL,BIC=NULL,adjR2=NULL)
+  prediction<-data.frame()
   # How many variables to use at a time?
+  eqeqeq<-c()
   for(n in 1:nlim){
-    print(n)
     eqn<-combn(vars,n)
     if(n==1) {eqn%<>%as.character()
     }else eqn<-apply(eqn,2,function(x) pracma::strcat(x,collapse = fn))
-    
-    for(eee in eqn){
-      equation<-paste0(eqn_base[1],eee,eqn_base[2])
-      predictors<-data.frame(AIC=NULL,BIC=NULL)
-      for (i in 1:Nb){
-        ind = sample(seq_len(nrow(output)),size = Ns)
-        train<-output[ind,]
-        test<-output[-ind,]
-        if(!is.null(weights)) predy<-lm(formula = as.formula(equation),
-                                        data = train, weights = weights[ind])
-        else predy<-lm(formula = as.formula(equation),data = train)
-        # print(paste0(ceiling(AIC(predy)),", ",ceiling(BIC(predy))))
-        # predme<-predict(predy,test, interval = 'confidence')
-        predictors%<>%rbind(data.frame(AIC=AIC(predy),BIC=BIC(predy),adjR2=summary(predy)$adj.r.squared))
-      }
-      prediction<-rbind(cbind(data.frame(eqn=rep(equation)),t(colMeans(predictors))),prediction)
-      
-    }
+    eqeqeq%<>%c(eqeqeq,unname(sapply(eqn,function(eee) paste0(eqn_base[1],eee,eqn_base[2]))))
   }
   
-  return(prediction)
+  eqeqeq<-unique(eqeqeq)
+  
+  prediction<-as.data.frame(t(matrix(unlist(mclapply(eqeqeq,mc.cores = ncores,function(eee){
+    
+    predictors<-data.frame()
+    for (i in 1:Nb){
+      ind = sample(seq_len(nrow(output)),size = Ns)
+      train<-output[ind,]
+      test<-output[-ind,]
+      
+      predictors%<>%rbind(modely(eee,train,test))
+    }
+    
+    return(c(t(colMeans(predictors))))
+    
+  })),nrow = 3)))
+  colnames(prediction)<-c("StandErr","AIC","BIC")
+  
+  print(length(eqeqeq))
+  print(nrow(prediction))
+  print("")
+  
+  return(cbind(data.frame(eqn=eqeqeq),prediction))
   
 }
 

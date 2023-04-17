@@ -56,7 +56,7 @@ LoadLibraries<-function(packred){
   library(mvtnorm)
   library(abind)
   library(Rmpi)
-  library(ecochange)
+  # library(ecochange)
   
   if(!packred) {
     library(codetools)

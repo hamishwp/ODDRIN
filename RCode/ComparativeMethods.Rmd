@@ -1,0 +1,57 @@
+---
+title: "Comparative Disaster Risk Modelling Methodologies"
+author: "Hamish Patten, Max Loake and David Steinsaltz"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Abstract
+
+
+
+## Introduction
+
+## Models
+
+### Regression-based Models
+
+Introduction to Generalized Linear Models (GLMs), then explaining the roles of link functions, etc.
+
+- Poisson model
+- Negative-binomial model
+- log-normal
+- Gamma
+- Zero-inflated Poisson
+- Zero-inflated negative-binomial
+- Hurdle model?
+
+### Machine Learning Models
+
+#### Spatial Point Data
+
+- Gaussian Process Regression (GPR) for the building damage assessment data
+- Support Vector Machines
+
+#### Spatial Raster Data
+
+- CNNs of various hyperparameters and layers (including ResNet?)
+- Generative Neural Networks?
+- Convolutional Long Term Short Memory (LTSM) network
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

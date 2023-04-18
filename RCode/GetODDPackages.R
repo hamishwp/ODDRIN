@@ -83,7 +83,7 @@ GetODDPackages<-function(packred){
                                    "tidyRSS","geojsonR", "tiff", "gstat",
                                    "FactoMineR","factoextra","xtable",
                                    "gsubfn","mapsapi","leaflet", "ssh","RPostgres",
-                                   "GADMTools")
+                                   "GADMTools", "pscl","multiColl")
   
   
   new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]

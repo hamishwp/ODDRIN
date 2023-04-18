@@ -1221,7 +1221,7 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",intercept=F,fn="+",nlim=3,w
                  AIC=AIC(modeler),
                  BIC=BIC(modeler))
     }
-      
+    
   } else if(GLMer=="pois"){
     modely<-function(equation,train,test) {
       datar<-na.omit(rbind(train,test))
@@ -1232,7 +1232,7 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",intercept=F,fn="+",nlim=3,w
                  AIC=AIC(modeler),
                  BIC=BIC(modeler))
     }
-  
+    
   } else if(GLMer=="lognorm"){
     modely<-function(equation,train,test) {
       datar<-na.omit(rbind(train,test))
@@ -1290,7 +1290,7 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",intercept=F,fn="+",nlim=3,w
     }
     
   } else stop("Regression model not recognised")
-    
+  
   # Use 80% of the observations as training and 20% for testing
   Ns <- floor(0.80*nrow(output))
   # List of variables in the output data.frame
@@ -1318,17 +1318,16 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",intercept=F,fn="+",nlim=3,w
       train<-output[ind,]
       test<-output[-ind,]
       
-      predictors%<>%rbind(modely(eee,train,test))
+      ressies<-tryCatch(modely(eee,train,test),error = function(e) NA)
+      if(all(is.na(ressies))) next
+      
+      predictors%<>%rbind(ressies)
     }
     
     return(c(t(colMeans(predictors))))
     
   })),nrow = 3)))
   colnames(prediction)<-c("StandErr","AIC","BIC")
-  
-  print(length(eqeqeq))
-  print(nrow(prediction))
-  print("")
   
   return(cbind(data.frame(eqn=eqeqeq),prediction))
   

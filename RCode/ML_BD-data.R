@@ -77,7 +77,7 @@ parallelML<-function(algo) {
   # Lets reduce the bias towards predicting well only the unaffected buildings
   indies<-which(BDs$Damage=="Unaffected" & !BDs$Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
   # Now split the remaining into groups of indices
-  indies <- groupKFold(indies, k = floor(length(indies)/numun))
+  indies <- createFolds(indies, k = floor(length(indies)/numun), list = T, returnTrain = FALSE)
   # Now let's split up the remaining unaffected
   unaff%<>%rbind(BDs[sample(indies,numun*10L,F,BDs$www[indies]),])
   # and ready for the cross-validation

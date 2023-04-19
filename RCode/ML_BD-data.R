@@ -60,7 +60,7 @@ BDs$Damage%<>%as.factor()
 levels(BDs$Damage)<-c("Unaffected","Damaged")
 BDs$hazMax%<>%unname();BDs$hazSD%<>%unname()
 
-train_control <- trainControl(method="repeatedcv", number=10, repeats=5,classProbs=T)#,summaryFunction=twoClassSummary)
+train_control <- trainControl(method="repeatedcv", number=10, repeats=5,classProbs=T,summaryFunction=twoClassSummary)
 
 parallelML<-function(algo) {
   # How many damaged buildings are there?
@@ -76,40 +76,50 @@ parallelML<-function(algo) {
   # Now split the remaining into groups of indices
   indies <- createFolds(indies, k = floor(length(indies)/numun), list = T, returnTrain = FALSE)
   # CV-split and model the damaged buildings
-  as.data.frame(t(colMeans(do.call(rbind, lapply(1:length(indies),function(i){
+  # outy<-as.data.frame(t(colMeans(do.call(rbind, lapply(1:length(indies),function(i){
+  as.data.frame(t(colMeans(do.call(rbind, lapply(1:1,function(i){
     datar<-rbind(BDs[indies[[i]],],permys)
     datar%<>%dplyr::select(-c("Event","grading","weighting","www"))
-    modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC", 
-                          trControl = train_control,  preProcess = c("center","scale"))
-    
-    
-    # What is it you want to extract? ROC? Kappa?
-    
+    modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC",
+                 trControl = train_control,  preProcess = c("center","scale"))
+    return(cbind(modeler$results[-1],
+                 t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
   })))))
-  
   
 }
 
-cl <- makePSOCKcluster(12)  # Create 8 clusters
-registerDoParallel(cl)
-getDoParWorkers()
 
-svm1<-parallelML("svmLinear")
+# library(parallel)
+# library(doParallel)
+# 
+# cl <- makePSOCKcluster(40)  # Create 8 clusters
+# registerDoParallel(cl)
+# getDoParWorkers()
 
-stopCluster(cl)
-registerDoSEQ()
+# modeler<-parallelML("svmLinear")
 
-plot(varImp(svm1, scale=FALSE))
-confusionMatrix(predict(svm1, BDs), BDs$Damage)
+# stopCluster(cl)
+# registerDoSEQ()
 
-saveRDS(svm1,"./IIDIPUS_Results/ML_Models/BD_svm_initial.RData")
+# plot(varImp(modeler, scale=FALSE))
+# tmp<-confusionMatrix(predict(modeler, BDs), BDs$Damage)
+
+# saveRDS(svm1,"./IIDIPUS_Results/ML_Models/BD_svm_initial.RData")
 
 tabmod<-getModelInfo()
 carmods<-unlist(sapply(tabmod,function(x) x$type%in%"Classification"))
 carmods<-data.frame(algorithm=names(carmods),classification=unname(carmods))
-carmods%<>%filter(classification)
-#
+carmods%<>%filter(classification)%>%pull(algorithm)
 
+# Parallelise
+cl <- makePSOCKcluster(60)  # Create 8 clusters
+registerDoParallel(cl)
+getDoParWorkers()
+# Run ALL THE MODELLLLLSSS
+ML_BDs<-lapply(carmods,parallelML)
+# Remember to close the computing cluster
+stopCluster(cl)
+registerDoSEQ()
 
 
 

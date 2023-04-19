@@ -76,8 +76,8 @@ parallelML<-function(algo) {
   # Now split the remaining into groups of indices
   indies <- createFolds(indies, k = floor(length(indies)/numun), list = T, returnTrain = FALSE)
   # CV-split and model the damaged buildings
-  # outy<-as.data.frame(t(colMeans(do.call(rbind, lapply(1:length(indies),function(i){
-  as.data.frame(t(colMeans(do.call(rbind, lapply(1:1,function(i){
+  outy<-as.data.frame(t(colMeans(do.call(rbind, lapply(1:length(indies),function(i){
+  # as.data.frame(t(colMeans(do.call(rbind, lapply(1:1,function(i){
     datar<-rbind(BDs[indies[[i]],],permys)
     datar%<>%dplyr::select(-c("Event","grading","weighting","www"))
     modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC",

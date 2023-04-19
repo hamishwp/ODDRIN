@@ -111,6 +111,9 @@ carmods<-unlist(sapply(tabmod,function(x) x$type%in%"Classification"))
 carmods<-data.frame(algorithm=names(carmods),classification=unname(carmods))
 carmods%<>%filter(classification)%>%pull(algorithm)
 
+# Check that we have all that we need to run each model
+checkInstall(getModelInfo("pls")$library)
+
 # Parallelise
 cl <- makePSOCKcluster(60)  # Create 8 clusters
 registerDoParallel(cl)

@@ -1,8 +1,7 @@
-install.packages(c("bit64", "snow", "SparseM", "Matrix"))
-
-devtools::install_github("Danko-lab/Rgtsvm/Rgtsvm", args="--configure-args='--with-cuda-home=YOUR_CUDA_PATH --with-boost-home=YOU_BOOST_PATH'")
-
-source('RCode/GetODDPackages.R')
+# install.packages(c("bit64", "snow", "SparseM", "Matrix"))
+# devtools::install_github("Danko-lab/Rgtsvm/Rgtsvm", args="--configure-args='--with-cuda-home=YOUR_CUDA_PATH --with-boost-home=YOU_BOOST_PATH'")
+install.packages("modi")
+# source('RCode/GetODDPackages.R')
 
 folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/BDobjects/"
 filez<-list.files(folder)
@@ -61,9 +60,7 @@ BDs$Damage%<>%as.factor()
 levels(BDs$Damage)<-c("Unaffected","Damaged")
 BDs$hazMax%<>%unname();BDs$hazSD%<>%unname()
 
-miniBD<-BDs[sample(1:nrow(BDs),50000,F,BDs$www),]%>%dplyr::select(-c("Event","grading","weighting","www"))
-
-train_control <- trainControl(method="repeatedcv", number=10, repeats=5,classProbs=T,summaryFunction=twoClassSummary)
+train_control <- trainControl(method="repeatedcv", number=10, repeats=5,classProbs=T)#,summaryFunction=twoClassSummary)
 
 parallelML<-function(algo) {
   # How many damaged buildings are there?
@@ -78,16 +75,19 @@ parallelML<-function(algo) {
   indies<-which(BDs$Damage=="Unaffected" & !BDs$Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
   # Now split the remaining into groups of indices
   indies <- createFolds(indies, k = floor(length(indies)/numun), list = T, returnTrain = FALSE)
-  # Now let's split up the remaining unaffected
-  unaff%<>%rbind(BDs[sample(indies,numun*10L,F,BDs$www[indies]),])
-  # and ready for the cross-validation
+  # CV-split and model the damaged buildings
+  as.data.frame(t(colMeans(do.call(rbind, lapply(1:length(indies),function(i){
+    datar<-rbind(BDs[indies[[i]],],permys)
+    datar%<>%dplyr::select(-c("Event","grading","weighting","www"))
+    modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC", 
+                          trControl = train_control,  preProcess = c("center","scale"))
+    
+    
+    # What is it you want to extract? ROC? Kappa?
+    
+  })))))
   
   
-  # Now let's split up the damaged buildings
-  
-  miniBD<-rbind(,
-                BDs[which(BDs$Damage=="Damaged"),])
-  for(i in 1:) caret::train(Damage~., data = miniBD, method = algo, metric="ROC", trControl = train_control,  preProcess = c("center","scale"))
 }
 
 cl <- makePSOCKcluster(12)  # Create 8 clusters

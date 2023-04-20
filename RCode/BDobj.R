@@ -23,10 +23,10 @@
 #   - SampleBuildArea(object@Population,object@buildareapars)
 #   - Extract hazard intensity values (I0)
 #######################################################################
-source('RCode/Functions.R')
-source('RCode/GetPopDemo.R')
-source('RCode/GetSocioEconomic.R')
-source('RCode/GetINFORM.R')
+# source('RCode/Functions.R')
+# source('RCode/GetPopDemo.R')
+# source('RCode/GetSocioEconomic.R')
+# source('RCode/GetINFORM.R')
 
 checkBD<-function(object) {
   stop("modify checks function")

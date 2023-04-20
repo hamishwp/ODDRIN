@@ -1,70 +1,101 @@
-# install.packages(c("bit64", "snow", "SparseM", "Matrix"))
-# devtools::install_github("Danko-lab/Rgtsvm/Rgtsvm", args="--configure-args='--with-cuda-home=YOUR_CUDA_PATH --with-boost-home=YOU_BOOST_PATH'")
-install.packages("modi")
-# source('RCode/GetODDPackages.R')
-
-folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/BDobjects/"
-filez<-list.files(folder)
-haz<-"EQ"
-if(haz=="EQ") funcyfun<-exp else funcyfun<-returnX
-
-BDs<-data.frame()
-for(fff in filez){
-  
-  # if(fff%in%c("EQ20180225PNG_68","EQ20190925IDN_95","EQ20201030TUR_88")) next
-  
-  BDy<-readRDS(paste0(folder,fff))
-  if(length(BDy@data[,-grep(names(BDy@data),pattern = "haz",value = F)])<9) next
-  
-  if(length(grep(names(BDy@data),pattern = "hazMean",value = T))==1) {
-    hazMax<-BDy$hazMean1
-    hazSD<-BDy$hazSD1
-  } else {
-    hazMax<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazMean",value = T)],1,max,na.rm=T)
-    hazSD<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazSD",value = T)],1,median,na.rm=T)
-  }
-  BDy@data%<>%dplyr::select(-c(grep(names(BDy@data),pattern = "hazMean",value = T),
-                               grep(names(BDy@data),pattern = "hazSD",value = T),
-                               grep(names(BDy@data),pattern = "itude",value = T),
-                               grep(names(BDy@data),pattern = "nBuildings",value = T)))%>%
-    mutate(Event=fff,date=BDy@hazdates[1],hazMax=funcyfun(hazMax-BDy@I0),hazSD=hazSD)
-  
-  BDs%<>%rbind(BDy@data)
-  
-}
-rm(BDy)
-
-BDs$time<-as.numeric(BDs$date-min(BDs$date))
-
-BDs%<>%dplyr::select(-c("date","Confidence","ISO3C"))  
-BDs$Population<-log(BDs$Population+1)
-BDs$GNIc<-log(BDs$GNIc)
-BDs%<>%filter(!as.character(grading)%in%c("possible") & apply(BDs,1,function(x) !any(is.na(x))))
-BDs$Damage<-abs(1-as.integer(BDs$grading=="notaffected"))
-# BDs%<>%dplyr::select(-"grading")
-
-BDs%>%ggplot(aes(log(hazMax),group=as.factor(grading)))+geom_density(aes(colour=as.factor(grading),fill=as.factor(grading)),alpha=0.1)
-
-tmp<-BDs%>%group_by(Event)%>%summarise(weighting=1/length(GNIc))
-BDs%<>%merge(tmp,by="Event")
-BDs%>%group_by(grading)%>%summarise(wmean=weighted.mean(hazMax,weighting),wcov=modi::weighted.var(hazMax,weighting))
-
+# install.packages("caret",
+#                  repos = "http://cran.r-project.org", 
+#                  dependencies = c("Depends", "Imports","Suggests"))
+source('RCode/BDobj.R')
+library(dplyr)
+library(magrittr)
+library(tidyverse)
+library(boot)
+library(MASS)
+library(pscl)
+library(FactoMineR)
+library(factoextra)
+library(parallel)
+library(doParallel)
 library(caret)
-# model<-e1071::svm(BDs[1:10000,-c(1,5)], BDs$Damage[1:10000], kernel = "polynomial", cost = 5, scale = FALSE)
-BDs$www<-BDs$weighting
-BDs$www[BDs$Damage==1]<-BDs$www[BDs$Damage==1]/sum(BDs$Damage==1)
-BDs$www[BDs$Damage==0]<-BDs$www[BDs$Damage==0]/sum(BDs$Damage==0)
-BDs$www<-BDs$www/sum(BDs$www)
 
-BDs$Damage%<>%as.factor()
-levels(BDs$Damage)<-c("Unaffected","Damaged")
-BDs$hazMax%<>%unname();BDs$hazSD%<>%unname()
+# folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/BDobjects/"
+# filez<-list.files(folder)
+# haz<-"EQ"
+# if(haz=="EQ") funcyfun<-exp else funcyfun<-returnX
+# 
+# BDs<-data.frame()
+# for(fff in filez){
+#   
+#   # if(fff%in%c("EQ20180225PNG_68","EQ20190925IDN_95","EQ20201030TUR_88")) next
+#   
+#   BDy<-readRDS(paste0(folder,fff))
+#   if(length(BDy@data[,-grep(names(BDy@data),pattern = "haz",value = F)])<9) next
+#   
+#   if(length(grep(names(BDy@data),pattern = "hazMean",value = T))==1) {
+#     hazMax<-BDy$hazMean1
+#     hazSD<-BDy$hazSD1
+#   } else {
+#     hazMax<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazMean",value = T)],1,max,na.rm=T)
+#     hazSD<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazSD",value = T)],1,median,na.rm=T)
+#   }
+#   BDy@data%<>%dplyr::select(-c(grep(names(BDy@data),pattern = "hazMean",value = T),
+#                                grep(names(BDy@data),pattern = "hazSD",value = T),
+#                                grep(names(BDy@data),pattern = "itude",value = T),
+#                                grep(names(BDy@data),pattern = "nBuildings",value = T)))%>%
+#     mutate(Event=fff,date=BDy@hazdates[1],hazMax=funcyfun(hazMax-BDy@I0),hazSD=hazSD)
+#   
+#   BDs%<>%rbind(BDy@data)
+#   
+# }
+# rm(BDy)
+# 
+# BDs$time<-as.numeric(BDs$date-min(BDs$date))
+# 
+# BDs%<>%dplyr::select(-c("date","Confidence","ISO3C"))  
+# BDs$Population<-log(BDs$Population+1)
+# BDs$GNIc<-log(BDs$GNIc)
+# BDs%<>%filter(!as.character(grading)%in%c("possible") & apply(BDs,1,function(x) !any(is.na(x))))
+# BDs$Damage<-abs(1-as.integer(BDs$grading=="notaffected"))
+# # BDs%<>%dplyr::select(-"grading")
+# 
+# BDs%>%ggplot(aes(log(hazMax),group=as.factor(grading)))+geom_density(aes(colour=as.factor(grading),fill=as.factor(grading)),alpha=0.1)
+# 
+# tmp<-BDs%>%group_by(Event)%>%summarise(weighting=1/length(GNIc))
+# BDs%<>%merge(tmp,by="Event")
+# BDs%>%group_by(grading)%>%summarise(wmean=weighted.mean(hazMax,weighting),wcov=modi::weighted.var(hazMax,weighting))
+# 
+# # model<-e1071::svm(BDs[1:10000,-c(1,5)], BDs$Damage[1:10000], kernel = "polynomial", cost = 5, scale = FALSE)
+# BDs$www<-BDs$weighting
+# BDs$www[BDs$Damage==1]<-BDs$www[BDs$Damage==1]/sum(BDs$Damage==1)
+# BDs$www[BDs$Damage==0]<-BDs$www[BDs$Damage==0]/sum(BDs$Damage==0)
+# BDs$www<-BDs$www/sum(BDs$www)
+# 
+# BDs$Damage%<>%as.factor()
+# levels(BDs$Damage)<-c("Unaffected","Damaged")
+# BDs$hazMax%<>%unname();BDs$hazSD%<>%unname()
+# 
+# saveRDS(BDs,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/InputData_BD.RData")
 
-train_control <- trainControl(method="repeatedcv", number=10, repeats=5,classProbs=T,summaryFunction=twoClassSummary)
+BDs<-readRDS("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/InputData_BD.RData")
+
+train_control <- caret::trainControl(method="repeatedcv", number=10, repeats=5,
+                                     search = "random",classProbs=T,
+                                     summaryFunction=twoClassSummary)
 
 parallelML<-function(algo) {
+  # Remove pesky columns
+  datar<-BDs%>%dplyr::select(-c("Event","grading","weighting","www"))
+  # Run the model!
+  modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC",
+                        tuneLength = 12, trControl = train_control,
+                        preProcess = c("center","scale"))
+  
+  return(cbind(modeler$results[-1],
+               t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
+  
+}
+
+parallelML_balanced<-function(algo,splitties=NULL) {
   # How many damaged buildings are there?
   numun<-round(table(BDs$Damage)["Damaged"]*1.5)
+  # How many times to split the dataset and model
+  if(is.null(splitties)) splitties<-floor(length(indies)/numun)
   # By default, add all events that have less than 500 points
   permys<-BDs%>%filter(Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
   # Adding all damaged buildings, too
@@ -74,37 +105,21 @@ parallelML<-function(algo) {
   # Lets reduce the bias towards predicting well only the unaffected buildings
   indies<-which(BDs$Damage=="Unaffected" & !BDs$Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
   # Now split the remaining into groups of indices
-  indies <- createFolds(indies, k = floor(length(indies)/numun), list = T, returnTrain = FALSE)
+  indies <- createFolds(indies, k = splitties, list = T, returnTrain = FALSE)
   # CV-split and model the damaged buildings
-  outy<-as.data.frame(t(colMeans(do.call(rbind, lapply(1:length(indies),function(i){
-  # as.data.frame(t(colMeans(do.call(rbind, lapply(1:1,function(i){
+  as.data.frame(t(colMeans(do.call(rbind, lapply(1:length(indies),function(i){
     datar<-rbind(BDs[indies[[i]],],permys)
     datar%<>%dplyr::select(-c("Event","grading","weighting","www"))
+    # Run the model!
     modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC",
-                 trControl = train_control,  preProcess = c("center","scale"))
+                          tuneLength = 12, trControl = train_control,
+                          preProcess = c("center","scale"))
+    
     return(cbind(modeler$results[-1],
                  t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
   })))))
   
 }
-
-
-# library(parallel)
-# library(doParallel)
-# 
-# cl <- makePSOCKcluster(40)  # Create 8 clusters
-# registerDoParallel(cl)
-# getDoParWorkers()
-
-# modeler<-parallelML("svmLinear")
-
-# stopCluster(cl)
-# registerDoSEQ()
-
-# plot(varImp(modeler, scale=FALSE))
-# tmp<-confusionMatrix(predict(modeler, BDs), BDs$Damage)
-
-# saveRDS(svm1,"./IIDIPUS_Results/ML_Models/BD_svm_initial.RData")
 
 tabmod<-getModelInfo()
 carmods<-unlist(sapply(tabmod,function(x) x$type%in%"Classification"))
@@ -112,17 +127,31 @@ carmods<-data.frame(algorithm=names(carmods),classification=unname(carmods))
 carmods%<>%filter(classification)%>%pull(algorithm)
 
 # Check that we have all that we need to run each model
-checkInstall(getModelInfo("pls")$library)
+checkerz<-unlist(lapply(carmods,function(stst) ifelse(is.null(tryCatch(checkInstall(getModelInfo(stst)$library),error=function(e) NA)),T,F)))
+carmods<-carmods[checkerz]; rm(checkerz)
 
 # Parallelise
-cl <- makePSOCKcluster(60)  # Create 8 clusters
+cl <- makePSOCKcluster(20)  # Create 8 clusters
 registerDoParallel(cl)
 getDoParWorkers()
 # Run ALL THE MODELLLLLSSS
-ML_BDs<-lapply(carmods,parallelML)
+ML_BDs<-lapply(carmods,function(stst) tryCatch(parallelML_balanced(stst,3),error=function(e) NA))
 # Remember to close the computing cluster
 stopCluster(cl)
 registerDoSEQ()
+
+
+# plot(varImp(modeler, scale=FALSE))
+# tmp<-confusionMatrix(predict(modeler, BDs), BDs$Damage)
+
+
+
+
+
+
+
+
+
 
 
 

@@ -2,7 +2,7 @@
 # dir<-directory<-"/home/hamishwp/Documents/BEAST/Coding/Oxford/ODDRIN/";setwd(directory); packred<-T
 # Download and install the necessary packages:
 # source('RCode/GetODDPackages.R')
-# source('RCode/ODDobj.R')
+source('RCode/ODDobj.R')
 library(dplyr)
 library(magrittr)
 library(tidyverse)
@@ -270,9 +270,9 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
 # 
 # out$time<-as.numeric(out$date-min(out$date))
 # 
-# saveRDS(out,"./IIDIPUS_Results/GLM_Models/InputDataGLM.RData")
+# saveRDS(out,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/InputDataGLM.RData")
 
-out<-readRDS("./IIDIPUS_Results/GLM_Models/InputDataGLM.RData")
+out<-readRDS("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/InputDataGLM.RData")
 
 # Per impact, do the analysis (for all impacts, even without building data)
 outred<-dplyr::select(out,-c("iso3","date")); rm(out)
@@ -309,51 +309,51 @@ fuller<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                       error=function(e) NA)
 fuller$model<-"LM"
 
-saveRDS(fuller,"./IIDIPUS_Results/GLM_Models/GLM_Mortality_LM.RData")
+saveRDS(fuller,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Mortality_LM.RData")
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "pois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Mortality_pois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Mortality_pois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="pois")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "lognorm", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Mortality_lognorm.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Mortality_lognorm.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="lognorm")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "HurdlePois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Mortality_HurdlePois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Mortality_HurdlePois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="HurdlePois")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "HurdleNegBin", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Mortality_HurdleNegBin.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Mortality_HurdleNegBin.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="HurdleNegBin")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "ZInegbin", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Mortality_ZInegbin.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Mortality_ZInegbin.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="ZInegbin")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "ZIpois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Mortality_ZIpois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Mortality_ZIpois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="ZIpois")))
 
-saveRDS(fuller,"./IIDIPUS_Results/GLM_Models/GLM_Mortality.RData")
+saveRDS(fuller,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Mortality.RData")
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% DISPLACEMENT %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -366,51 +366,51 @@ fuller<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                     GLMer = "LM", ncores=40),
                  error=function(e) NA)
 fuller$model<-"LM"
-saveRDS(fuller,"./IIDIPUS_Results/GLM_Models/GLM_Displacement_LM.RData")
+saveRDS(fuller,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Displacement_LM.RData")
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "pois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Displacement_pois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Displacement_pois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="pois")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "lognorm", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Displacement_lognorm.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Displacement_lognorm.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="lognorm")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "HurdlePois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Displacement_HurdlePois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Displacement_HurdlePois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="HurdlePois")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "HurdleNegBin", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Displacement_HurdleNegBin.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Displacement_HurdleNegBin.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="HurdleNegBin")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "ZInegbin", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Displacement_ZInegbin.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Displacement_ZInegbin.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="ZInegbin")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "ZIpois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_Displacement_ZIpois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Displacement_ZIpois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="ZIpois")))
 
-saveRDS(fuller,"./IIDIPUS_Results/GLM_Models/GLM_Displacement.RData")
+saveRDS(fuller,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_Displacement.RData")
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -424,51 +424,51 @@ fuller<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                     GLMer = "LM", ncores=40),
                  error=function(e) NA)
 fuller$model<-"LM"
-saveRDS(fuller,"./IIDIPUS_Results/GLM_Models/GLM_BuildDam_LM.RData")
+saveRDS(fuller,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDam_LM.RData")
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "pois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDam_pois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDam_pois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="pois")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "lognorm", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDam_lognorm.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDam_lognorm.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="lognorm")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "HurdlePois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDam_HurdlePois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDam_HurdlePois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="HurdlePois")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "HurdleNegBin", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDam_HurdleNegBin.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDam_HurdleNegBin.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="HurdleNegBin")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=3,intercept=T,fn="+",nlim=12,
                                          GLMer = "ZInegbin", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDam_ZInegbin.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDam_ZInegbin.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="ZInegbin")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "ZIpois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDam_ZIpois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDam_ZIpois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="ZIpois")))
 
-saveRDS(fuller,"./IIDIPUS_Results/GLM_Models/GLM_BuildDam.RData")
+saveRDS(fuller,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDam.RData")
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%% BUILDING DESTRUCTION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -481,62 +481,62 @@ fuller<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                     GLMer = "LM", ncores=40),
                  error=function(e) NA)
 fuller$model<-"LM"
-saveRDS(fuller,"./IIDIPUS_Results/GLM_Models/GLM_BuildDest_LM.RData")
+saveRDS(fuller,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDest_LM.RData")
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "pois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDest_pois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDest_pois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="pois")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "lognorm", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDest_lognorm.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDest_lognorm.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="lognorm")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "HurdlePois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDest_HurdlePois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDest_HurdlePois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="HurdlePois")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "HurdleNegBin", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDest_HurdleNegBin.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDest_HurdleNegBin.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="HurdleNegBin")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "ZInegbin", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDest_ZInegbin.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDest_ZInegbin.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="ZInegbin")))
 
 predictions<-tryCatch(LMFeatureSelection(outFrame,Nb=15,intercept=T,fn="+",nlim=12,
                                          GLMer = "ZIpois", ncores=40),
                       error=function(e) NA)
-saveRDS(predictions,"./IIDIPUS_Results/GLM_Models/GLM_BuildDest_ZIpois.RData")
+saveRDS(predictions,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDest_ZIpois.RData")
 
 if(!all(is.na(predictions))) fuller%<>%rbind(cbind(predictions,data.frame(model="ZIpois")))
 
-saveRDS(fuller,"./IIDIPUS_Results/GLM_Models/GLM_BuildDest.RData")
+saveRDS(fuller,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_BuildDest.RData")
 
 
 
 # Analyse the results:
-filez<-list.files("./IIDIPUS_Results/GLM_Models/"); filez<-filez[!filez%in%c("GLM_Mortality.RData","GLM_BuildDam.RData","GLM_BuildDest.RData","GLM_Displacement.RData","InputDataGLM.RData")]
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/"); filez<-filez[!filez%in%c("GLM_Mortality.RData","GLM_BuildDam.RData","GLM_BuildDest.RData","GLM_Displacement.RData","InputDataGLM.RData")]
 namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]; namerz<-namerz[!namerz%in%c("Mortality","BuildDam","BuildDest","Displacement","")]
 
 predictions<-data.frame()
 for(i in 1:length(filez)) {
   if(filez[i]=="InputDataGLM.RData") next
-  tmp<-readRDS(paste0("./IIDIPUS_Results/GLM_Models/",filez[i]))
+  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/",filez[i]))
   if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
   predictions%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
 }
@@ -567,21 +567,21 @@ predictionsMV<-tryCatch(LMFeatureSelection(dplyr::select(outred,-allimps[!allimp
                                            Nb=15,intercept=T,fn="+",nlim=12,ncores=40,
                                            mvm = imps,GLMer = "lognorm"),
                       error=function(e) NA)
-saveRDS(predictionsMV,"./IIDIPUS_Results/MV_GLM_Models/MVGLM_MortDisp_lognorm.RData")
+saveRDS(predictionsMV,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/MVGLM_MortDisp_lognorm.RData")
 
 imps<-c("buildDam","buildDest")
 predictionsMV<-tryCatch(LMFeatureSelection(dplyr::select(outred,-allimps[!allimps%in%imps]),
                                            Nb=15,intercept=T,fn="+",nlim=12,ncores=40,
                                            mvm = imps,GLMer = "lognorm"),
                         error=function(e) NA)
-saveRDS(predictionsMV,"./IIDIPUS_Results/MV_GLM_Models/MVGLM_buildDambuildDest_lognorm.RData")
+saveRDS(predictionsMV,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/MVGLM_buildDambuildDest_lognorm.RData")
 
 # ALL!
 predictionsMV<-tryCatch(LMFeatureSelection(outred,
                                            Nb=15,intercept=T,fn="+",nlim=12,ncores=40,
                                            mvm = allimps,GLMer = "lognorm"),
                         error=function(e) NA)
-saveRDS(predictionsMV,"./IIDIPUS_Results/MV_GLM_Models/MVGLM_MortDispbuildDambuildDest_lognorm.RData")
+saveRDS(predictionsMV,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/MVGLM_MortDispbuildDambuildDest_lognorm.RData")
 
 # Linear models
 
@@ -590,29 +590,29 @@ predictionsMV<-tryCatch(LMFeatureSelection(dplyr::select(outred,-allimps[!allimp
                                            Nb=15,intercept=T,fn="+",nlim=12,ncores=40,
                                            mvm = imps,GLMer = "LM"),
                         error=function(e) NA)
-saveRDS(predictionsMV,"./IIDIPUS_Results/MV_GLM_Models/MVGLM_MortDisp_LM.RData")
+saveRDS(predictionsMV,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/MVGLM_MortDisp_LM.RData")
 
 imps<-c("buildDam","buildDest")
 predictionsMV<-tryCatch(LMFeatureSelection(dplyr::select(outred,-allimps[!allimps%in%imps]),
                                            Nb=15,intercept=T,fn="+",nlim=12,ncores=40,
                                            mvm = imps,GLMer = "LM"),
                         error=function(e) NA)
-saveRDS(predictionsMV,"./IIDIPUS_Results/MV_GLM_Models/MVGLM_buildDambuildDest_LM.RData")
+saveRDS(predictionsMV,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/MVGLM_buildDambuildDest_LM.RData")
 
 # ALL!
 predictionsMV<-tryCatch(LMFeatureSelection(outred,
                                            Nb=15,intercept=T,fn="+",nlim=12,ncores=40,
                                            mvm = allimps,GLMer = "LM"),
                         error=function(e) NA)
-saveRDS(predictionsMV,"./IIDIPUS_Results/MV_GLM_Models/MVGLM_MortDispbuildDambuildDest_LM.RData")
+saveRDS(predictionsMV,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/MVGLM_MortDispbuildDambuildDest_LM.RData")
 
 # Let's have a look! :)
-filez<-list.files("./IIDIPUS_Results/MV_GLM_Models/")
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/")
 namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]
 
 predictionsMV<-data.frame()
 for(i in 1:length(filez)) {
-  tmp<-readRDS(paste0("./IIDIPUS_Results/MV_GLM_Models/",filez[i]))
+  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/",filez[i]))
   if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
   tmp[,allimps[!allimps%in%colnames(tmp)]]<-NA
   predictionsMV%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))

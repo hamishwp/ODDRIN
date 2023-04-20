@@ -89,6 +89,10 @@ GetODDPackages<-function(packred){
   new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
   if(length(new.packages)>0) install.packages(new.packages, repos='http://cran.us.r-project.org')
   
+  # This package makes sure you're uptodate on all packages, including things like tidyverse 
+  if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+  BiocManager::install("Biobase", version = "3.16")
+  
   # devtools::install_github('daroczig/fbRads')
   # if(length(list.of.packages[!("openrouteservice" %in% installed.packages()[,"Package"])])){devtools::install_github("rCarto/osrm")}
   if(length(list.of.packages[!("ggmap" %in% installed.packages()[,"Package"])])){devtools::install_github("dkahle/ggmap")}

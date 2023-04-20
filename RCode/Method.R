@@ -1205,177 +1205,49 @@ SingleEventsModifierCalc<-function(dir,Model,Omega,AlgoParams){
   
 }
 
-# Used to correlate the vulnerability variables with the modifier term
-LMFeatureSelection<-function(output,Nb=30,GLMer="LM",intercept=F,fn="+",nlim=3,weights=NULL,ncores=4){
-  # Nb - Number of times LM is run with different samples of training vs test data
-  # intercept - do we include an intercept in the equation?
-  
-  # Setup the GLM here:
-  if(GLMer=="LM"){
-    modely<-function(equation,train,test) {
-      datar<-na.omit(rbind(train,test))
-      modeler<-glm(formula = as.formula(equation),data = datar,family = gaussian(link = "identity"))
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
-      
-      data.frame(StandErr=StandErr,
-                 AIC=AIC(modeler),
-                 BIC=BIC(modeler))
-    }
-    
-  } else if(GLMer=="pois"){
-    modely<-function(equation,train,test) {
-      datar<-na.omit(rbind(train,test))
-      modeler<-glm(formula = as.formula(equation),data = datar,family = poisson())
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
-      
-      data.frame(StandErr=StandErr,
-                 AIC=AIC(modeler),
-                 BIC=BIC(modeler))
-    }
-    
-  } else if(GLMer=="lognorm"){
-    modely<-function(equation,train,test) {
-      datar<-na.omit(rbind(train,test))
-      datar$Y<-log(datar$Y+10)
-      modeler<-glm(formula = as.formula(equation),data = datar,family = gaussian(link = "identity"))
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
-      
-      data.frame(StandErr=StandErr,
-                 AIC=AIC(modeler),
-                 BIC=BIC(modeler))
-    }
-    
-  } else if(GLMer=="HurdlePois"){
-    modely<-function(equation,train,test) {
-      datar<-na.omit(rbind(train,test))
-      modeler<-pscl::hurdle(formula = as.formula(equation),data = datar,dist="poisson")
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
-      
-      data.frame(StandErr=StandErr,
-                 AIC=AIC(modeler),
-                 BIC=BIC(modeler))
-    }
-    
-  } else if(GLMer=="HurdleNegBin"){
-    modely<-function(equation,train,test) {
-      datar<-na.omit(rbind(train,test))
-      modeler<-pscl::hurdle(formula = as.formula(equation),data = datar,dist="negbin")
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
-      
-      data.frame(StandErr=StandErr,
-                 AIC=AIC(modeler),
-                 BIC=BIC(modeler))
-    }
-    
-  } else if(GLMer=="ZInegbin"){
-    modely<-function(equation,train,test) {
-      datar<-na.omit(rbind(train,test))
-      modeler<-pscl::zeroinfl(formula = as.formula(equation),data = datar,dist="negbin")
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
-      
-      data.frame(StandErr=StandErr,
-                 AIC=AIC(modeler),
-                 BIC=BIC(modeler))
-    }
-    
-  } else if(GLMer=="ZIpois"){
-    modely<-function(equation,train,test) {
-      datar<-na.omit(rbind(train,test))
-      modeler<-pscl::zeroinfl(formula = as.formula(equation),data = datar,dist="poisson")
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat),na.rm = T))$delta[1]
-      
-      data.frame(StandErr=StandErr,
-                 AIC=AIC(modeler),
-                 BIC=BIC(modeler))
-    }
-    
-  } else stop("Regression model not recognised")
-  
-  # Use 80% of the observations as training and 20% for testing
-  Ns <- floor(0.80*nrow(output))
-  # List of variables in the output data.frame
-  vars<-colnames(dplyr::select(output,-Y))
-  # The parts of the LM that never change
-  if(!intercept) eqn_base<-c("Y ~ ","+0") else eqn_base<-c("Y ~ ","")
-  # Store the LM outputs
-  prediction<-data.frame()
-  # How many variables to use at a time?
-  eqeqeq<-c()
-  for(n in 1:nlim){
-    eqn<-combn(vars,n)
-    if(n==1) {eqn%<>%as.character()
-    }else eqn<-apply(eqn,2,function(x) pracma::strcat(x,collapse = fn))
-    eqeqeq%<>%c(eqeqeq,unname(sapply(eqn,function(eee) paste0(eqn_base[1],eee,eqn_base[2]))))
-  }
-  
-  eqeqeq<-unique(eqeqeq)
-  
-  prediction<-as.data.frame(t(matrix(unlist(mclapply(eqeqeq,mc.cores = ncores,function(eee){
-    
-    predictors<-data.frame()
-    for (i in 1:Nb){
-      ind = sample(seq_len(nrow(output)),size = Ns)
-      train<-output[ind,]
-      test<-output[-ind,]
-      
-      ressies<-tryCatch(modely(eee,train,test),error = function(e) NA)
-      if(all(is.na(ressies))) next
-      
-      predictors%<>%rbind(ressies)
-    }
-    
-    return(c(t(colMeans(predictors))))
-    
-  })),nrow = 3)))
-  colnames(prediction)<-c("StandErr","AIC","BIC")
-  
-  return(cbind(data.frame(eqn=eqeqeq),prediction))
-  
-}
-
-CorrelateModifier<-function(modifiers,Model){
-  
-  # This function uses all the ODDobjects available to extract iso3, start date and event_id values for each hazard
-  DispData<-ExtractDispData_ODD(Model$haz)
-  # Now extract the vulnerability variables to be used in the correlation - these are defined in Model
-  val<-vulnerabilityVars(DispData,Model)
-  # Use only the variables we think are relevant
-  warning("Using only Hamish's pre-selected World Bank indicators for correlation")
-  indies<-read_csv("./IIDIPUS_Input/REDUCED_WB-WorldDevelopment_Indicators.csv")
-  val%<>%filter(indicator%in%indies$indicator_id)
-  # Merge the two data frames
-  modifiers$indicator<-"modifier"
-  modifiers<-val%>%group_by(eventid)%>%summarise(date=unique(date))%>%merge(modifiers,by="eventid")
-  # Housekeeping
-  modifiers%<>%transmute(eventid=eventid,nearval=modifier,indicator=indicator)%>%
-    dplyr::select(eventid,nearval); colnames(modifiers)[3]<-"modifier"
-  
-  # Get data frames in the correct structure
-  for(inds in unique(val$indicator[val$indicator!="modifier"])){
-    tmp<-filter(val,indicator==inds)
-    tn<-data.frame(value=tmp$nearval); colnames(tn)<-inds
-    modifiers%<>%cbind(tn)
-  }
-  rm(tn,ti,tmp)
-  
-  # Scale and center the vulnerability variables
-  modifiers[3:ncol(modifiers)]<-base::scale(modifiers[3:ncol(modifiers)])
-  # Remove all NA values
-  redmodies<-redmodies[!apply(redmodies,1,function(x) any(is.na(x))),]
-  # Remove all vulnerability variables that correlate strongly with one another - Variance Inflation Factor
-  ncor <- cor(redmodies[,4:ncol(redmodies)])
-  redmodies<-redmodies[,c(1,3,which(!1:ncol(redmodies)%in%caret::findCorrelation(ncor, cutoff=0.75)))]
-  redmodies<-redmodies[,c(1,3,2,4:ncol(redmodies))]
-  redmodies%<>%dplyr::select(-c(eventid))
-  
-  # Here we go!
-  vulncor<-LMFeatureSelection(final,nlim = 3,weights = weights)
-  # vulncor<-LMFeatureSelection(final,nlim = 3,weights = weights,fn = ":",intercept = T)
-  # vulncor<-LMFeatureSelection(final,nlim = 4,weights = weights,fn = ":",intercept = T)
-  
-  return(vulncor)
-  
-}
+# CorrelateModifier<-function(modifiers,Model){
+#   
+#   # This function uses all the ODDobjects available to extract iso3, start date and event_id values for each hazard
+#   DispData<-ExtractDispData_ODD(Model$haz)
+#   # Now extract the vulnerability variables to be used in the correlation - these are defined in Model
+#   val<-vulnerabilityVars(DispData,Model)
+#   # Use only the variables we think are relevant
+#   warning("Using only Hamish's pre-selected World Bank indicators for correlation")
+#   indies<-read_csv("./IIDIPUS_Input/REDUCED_WB-WorldDevelopment_Indicators.csv")
+#   val%<>%filter(indicator%in%indies$indicator_id)
+#   # Merge the two data frames
+#   modifiers$indicator<-"modifier"
+#   modifiers<-val%>%group_by(eventid)%>%summarise(date=unique(date))%>%merge(modifiers,by="eventid")
+#   # Housekeeping
+#   modifiers%<>%transmute(eventid=eventid,nearval=modifier,indicator=indicator)%>%
+#     dplyr::select(eventid,nearval); colnames(modifiers)[3]<-"modifier"
+#   
+#   # Get data frames in the correct structure
+#   for(inds in unique(val$indicator[val$indicator!="modifier"])){
+#     tmp<-filter(val,indicator==inds)
+#     tn<-data.frame(value=tmp$nearval); colnames(tn)<-inds
+#     modifiers%<>%cbind(tn)
+#   }
+#   rm(tn,ti,tmp)
+#   
+#   # Scale and center the vulnerability variables
+#   modifiers[3:ncol(modifiers)]<-base::scale(modifiers[3:ncol(modifiers)])
+#   # Remove all NA values
+#   redmodies<-redmodies[!apply(redmodies,1,function(x) any(is.na(x))),]
+#   # Remove all vulnerability variables that correlate strongly with one another - Variance Inflation Factor
+#   ncor <- cor(redmodies[,4:ncol(redmodies)])
+#   redmodies<-redmodies[,c(1,3,which(!1:ncol(redmodies)%in%caret::findCorrelation(ncor, cutoff=0.75)))]
+#   redmodies<-redmodies[,c(1,3,2,4:ncol(redmodies))]
+#   redmodies%<>%dplyr::select(-c(eventid))
+#   
+#   # Here we go!
+#   vulncor<-LMFeatureSelection(final,nlim = 3,weights = weights)
+#   # vulncor<-LMFeatureSelection(final,nlim = 3,weights = weights,fn = ":",intercept = T)
+#   # vulncor<-LMFeatureSelection(final,nlim = 4,weights = weights,fn = ":",intercept = T)
+#   
+#   return(vulncor)
+#   
+# }
 
 
 # HighPriorModifiers<-function(modifiers,dir,Model,Omega,AlgoParams){

@@ -25,16 +25,16 @@
 #   - Extract hazard intensity values (I0)
 #######################################################################
 
-source('RCode/Functions.R')
-source('RCode/Model.R')
-source('RCode/GetPopDemo.R')
-source('RCode/GetSocioEconomic.R')
-source('RCode/AddVulnerability.R')
-library(devtools)
-library(parallel)
-library(doParallel)
-library(foreach)
-library(parallelsugar)
+# source('RCode/Functions.R')
+# source('RCode/Model.R')
+# source('RCode/GetPopDemo.R')
+# source('RCode/GetSocioEconomic.R')
+# source('RCode/AddVulnerability.R')
+# library(devtools)
+# library(parallel)
+# library(doParallel)
+# library(foreach)
+# library(parallelsugar)
 
 checkODD<-function(object) {
   

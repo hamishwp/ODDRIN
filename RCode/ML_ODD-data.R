@@ -633,7 +633,7 @@ predictionsMV%>%arrange(Cost)%>%dplyr::select(-allimps)%>%
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
 costie<-function(data, lev = NULL, model = NULL) {
-  out<-mean(abs(data$obs-data$pred)/(data$obs+1),na.rm = T)
+  out<-mean(abs(data$obs-data$pred),na.rm = T)
   names(out)<-"RelativeAbs"
   return(out)
 }
@@ -678,7 +678,7 @@ carmods%<>%filter(regression)%>%pull(algorithm)
 checkerz<-unlist(lapply(carmods,function(stst) ifelse(is.null(tryCatch(checkInstall(getModelInfo(stst)$library),error=function(e) NA)),T,F)))
 carmods<-carmods[checkerz]; rm(checkerz)
 
-minimods<-c("nnet","brnn","rf","glmnet","lm","lmStepAIC","rvmLinear","rvmRadial")
+minimods<-c("nnet","brnn","rf","glmnet","lm","lmStepAIC","svmLinear","svmRadial","svmPoly")
             # "blasso","bridge","glm.nb","lasso","nnls","pcr")
 # ,"gbm"
 

@@ -627,15 +627,25 @@ predictionsMV$model<-NULL
 predictionsMV%>%arrange(Cost)%>%dplyr::select(-allimps)%>%
   group_by(algo,impact)%>%slice(1:5)%>%View()
 
-# Building damage assessment - classification with and without spatial element (GLM, SVM, kriging)
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ML MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-# Graph NN for building damage data?
+outred
+
+
+
+
+
+
+
+# Building damage assessment - classification with spatial element using kriging
 
 # CNNs and maybe some others (RBF-NN, ResNet?)
 
-# Then do multivariate model for displacement and mortality for both CNNs and GLMs
+# Then do multivariate model for displacement and mortality for CNNs
 
-# Then do multivariate model for displacement and mortality for both CNNs and GLMs BY ADDING BUILDING DESTRUCTION TO DAMAGED
+# Then do multivariate model for displacement and mortality for CNNs
 
 
 

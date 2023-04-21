@@ -1,7 +1,8 @@
-# install.packages("caret",
-#                  repos = "http://cran.r-project.org", 
+# install.packages("caret",repos = "http://cran.r-project.org", 
 #                  dependencies = c("Depends", "Imports","Suggests"))
-source('RCode/BDobj.R')
+# devtools::install_github("souravc83/fastAdaboost")
+# devtools::install_github("davpinto/fastknn")
+
 library(dplyr)
 library(magrittr)
 library(tidyverse)
@@ -13,6 +14,9 @@ library(factoextra)
 library(parallel)
 library(doParallel)
 library(caret)
+library(fastknn)
+library(caTools)
+source('RCode/BDobj.R')
 
 # folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/BDobjects/"
 # filez<-list.files(folder)
@@ -74,7 +78,7 @@ library(caret)
 
 BDs<-readRDS("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/InputData_BD.RData")
 
-train_control <- caret::trainControl(method="repeatedcv", number=10, repeats=5,
+train_control <- caret::trainControl(method="repeatedcv", number=8, repeats=2,
                                      search = "random",classProbs=T,
                                      summaryFunction=twoClassSummary)
 
@@ -91,11 +95,10 @@ parallelML<-function(algo) {
   
 }
 
-parallelML_balanced<-function(algo,splitties=NULL) {
+parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
+  
   # How many damaged buildings are there?
   numun<-round(table(BDs$Damage)["Damaged"]*1.5)
-  # How many times to split the dataset and model
-  if(is.null(splitties)) splitties<-floor(length(indies)/numun)
   # By default, add all events that have less than 500 points
   permys<-BDs%>%filter(Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
   # Adding all damaged buildings, too
@@ -104,47 +107,106 @@ parallelML_balanced<-function(algo,splitties=NULL) {
                 rbind(permys)
   # Lets reduce the bias towards predicting well only the unaffected buildings
   indies<-which(BDs$Damage=="Unaffected" & !BDs$Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
+  # How many times to split the dataset and model
+  if(is.null(splitties)) splitties<-floor(length(indies)/numun)
+  print(paste0("Working with the ",algo," model with data split into ",splitties," groups")) 
   # Now split the remaining into groups of indices
   indies <- createFolds(indies, k = splitties, list = T, returnTrain = FALSE)
+  # Parallelise
+  cl <- makePSOCKcluster(ncores)  # Create computing clusters
+  registerDoParallel(cl)
+  getDoParWorkers()
   # CV-split and model the damaged buildings
-  as.data.frame(t(colMeans(do.call(rbind, lapply(1:length(indies),function(i){
+  out<-as.data.frame(t(apply(do.call(rbind, lapply(seq.int(1,length(indies),by=3),function(i){
     datar<-rbind(BDs[indies[[i]],],permys)
     datar%<>%dplyr::select(-c("Event","grading","weighting","www"))
     # Run the model!
     modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC",
                           tuneLength = 12, trControl = train_control,
                           preProcess = c("center","scale"))
-    
-    return(cbind(modeler$results[-1],
+    # Let me know!
+    print(paste0(signif(100*i/splitties,2),"% done"))
+    print(cbind(filter(modeler$results[-1],ROC==max(ROC)),
+          t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
+    return(cbind(filter(modeler$results[-1],ROC==max(ROC)),
                  t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
-  })))))
+  })),2,max)))
   
+  # Remember to close the computing cluster
+  stopCluster(cl)
+  registerDoSEQ()
+  # Save out, then get out!
+  saveRDS(out,paste0("./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/ML-",algo,".RData"))
+  
+  return(out)
 }
 
-tabmod<-getModelInfo()
-carmods<-unlist(sapply(tabmod,function(x) x$type%in%"Classification"))
-carmods<-data.frame(algorithm=names(carmods),classification=unname(carmods))
-carmods%<>%filter(classification)%>%pull(algorithm)
+# tabmod<-getModelInfo()
+# carmods<-unlist(sapply(tabmod,function(x) x$type%in%"Classification"))
+# carmods<-data.frame(algorithm=names(carmods),classification=unname(carmods))
+# carmods%<>%filter(classification)%>%pull(algorithm)
+# # Check that we have all that we need to run each model
+# checkerz<-unlist(lapply(carmods,function(stst) ifelse(is.null(tryCatch(checkInstall(getModelInfo(stst)$library),error=function(e) NA)),T,F)))
+# carmods<-carmods[checkerz]; rm(checkerz)
 
-# Check that we have all that we need to run each model
-checkerz<-unlist(lapply(carmods,function(stst) ifelse(is.null(tryCatch(checkInstall(getModelInfo(stst)$library),error=function(e) NA)),T,F)))
-carmods<-carmods[checkerz]; rm(checkerz)
+minimods<-c("svmLinear","smvRadial","svmPoly","naive_bayes","ada","rf","glmnet")
+
+ncores<-60
+# Run ALL THE MODELLLLLSSS
+ML_BDs<-lapply(minimods,function(stst) tryCatch(parallelML_balanced(stst,ncores = ncores),error=function(e) NA))
 
 # Parallelise
-cl <- makePSOCKcluster(20)  # Create 8 clusters
-registerDoParallel(cl)
-getDoParWorkers()
-# Run ALL THE MODELLLLLSSS
-ML_BDs<-lapply(carmods,function(stst) tryCatch(parallelML_balanced(stst,3),error=function(e) NA))
-# Remember to close the computing cluster
-stopCluster(cl)
-registerDoSEQ()
-
+# cl <- makePSOCKcluster(60)  # Create computing clusters
+# registerDoParallel(cl)
+# getDoParWorkers()
+# # Run ALL THE MODELLLLLSSS
+# ML_BDs<-lapply(carmods,function(stst) tryCatch(parallelML_balanced(stst),error=function(e) NA))
+# # Remember to close the computing cluster
+# stopCluster(cl)
+# registerDoSEQ()
 
 # plot(varImp(modeler, scale=FALSE))
 # tmp<-confusionMatrix(predict(modeler, BDs), BDs$Damage)
 
+datar<-BDs%>%dplyr::select(-c("Event","grading","weighting","www"))
+# datar<-datar[sample(1:nrow(datar),50000,F),]
+ind<-colnames(datar)=="Damage"
+# Let's run it!
+set.seed(123)
+yhat <- fastknnCV(data.matrix(datar[,!ind]),as.factor(datar[,ind]),
+                  k = 1:15, method = "vote", folds = 8, eval.metric ="auc")
 
+# split <- sample(1:nrow(datar), size = 0.8*nrow(datar),replace = F)
+# 
+# featies<-knnDecision(data.matrix(datar[split,!ind]), as.factor(datar[split,ind]),
+#                      data.matrix(datar[-split,!ind]), as.factor(datar[-split,ind]),
+#                      k = yhat$best_k)
+
+ROC<-max(yhat$cv_table$mean)
+ROCSD<-sd(yhat$cv_table[which.max(yhat$cv_table$mean),1:8])
+
+namerz<-c("ROC","Sens","Spec","ROCSD","SensSD","SpecSD",colnames(datar)); namerz<-namerz[1:(length(namerz)-1)]
+out<-as.data.frame(t(data.frame(namerz))); colnames(out)<-out[1,]
+out[1,]<-NA
+out$ROC<-ROC
+out$ROCSD<-ROCSD
+
+saveRDS(out,"./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/ML-knn.RData")
+
+loccy<-"./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/"
+filez<-list.files(loccy)
+
+out<-do.call(rbind, lapply(seq_along(filez),
+                           function(i){ cbind(data.frame(algo=filez[i]),dplyr::select(readRDS(paste0(loccy,filez[i])),namerz))}))
+
+out$algo<-str_split(str_split(out$algo,".RData",simplify = T)[,1],"-",simplify = T)[,2]
+rownames(out)<-NULL
+out[,1:2]
+
+out%>%ggplot(aes(algo,ROC)) + 
+  geom_point(aes(colour=algo),size=3)+
+  geom_errorbar(aes(ymin=ROC-ROCSD, ymax=ROC+ROCSD,colour=algo),width=.4)
+# 
 
 
 
@@ -162,14 +224,15 @@ registerDoSEQ()
 # BDs<-BDs[1:10000,]
 
 set.seed(2016)
-
+library(Rgtsvm)
 # USING DEFAULT RBF-KERNEL
-gttune<-BDs%>%dplyr::select(-c("Event","grading","weighting"))%>%
-  Rgtsvm::tune.svm(BDs$Damage,
+miniBD<-BDs%>%dplyr::select(-c("Event","grading","weighting","www"))
+miniBD<-miniBD[sample(1:nrow(miniBD),50000,F),]
+gttune<-Rgtsvm::tune.svm(dplyr::select(miniBD,-Damage),as.numeric(miniBD$Damage),
                    gamma=c(2.25,2.5,2.75),
                    cost=c(30,35,40,45),
-                   tunecontrol=tune.control(sampling="cross",cross=8,rough.cross = 3),
-                   scale=F)
+                   tunecontrol=tune.control(sampling="cross",cross=10,rough.cross = 3),
+                   scale=T)
 # mdl <- Rgtsvm::svm(BDs[,1:3],BDs$Damage, type = "C-classification", kernel = "radial", degree=3, cost = 5, gamma = 1, probability = TRUE)
 
 saveRDS(gttune,"./IIDIPUS_Results/SVM/SVM_tune_gamma2_2.25_2.5_2.75_cost_30_35_40_45.Rdata")
@@ -177,7 +240,7 @@ saveRDS(gttune,"./IIDIPUS_Results/SVM/SVM_tune_gamma2_2.25_2.5_2.75_cost_30_35_4
 isplit<-sample(1:nrow(BDs),size = round(0.8*nrow(BDs)))
 mdl <- Rgtsvm::svm(BDs[isplit,1:3],BDs$Damage[isplit], kernel = "radial", 
                    cost = gttune$best.parameters$cost, gamma = gttune$best.parameters$gamma, 
-                   tunecontrol=tune.control(sampling="cross",cross=8,rough.cross = 3),
+                   tunecontrol=tune.control(sampling="cross",cross=10,rough.cross = 3),
                    probability = TRUE)
 
 saveRDS(mdl,"./IIDIPUS_Results/SVM/SVM_tuned_model.Rdata")
@@ -191,6 +254,7 @@ pred<-as.integer(as.character(pred))
 
 
 BDs$fold <- caret::createFolds(1:nrow(BDs), k = 8, list = FALSE)
+BDs$Damage%<>%as.numeric()
 ### PARAMETER LIST ###
 cost <- c(5,10,20)
 gamma <- c(1,2,3)
@@ -203,9 +267,9 @@ result <- foreach(i = 1:nrow(parms), .combine = rbind) %do% {
   out <- foreach(j = 1:max(BDs$fold), .combine = rbind, .inorder = FALSE) %dopar% {
     deve <- BDs[BDs$fold != j, ]
     test <- BDs[BDs$fold == j, ]
-    mdl <- Rgtsvm::svm(Damage~., data = deve, type = "C-classification", kernel = "radial", cost = c, gamma = g, probability = TRUE)
-    pred <- predict(mdl, test, decision.values = TRUE, probability = TRUE)
-    data.frame(y = test$Damage, prob = attributes(pred)$probabilities[, 2])
+    mdl <- Rgtsvm::svm(dplyr::select(deve,-Damage),deve$Damage, type = "C-classification", kernel = "radial", cost = c, gamma = g, probability = TRUE)
+    pred <- predict.gtsvm(mdl, test, decision.values = TRUE, probability = TRUE)
+    data.frame(y = test$Damage, prob = )
   }
   ### CALCULATE SVM PERFORMANCE ###
   roc <- pROC::roc(as.factor(out$y), out$prob) 

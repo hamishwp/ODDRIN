@@ -12,6 +12,7 @@ library(pscl)
 library(FactoMineR)
 library(factoextra)
 library(parallel)
+library(doParallel)
 
 # Used to correlate the vulnerability variables with the modifier term
 LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+",nlim=3,weights=NULL,ncores=4){
@@ -631,13 +632,83 @@ predictionsMV%>%arrange(Cost)%>%dplyr::select(-allimps)%>%
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ML MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-outred
+costie<-function(data, lev = NULL, model = NULL) {
+  out<-mean(abs(data$obs-data$pred)/(data$obs+1),na.rm = T)
+  names(out)<-"RelativeAbs"
+  return(out)
+}
+  
+train_control <- caret::trainControl(method="repeatedcv", number=10, repeats=5,
+                                     search = "random",
+                                     summaryFunction=costie)
 
 
+allimps<-c("mortality","displacement","buildDam","buildDest")
 
+parallelML<-function(algo,impact) {
+  
+  print(paste0("Working on ",algo," for impact=",impact))  
+  
+  outFrame<-dplyr::select(outred,-allimps[impact!=allimps])
+  names(outFrame)[1]<-"Y"
+  outFrame$Y<-log(outFrame$Y+10)
+  outFrame%<>%na.omit()
+   
+  modeler<-caret::train(Y~., data = outFrame, method = algo, metric="RelativeAbs",
+                        tuneLength = 12, trControl = train_control,linout = TRUE,
+                        preProcess = c("center","scale"))
+  
+  print(modeler$results)
+  
+  out<-cbind(dplyr::select(filter(modeler$results,RelativeAbs==min(RelativeAbs)),RelativeAbs),
+          t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,]))))
+  rownames(out)<-NULL
+    
+  saveRDS(out,paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/ML_",algo,"_",impact,".RData"))
+  
+  return(out)
+  
+}
 
+tabmod<-getModelInfo()
+carmods<-unlist(sapply(tabmod,function(x) x$type%in%"Regression"))
+carmods<-data.frame(algorithm=names(carmods),regression=unname(carmods))
+carmods%<>%filter(regression)%>%pull(algorithm)
+# Check that we have all that we need to run each model
+checkerz<-unlist(lapply(carmods,function(stst) ifelse(is.null(tryCatch(checkInstall(getModelInfo(stst)$library),error=function(e) NA)),T,F)))
+carmods<-carmods[checkerz]; rm(checkerz)
 
+minimods<-c("nnet","brnn","rf","glmnet","lm","lmStepAIC","rvmLinear","rvmRadial")
+            # "blasso","bridge","glm.nb","lasso","nnls","pcr")
+# ,"gbm"
 
+# Parallelise
+ncores<-60
+cl <- makePSOCKcluster(ncores)  # Create computing clusters
+registerDoParallel(cl)
+getDoParWorkers()
+# Run it!
+ODD_ML<-lapply(allimps, function(impact) {
+  lapply(minimods,function(algo) {
+    out<-tryCatch(parallelML(algo,impact),error=function(e) NA)
+    if(any(is.na(out))) return(NULL)
+    })})
+# Remember to close the computing cluster
+stopCluster(cl)
+registerDoSEQ()
+
+# Let's have a look! :)
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/")
+namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"ML_",simplify = T)[,2]
+impact<-str_split(namerz,"_",simplify = T)[,2]
+namerz<-str_split(namerz,"_",simplify = T)[,1]
+
+predictionsML<-data.frame()
+for(i in 1:length(filez)) {
+  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/",filez[i]))
+  predictionsML%<>%rbind(cbind(data.frame(model=namerz[i],impact=impact[i]),tmp))
+}
+predictionsML
 
 # Building damage assessment - classification with spatial element using kriging
 

@@ -82,18 +82,18 @@ train_control <- caret::trainControl(method="repeatedcv", number=8, repeats=2,
                                      search = "random",classProbs=T,
                                      summaryFunction=twoClassSummary)
 
-parallelML<-function(algo) {
-  # Remove pesky columns
-  datar<-BDs%>%dplyr::select(-c("Event","grading","weighting","www"))
-  # Run the model!
-  modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC",
-                        tuneLength = 12, trControl = train_control,
-                        preProcess = c("center","scale"))
-  
-  return(cbind(modeler$results[-1],
-               t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
-  
-}
+# parallelML<-function(algo) {
+#   # Remove pesky columns
+#   datar<-BDs%>%dplyr::select(-c("Event","grading","weighting","www"))
+#   # Run the model!
+#   modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC",
+#                         tuneLength = 12, trControl = train_control,
+#                         preProcess = c("center","scale"))
+#   
+#   return(cbind(modeler$results[-1],
+#                t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
+#   
+# }
 
 parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
   

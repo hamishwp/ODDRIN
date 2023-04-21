@@ -24,10 +24,10 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
     # Change between the normal (linear) model and the log-normal
     if(GLMer=="LM") {
       lognorm=F 
-      fncy<-function(x) x
+      fncy<-function(x) log(x+10)
     } else {
       lognorm=T
-      fncy<-exp
+      fncy<-function(x) x
     }
   
     modely<-function(equation,datar,responsers){
@@ -42,7 +42,7 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
         test<-datar[indies[[i]],]
         train<-datar[!1:nrow(datar)%in%indies[[i]],]
         modeler<-lm(formula = as.formula(equation),data = train)
-        as.data.frame(t(colMeans(abs(fncy(predict(modeler,test))-fncy(test[,responsers]))/(fncy(test[,responsers])+1),na.rm = T)))
+        as.data.frame(t(colMeans(abs(fncy(predict(modeler,test))-fncy(test[,responsers])),na.rm = T)))
       })))))
     }
     
@@ -50,7 +50,7 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
     modely<-function(equation,datar,responsers="Y") {
       datar%<>%na.omit()
       modeler<-glm(formula = as.formula(equation),data = datar,family = gaussian(link = "identity"))
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat)/(y+1),na.rm = T))$delta[1]
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(log(y+10)-log(yhat+10)),na.rm = T))$delta[1]
       
       data.frame(StandErr=StandErr,
                  AIC=AIC(modeler),
@@ -61,7 +61,7 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
     modely<-function(equation,datar,responsers="Y") {
       datar%<>%na.omit()
       modeler<-glm(formula = as.formula(equation),data = datar,family = poisson())
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat)/(y+1),na.rm = T))$delta[1]
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(log(y+10)-log(yhat+10)),na.rm = T))$delta[1]
       
       data.frame(StandErr=StandErr,
                  AIC=AIC(modeler),
@@ -84,7 +84,7 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
     modely<-function(equation,datar,responsers="Y") {
       datar%<>%na.omit()
       modeler<-pscl::hurdle(formula = as.formula(equation),data = datar,dist="poisson")
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat)/(y+1),na.rm = T))$delta[1]
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(log(y+10)-log(yhat+10)),na.rm = T))$delta[1]
       
       data.frame(StandErr=StandErr,
                  AIC=AIC(modeler),
@@ -95,7 +95,7 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
     modely<-function(equation,datar,responsers="Y") {
       datar%<>%na.omit()
       modeler<-pscl::hurdle(formula = as.formula(equation),data = datar,dist="negbin")
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat)/(y+1),na.rm = T))$delta[1]
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(log(y+10)-log(yhat+10)),na.rm = T))$delta[1]
       
       data.frame(StandErr=StandErr,
                  AIC=AIC(modeler),
@@ -106,7 +106,7 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
     modely<-function(equation,datar,responsers="Y") {
       datar%<>%na.omit()
       modeler<-pscl::zeroinfl(formula = as.formula(equation),data = datar,dist="negbin")
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat)/(y+1),na.rm = T))$delta[1]
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(log(y+10)-log(yhat+10)),na.rm = T))$delta[1]
       
       data.frame(StandErr=StandErr,
                  AIC=AIC(modeler),
@@ -117,7 +117,7 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
     modely<-function(equation,datar,responsers="Y") {
       datar%<>%na.omit()
       modeler<-pscl::zeroinfl(formula = as.formula(equation),data = datar,dist="poisson")
-      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(y-yhat)/(y+1),na.rm = T))$delta[1]
+      StandErr<-cv.glm(data = datar, glmfit = modeler, K = 10, cost=function(y,yhat) mean(abs(log(y+10)-log(yhat+10)),na.rm = T))$delta[1]
       
       data.frame(StandErr=StandErr,
                  AIC=AIC(modeler),

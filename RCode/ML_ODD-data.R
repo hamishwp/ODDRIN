@@ -13,6 +13,7 @@ library(FactoMineR)
 library(factoextra)
 library(parallel)
 library(doParallel)
+library(caret)
 
 # Used to correlate the vulnerability variables with the modifier term
 LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+",nlim=3,weights=NULL,ncores=4){

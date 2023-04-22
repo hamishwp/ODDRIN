@@ -532,25 +532,25 @@ colnames(outred)
 
 
 # Analyse the results:
-# filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/"); filez<-filez[!filez%in%c("GLM_Mortality.RData","GLM_BuildDam.RData","GLM_BuildDest.RData","GLM_Displacement.RData","InputDataGLM.RData")]
-# namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]; namerz<-namerz[!namerz%in%c("Mortality","BuildDam","BuildDest","Displacement","")]
-# 
-# predictions<-data.frame()
-# for(i in 1:length(filez)) {
-#   if(filez[i]=="InputDataGLM.RData") next
-#   tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/",filez[i]))
-#   if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
-#   predictions%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
-# }
-# 
-# tmp<-str_split(predictions$model,"_",simplify = T)
-# predictions$impact<-tmp[,1]
-# predictions$algo<-tmp[,2]
-# predictions$model<-NULL
-# table(predictions$impact)
-# table(predictions$algo)
-# 
-# predictions%>%arrange(StandErr)%>%group_by(impact)%>%slice(1:5)
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/"); filez<-filez[!filez%in%c("GLM_Mortality.RData","GLM_BuildDam.RData","GLM_BuildDest.RData","GLM_Displacement.RData","InputDataGLM.RData")]
+namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]; namerz<-namerz[!namerz%in%c("Mortality","BuildDam","BuildDest","Displacement","")]
+
+predictions<-data.frame()
+for(i in 1:length(filez)) {
+  if(filez[i]=="InputDataGLM.RData" | grepl(filez[i],pattern = "MVGLM")) next
+  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/",filez[i]))
+  if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
+  predictions%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
+}
+
+tmp<-str_split(predictions$model,"_",simplify = T)
+predictions$impact<-tmp[,1]
+predictions$algo<-tmp[,2]
+predictions$model<-NULL
+table(predictions$impact)
+table(predictions$algo)
+
+predictions%>%arrange(StandErr)%>%group_by(impact)%>%slice(1:5)%>%View()
 # predictions%>%arrange(BIC)%>%group_by(impact)%>%slice(1:5)
 # 
 # predictions%>%group_by(impact,algo)%>%
@@ -609,25 +609,26 @@ predictionsMV<-tryCatch(LMFeatureSelection(outred,
 saveRDS(predictionsMV,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/MVGLM_MortDispbuildDambuildDest_LM.RData")
 
 # Let's have a look! :)
-# filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/")
-# namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]
-# 
-# predictionsMV<-data.frame()
-# for(i in 1:length(filez)) {
-#   tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/",filez[i]))
-#   if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
-#   tmp[,allimps[!allimps%in%colnames(tmp)]]<-NA
-#   predictionsMV%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
-# }
-# predictionsMV$Cost<-apply(predictionsMV[,2:5],1,prod,na.rm=T)
-# 
-# tmp<-str_split(predictionsMV$model,"_",simplify = T)
-# predictionsMV$impact<-tmp[,1]
-# predictionsMV$algo<-tmp[,2]
-# predictionsMV$model<-NULL
-# 
-# predictionsMV%>%arrange(Cost)%>%dplyr::select(-allimps)%>%
-#   group_by(algo,impact)%>%slice(1:5)%>%View()
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/")
+namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]
+
+predictionsMV<-data.frame()
+for(i in 1:length(filez)) {
+  if(filez[i]=="InputData_BD.RData") next
+  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/",filez[i]))
+  if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
+  tmp[,allimps[!allimps%in%colnames(tmp)]]<-NA
+  predictionsMV%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
+}
+predictionsMV$Cost<-apply(predictionsMV[,2:5],1,prod,na.rm=T)
+
+tmp<-str_split(predictionsMV$model,"_",simplify = T)
+predictionsMV$impact<-tmp[,1]
+predictionsMV$algo<-tmp[,2]
+predictionsMV$model<-NULL
+
+predictionsMV%>%arrange(Cost)%>%dplyr::select(-allimps)%>%
+  group_by(algo,impact)%>%slice(1:5)%>%View()
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ML MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -699,17 +700,17 @@ stopCluster(cl)
 registerDoSEQ()
 
 # Let's have a look! :)
-# filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/")
-# namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"ML_",simplify = T)[,2]
-# impact<-str_split(namerz,"_",simplify = T)[,2]
-# namerz<-str_split(namerz,"_",simplify = T)[,1]
-# 
-# predictionsML<-data.frame()
-# for(i in 1:length(filez)) {
-#   tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/",filez[i]))
-#   predictionsML%<>%rbind(cbind(data.frame(model=namerz[i],impact=impact[i]),tmp))
-# }
-# predictionsML
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/")
+namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"ML_",simplify = T)[,2]
+impact<-str_split(namerz,"_",simplify = T)[,2]
+namerz<-str_split(namerz,"_",simplify = T)[,1]
+
+predictionsML<-data.frame()
+for(i in 1:length(filez)) {
+  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/",filez[i]))
+  predictionsML%<>%rbind(cbind(data.frame(model=namerz[i],impact=impact[i]),tmp))
+}
+View(predictionsML)
 
 # Building damage assessment - classification with spatial element using kriging
 

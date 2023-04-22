@@ -14,6 +14,7 @@ library(factoextra)
 library(parallel)
 library(doParallel)
 library(caret)
+library(tornado)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% DEFINE GLM MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -237,8 +238,8 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
     predictors<-data.frame()
     for (i in 1:Nb){
       # Run the model
-      ressies<-tryCatch(modely(eee,output,responsers),error = function(e) NA)
-      if(all(is.na(ressies))) next
+      ressies<-tryCatch(modely(eee,output,responsers),
+                        error = function(e) rep(NA,ifelse(is.null(mvm),4,length(responsers)*2L)))
       
       predictors%<>%rbind(ressies)
     }
@@ -425,18 +426,19 @@ predictions<-data.frame()
 for(i in 1:length(filez)) {
   if(filez[i]=="InputDataGLM.RData" | grepl(filez[i],pattern = "MVGLM")) next
   tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/",filez[i]))
+  if(all(is.na(tmp))) {print(paste0("Failed for ",filez[i]));next}
   if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
   predictions%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
 }
 
 tmp<-str_split(predictions$model,"_",simplify = T)
-predictions$impact<-tmp[,1]
-predictions$algo<-tmp[,2]
+predictions$impact<-tmp[,2]
+predictions$algo<-tmp[,1]
 predictions$model<-NULL
 table(predictions$impact)
 table(predictions$algo)
 
-predictions%>%arrange(StandErr)%>%group_by(impact)%>%slice(1:5)%>%View()
+predictions%>%arrange(StandErr)%>%group_by(impact,algo)%>%slice(1)%>%View()
 # predictions%>%arrange(BIC)%>%group_by(impact)%>%slice(1:5)
 # 
 # predictions%>%filter(algo!="lognorm")%>%group_by(impact,algo)%>%
@@ -444,68 +446,11 @@ predictions%>%arrange(StandErr)%>%group_by(impact)%>%slice(1:5)%>%View()
 #   ggplot(aes(minnie,BIC))+geom_point(aes(colour=algo,shape=impact),size=3)+
 #   scale_y_log10()+scale_x_log10()
 
-
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MULTIVARIATE MODELS @%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-
-ExtractMVGLMresults<-function(algo,impact){
-  
-  print(paste0("Working on ",algo," for impacts=",impact))  
-  # Make weights from the different events to make sure that no single event dominates the model parameterisation
-  weights<-outred%>%group_by(Event)%>%summarise(www=1/length(time))%>%merge(outred)%>%pull(www)
-  # Remove the variable Event after weighting is calculated
-  outFrame%<>%dplyr::select(-Event)
-  # Function from the file CorrelateModifier.R:
-  out<-tryCatch(LMFeatureSelection(outred,Nb=1,intercept=T,fn="+",nlim=12,
-                                   GLMer = algo, weights = weights, mvm = imps, ncores=60),
-                error=function(e) NA)
-  out$model<-algo
-  
-  saveRDS(out,paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/MVGLM_",algo,"_",impact,".RData"))
-  
-  return(out)
-  
-}
-
-minimods<-c("LM","lognorm")
-
-# Run it!
-ODD_ML<-lapply(allimps, function(impact) {
-  lapply(minimods,function(algo) {
-    out<-tryCatch(ExtractGLMresults(algo,impact),error=function(e) NA)
-    if(any(is.na(out))) return(NULL)
-  })})
-
-# Let's have a look! :)
-filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/")
-namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]; namerz<-namerz[namerz!=""]
-
-predictionsMV<-data.frame()
-for(i in 1:length(filez)) {
-  if(filez[i]=="InputData_BD.RData") next
-  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/",filez[i]))
-  if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
-  tmp[,allimps[!allimps%in%colnames(tmp)]]<-NA
-  tmp<-tmp[apply(tmp,1,function(x)!all(is.na(x))),]
-  predictionsMV%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
-}
-predictionsMV$Cost<-apply(predictionsMV[,2:5],1,prod,na.rm=T)
-
-tmp<-str_split(predictionsMV$model,"_",simplify = T)
-predictionsMV$impact<-tmp[,1]
-predictionsMV$algo<-tmp[,2]
-predictionsMV$model<-NULL
-
-predictionsMV%>%arrange(Cost)%>%dplyr::select(-allimps)%>%
-  group_by(algo,impact)%>%slice(1:5)%>%View()
-
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ML MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-# costie<-function(data, lev = NULL, model = NULL) {
-costie<-function(data) {
+costie<-function(data, lev = NULL, model = NULL) {
   out<-mean(abs(data$obs-data$pred)*data$weights/sum(data$weights),na.rm = T)
   names(out)<-"RelativeAbs"
   return(out)
@@ -517,7 +462,7 @@ train_control <- caret::trainControl(method="repeatedcv", number=10, repeats=3,
 
 allimps<-c("mortality","displacement","buildDam","buildDest")
 
-parallelML<-function(algo,impact) {
+parallelML<-function(algo,impact,modRet=F) {
   
   print(paste0("Working on ",algo," for impact=",impact))  
   
@@ -534,10 +479,12 @@ parallelML<-function(algo,impact) {
                         tuneLength = 12, trControl = train_control,linout = TRUE,
                         weights = weights, preProcess = c("center","scale"))
   
+  if(modRet) return(modeler)
+  
   print(modeler$results)
   
-  out<-cbind(dplyr::select(filter(modeler$results,RelativeAbs==min(RelativeAbs)),RelativeAbs),
-          t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,]))))
+  out<-cbind(dplyr::select(filter(modeler$results,RelativeAbs==min(RelativeAbs)),RelativeAbs,RelativeAbsSD),
+          t(as.data.frame((t(as.data.frame(varImp(modeler, useModel=F, nonpara=F, scale=FALSE)$importance))[1,]))))
   rownames(out)<-NULL
     
   saveRDS(out,paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/ML_",algo,"_",impact,".RData"))
@@ -584,7 +531,141 @@ for(i in 1:length(filez)) {
   tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/",filez[i]))
   predictionsML%<>%rbind(cbind(data.frame(model=namerz[i],impact=impact[i]),tmp))
 }
+
+table(predictionsML$model)
+table(predictionsML$impact)
+
 View(predictionsML)
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%% COMPARE UNIVARIATE MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+fuller<-rbind(transmute(predictions,RelativeAbsDiff=StandErr,RelativeAbsDiffSD=StandErrSD,
+                        impact=impact,algo=algo, equation=eqn),
+              transmute(predictionsML,RelativeAbsDiff=RelativeAbs,RelativeAbsDiffSD=RelativeAbsSD,
+                        impact=impact,algo=model,equation="Y ~ maxHaz + ExpSchYrs + LifeExp + GNIc + Vs30 + EQFreq + hazSD + time + ExpDim1 + ExpDim2 + WIDDim1 + WIDDim2"))
+View(fuller)     
+
+fuller%>%group_by(impact,algo)%>%arrange(RelativeAbsDiff)%>%slice(1)%>%View()
+
+# For each of the top models, calculate the feature importance using vip package
+# See here for more info: https://cran.r-project.org/web/packages/vip/vignettes/vip-introduction.pdf
+# Then compare the values between the top 10-models (over all model types) for each impact
+
+# FOR ALL MODELS WITHIN 2SIGMA OF BEST MODEL, PER GLM, MEASURE THE MODEL-AGNOSTIC VIP
+
+vip::vi(modeler,method="firm")
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MULTIVARIATE MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+ExtractMVGLMresults<-function(algo,impact){
+  
+  print(paste0("Working on ",algo," for impacts=",paste0(impact,collapse = " & ")))
+  # Get rid of NAs
+  outFrame<-outred%>%na.omit()
+  # Make weights from the different events to make sure that no single event dominates the model parameterisation
+  weights<-outFrame%>%group_by(Event)%>%summarise(www=1/length(time))%>%merge(outFrame)%>%pull(www)
+  # Remove the variable Event after weighting is calculated
+  outFrame%<>%dplyr::select(-Event)
+  # Function from the file CorrelateModifier.R:
+  out<-LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=12,
+                          GLMer = algo, weights = weights, mvm = impact, ncores=60)
+  # out<-tryCatch(LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=12,
+  #                                  GLMer = algo, weights = weights, mvm = impact, ncores=60),
+  #               error=function(e) NA)
+  out$model<-algo
+  
+  saveRDS(out,paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/MVGLM_",algo,"_",paste0(impact,collapse = ""),".RData"))
+  
+  return(out)
+  
+}
+
+minimods<-c("LM","lognorm")
+
+impcombs<-list(c("mortality","displacement"),
+               c("buildDam","buildDest"),
+               c("mortality","displacement","buildDam","buildDest"))
+
+# Run it!
+ODD_ML<-lapply(1:length(impcombs), function(jj) {
+  lapply(minimods,function(algo) {
+    out<-tryCatch(ExtractMVGLMresults(algo,unlist(impcombs[[jj]])),error=function(e) NA)
+    if(any(is.na(out))) {print(paste0("Fail for ",algo,unlist(impcombs[[jj]]))); return(NULL)}
+  })})
+
+# Let's have a look! :)
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/")
+namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]; namerz<-namerz[namerz!=""]
+
+predictionsMV<-data.frame()
+for(i in 1:length(filez)) {
+  if(filez[i]=="InputData_BD.RData") next
+  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/",filez[i]))
+  if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
+  missies<-allimps[!allimps%in%colnames(tmp)]
+  if(length(missies)>0) tmp[,c(missies,paste0(allimps[!allimps%in%colnames(tmp)],"SD"))]<-NA
+  tmp<-tmp[apply(tmp,1,function(x)!all(is.na(x))),]
+  predictionsMV%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
+}
+predictionsMV$Cost<-apply(predictionsMV[,allimps],1,prod,na.rm=T)
+
+tmp<-str_split(predictionsMV$model,"_",simplify = T)
+predictionsMV$impact<-tmp[,1]
+predictionsMV$algo<-tmp[,2]
+predictionsMV$model<-NULL
+
+predictionsMV%>%arrange(Cost)%>%dplyr::select(-c(allimps,paste0(allimps,"SD")))%>%
+  group_by(algo,impact)%>%slice(1:5)%>%View()
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%% COMPARE MULTIVARIATE MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+
+
+# TO DO:
+# 1) Table of top-5 models, per impact
+#    FOR BD AND ODD MODELS
+# 2) Plot comparison of StandErr between GLM and ML models, with error bar
+# 3) Do I do feature importance for each model for the each impact
+# 3) Feature importance: per impact, all models that are within best model performance confidence interval
+#    take out all the
+#    Don't need to consider the BIC as the cross-validation takes into account risk of overfitting
+# 4) Application of GLM and ML models on the MV impact data to make the comparison
+# 5) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Building damage assessment - classification with spatial element using kriging
 

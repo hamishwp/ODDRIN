@@ -14,7 +14,8 @@ library(factoextra)
 library(parallel)
 library(doParallel)
 library(caret)
-library(tornado)
+
+# install.packages("ggcorrplot")
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% DEFINE GLM MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -31,9 +32,11 @@ GetModel<-function(GLMer,weights,mvm=NULL){
       fncy<-function(x) x
     }
     
-    modely<-function(equation,datar,responsers){
+    modely<-function(equation,datar,responsers,modout=F){
       # If we are using a lognormal model
       if(lognorm) datar[,responsers]<-log(datar[,responsers]+10)
+      # if we just want the model output:
+      if(modout) return(lm(formula = as.formula(equation),data = datar,weights = weights))
       # Set up the cross validation folds
       indies <- createFolds(1:nrow(datar), k = 10, list = T, returnTrain = FALSE)
       # Train a model for each fold
@@ -47,9 +50,11 @@ GetModel<-function(GLMer,weights,mvm=NULL){
     }
     
   } else if(GLMer=="LM"){
-    modely<-function(equation,datar,responsers="Y") {
+    modely<-function(equation,datar,responsers="Y",modout=F) {
       # Train the model on all the data in order to check the BIC
       modeler<-glm(formula = as.formula(equation),data = datar,family = gaussian(link = "identity"),weights = weights)
+      # if we just want the model output:
+      if(modout) return(modeler)
       # Set up the cross validation folds
       indies <- createFolds(1:nrow(datar), k = 10, list = T, returnTrain = FALSE)
       # Train a model for each fold
@@ -67,9 +72,11 @@ GetModel<-function(GLMer,weights,mvm=NULL){
     }
     
   } else if(GLMer=="pois"){
-    modely<-function(equation,datar,responsers="Y") {
+    modely<-function(equation,datar,responsers="Y",modout=F) {
       # Train the model on all the data in order to check the BIC
       modeler<-glm(formula = as.formula(equation),data = datar,family = poisson(),weights = weights)
+      # if we just want the model output:
+      if(modout) return(modeler)
       # Set up the cross validation folds
       indies <- createFolds(1:nrow(datar), k = 10, list = T, returnTrain = FALSE)
       # Train a model for each fold
@@ -88,11 +95,13 @@ GetModel<-function(GLMer,weights,mvm=NULL){
     }
     
   } else if(GLMer=="lognorm"){
-    modely<-function(equation,datar,responsers="Y") {
+    modely<-function(equation,datar,responsers="Y",modout=F) {
       # Convert to log scale
       datar$Y<-log(datar$Y+10)
       # Train the model on all the data in order to check the BIC
       modeler<-glm(formula = as.formula(equation),data = datar,family = gaussian(link = "identity"),weights = weights)
+      # if we just want the model output:
+      if(modout) return(modeler)
       # Set up the cross validation folds
       indies <- createFolds(1:nrow(datar), k = 10, list = T, returnTrain = FALSE)
       # Train a model for each fold
@@ -111,9 +120,11 @@ GetModel<-function(GLMer,weights,mvm=NULL){
     }
     
   } else if(GLMer=="HurdlePois"){
-    modely<-function(equation,datar,responsers="Y") {
+    modely<-function(equation,datar,responsers="Y",modout=F) {
       # Train the model on all the data in order to check the BIC
       modeler<-pscl::hurdle(formula = as.formula(equation),data = datar,dist="poisson",weights = weights)
+      # if we just want the model output:
+      if(modout) return(modeler)
       # Set up the cross validation folds
       indies <- createFolds(1:nrow(datar), k = 10, list = T, returnTrain = FALSE)
       # Train a model for each fold
@@ -131,9 +142,11 @@ GetModel<-function(GLMer,weights,mvm=NULL){
     }
     
   } else if(GLMer=="HurdleNegBin"){
-    modely<-function(equation,datar,responsers="Y") {
+    modely<-function(equation,datar,responsers="Y",modout=F) {
       # Train the model on all the data in order to check the BIC
       modeler<-pscl::hurdle(formula = as.formula(equation),data = datar,dist="negbin",weights = weights)
+      # if we just want the model output:
+      if(modout) return(modeler)
       # Set up the cross validation folds
       indies <- createFolds(1:nrow(datar), k = 10, list = T, returnTrain = FALSE)
       # Train a model for each fold
@@ -151,9 +164,11 @@ GetModel<-function(GLMer,weights,mvm=NULL){
     }
     
   } else if(GLMer=="ZInegbin"){
-    modely<-function(equation,datar,responsers="Y") {
+    modely<-function(equation,datar,responsers="Y",modout=F) {
       # Train the model on all the data in order to check the BIC
       modeler<-pscl::zeroinfl(formula = as.formula(equation),data = datar,dist="negbin",weights = weights)
+      # if we just want the model output:
+      if(modout) return(modeler)
       # Set up the cross validation folds
       indies <- createFolds(1:nrow(datar), k = 10, list = T, returnTrain = FALSE)
       # Train a model for each fold
@@ -171,9 +186,11 @@ GetModel<-function(GLMer,weights,mvm=NULL){
     }
     
   } else if(GLMer=="ZIpois"){
-    modely<-function(equation,datar,responsers="Y") {
+    modely<-function(equation,datar,responsers="Y",modout=F) {
       # Train the model on all the data in order to check the BIC
       modeler<-pscl::zeroinfl(formula = as.formula(equation),data = datar,dist="poisson",weights = weights)
+      # if we just want the model output:
+      if(modout) return(modeler)
       # Set up the cross validation folds
       indies <- createFolds(1:nrow(datar), k = 10, list = T, returnTrain = FALSE)
       # Train a model for each fold
@@ -386,11 +403,18 @@ allimps<-c("mortality","displacement","buildDam","buildDest")
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% UNIVARIATE MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-ExtractGLMresults<-function(algo,impact){
+ExtractGLMresults<-function(algo,impact,othimps=NULL){
   
   print(paste0("Working on ",algo," for impact=",impact))  
   
-  outFrame<-dplyr::select(outred,-allimps[impact!=allimps])
+  if(is.null(othimps)){
+    outFrame<-dplyr::select(outred,-allimps[impact!=allimps])  
+  } else {
+    outFrame<-dplyr::select(outred,-allimps[!allimps%in%c(impact,othimps)])
+    ind<-which(colnames(outFrame)==impact)
+    outFrame<-outFrame[,c(ind,(1:ncol(outFrame))[-ind])]
+  }
+  
   names(outFrame)[1]<-"Y"
   outFrame%<>%na.omit()
   # Make weights from the different events to make sure that no single event dominates the model parameterisation
@@ -399,11 +423,11 @@ ExtractGLMresults<-function(algo,impact){
   outFrame%<>%dplyr::select(-Event)
   
   # Function from the file CorrelateModifier.R:
-  out<-tryCatch(LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=12,
+  out<-tryCatch(LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=(ncol(outFrame)-1),
                                    GLMer = algo, weights = weights, ncores=60),
                 error=function(e) NA)
   # out$model<-algo
-  saveRDS(out,paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_",algo,"_",impact,".RData"))
+  saveRDS(out,paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/GLM_",algo,"_",impact,ifelse(is.null(othimps),"",paste0("_with-",othimps)),".RData"))
   
   return(out)
   
@@ -419,7 +443,7 @@ ODD_ML<-lapply(allimps, function(impact) {
   })})
 
 # Analyse the results:
-filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/"); filez<-filez[!filez%in%c("GLM_Mortality.RData","GLM_BuildDam.RData","GLM_BuildDest.RData","GLM_Displacement.RData","InputDataGLM.RData")]
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/"); filez<-filez[!grepl(filez,pattern = "_with")]
 namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]; namerz<-namerz[!namerz%in%c("Mortality","BuildDam","BuildDest","Displacement","")]
 
 predictions<-data.frame()
@@ -441,10 +465,56 @@ table(predictions$algo)
 predictions%>%arrange(StandErr)%>%group_by(impact,algo)%>%slice(1)%>%View()
 # predictions%>%arrange(BIC)%>%group_by(impact)%>%slice(1:5)
 # 
-# predictions%>%filter(algo!="lognorm")%>%group_by(impact,algo)%>%
-#   summarise(minnie=min(StandErr),BIC=BIC[which.min(StandErr)])%>%
-#   ggplot(aes(minnie,BIC))+geom_point(aes(colour=algo,shape=impact),size=3)+
+# predictions%>%group_by(impact,algo)%>%
+#   summarise(StandErr=min(StandErr),BIC=BIC[which.min(StandErr)],StandErrSD=StandErrSD[which.min(StandErr)])%>%
+#   ggplot(aes(StandErr,BIC))+geom_point(aes(colour=algo,shape=impact),size=3)+
+#   geom_errorbar(aes(xmin=StandErr-StandErrSD, 
+#                                       xmax=StandErr+StandErrSD,colour=algo))
 #   scale_y_log10()+scale_x_log10()
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%% CONDITIONAL UNIVARIATE MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+# Run it!
+ODD_ML<-lapply(allimps[2:4], function(impact) {
+  lapply(minimods,function(algo) {
+    out<-tryCatch(ExtractGLMresults(algo,impact,othimps = "mortality"),error=function(e) NA)
+    if(any(is.na(out))) return(NULL)
+  })})
+
+ODD_ML<-lapply(allimps[c(1,3,4)], function(impact) {
+  lapply(minimods,function(algo) {
+    out<-tryCatch(ExtractGLMresults(algo,impact,othimps = "displacement"),error=function(e) NA)
+    if(any(is.na(out))) return(NULL)
+  })})
+
+ODD_ML<-lapply(allimps[c(1,2,4)], function(impact) {
+  lapply(minimods,function(algo) {
+    out<-tryCatch(ExtractGLMresults(algo,impact,othimps = "buildDam"),error=function(e) NA)
+    if(any(is.na(out))) return(NULL)
+  })})
+
+ODD_ML<-lapply(allimps[c(1,2,3)], function(impact) {
+  lapply(minimods,function(algo) {
+    out<-tryCatch(ExtractGLMresults(algo,impact,othimps = "buildDest"),error=function(e) NA)
+    if(any(is.na(out))) return(NULL)
+  })})
+
+ODD_ML<-lapply(allimps[3:4], function(impact) {
+  lapply(minimods,function(algo) {
+    out<-tryCatch(ExtractGLMresults(algo,impact,othimps = c("mortality","displacement")),error=function(e) NA)
+    if(any(is.na(out))) return(NULL)
+  })})
+
+ODD_ML<-lapply(allimps[1:2], function(impact) {
+  lapply(minimods,function(algo) {
+    out<-tryCatch(ExtractGLMresults(algo,impact,othimps = c("buildDam","buildDest")),error=function(e) NA)
+    if(any(is.na(out))) return(NULL)
+  })})
+
+# Find the best equation, then compare the error with the best GLM without the impact terms
+
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ML MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -547,15 +617,225 @@ fuller<-rbind(transmute(predictions,RelativeAbsDiff=StandErr,RelativeAbsDiffSD=S
                         impact=impact,algo=model,equation="Y ~ maxHaz + ExpSchYrs + LifeExp + GNIc + Vs30 + EQFreq + hazSD + time + ExpDim1 + ExpDim2 + WIDDim1 + WIDDim2"))
 View(fuller)     
 
-fuller%>%group_by(impact,algo)%>%arrange(RelativeAbsDiff)%>%slice(1)%>%View()
+predictions%<>%group_by(impact)%>%mutate(BestDiff=StandErr-min(StandErr,na.rm = T))
+
+p<-predictions%>%filter(StandErr<0.6)%>%ggplot(aes(StandErr,group=algo)) +
+  geom_density(aes(fill=algo),alpha=0.4)+scale_x_log10()+
+  xlab("Relative Absolute Log-Difference Errors - Log Scale ")+ylab("Density")+labs(fill="Model")+
+  facet_wrap(.~impact,scales = "free");p
+ggsave("GLM_Errors.eps",p,path="./Plots/IIDIPUS_Results/GLM-ML_Work/",width=10,height=5,device = grDevices::cairo_ps)  
+
+
+fuller%<>%na.omit()
+
+allUV<-fuller%>%arrange(RelativeAbsDiff)%>%group_by(impact,algo)%>%slice(1)%>%
+  dplyr::select(impact,algo,RelativeAbsDiff,RelativeAbsDiffSD)%>%filter(algo!="lm")
+
+# colnames(allUV)<-c("Impact","Model","Avg. MADL Value", "S.D. MADL Value")
+
+p<-allUV%>%ggplot(aes(algo,RelativeAbsDiff,group=impact))+
+  # geom_point(aes(colour=impact,shape=impact),size=4) +
+  geom_pointrange(aes(ymin=RelativeAbsDiff-RelativeAbsDiffSD,
+                    ymax=RelativeAbsDiff+RelativeAbsDiffSD,colour=impact,
+                    shape=impact),
+                size=1)+theme(axis.text.x = element_text(angle = 90))+
+  scale_y_log10()+scale_shape_manual(values=15:18,breaks=allimps)+
+  xlab("Model") + ylab("Mean Absolute Deviation of Logs (MADL)")+
+  labs(colour="Impact Type",shape="Impact Type");p
+ggsave("UV_MADL.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)  
+
+
+# tabUV<-lapply(unique(allUV$Impact), function(imp){
+#   print(xtable::xtable(filter(allUV,Impact==imp),
+#                        paste0("MADL distances for the univariate response, multiple regression models, for ",imp," observational data only")), row.names = FALSE)
+# })
+
+
+#  HYPOTHESIS TESTING ON BEST PERFORMING MODEL
+# fuller%<>%group_by(impact)%>%mutate(nn=sum(!is.na(outred[,unique(impact)])))
+# fuller%<>%group_by(impact)%>%mutate(BestDiff=dnorm(RelativeAbsDiff-min(RelativeAbsDiff),0,
+#                                                       sqrt(RelativeAbsDiffSD^2+RelativeAbsDiffSD[which.min(RelativeAbsDiff)]^2)/sqrt(nn))<0.05)%>%
+#   dplyr::select(-nn)
+  
+# fuller%<>%group_by(impact)%>%mutate(minSD=RelativeAbsDiffSD[which.min(RelativeAbsDiff)]^2/unique(nn),
+#                                     thisSD=RelativeAbsDiffSD^2/nn)%>%
+#   mutate(df=(thisSD+minSD)^2/( (thisSD^2+minSD^2) / (nn-1) ))
+  
+# fuller%<>%group_by(impact)%>%mutate(withBest=dt(RelativeAbsDiff-min(RelativeAbsDiff),df))
+
+# topOeach<-fuller%>%group_by(impact,algo)%>%arrange(RelativeAbsDiff)%>%slice(1)%>%dplyr::select(3,4,1,2)
+# 
+# topOeach%>%ggplot(aes(algo,RelativeAbsDiff,group=impact)) +
+#   geom_point(aes(colour=impact,shape=impact),size=4)+
+#   geom_errorbar(aes(ymin=RelativeAbsDiff-RelativeAbsDiffSD, 
+#                     ymax=RelativeAbsDiff+RelativeAbsDiffSD,colour=impact),
+#                 width=.4,alpha=0.7)+
+#   scale_y_log10()+scale_shape_manual(values=15:18,breaks=allimps)
 
 # For each of the top models, calculate the feature importance using vip package
 # See here for more info: https://cran.r-project.org/web/packages/vip/vignettes/vip-introduction.pdf
 # Then compare the values between the top 10-models (over all model types) for each impact
 
-# FOR ALL MODELS WITHIN 2SIGMA OF BEST MODEL, PER GLM, MEASURE THE MODEL-AGNOSTIC VIP
+# FOR ALL MODELS NOT STAT. SIG. DIFF FROM BEST MODEL, PER GLM, MEASURE THE MODEL-AGNOSTIC VIP
 
-vip::vi(modeler,method="firm")
+GLMmods<-predictions%>%arrange(StandErr)%>%group_by(impact,algo)%>%slice(1)%>%
+  dplyr::select(eqn,StandErr,StandErrSD,impact,algo)
+
+GLMmods%<>%filter(algo=="lognorm")
+
+resultsUV<-do.call(rbind,lapply(1:nrow(GLMmods),function(i){
+  inpy<-as.data.frame(GLMmods[i,])
+  inpy$impact
+  # Sort out the data
+  outFrame<-dplyr::select(outred,-allimps[inpy$impact!=allimps])
+  names(outFrame)[1]<-"Y"
+  outFrame%<>%na.omit()
+  # Make weights from the different events to make sure that no single event dominates the model parameterisation
+  weights<-outFrame%>%group_by(Event)%>%summarise(www=1/length(time))%>%merge(outFrame)%>%pull(www)
+  # Remove the variable Event after weighting is calculated
+  outFrame%<>%dplyr::select(-Event)
+  # Find the GLM model
+  modeler<-GetModel(inpy$algo,weights)
+  # Extract the trained model
+  outmod<-modeler(inpy$eqn,outFrame,"Y",modout=T)
+  # Which variables to include
+  vars<-names(outmod$model)[-1];vars<-vars[-length(vars)]
+  # Feature importance (model-agnostic) calculation
+  vippy<-as.data.frame(vip::vi(outmod,scale=T,ice=T,
+                               feature_names=vars))%>%dplyr::select(Variable,Importance)
+  # Add missing columns
+  missies<-colnames(outFrame)[-1][!colnames(outFrame)[-1]%in%vippy$Variable]
+  if(length(missies)>0) vippy%<>%rbind(data.frame(Variable=missies,Importance=0))
+  # Reformulate to column form 
+  rownames(vippy)<-vippy$Variable; vippy%<>%dplyr::select(Importance)%>%t()%>%as.data.frame()
+  # colnames in alphabetical order and add the model information to the data frame
+  vippy%<>%dplyr::select(sort(colnames(vippy)))%>%cbind(inpy)%>%dplyr::select(-eqn)%>%
+    dplyr::select(impact,algo,StandErr,StandErrSD,everything())
+  # output it all!
+  return(vippy)
+}))
+
+# Order the variables by their importance, weighted by each models error value
+varimport<--apply(resultsUV[,-(1:4)],2,function(x) weighted.mean(x,1/resultsUV$StandErr))
+# Reorder the dataframe
+resultsUV%<>%dplyr::select(algo,impact,StandErr,StandErrSD,names(sort(varimport)))
+colnames(resultsUV)<-colnames(predictionsML)
+rownames(resultsUV)<-NULL
+
+resultsUV%<>%rbind(predictionsML)
+
+tabUV<-lapply(unique(resultsUV$impact), function(imp){
+  xtable::xtable(filter(resultsUV,impact==imp),"Feature importance ranking measure (FIRM), scaled as a percentage, for the best performing model-formulation for each GLM or ML model. When applying the FIRM, Individual Conditional Expectation (ICE) curves are used.")})
+
+for(i in 1:length(tabUV)) print(tabUV[[i]],include.rownames=F)
+# Melt the dataframe to plot
+# resultsUV%<>%reshape2::melt(id.vars=1:4)
+# # Make a weighting variable for the alpha plotting
+# resultsUV$normError<-1/resultsUV$StandErr
+# resultsUV%<>%group_by(impact)%>%mutate(normError=normError/max(normError))%>%ungroup()
+# # Plot
+# resultsUV%>%ggplot(aes(as.factor(variable),value,group=algo))+geom_point(aes(colour=algo,alpha=normError))+
+#   facet_wrap(.~impact,nrow = 4)
+
+#  HYPOTHESIS TESTING ON BEST PERFORMING MODEL
+resultsUV%<>%group_by(impact)%>%mutate(nn=sum(!is.na(outred[,unique(impact)])))
+resultsUV%<>%group_by(impact)%>%mutate(withBest=dnorm(RelativeAbs-min(RelativeAbs),0,
+   sqrt(RelativeAbsSD^2+RelativeAbsSD[which.min(RelativeAbs)]^2)/sqrt(nn))<0.05)%>%
+  dplyr::select(-nn)
+
+resultsUV%<>%group_by(impact)%>%mutate(withBest=dnorm(RelativeAbs-min(RelativeAbs),0,
+                                                      sqrt(RelativeAbsSD^2+RelativeAbsSD[which.min(RelativeAbs)]^2)/sqrt(nn))<0.05)%>%
+  dplyr::select(-nn)
+
+tabUV<-lapply(unique(resultsUV$impact), function(imp){
+  xtable::xtable(filter(resultsUV,impact==imp & withBest),"Feature importance ranking measure (FIRM), scaled as a percentage, for the \'best-performing\' models. The definition of \'best performing\' here is defined as any model that had a cost that was not statistically significantly different from the overall best performing model for each specific impact. When applying the FIRM, Individual Conditional Expectation (ICE) curves are used.")})
+
+for(i in 1:length(tabUV)) print(tabUV[[i]],include.rownames=F)
+
+# The models that made it as one of the best performing, per impact:
+resultsUV[resultsUV$withBest,]%>%group_by(impact)%>%reframe(models=unique(model))%>%View()
+resultsUV[resultsUV$withBest,]%>%group_by(impact)%>%reframe(models=length(model))
+nrow(resultsUV)
+
+# Order the variables by their importance, weighted by each models error value
+varimport<-do.call(rbind,lapply(allimps,function(imps) {tmp<-filter(resultsUV,impact==imps);apply(tmp[tmp$withBest,-c(1:4,ncol(tmp),(ncol(tmp)-1))],2,function(x) weighted.mean(x,1/tmp$RelativeAbs[tmp$withBest]))}))
+varimport<-100*varimport/rowSums(varimport)
+varimport%<>%rbind(as.numeric(colMeans(varimport)))
+rownames(varimport)<-c(allimps,"average")
+varimport<-100*varimport/rowSums(varimport)
+varimport%<>%t()
+varimport%<>%as.data.frame(row.names = rownames(varimport))%>%mutate(Covariate=rownames(varimport))
+
+varimport%<>%reshape2::melt(id.vars=6)
+colnames(varimport)[2]<-"impact"
+
+pal <- c(
+  "mortality" = "red",
+  "displacement" = "blue", 
+  "buildDam" = "forestgreen", 
+  "buildDest" = "purple",
+  "average" = "black"
+)
+varimport%>%ggplot(aes(Covariate,value,group=impact))+geom_point(aes(colour=impact,shape=impact),size=2)+
+  geom_line(aes(colour=impact),alpha=0.25)+scale_colour_manual(values = pal,limits = names(pal))
+
+
+
+
+
+
+
+colnames(resultsUV)[2:4]<-c("model","RelativeAbs","RelativeAbsSD")
+
+predictionsML%<>%rbind(resultsUV)
+
+varimp<-predictionsML%>%arrange(RelativeAbs)%>%group_by(model)%>%
+  summarise(Cost=prod(RelativeAbs),
+            maxHaz=mean(maxHaz),
+            ExpSchYrs=mean(ExpSchYrs),
+            LifeExp=mean(LifeExp),
+            GNIc=mean(GNIc),
+            Vs30=mean(Vs30),
+            EQFreq=mean(EQFreq),
+            hazSD=mean(hazSD),
+            time=mean(time),
+            ExpDim1=mean(ExpDim1),
+            ExpDim2=mean(ExpDim2),
+            WIDDim1=mean(WIDDim1),
+            WIDDim2=mean(WIDDim2))
+
+varimp[3:ncol(varimp)]<-100*varimp[3:ncol(varimp)]/
+rowSums(varimp[3:ncol(varimp)])
+# 
+varimp%>%filter(model%in%c("rf","svmRadial","svmPoly","lognorm","nnet"))%>%xtable::xtable()%>%print(row.names = FALSE)
+
+
+
+
+
+
+
+# Analyse the results:
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/"); filez<-filez[!grepl(filez,pattern = "_with")]
+namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]; namerz<-namerz[!namerz%in%c("Mortality","BuildDam","BuildDest","Displacement","")]
+
+predictions<-data.frame()
+for(i in 1:length(filez)) {
+  if(filez[i]=="InputDataGLM.RData" | grepl(filez[i],pattern = "MVGLM")) next
+  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/",filez[i]))
+  if(all(is.na(tmp))) {print(paste0("Failed for ",filez[i]));next}
+  if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
+  predictions%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
+}
+
+tmp<-str_split(predictions$model,"_",simplify = T)
+predictions$impact<-tmp[,2]
+predictions$algo<-tmp[,1]
+predictions$model<-NULL
+table(predictions$impact)
+table(predictions$algo)
+
+predictions%>%arrange(StandErr)%>%group_by(impact,algo)%>%slice(1)%>%View()
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MULTIVARIATE MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -565,15 +845,15 @@ ExtractMVGLMresults<-function(algo,impact){
   
   print(paste0("Working on ",algo," for impacts=",paste0(impact,collapse = " & ")))
   # Get rid of NAs
-  outFrame<-outred%>%na.omit()
+  outFrame<-outred%>%na.omit()%>%dplyr::select(-allimps[!allimps%in%impact])
   # Make weights from the different events to make sure that no single event dominates the model parameterisation
   weights<-outFrame%>%group_by(Event)%>%summarise(www=1/length(time))%>%merge(outFrame)%>%pull(www)
   # Remove the variable Event after weighting is calculated
   outFrame%<>%dplyr::select(-Event)
   # Function from the file CorrelateModifier.R:
-  out<-LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=12,
+  out<-LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=(ncol(outFrame)-1),
                           GLMer = algo, weights = weights, mvm = impact, ncores=60)
-  # out<-tryCatch(LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=12,
+  # out<-tryCatch(LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=(ncol(outFrame)-1),
   #                                  GLMer = algo, weights = weights, mvm = impact, ncores=60),
   #               error=function(e) NA)
   out$model<-algo
@@ -614,17 +894,78 @@ for(i in 1:length(filez)) {
 predictionsMV$Cost<-apply(predictionsMV[,allimps],1,prod,na.rm=T)
 
 tmp<-str_split(predictionsMV$model,"_",simplify = T)
-predictionsMV$impact<-tmp[,1]
-predictionsMV$algo<-tmp[,2]
+predictionsMV$impact<-tmp[,2]
+predictionsMV$algo<-tmp[,1]
 predictionsMV$model<-NULL
 
 predictionsMV%>%arrange(Cost)%>%dplyr::select(-c(allimps,paste0(allimps,"SD")))%>%
   group_by(algo,impact)%>%slice(1:5)%>%View()
 
-
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%% COMPARE MULTIVARIATE MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+predictionsMV%>%arrange(Cost)%>%group_by(impact,algo)%>%slice(1)
+
+MVGLMmods<-predictionsMV%>%arrange(Cost)%>%group_by(impact,algo)%>%slice(1)
+MVvars<-str_split(str_split(str_split((str_split(MVGLMmods$eqn,"~",simplify = T)[,1]),"\\(",simplify = T)[,2],"\\)",simplify = T)[,1],",")
+
+MVGLMmods%<>%filter(algo=="lognorm")
+
+resultsMV<-lapply(1:nrow(MVGLMmods),function(i){
+  inpy<-as.data.frame(MVGLMmods[i,])
+  if(inpy$algo=="LM") return(NA)
+  # Remove NAs
+  outFrame<-outred%>%na.omit()%>%dplyr::select(-allimps[allimps%in%inpy$impact])
+  # Make sure log-normal model is taken into account
+  if(inpy$algo=="lognorm") outFrame[,MVvars[[i]]]<-log(outFrame[,MVvars[[i]]]+10)
+  # Remove the variable Event after weighting is calculated
+  outFrame%<>%dplyr::select(-Event)
+  # Extract the trained model
+  outmod<-lm(formula = as.formula(inpy$eqn),data = outFrame)
+  # Which variables to include
+  vars<-names(outmod$model)[-1];vars<-vars[-length(vars)]
+  # Feature importance (model-agnostic) calculation
+  vippy<-as.data.frame(vip::vi(outmod,method="firm",scale=T,ice=T,
+                               feature_names=vars))
+  # Add missing columns
+  missies<-colnames(outFrame)[!colnames(outFrame)%in%c(vippy$Variable,inpy$impact)]
+  vippy%<>%rbind(data.frame(Variable=missies,Importance=0))
+  # Reformulate to column form 
+  rownames(vippy)<-vippy$Variable; vippy%<>%dplyr::select(Importance)%>%t()%>%as.data.frame()
+  # colnames in alphabetical order and add the model information to the data frame
+  vippy%<>%dplyr::select(sort(colnames(vippy)))%>%cbind(dplyr::select(inpy,Cost,impact,algo))
+  # output it all!
+  return(list(vip=vippy,covvy=vcov(outmod)))
+})
+
+covvy<-resultsMV[[1]]$covvy;covvy<-covvy-min(covvy);covvy<-covvy/max(covvy);covvy<-2*covvy - 1
+
+ggcorrplot::ggcorrplot(covvy, type = "lower",
+                       lab = TRUE)
+ncl<-(ncol(covvy)/2L)
+ccrr<-data.frame()
+for(i in 1:ncl) {
+  ccrr%<>%rbind(data.frame(corii=covvy[i,i+ncl],name=str_split(colnames(covvy)[i],":",simplify = T)[,2]))
+}
+
+# Compare StandErr for lognormal against LM to show why you will only use lognormal afterwards
+# Mention which covariates were in the highest-performing models
+# Run the model with all covariates for the lognormal model
+# Look at which covariates are stat. sig. for both models
+# Do the same for the highest performing models
+# For which covariates do you print out the covariance?
+#     those that are stat.sig in both?
+#     those that are present in the highest performing MV models?
+#     those that are present in the highest performing UV models?
+
+# I think most likely the last one. Make sure to have done the analysis on the other 
+
+
+
+
+
+
 
 
 
@@ -632,15 +973,8 @@ predictionsMV%>%arrange(Cost)%>%dplyr::select(-c(allimps,paste0(allimps,"SD")))%
 # 1) Table of top-5 models, per impact
 #    FOR BD AND ODD MODELS
 # 2) Plot comparison of StandErr between GLM and ML models, with error bar
-# 3) Do I do feature importance for each model for the each impact
-# 3) Feature importance: per impact, all models that are within best model performance confidence interval
-#    take out all the
-#    Don't need to consider the BIC as the cross-validation takes into account risk of overfitting
 # 4) Application of GLM and ML models on the MV impact data to make the comparison
 # 5) 
-
-
-
 
 
 

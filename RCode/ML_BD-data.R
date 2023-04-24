@@ -18,65 +18,65 @@ library(fastknn)
 library(caTools)
 source('RCode/BDobj.R')
 
-# folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/BDobjects/"
-# filez<-list.files(folder)
-# haz<-"EQ"
-# if(haz=="EQ") funcyfun<-exp else funcyfun<-returnX
-# 
-# BDs<-data.frame()
-# for(fff in filez){
-#   
-#   # if(fff%in%c("EQ20180225PNG_68","EQ20190925IDN_95","EQ20201030TUR_88")) next
-#   
-#   BDy<-readRDS(paste0(folder,fff))
-#   if(length(BDy@data[,-grep(names(BDy@data),pattern = "haz",value = F)])<9) next
-#   
-#   if(length(grep(names(BDy@data),pattern = "hazMean",value = T))==1) {
-#     hazMax<-BDy$hazMean1
-#     hazSD<-BDy$hazSD1
-#   } else {
-#     hazMax<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazMean",value = T)],1,max,na.rm=T)
-#     hazSD<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazSD",value = T)],1,median,na.rm=T)
-#   }
-#   BDy@data%<>%dplyr::select(-c(grep(names(BDy@data),pattern = "hazMean",value = T),
-#                                grep(names(BDy@data),pattern = "hazSD",value = T),
-#                                grep(names(BDy@data),pattern = "itude",value = T),
-#                                grep(names(BDy@data),pattern = "nBuildings",value = T)))%>%
-#     mutate(Event=fff,date=BDy@hazdates[1],hazMax=funcyfun(hazMax-BDy@I0),hazSD=hazSD)
-#   
-#   BDs%<>%rbind(BDy@data)
-#   
-# }
-# rm(BDy)
-# 
-# BDs$time<-as.numeric(BDs$date-min(BDs$date))
-# 
-# BDs%<>%dplyr::select(-c("date","Confidence","ISO3C"))  
-# BDs$Population<-log(BDs$Population+1)
-# BDs$GNIc<-log(BDs$GNIc)
-# BDs%<>%filter(!as.character(grading)%in%c("possible") & apply(BDs,1,function(x) !any(is.na(x))))
-# BDs$Damage<-abs(1-as.integer(BDs$grading=="notaffected"))
-# # BDs%<>%dplyr::select(-"grading")
-# 
-# BDs%>%ggplot(aes(log(hazMax),group=as.factor(grading)))+geom_density(aes(colour=as.factor(grading),fill=as.factor(grading)),alpha=0.1)
-# 
-# tmp<-BDs%>%group_by(Event)%>%summarise(weighting=1/length(GNIc))
-# BDs%<>%merge(tmp,by="Event")
-# BDs%>%group_by(grading)%>%summarise(wmean=weighted.mean(hazMax,weighting),wcov=modi::weighted.var(hazMax,weighting))
-# 
-# # model<-e1071::svm(BDs[1:10000,-c(1,5)], BDs$Damage[1:10000], kernel = "polynomial", cost = 5, scale = FALSE)
-# BDs$www<-BDs$weighting
-# BDs$www[BDs$Damage==1]<-BDs$www[BDs$Damage==1]/sum(BDs$Damage==1)
-# BDs$www[BDs$Damage==0]<-BDs$www[BDs$Damage==0]/sum(BDs$Damage==0)
-# BDs$www<-BDs$www/sum(BDs$www)
-# 
-# BDs$Damage%<>%as.factor()
-# levels(BDs$Damage)<-c("Unaffected","Damaged")
-# BDs$hazMax%<>%unname();BDs$hazSD%<>%unname()
-# 
-# saveRDS(BDs,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/InputData_BD.RData")
+folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/BDobjects/"
+filez<-list.files(folder)
+haz<-"EQ"
+if(haz=="EQ") funcyfun<-exp else funcyfun<-returnX
 
-BDs<-readRDS("./IIDIPUS_Results/SpatialPolygons_ML-GLM/MV_GLM_Models/InputData_BD.RData")
+BDs<-data.frame()
+for(fff in filez){
+
+  # if(fff%in%c("EQ20180225PNG_68","EQ20190925IDN_95","EQ20201030TUR_88")) next
+
+  BDy<-readRDS(paste0(folder,fff))
+  if(length(BDy@data[,-grep(names(BDy@data),pattern = "haz",value = F)])<9) next
+
+  if(length(grep(names(BDy@data),pattern = "hazMean",value = T))==1) {
+    hazMax<-BDy$hazMean1
+    hazSD<-BDy$hazSD1
+  } else {
+    hazMax<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazMean",value = T)],1,max,na.rm=T)
+    hazSD<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazSD",value = T)],1,median,na.rm=T)
+  }
+  BDy@data%<>%dplyr::select(-c(grep(names(BDy@data),pattern = "hazMean",value = T),
+                               grep(names(BDy@data),pattern = "hazSD",value = T),
+                               grep(names(BDy@data),pattern = "itude",value = T),
+                               grep(names(BDy@data),pattern = "nBuildings",value = T)))%>%
+    mutate(Event=fff,date=BDy@hazdates[1],hazMax=funcyfun(hazMax-BDy@I0),hazSD=hazSD)
+
+  BDs%<>%rbind(BDy@data)
+
+}
+rm(BDy)
+
+BDs$time<-as.numeric(BDs$date-min(BDs$date))
+
+BDs%<>%dplyr::select(-c("date","Confidence","ISO3C"))
+BDs$Population<-log(BDs$Population+1)
+BDs$GNIc<-log(BDs$GNIc)
+BDs%<>%filter(!as.character(grading)%in%c("possible") & apply(BDs,1,function(x) !any(is.na(x))))
+BDs$Damage<-abs(1-as.integer(BDs$grading=="notaffected"))
+# BDs%<>%dplyr::select(-"grading")
+
+BDs%>%ggplot(aes(log(hazMax),group=as.factor(grading)))+geom_density(aes(colour=as.factor(grading),fill=as.factor(grading)),alpha=0.1)
+
+tmp<-BDs%>%group_by(Event)%>%summarise(weighting=1/length(GNIc))
+BDs%<>%merge(tmp,by="Event")
+BDs%>%group_by(grading)%>%summarise(wmean=weighted.mean(hazMax,weighting),wcov=modi::weighted.var(hazMax,weighting))
+
+# model<-e1071::svm(BDs[1:10000,-c(1,5)], BDs$Damage[1:10000], kernel = "polynomial", cost = 5, scale = FALSE)
+BDs$www<-BDs$weighting
+BDs$www[BDs$Damage==1]<-BDs$www[BDs$Damage==1]/sum(BDs$Damage==1)
+BDs$www[BDs$Damage==0]<-BDs$www[BDs$Damage==0]/sum(BDs$Damage==0)
+BDs$www<-BDs$www/sum(BDs$www)
+
+BDs$Damage%<>%as.factor()
+levels(BDs$Damage)<-c("Unaffected","Damaged")
+BDs$hazMax%<>%unname();BDs$hazSD%<>%unname()
+
+saveRDS(BDs,"./IIDIPUS_Results/SpatialPoints_ML-GLM/InputData_BD.RData")
+
+BDs<-readRDS("./IIDIPUS_Results/SpatialPoints_ML-GLM/InputData_BD.RData")
 
 train_control <- caret::trainControl(method="repeatedcv", number=8, repeats=2,
                                      search = "random",classProbs=T,
@@ -117,7 +117,7 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
   registerDoParallel(cl)
   getDoParWorkers()
   # CV-split and model the damaged buildings
-  out<-as.data.frame(t(apply(do.call(rbind, lapply(seq.int(1,length(indies),by=3),function(i){
+  out<-lapply(seq.int(1,length(indies),by=3),function(i){
     datar<-rbind(BDs[indies[[i]],],permys)
     datar%<>%dplyr::select(-c("Event","grading","weighting","www"))
     # Run the model!
@@ -126,11 +126,20 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
                           preProcess = c("center","scale"))
     # Let me know!
     print(paste0(signif(100*i/splitties,2),"% done"))
-    print(cbind(filter(modeler$results[-1],ROC==max(ROC)),
-          t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
-    return(cbind(filter(modeler$results[-1],ROC==max(ROC)),
-                 t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
-  })),2,max)))
+
+    perf<-cbind(filter(modeler$results[-1],ROC==max(ROC)),
+                t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,]))))
+    print(perf)
+    
+    vippy<-as.data.frame(vip::vi(modeler,method="firm",scale=T,ice=T,
+                                 feature_names=colnames(datar)[colnames(datar)!="Damage"]))
+    # Reformulate to column form
+    rownames(vippy)<-vippy$Variable; vippy%<>%dplyr::select(Importance)%>%t()%>%as.data.frame()
+    # colnames in alphabetical order and add the model information to the data frame
+    vippy%<>%dplyr::select(sort(colnames(vippy)))
+    
+    return(list(perf=perf,vippy=vippy))
+  })
   
   # Remember to close the computing cluster
   stopCluster(cl)
@@ -149,7 +158,7 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
 # checkerz<-unlist(lapply(carmods,function(stst) ifelse(is.null(tryCatch(checkInstall(getModelInfo(stst)$library),error=function(e) NA)),T,F)))
 # carmods<-carmods[checkerz]; rm(checkerz)
 
-minimods<-c("svmLinear","smvRadial","svmPoly","naive_bayes","ada","rf","glmnet")
+minimods<-c("svmLinear","svmRadial","svmPoly","naive_bayes","AdaBoost","rf","glmnet")
 
 ncores<-60
 # Run ALL THE MODELLLLLSSS
@@ -176,6 +185,10 @@ set.seed(123)
 yhat <- fastknnCV(data.matrix(datar[,!ind]),as.factor(datar[,ind]),
                   k = 1:15, method = "vote", folds = 8, eval.metric ="auc")
 
+knn.out <- fastknn::fastknn(data.matrix(datar[,!ind]),
+                            as.factor(datar[,ind]),
+                            data.matrix(datar[,!ind]), k = yhat$best_k) 
+
 # split <- sample(1:nrow(datar), size = 0.8*nrow(datar),replace = F)
 # 
 # featies<-knnDecision(data.matrix(datar[split,!ind]), as.factor(datar[split,ind]),
@@ -197,7 +210,8 @@ loccy<-"./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/"
 filez<-list.files(loccy)
 
 out<-do.call(rbind, lapply(seq_along(filez),
-                           function(i){ cbind(data.frame(algo=filez[i]),dplyr::select(readRDS(paste0(loccy,filez[i])),namerz))}))
+                           function(i){ cbind(data.frame(algo=filez[i]),
+                                              dplyr::select(readRDS(paste0(loccy,filez[i])),namerz))}))
 
 out$algo<-str_split(str_split(out$algo,".RData",simplify = T)[,1],"-",simplify = T)[,2]
 rownames(out)<-NULL
@@ -216,83 +230,6 @@ out%>%ggplot(aes(algo,ROC)) +
 
 
 
-
-
-
-
-
-# BDs<-BDs[1:10000,]
-
-set.seed(2016)
-library(Rgtsvm)
-# USING DEFAULT RBF-KERNEL
-miniBD<-BDs%>%dplyr::select(-c("Event","grading","weighting","www"))
-miniBD<-miniBD[sample(1:nrow(miniBD),50000,F),]
-gttune<-Rgtsvm::tune.svm(dplyr::select(miniBD,-Damage),as.numeric(miniBD$Damage),
-                   gamma=c(2.25,2.5,2.75),
-                   cost=c(30,35,40,45),
-                   tunecontrol=tune.control(sampling="cross",cross=10,rough.cross = 3),
-                   scale=T)
-# mdl <- Rgtsvm::svm(BDs[,1:3],BDs$Damage, type = "C-classification", kernel = "radial", degree=3, cost = 5, gamma = 1, probability = TRUE)
-
-saveRDS(gttune,"./IIDIPUS_Results/SVM/SVM_tune_gamma2_2.25_2.5_2.75_cost_30_35_40_45.Rdata")
-
-isplit<-sample(1:nrow(BDs),size = round(0.8*nrow(BDs)))
-mdl <- Rgtsvm::svm(BDs[isplit,1:3],BDs$Damage[isplit], kernel = "radial", 
-                   cost = gttune$best.parameters$cost, gamma = gttune$best.parameters$gamma, 
-                   tunecontrol=tune.control(sampling="cross",cross=10,rough.cross = 3),
-                   probability = TRUE)
-
-saveRDS(mdl,"./IIDIPUS_Results/SVM/SVM_tuned_model.Rdata")
-
-pred <- predict(mdl, BDs[-isplit,1:3], decision.values = TRUE, probability = TRUE)
-table(pred==BDs$Damage[-isplit])
-pred<-as.integer(as.character(pred))
-
-
-
-
-
-BDs$fold <- caret::createFolds(1:nrow(BDs), k = 8, list = FALSE)
-BDs$Damage%<>%as.numeric()
-### PARAMETER LIST ###
-cost <- c(5,10,20)
-gamma <- c(1,2,3)
-parms <- expand.grid(cost = cost, gamma = gamma)
-### LOOP THROUGH PARAMETER VALUES ###
-result <- foreach(i = 1:nrow(parms), .combine = rbind) %do% {
-  c <- parms[i, ]$cost
-  g <- parms[i, ]$gamma
-  ### K-FOLD VALIDATION ###
-  out <- foreach(j = 1:max(BDs$fold), .combine = rbind, .inorder = FALSE) %dopar% {
-    deve <- BDs[BDs$fold != j, ]
-    test <- BDs[BDs$fold == j, ]
-    mdl <- Rgtsvm::svm(dplyr::select(deve,-Damage),deve$Damage, type = "C-classification", kernel = "radial", cost = c, gamma = g, probability = TRUE)
-    pred <- predict.gtsvm(mdl, test, decision.values = TRUE, probability = TRUE)
-    data.frame(y = test$Damage, prob = )
-  }
-  ### CALCULATE SVM PERFORMANCE ###
-  roc <- pROC::roc(as.factor(out$y), out$prob) 
-  data.frame(parms[i, ], roc = roc$auc[1])
-}
-
-mdl_radial<-mdl
-
-result2 <- foreach(i = 1:nrow(parms), .combine = rbind) %do% {
-  c <- parms[i, ]$cost
-  g <- parms[i, ]$gamma
-  ### K-FOLD VALIDATION ###
-  out <- foreach(j = 1:max(BDs$fold), .combine = rbind, .inorder = FALSE) %dopar% {
-    deve <- BDs[BDs$fold != j, ]
-    test <- BDs[BDs$fold == j, ]
-    mdl <- Rgtsvm::svm(Damage~., data = deve, type = "C-classification", kernel = "polynomial", degree=3, cost = c, gamma = g, probability = TRUE)
-    pred <- predict(mdl, test, decision.values = TRUE, probability = TRUE)
-    data.frame(y = test$Damage, prob = attributes(pred)$probabilities[, 2])
-  }
-  ### CALCULATE SVM PERFORMANCE ###
-  roc <- pROC::roc(as.factor(out$y), out$prob) 
-  data.frame(parms[i, ], roc = roc$auc[1])
-}
 
 
 

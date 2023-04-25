@@ -598,6 +598,7 @@ namerz<-str_split(namerz,"_",simplify = T)[,1]
 
 predictionsML<-data.frame()
 for(i in 1:length(filez)) {
+  if(filez[i]=="ML_brnn_mortality.RData") next
   tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/",filez[i]))
   predictionsML%<>%rbind(cbind(data.frame(model=namerz[i],impact=impact[i]),tmp))
 }
@@ -632,6 +633,13 @@ allUV<-fuller%>%arrange(RelativeAbsDiff)%>%group_by(impact,algo)%>%slice(1)%>%
   dplyr::select(impact,algo,RelativeAbsDiff,RelativeAbsDiffSD)%>%filter(algo!="lm")
 
 # colnames(allUV)<-c("Impact","Model","Avg. MADL Value", "S.D. MADL Value")
+pal <- c(
+  "mortality" = scales::hue_pal()(4)[1],
+  "displacement" = scales::hue_pal()(4)[2], 
+  "buildDam" = scales::hue_pal()(4)[3], 
+  "buildDest" = scales::hue_pal()(4)[4],
+  "average" = "black"
+)
 
 p<-allUV%>%ggplot(aes(algo,RelativeAbsDiff,group=impact))+
   # geom_point(aes(colour=impact,shape=impact),size=4) +
@@ -641,9 +649,27 @@ p<-allUV%>%ggplot(aes(algo,RelativeAbsDiff,group=impact))+
                 size=1)+theme(axis.text.x = element_text(angle = 90))+
   scale_y_log10()+scale_shape_manual(values=15:18,breaks=allimps)+
   xlab("Model") + ylab("Mean Absolute Deviation of Logs (MADL)")+
+  scale_colour_manual(values = pal,limits = names(pal))+
   labs(colour="Impact Type",shape="Impact Type");p
 ggsave("UV_MADL.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)  
 
+varimport<-predictionsML%>%group_by(impact)%>%summarise_at(colnames(predictionsML)[-c(1:4)],mean)
+varimport%<>%rbind(as.data.frame(cbind(impact="average",as.data.frame(t(colMeans(varimport[,-1]))))))
+varimport[,-1]<-100*varimport[,-1]/rowSums(as.matrix(varimport[,-1]))
+varimport<-varimport[,rev(c(1,order(as.numeric(varimport[varimport$impact=="average",-1]))+1))]
+
+p<-varimport%>%reshape2::melt("impact")%>%
+  ggplot(aes(variable,value,group=impact))+
+  geom_point(aes(colour=impact,shape=impact),size=3)+
+  geom_line(aes(colour=impact),alpha=0.5,linetype="dotdash")+
+  scale_shape_manual(values=15:19,breaks=allimps)+
+  scale_colour_manual(values = pal,limits = names(pal))+
+  xlab("Model Covariate") + ylab("Feature Importance [%]")+
+  labs(colour="Impact Type",shape="Impact Type")+
+  theme(axis.text.x = element_text(angle = 90));p
+
+ggsave("UV_FeatImp.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)  
+ggsave("UV_FeatImp.png",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.)  
 
 # tabUV<-lapply(unique(allUV$Impact), function(imp){
 #   print(xtable::xtable(filter(allUV,Impact==imp),

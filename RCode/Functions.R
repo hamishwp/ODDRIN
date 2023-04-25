@@ -373,9 +373,10 @@ convIso3Country<-function(iso3){
 }
 
 convIso3Continent<-function(iso3){
-  continents<-countrycode::countrycode(sourcevar = iso3,
-                                       origin = "iso3c",
-                                       destination = "continent",warn = F)
+  # continents<-countrycode::countrycode(sourcevar = iso3,
+  #                                      origin = "iso3c",
+  #                                      destination = "continent",warn = F)
+  merge(raster::ccodes()[,c("ISO3","continent")],data.frame(ISO3=iso3))$continent
 }
 
 InterpDay<-function(ndata,day){

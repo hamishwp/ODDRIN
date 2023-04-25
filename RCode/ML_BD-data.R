@@ -16,7 +16,7 @@ library(doParallel)
 library(caret)
 library(fastknn)
 library(caTools)
-source('RCode/BDobj.R')
+# source('RCode/BDobj.R')
 
 # folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/BDobjects/"
 # filez<-list.files(folder)

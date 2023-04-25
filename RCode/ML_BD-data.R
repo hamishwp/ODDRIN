@@ -156,7 +156,7 @@ minimods<-c("svmLinear","svmRadial","svmPoly","naive_bayes","rf","glmnet","AdaBo
 
 ncores<-60
 
-out<-parallelML_balanced("Ada",ncores = ncores)
+out<-parallelML_balanced("ada",ncores = ncores)
 
 stop()
 

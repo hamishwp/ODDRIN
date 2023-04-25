@@ -155,6 +155,11 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
 minimods<-c("svmLinear","svmRadial","svmPoly","naive_bayes","rf","glmnet","AdaBoost")
 
 ncores<-60
+
+out<-parallelML_balanced("Ada",ncores = ncores)
+
+stop()
+
 # Run ALL THE MODELLLLLSSS
 ML_BDs<-lapply(minimods,function(stst) tryCatch(parallelML_balanced(stst,ncores = ncores),error=function(e) NA))
 

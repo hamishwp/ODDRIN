@@ -15,7 +15,7 @@ library(parallel)
 library(doParallel)
 library(caret)
 
-# install.packages("ggcorrplot")
+# install.packages(c("ggcorrplot","vip","pdp","ggcorrplot"))
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% DEFINE GLM MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -966,14 +966,39 @@ resultsMV<-lapply(1:nrow(MVGLMmods),function(i){
 })
 
 covvy<-resultsMV[[1]]$covvy;covvy<-covvy-min(covvy);covvy<-covvy/max(covvy);covvy<-2*covvy - 1
+ind<-which(grepl("Intercept",colnames(covvy)))
+covvy<-covvy[-ind,]; covvy<-covvy[,-ind]
 
 ggcorrplot::ggcorrplot(covvy, type = "lower",
                        lab = TRUE)
-ncl<-(ncol(covvy)/2L)
-ccrr<-data.frame()
-for(i in 1:ncl) {
-  ccrr%<>%rbind(data.frame(corii=covvy[i,i+ncl],name=str_split(colnames(covvy)[i],":",simplify = T)[,2]))
-}
+
+# Displacement and Mortality
+covvy<-resultsMV[[1]]$covvy
+ind<-which(grepl("Intercept",colnames(covvy)))
+covvy<-covvy[-ind,]; covvy<-covvy[,-ind]
+
+covvy<-covvy[(1:(ncol(covvy)/2)),
+      ((ncol(covvy)/2)+1):ncol(covvy)]
+
+covvy<-covvy/max(abs(covvy))
+
+ggcorrplot::ggcorrplot(covvy, 
+                       type = "lower",show.diag = T,
+                       lab = TRUE)  
+
+# Building damage & destruction
+covvy<-resultsMV[[2]]$covvy
+ind<-which(grepl("Intercept",colnames(covvy)))
+covvy<-covvy[-ind,]; covvy<-covvy[,-ind]
+
+covvy<-covvy[(1:(ncol(covvy)/2)),
+             ((ncol(covvy)/2)+1):ncol(covvy)]
+
+covvy<-covvy/max(abs(covvy))
+
+ggcorrplot::ggcorrplot(covvy, 
+                       type = "lower",show.diag = T,
+                       lab = TRUE)  
 
 # Compare StandErr for lognormal against LM to show why you will only use lognormal afterwards
 # Mention which covariates were in the highest-performing models

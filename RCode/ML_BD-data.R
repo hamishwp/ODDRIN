@@ -99,7 +99,7 @@ train_control <- caret::trainControl(method="repeatedcv", number=8, repeats=2,
 #   
 # }
 
-parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
+parallelML_balanced<-function(algo,splitties=NULL,ncores=4, nety=NULL) {
   
   # How many damaged buildings are there?
   numun<-round(table(BDs$Damage)["Damaged"]*1.5)
@@ -125,8 +125,8 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
     datar<-rbind(BDs[indies[[i]],],permys)
     datar%<>%dplyr::select(-c("Event","grading","weighting","www"))
     # Run the model!
-    modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC",
-                          tuneLength = 12, trControl = train_control,
+    if(!is.null(nety)) modeler<-caret::train(Damage~., data = datar, method = algo, metric="ROC",
+                          tuneLength = 12, trControl = train_control, alpha=nety,
                           preProcess = c("center","scale"))
     # Let me know!
     print(paste0(signif(100*i/splitties,2),"% done"))
@@ -139,7 +139,8 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
   stopCluster(cl)
   registerDoSEQ()
   # Save out, then get out!
-  saveRDS(out,paste0("./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/ML-",algo,"_2.RData"))
+  if(!is.null(nety)) {saveRDS(out,paste0("./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/ML-glmnet-alpha",nety,".RData"))
+  } else saveRDS(out,paste0("./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/ML-",algo,"_2.RData"))
   
   return(out)
 }
@@ -156,7 +157,12 @@ minimods<-c("svmLinear","svmRadial","svmPoly","naive_bayes","rf","glmnet","AdaBo
 
 ncores<-60
 # Run ALL THE MODELLLLLSSS
-ML_BDs<-lapply(minimods,function(stst) tryCatch(parallelML_balanced(stst,ncores = ncores),error=function(e) NA))
+# ML_BDs<-lapply(minimods,function(stst) tryCatch(parallelML_balanced(stst,ncores = ncores),error=function(e) NA))
+ML_BDs<-lapply(0:10/10,function(netnet) tryCatch(parallelML_balanced("glmnet",nety = netnet,ncores = ncores),error=function(e) NA))
+
+out<-parallelML_balanced("Ada",ncores = ncores)
+
+stop()
 
 # Parallelise
 # cl <- makePSOCKcluster(60)  # Create computing clusters

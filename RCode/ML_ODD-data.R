@@ -393,6 +393,8 @@ rm(WIDPCA,iWID,tmpWID)
 
 # Remove NAs from the object
 outred<-outred[apply(outred[,-(1:4)],1,function(x) !any(is.na(x))),]
+
+covariates<-colnames(outred)[-c(1:5)]
 # Check the Variance Inflation Factor
 print(paste0("Checking the VIF of the remaining variables: percentage that didn't pass = ",sum(multiColl::VIF(outred[,-(1:5)])>6)/ncol(outred[,-(1:5)])))
 colnames(outred)
@@ -514,7 +516,50 @@ ODD_ML<-lapply(allimps[1:2], function(impact) {
   })})
 
 # Find the best equation, then compare the error with the best GLM without the impact terms
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/"); filez<-filez[grepl(filez,pattern = "_with")]
+namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]; namerz<-namerz[!namerz%in%c("Mortality","BuildDam","BuildDest","Displacement","")]
 
+predictionsCUV<-data.frame()
+for(i in 1:length(filez)) {
+  if(filez[i]=="InputDataGLM.RData" | grepl(filez[i],pattern = "MVGLM")) next
+  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/",filez[i]))
+  if(all(is.na(tmp))) {print(paste0("Failed for ",filez[i]));next}
+  if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
+  predictionsCUV%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
+}
+
+predictionsCUV$otherimp<-str_split(predictionsCUV$model,"-",simplify = T)[,2]
+predictionsCUV$impact<-str_split(predictionsCUV$model,"_",simplify = T)[,2]
+predictionsCUV$impineq<-unlist(lapply(1:nrow(predictionsCUV),function(i) grepl(predictionsCUV$otherimp[i],predictionsCUV$eqn[i])))
+
+predictionsCUV%<>%filter(otherimp%in%allimps)
+
+predictionsCUV%<>%na.omit()
+
+condout<-predictionsCUV%>%group_by(impact,otherimp)%>%
+  summarise(bestCond=min(StandErr[impineq],na.rm = T),
+            bestCondSD=StandErrSD[which.min(StandErr[impineq])],
+            bestNoCond=min(StandErr[!impineq],na.rm = T),
+            bestNoCondSD=StandErrSD[which.min(StandErr[!impineq])])
+condout$improvedPred<-condout$bestCond<condout$bestNoCond
+
+condout%<>%group_by(impact,otherimp)%>%mutate(nn=nrow(na.omit(outred[,c(unique(impact),unique(otherimp))])))
+
+condout%<>%mutate(minSD=bestCondSD^2/unique(nn),
+                                      thisSD=bestNoCondSD^2/unique(nn))%>%
+  mutate(df=(nn-1)*(thisSD+minSD)^2/(thisSD^2+minSD^2))%>%dplyr::select(-c(minSD,thisSD))
+
+condout%<>%mutate(tval=sqrt(nn)*(bestCond-bestNoCond)/
+                                        sqrt(bestCondSD^2+bestNoCondSD^2))
+condout%<>%mutate(pval=dt(tval,df))%>%dplyr::select(-c(df,nn,tval,bestCondSD,bestNoCondSD))
+
+condout$improvedPred<-condout$improvedPred & condout$pval<0.05
+
+condtab<-xtable::xtable(condout,
+               "Increase in model performance by including other impact types as covariates.")
+names(condtab)<-c("Response Impact","Covariate Impact","Best MADL w Covariate","Best MADL w/o Covariate","Improved? (Stat. Sig. Only)","P-value [95%]")
+
+print(condtab,include.rownames=F)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ML MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -532,11 +577,18 @@ train_control <- caret::trainControl(method="repeatedcv", number=10, repeats=3,
 
 allimps<-c("mortality","displacement","buildDam","buildDest")
 
-parallelML<-function(algo,impact,modRet=F) {
+parallelML<-function(algo,impact,modRet=F,othimps=NULL) {
   
   print(paste0("Working on ",algo," for impact=",impact))  
   
-  outFrame<-dplyr::select(outred,-allimps[impact!=allimps])
+  if(is.null(othimps)){
+    outFrame<-dplyr::select(outred,-allimps[impact!=allimps])  
+  } else {
+    outFrame<-dplyr::select(outred,-allimps[!allimps%in%c(impact,othimps)])
+    ind<-which(colnames(outFrame)==impact)
+    outFrame<-outFrame[,c(ind,(1:ncol(outFrame))[-ind])]
+  }
+  
   names(outFrame)[1]<-"Y"
   outFrame$Y<-log(outFrame$Y+10)
   outFrame%<>%na.omit()
@@ -556,8 +608,8 @@ parallelML<-function(algo,impact,modRet=F) {
   out<-cbind(dplyr::select(filter(modeler$results,RelativeAbs==min(RelativeAbs)),RelativeAbs,RelativeAbsSD),
           t(as.data.frame((t(as.data.frame(varImp(modeler, useModel=F, nonpara=F, scale=FALSE)$importance))[1,]))))
   rownames(out)<-NULL
-    
-  saveRDS(out,paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/ML_",algo,"_",impact,".RData"))
+  
+  saveRDS(out,paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/ML_",algo,"_",impact,ifelse(is.null(othimps),"",paste0("_with-",othimps)),".RData"))
   
   return(out)
   
@@ -586,27 +638,108 @@ ODD_ML<-lapply(allimps, function(impact) {
     out<-tryCatch(parallelML(algo,impact),error=function(e) NA)
     if(any(is.na(out))) return(NULL)
     })})
+
+# Remember to close the computing cluster
+stopCluster(cl)
+registerDoSEQ()
+
+# CONDITIONAL MODELS
+
+cl <- makePSOCKcluster(ncores)  # Create computing clusters
+registerDoParallel(cl)
+getDoParWorkers()
+
+ODD_ML_Cond<-lapply(allimps, function(impact) {
+  lapply(allimps[allimps!=impact],function(oth){
+    lapply(minimods,function(algo) {
+      out<-tryCatch(parallelML(algo,impact,othimp = oth),error=function(e) NA)
+      if(any(is.na(out))) return(NULL)
+    })
+  })
+})
+
 # Remember to close the computing cluster
 stopCluster(cl)
 registerDoSEQ()
 
 # Let's have a look! :)
-filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/")
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/"); filez<-filez[!grepl(filez,pattern = "_with")]
 namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"ML_",simplify = T)[,2]
 impact<-str_split(namerz,"_",simplify = T)[,2]
 namerz<-str_split(namerz,"_",simplify = T)[,1]
 
 predictionsML<-data.frame()
 for(i in 1:length(filez)) {
-  if(filez[i]=="ML_brnn_mortality.RData") next
   tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/",filez[i]))
   predictionsML%<>%rbind(cbind(data.frame(model=namerz[i],impact=impact[i]),tmp))
 }
+predictionsML[,covariates]<-100*predictionsML[,covariates]/rowSums(predictionsML[,covariates])
 
 table(predictionsML$model)
 table(predictionsML$impact)
 
 View(predictionsML)
+
+# Find the best equation, then compare the error with the best GLM without the impact terms
+filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/"); filez<-filez[grepl(filez,pattern = "_with")]
+namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"ML_",simplify = T)[,2]; namerz<-namerz[!namerz%in%c("Mortality","BuildDam","BuildDest","Displacement","")]
+
+predictionsCUVML<-data.frame()
+for(i in 1:length(filez)) {
+  if(filez[i]=="InputDataGLM.RData" | grepl(filez[i],pattern = "MVGLM")) next
+  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/NoSpace_ML_models/",filez[i]))
+  if(all(is.na(tmp))) {print(paste0("Failed for ",filez[i]));next}
+  if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
+  predictionsCUVML%<>%rbind(cbind(tmp[,1:2],data.frame(model=namerz[i])))
+}
+
+predictionsCUVML$otherimp<-str_split(predictionsCUVML$model,"-",simplify = T)[,2]
+predictionsCUVML$impact<-str_split(predictionsCUVML$model,"_",simplify = T)[,2]
+predictionsCUVML$model<-str_split(predictionsCUVML$model,"_",simplify = T)[,1]
+
+predictionsCUVML%<>%filter(otherimp%in%allimps)
+
+predictionsCUVML%<>%na.omit()%>%dplyr::select(impact,otherimp,model,everything())
+colnames(predictionsCUVML)[4:5]<-c("bestCond","bestCondSD")
+
+tmp<-predictionsML%>%dplyr::select(model,impact,RelativeAbs,RelativeAbsSD)
+colnames(tmp)[3:4]<-c("bestNoCond","bestNoCondSD")
+
+predictionsCUVML%<>%full_join(tmp)#,by=c("model","impact"))
+
+condout<-predictionsCUV%>%group_by(impact,otherimp)%>%
+  summarise(bestCond=min(StandErr[impineq],na.rm = T),
+            bestCondSD=StandErrSD[which.min(StandErr[impineq])],
+            bestNoCond=min(StandErr[!impineq],na.rm = T),
+            bestNoCondSD=StandErrSD[which.min(StandErr[!impineq])])
+
+condout%<>%rbind(dplyr::select(predictionsCUVML,-model))
+
+condout%<>%group_by(impact,otherimp)%>%
+  summarise(bestCond=min(bestCond,na.rm = T),
+            bestCondSD=bestCondSD[which.min(bestCond)],
+            bestNoCond=min(bestNoCond,na.rm = T),
+            bestNoCondSD=bestNoCondSD[which.min(bestNoCond)])
+
+condout$improvedPred<-condout$bestCond<condout$bestNoCond
+
+condout%<>%group_by(impact,otherimp)%>%mutate(nn=nrow(na.omit(outred[,c(unique(impact),unique(otherimp))])))
+
+condout%<>%mutate(minSD=bestCondSD^2/unique(nn),
+                  thisSD=bestNoCondSD^2/unique(nn))%>%
+  mutate(df=(nn-1)*(thisSD+minSD)^2/(thisSD^2+minSD^2))%>%dplyr::select(-c(minSD,thisSD))
+
+condout%<>%mutate(tval=sqrt(nn)*(bestCond-bestNoCond)/
+                    sqrt(bestCondSD^2+bestNoCondSD^2))
+condout%<>%mutate(pval=dt(tval,df))%>%dplyr::select(-c(df,nn,tval,bestCondSD,bestNoCondSD))
+
+condout$improvedPred<-condout$improvedPred & condout$pval<0.05
+
+condtab<-xtable::xtable(condout,
+                        "Increase in model performance by including other impact types as covariates.")
+names(condtab)<-c("Response Impact","Covariate Impact","Best MADL w Covariate","Best MADL w/o Covariate","Improved? (Stat. Sig. Only)","P-value [95%]")
+
+print(condtab,include.rownames=F)
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%% COMPARE UNIVARIATE MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -616,6 +749,15 @@ fuller<-rbind(transmute(predictions,RelativeAbsDiff=StandErr,RelativeAbsDiffSD=S
                         impact=impact,algo=algo, equation=eqn),
               transmute(predictionsML,RelativeAbsDiff=RelativeAbs,RelativeAbsDiffSD=RelativeAbsSD,
                         impact=impact,algo=model,equation="Y ~ maxHaz + ExpSchYrs + LifeExp + GNIc + Vs30 + EQFreq + hazSD + time + ExpDim1 + ExpDim2 + WIDDim1 + WIDDim2"))
+fuller%<>%na.omit()
+
+# For the top-five models in terms of performance across all impacts
+fuller%>%group_by(impact,algo)%>%filter(RelativeAbsDiff==min(RelativeAbsDiff))%>%
+  ungroup()%>%group_by(algo)%>%reframe(Cost=prod(RelativeAbsDiff))%>%
+  ungroup()%>%mutate(Cost=Cost/min(Cost))%>%arrange(Cost)
+
+
+
 View(fuller)     
 
 predictions%<>%group_by(impact)%>%mutate(BestDiff=StandErr-min(StandErr,na.rm = T))
@@ -625,9 +767,6 @@ p<-predictions%>%filter(StandErr<0.6)%>%ggplot(aes(StandErr,group=algo)) +
   xlab("Relative Absolute Log-Difference Errors - Log Scale ")+ylab("Density")+labs(fill="Model")+
   facet_wrap(.~impact,scales = "free");p
 ggsave("GLM_Errors.eps",p,path="./Plots/IIDIPUS_Results/GLM-ML_Work/",width=10,height=5,device = grDevices::cairo_ps)  
-
-
-fuller%<>%na.omit()
 
 allUV<-fuller%>%arrange(RelativeAbsDiff)%>%group_by(impact,algo)%>%slice(1)%>%
   dplyr::select(impact,algo,RelativeAbsDiff,RelativeAbsDiffSD)%>%filter(algo!="lm")
@@ -653,65 +792,37 @@ p<-allUV%>%ggplot(aes(algo,RelativeAbsDiff,group=impact))+
   labs(colour="Impact Type",shape="Impact Type");p
 ggsave("UV_MADL.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)  
 
-varimport<-predictionsML%>%group_by(impact)%>%summarise_at(colnames(predictionsML)[-c(1:4)],mean)
-varimport%<>%rbind(as.data.frame(cbind(impact="average",as.data.frame(t(colMeans(varimport[,-1]))))))
-varimport[,-1]<-100*varimport[,-1]/rowSums(as.matrix(varimport[,-1]))
-varimport<-varimport[,rev(c(1,order(as.numeric(varimport[varimport$impact=="average",-1]))+1))]
-
-p<-varimport%>%reshape2::melt("impact")%>%
-  ggplot(aes(variable,value,group=impact))+
-  geom_point(aes(colour=impact,shape=impact),size=3)+
-  geom_line(aes(colour=impact),alpha=0.5,linetype="dotdash")+
-  scale_shape_manual(values=15:19,breaks=allimps)+
-  scale_colour_manual(values = pal,limits = names(pal))+
-  xlab("Model Covariate") + ylab("Feature Importance [%]")+
-  labs(colour="Impact Type",shape="Impact Type")+
-  theme(axis.text.x = element_text(angle = 90));p
-
-ggsave("UV_FeatImp.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)  
-ggsave("UV_FeatImp.png",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.)  
-
-# tabUV<-lapply(unique(allUV$Impact), function(imp){
-#   print(xtable::xtable(filter(allUV,Impact==imp),
-#                        paste0("MADL distances for the univariate response, multiple regression models, for ",imp," observational data only")), row.names = FALSE)
-# })
-
-
-#  HYPOTHESIS TESTING ON BEST PERFORMING MODEL
-# fuller%<>%group_by(impact)%>%mutate(nn=sum(!is.na(outred[,unique(impact)])))
-# fuller%<>%group_by(impact)%>%mutate(BestDiff=dnorm(RelativeAbsDiff-min(RelativeAbsDiff),0,
-#                                                       sqrt(RelativeAbsDiffSD^2+RelativeAbsDiffSD[which.min(RelativeAbsDiff)]^2)/sqrt(nn))<0.05)%>%
-#   dplyr::select(-nn)
-  
-# fuller%<>%group_by(impact)%>%mutate(minSD=RelativeAbsDiffSD[which.min(RelativeAbsDiff)]^2/unique(nn),
-#                                     thisSD=RelativeAbsDiffSD^2/nn)%>%
-#   mutate(df=(thisSD+minSD)^2/( (thisSD^2+minSD^2) / (nn-1) ))
-  
-# fuller%<>%group_by(impact)%>%mutate(withBest=dt(RelativeAbsDiff-min(RelativeAbsDiff),df))
-
-# topOeach<-fuller%>%group_by(impact,algo)%>%arrange(RelativeAbsDiff)%>%slice(1)%>%dplyr::select(3,4,1,2)
-# 
-# topOeach%>%ggplot(aes(algo,RelativeAbsDiff,group=impact)) +
-#   geom_point(aes(colour=impact,shape=impact),size=4)+
-#   geom_errorbar(aes(ymin=RelativeAbsDiff-RelativeAbsDiffSD, 
-#                     ymax=RelativeAbsDiff+RelativeAbsDiffSD,colour=impact),
-#                 width=.4,alpha=0.7)+
-#   scale_y_log10()+scale_shape_manual(values=15:18,breaks=allimps)
-
 # For each of the top models, calculate the feature importance using vip package
 # See here for more info: https://cran.r-project.org/web/packages/vip/vignettes/vip-introduction.pdf
 # Then compare the values between the top 10-models (over all model types) for each impact
 
 # FOR ALL MODELS NOT STAT. SIG. DIFF FROM BEST MODEL, PER GLM, MEASURE THE MODEL-AGNOSTIC VIP
 
-GLMmods<-predictions%>%arrange(StandErr)%>%group_by(impact,algo)%>%slice(1)%>%
-  dplyr::select(eqn,StandErr,StandErrSD,impact,algo)
+topOeach<-fuller%>%group_by(impact,algo)%>%arrange(RelativeAbsDiff)%>%dplyr::select(3,4,1,2,5)
+topOeach%<>%group_by(impact)%>%mutate(nn=sum(!is.na(outred[,unique(impact)])))
 
-GLMmods%<>%filter(algo=="lognorm")
+topOeach%<>%group_by(impact)%>%mutate(minSD=RelativeAbsDiffSD[which.min(RelativeAbsDiff)]^2/unique(nn),
+                                      thisSD=RelativeAbsDiffSD^2/unique(nn))%>%
+  mutate(df=(nn-1)*(thisSD+minSD)^2/(thisSD^2+minSD^2))
+
+topOeach%<>%group_by(impact)%>%mutate(tval=sqrt(nn)*(RelativeAbsDiff-min(RelativeAbsDiff))/
+                                        sqrt(RelativeAbsDiffSD^2+RelativeAbsDiffSD[which.min(RelativeAbsDiffSD)]^2))
+topOeach%<>%mutate(pval=dt(tval,df))
+
+topOeach%<>%filter(pval>0.05)%>%dplyr::select(-c(nn,minSD,thisSD,df,tval))
+
+table(topOeach$impact[topOeach$pval>0.05])
+table(topOeach$algo[topOeach$pval>0.05])
+
+GLMmods<-predictions%>%filter(algo%in%unique(topOeach$algo))%>%group_by(impact,algo)%>%
+  filter(eqn%in%topOeach$equation[topOeach$algo==unique(algo) & topOeach$impact==unique(impact)])
+
+colnames(topOeach)[5]<-"eqn"
+
+GLMmods%<>%merge(dplyr::select(topOeach,impact,algo,eqn,pval))
 
 resultsUV<-do.call(rbind,lapply(1:nrow(GLMmods),function(i){
   inpy<-as.data.frame(GLMmods[i,])
-  inpy$impact
   # Sort out the data
   outFrame<-dplyr::select(outred,-allimps[inpy$impact!=allimps])
   names(outFrame)[1]<-"Y"
@@ -735,133 +846,73 @@ resultsUV<-do.call(rbind,lapply(1:nrow(GLMmods),function(i){
   # Reformulate to column form 
   rownames(vippy)<-vippy$Variable; vippy%<>%dplyr::select(Importance)%>%t()%>%as.data.frame()
   # colnames in alphabetical order and add the model information to the data frame
-  vippy%<>%dplyr::select(sort(colnames(vippy)))%>%cbind(inpy)%>%dplyr::select(-eqn)%>%
+  vippy%<>%dplyr::select(sort(colnames(vippy)))%>%cbind(inpy)%>%
     dplyr::select(impact,algo,StandErr,StandErrSD,everything())
   # output it all!
   return(vippy)
 }))
 
-# Order the variables by their importance, weighted by each models error value
-varimport<--apply(resultsUV[,-(1:4)],2,function(x) weighted.mean(x,1/resultsUV$StandErr))
 # Reorder the dataframe
-resultsUV%<>%dplyr::select(algo,impact,StandErr,StandErrSD,names(sort(varimport)))
-colnames(resultsUV)<-colnames(predictionsML)
+resultsUV%<>%dplyr::select(algo,impact,StandErr,StandErrSD,everything())%>%dplyr::select(-c(AIC,BIC,pval,eqn))
+colnames(resultsUV)[1:4]<-colnames(predictionsML)[1:4]
 rownames(resultsUV)<-NULL
+
+resultsUV[,covariates]<-100*resultsUV[,covariates]/rowSums(resultsUV[,covariates])
 
 resultsUV%<>%rbind(predictionsML)
 
-tabUV<-lapply(unique(resultsUV$impact), function(imp){
-  xtable::xtable(filter(resultsUV,impact==imp),"Feature importance ranking measure (FIRM), scaled as a percentage, for the best performing model-formulation for each GLM or ML model. When applying the FIRM, Individual Conditional Expectation (ICE) curves are used.")})
-
-for(i in 1:length(tabUV)) print(tabUV[[i]],include.rownames=F)
-# Melt the dataframe to plot
-# resultsUV%<>%reshape2::melt(id.vars=1:4)
-# # Make a weighting variable for the alpha plotting
-# resultsUV$normError<-1/resultsUV$StandErr
-# resultsUV%<>%group_by(impact)%>%mutate(normError=normError/max(normError))%>%ungroup()
-# # Plot
-# resultsUV%>%ggplot(aes(as.factor(variable),value,group=algo))+geom_point(aes(colour=algo,alpha=normError))+
-#   facet_wrap(.~impact,nrow = 4)
-
-#  HYPOTHESIS TESTING ON BEST PERFORMING MODEL
 resultsUV%<>%group_by(impact)%>%mutate(nn=sum(!is.na(outred[,unique(impact)])))
-resultsUV%<>%group_by(impact)%>%mutate(withBest=dnorm(RelativeAbs-min(RelativeAbs),0,
-   sqrt(RelativeAbsSD^2+RelativeAbsSD[which.min(RelativeAbs)]^2)/sqrt(nn))<0.05)%>%
-  dplyr::select(-nn)
 
-resultsUV%<>%group_by(impact)%>%mutate(withBest=dnorm(RelativeAbs-min(RelativeAbs),0,
-                                                      sqrt(RelativeAbsSD^2+RelativeAbsSD[which.min(RelativeAbs)]^2)/sqrt(nn))<0.05)%>%
-  dplyr::select(-nn)
+resultsUV%<>%group_by(impact)%>%mutate(minSD=RelativeAbsSD[which.min(RelativeAbs)]^2/unique(nn),
+                                      thisSD=RelativeAbsSD^2/unique(nn))%>%
+  mutate(df=(nn-1)*(thisSD+minSD)^2/(thisSD^2+minSD^2))
 
-tabUV<-lapply(unique(resultsUV$impact), function(imp){
-  xtable::xtable(filter(resultsUV,impact==imp & withBest),"Feature importance ranking measure (FIRM), scaled as a percentage, for the \'best-performing\' models. The definition of \'best performing\' here is defined as any model that had a cost that was not statistically significantly different from the overall best performing model for each specific impact. When applying the FIRM, Individual Conditional Expectation (ICE) curves are used.")})
+resultsUV%<>%group_by(impact)%>%mutate(tval=sqrt(nn)*(RelativeAbs-min(RelativeAbs))/
+                                        sqrt(RelativeAbsSD^2+RelativeAbsSD[which.min(RelativeAbsSD)]^2))
+resultsUV%<>%mutate(pval=dt(tval,df))
 
-for(i in 1:length(tabUV)) print(tabUV[[i]],include.rownames=F)
-
-# The models that made it as one of the best performing, per impact:
-resultsUV[resultsUV$withBest,]%>%group_by(impact)%>%reframe(models=unique(model))%>%View()
-resultsUV[resultsUV$withBest,]%>%group_by(impact)%>%reframe(models=length(model))
-nrow(resultsUV)
+resultsUV%<>%filter(pval>0.05)
 
 # Order the variables by their importance, weighted by each models error value
-varimport<-do.call(rbind,lapply(allimps,function(imps) {tmp<-filter(resultsUV,impact==imps);apply(tmp[tmp$withBest,-c(1:4,ncol(tmp),(ncol(tmp)-1))],2,function(x) weighted.mean(x,1/tmp$RelativeAbs[tmp$withBest]))}))
-varimport<-100*varimport/rowSums(varimport)
-varimport%<>%rbind(as.numeric(colMeans(varimport)))
-rownames(varimport)<-c(allimps,"average")
-varimport<-100*varimport/rowSums(varimport)
-varimport%<>%t()
-varimport%<>%as.data.frame(row.names = rownames(varimport))%>%mutate(Covariate=rownames(varimport))
+varimport<-resultsUV%>%group_by(impact)%>%
+  reframe(across(c("RelativeAbs","RelativeAbsSD",covariates), ~ weighted.mean(.x,pval)))%>%
+  dplyr::select(-c(RelativeAbs,RelativeAbsSD))
 
-varimport%<>%reshape2::melt(id.vars=6)
-colnames(varimport)[2]<-"impact"
+# To account for the variance in the estimates
+wavg<-(varimport[varimport$impact=="mortality",-1] +
+  varimport[varimport$impact=="displacement",-1]/3.22 + 
+  varimport[varimport$impact=="buildDam",-1]/3.06 +
+  varimport[varimport$impact=="buildDest",-1]/4)/(1+1/3.22+1/3.06+1/4)
+
+varimport%<>%rbind(cbind(data.frame(impact="average"),wavg))
+                         
+varimport[,-1]<-100*varimport[,-1]/rowSums(as.matrix(varimport[,-1]))
+
+ordy<-colnames(varimport[,-1])[rev(order(as.numeric(varimport[varimport$impact=="average",-1])))]
+
+varimport%<>%reshape2::melt("impact")
+
+varimport$variable%<>%factor(levels=ordy)
 
 pal <- c(
-  "mortality" = "red",
-  "displacement" = "blue", 
-  "buildDam" = "forestgreen", 
-  "buildDest" = "purple",
+  "mortality" = scales::hue_pal()(4)[1],
+  "displacement" = scales::hue_pal()(4)[2], 
+  "buildDam" = scales::hue_pal()(4)[3], 
+  "buildDest" = scales::hue_pal()(4)[4],
   "average" = "black"
 )
-varimport%>%ggplot(aes(Covariate,value,group=impact))+geom_point(aes(colour=impact,shape=impact),size=2)+
-  geom_line(aes(colour=impact),alpha=0.25)+scale_colour_manual(values = pal,limits = names(pal))
 
+p<-varimport%>%
+  ggplot(aes(variable,value,group=impact))+
+  geom_point(aes(colour=impact,shape=impact),size=3)+
+  geom_line(aes(colour=impact),linewidth=0.7, alpha=0.5,linetype="dotdash")+
+  scale_shape_manual(values=c(15:18,1),breaks=c(allimps,"average"))+
+  scale_colour_manual(values = pal,limits = names(pal))+
+  xlab("Model Covariate") + ylab("Feature Importance [%]")+
+  labs(colour="Impact Type",shape="Impact Type")+
+  theme(axis.text.x = element_text(angle = 90));p
 
-
-
-
-
-
-colnames(resultsUV)[2:4]<-c("model","RelativeAbs","RelativeAbsSD")
-
-predictionsML%<>%rbind(resultsUV)
-
-varimp<-predictionsML%>%arrange(RelativeAbs)%>%group_by(model)%>%
-  summarise(Cost=prod(RelativeAbs),
-            maxHaz=mean(maxHaz),
-            ExpSchYrs=mean(ExpSchYrs),
-            LifeExp=mean(LifeExp),
-            GNIc=mean(GNIc),
-            Vs30=mean(Vs30),
-            EQFreq=mean(EQFreq),
-            hazSD=mean(hazSD),
-            time=mean(time),
-            ExpDim1=mean(ExpDim1),
-            ExpDim2=mean(ExpDim2),
-            WIDDim1=mean(WIDDim1),
-            WIDDim2=mean(WIDDim2))
-
-varimp[3:ncol(varimp)]<-100*varimp[3:ncol(varimp)]/
-rowSums(varimp[3:ncol(varimp)])
-# 
-varimp%>%filter(model%in%c("rf","svmRadial","svmPoly","lognorm","nnet"))%>%xtable::xtable()%>%print(row.names = FALSE)
-
-
-
-
-
-
-
-# Analyse the results:
-filez<-list.files("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/"); filez<-filez[!grepl(filez,pattern = "_with")]
-namerz<-str_split(str_split(filez,".RData",simplify = T)[,1],"GLM_",simplify = T)[,2]; namerz<-namerz[!namerz%in%c("Mortality","BuildDam","BuildDest","Displacement","")]
-
-predictions<-data.frame()
-for(i in 1:length(filez)) {
-  if(filez[i]=="InputDataGLM.RData" | grepl(filez[i],pattern = "MVGLM")) next
-  tmp<-readRDS(paste0("./IIDIPUS_Results/SpatialPolygons_ML-GLM/GLM_Models/",filez[i]))
-  if(all(is.na(tmp))) {print(paste0("Failed for ",filez[i]));next}
-  if("model"%in%colnames(tmp)) tmp%<>%dplyr::select(-"model")
-  predictions%<>%rbind(cbind(tmp,data.frame(model=namerz[i])))
-}
-
-tmp<-str_split(predictions$model,"_",simplify = T)
-predictions$impact<-tmp[,2]
-predictions$algo<-tmp[,1]
-predictions$model<-NULL
-table(predictions$impact)
-table(predictions$algo)
-
-predictions%>%arrange(StandErr)%>%group_by(impact,algo)%>%slice(1)%>%View()
+ggsave("UV_FeatImp.eps",p,path="./Plots/IIDIPUS_Results/",width=9,height=4.,device = grDevices::cairo_ps)  
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MULTIVARIATE MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -877,7 +928,7 @@ ExtractMVGLMresults<-function(algo,impact){
   # Remove the variable Event after weighting is calculated
   outFrame%<>%dplyr::select(-Event)
   # Function from the file CorrelateModifier.R:
-  out<-LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=(ncol(outFrame)-1),
+  out<-LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=(ncol(outFrame)-length(impact)),
                           GLMer = algo, weights = weights, mvm = impact, ncores=60)
   # out<-tryCatch(LMFeatureSelection(outFrame,Nb=1,intercept=T,fn="+",nlim=(ncol(outFrame)-1),
   #                                  GLMer = algo, weights = weights, mvm = impact, ncores=60),
@@ -894,6 +945,10 @@ minimods<-c("LM","lognorm")
 
 impcombs<-list(c("mortality","displacement"),
                c("buildDam","buildDest"),
+               c("mortality","buildDest"),
+               c("mortality","buildDam"),
+               c("displacement","buildDest"),
+               c("displacement","buildDam"),
                c("mortality","displacement","buildDam","buildDest"))
 
 # Run it!
@@ -934,7 +989,7 @@ predictionsMV%>%arrange(Cost)%>%dplyr::select(-c(allimps,paste0(allimps,"SD")))%
 predictionsMV%>%arrange(Cost)%>%group_by(impact,algo)%>%slice(1)
 
 MVGLMmods<-predictionsMV%>%arrange(Cost)%>%group_by(impact,algo)%>%slice(1)
-MVvars<-str_split(str_split(str_split((str_split(MVGLMmods$eqn,"~",simplify = T)[,1]),"\\(",simplify = T)[,2],"\\)",simplify = T)[,1],",")
+MVvars<-str_split(str_split(str_split((str_split(unique(MVGLMmods$eqn),"~",simplify = T)[,1]),"\\(",simplify = T)[,2],"\\)",simplify = T)[,1],",")
 
 MVGLMmods%<>%filter(algo=="lognorm")
 
@@ -942,20 +997,20 @@ resultsMV<-lapply(1:nrow(MVGLMmods),function(i){
   inpy<-as.data.frame(MVGLMmods[i,])
   if(inpy$algo=="LM") return(NA)
   # Remove NAs
-  outFrame<-outred%>%na.omit()%>%dplyr::select(-allimps[allimps%in%inpy$impact])
+  outFrame<-outred%>%na.omit()%>%dplyr::select(-allimps[!allimps%in%MVvars[[i]]])
   # Make sure log-normal model is taken into account
   if(inpy$algo=="lognorm") outFrame[,MVvars[[i]]]<-log(outFrame[,MVvars[[i]]]+10)
   # Remove the variable Event after weighting is calculated
   outFrame%<>%dplyr::select(-Event)
+  # Have the full equation
+  eqn<-paste0("cbind(",paste0(MVvars[[i]],collapse=","),") ~ ",paste0(covariates,collapse = " + "))
   # Extract the trained model
-  outmod<-lm(formula = as.formula(inpy$eqn),data = outFrame)
-  # Which variables to include
-  vars<-names(outmod$model)[-1];vars<-vars[-length(vars)]
+  outmod<-lm(formula = as.formula(eqn),data = outFrame)
   # Feature importance (model-agnostic) calculation
   vippy<-as.data.frame(vip::vi(outmod,method="firm",scale=T,ice=T,
-                               feature_names=vars))
+                               feature_names=covariates))
   # Add missing columns
-  missies<-colnames(outFrame)[!colnames(outFrame)%in%c(vippy$Variable,inpy$impact)]
+  missies<-colnames(outFrame)[!colnames(outFrame)%in%c(vippy$Variable,MVvars[[i]])]
   vippy%<>%rbind(data.frame(Variable=missies,Importance=0))
   # Reformulate to column form 
   rownames(vippy)<-vippy$Variable; vippy%<>%dplyr::select(Importance)%>%t()%>%as.data.frame()
@@ -964,13 +1019,6 @@ resultsMV<-lapply(1:nrow(MVGLMmods),function(i){
   # output it all!
   return(list(vip=vippy,covvy=vcov(outmod)))
 })
-
-covvy<-resultsMV[[1]]$covvy;covvy<-covvy-min(covvy);covvy<-covvy/max(covvy);covvy<-2*covvy - 1
-ind<-which(grepl("Intercept",colnames(covvy)))
-covvy<-covvy[-ind,]; covvy<-covvy[,-ind]
-
-ggcorrplot::ggcorrplot(covvy, type = "lower",
-                       lab = TRUE)
 
 # Displacement and Mortality
 covvy<-resultsMV[[1]]$covvy
@@ -1000,32 +1048,52 @@ ggcorrplot::ggcorrplot(covvy,
                        type = "lower",show.diag = T,
                        lab = TRUE)  
 
-# Compare StandErr for lognormal against LM to show why you will only use lognormal afterwards
-# Mention which covariates were in the highest-performing models
-# Run the model with all covariates for the lognormal model
-# Look at which covariates are stat. sig. for both models
-# Do the same for the highest performing models
-# For which covariates do you print out the covariance?
-#     those that are stat.sig in both?
-#     those that are present in the highest performing MV models?
-#     those that are present in the highest performing UV models?
+outer<-as.data.frame(do.call(rbind,lapply(1:(length(MVvars)-1),function(i){
+  eqn<-paste0("cbind(",paste0(MVvars[[i]],collapse=","),") ~ ",paste0(covariates,collapse = " + "))
+  covvy<-vcov(lm(formula = as.formula(eqn),data = outred))
+  
+  max(covvy)
+  
+  # covvy<-resultsMV[[i]]$covvy
+  ind<-which(grepl("Intercept",colnames(covvy)))
+  covvy<-covvy[-ind,]; covvy<-covvy[,-ind]
+  
+  covvy<-covvy[(1:(ncol(covvy)/2)),
+               ((ncol(covvy)/2)+1):ncol(covvy)]
+  
+  diag(covvy/max(abs(covvy)))
 
-# I think most likely the last one. Make sure to have done the analysis on the other 
+})))
+
+colnames(outer)<-covariates
+outer<-cbind(data.frame(impacts=unlist(lapply(1:(length(MVvars)-1),function(i) paste0(MVvars[[i]],collapse="-")))),outer)
+
+outer%<>%reshape2::melt("impacts")
+
+outer$variable%<>%factor(levels=ordy)
+
+# pal <- c(
+#   "mortality" = scales::hue_pal()(4)[1],
+#   "displacement" = scales::hue_pal()(4)[2], 
+#   "buildDam" = scales::hue_pal()(4)[3], 
+#   "buildDest" = scales::hue_pal()(4)[4],
+#   "average" = "black"
+# )
+
+p<-outer%>%
+  ggplot(aes(variable,value,group=impacts))+
+  geom_point(aes(colour=impacts,shape=impacts),size=3)+
+  geom_line(aes(colour=impacts),linewidth=0.7, alpha=0.5,linetype="dotdash")+
+  # scale_shape_manual(values=c(15:18,1),breaks=c(allimps,"average"))+
+  # scale_colour_manual(values = pal,limits = names(pal))+
+  xlab("Model Covariate") + ylab("Inter-impact Parameter Variance [Normalised]")+
+  labs(colour="Impact Interactions",shape="Impact Interactions")+
+  theme(axis.text.x = element_text(angle = 90));p
+
+ggsave("MV_FeatCor.eps",p,path="./Plots/IIDIPUS_Results/",width=9,height=4.,device = grDevices::cairo_ps)  
 
 
 
-
-
-
-
-
-
-# TO DO:
-# 1) Table of top-5 models, per impact
-#    FOR BD AND ODD MODELS
-# 2) Plot comparison of StandErr between GLM and ML models, with error bar
-# 4) Application of GLM and ML models on the MV impact data to make the comparison
-# 5) 
 
 
 
@@ -1064,4 +1132,101 @@ ggcorrplot::ggcorrplot(covvy,
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Melt the dataframe to plot
+# resultsUV%<>%reshape2::melt(id.vars=1:4)
+# # Make a weighting variable for the alpha plotting
+# resultsUV$normError<-1/resultsUV$StandErr
+# resultsUV%<>%group_by(impact)%>%mutate(normError=normError/max(normError))%>%ungroup()
+# # Plot
+# resultsUV%>%ggplot(aes(as.factor(variable),value,group=algo))+geom_point(aes(colour=algo,alpha=normError))+
+#   facet_wrap(.~impact,nrow = 4)
+
+#  HYPOTHESIS TESTING ON BEST PERFORMING MODEL
+# resultsUV%<>%group_by(impact)%>%mutate(nn=sum(!is.na(outred[,unique(impact)])))
+# resultsUV%<>%group_by(impact)%>%mutate(withBest=dnorm(RelativeAbs-min(RelativeAbs),0,
+#    sqrt(RelativeAbsSD^2+RelativeAbsSD[which.min(RelativeAbs)]^2)/sqrt(nn))<0.05)%>%
+#   dplyr::select(-nn)
+# 
+# resultsUV%<>%group_by(impact)%>%mutate(withBest=dnorm(RelativeAbs-min(RelativeAbs),0,
+#                                                       sqrt(RelativeAbsSD^2+RelativeAbsSD[which.min(RelativeAbs)]^2)/sqrt(nn))<0.05)%>%
+#   dplyr::select(-nn)
+
+# tabUV<-lapply(unique(resultsUV$impact), function(imp){
+#   xtable::xtable(filter(resultsUV,impact==imp & withBest),"Feature importance ranking measure (FIRM), scaled as a percentage, for the \'best-performing\' models. The definition of \'best performing\' here is defined as any model that had a cost that was not statistically significantly different from the overall best performing model for each specific impact. When applying the FIRM, Individual Conditional Expectation (ICE) curves are used.")})
+# 
+# for(i in 1:length(tabUV)) print(tabUV[[i]],include.rownames=F)
+# 
+# # The models that made it as one of the best performing, per impact:
+# resultsUV[resultsUV$withBest,]%>%group_by(impact)%>%reframe(models=unique(model))%>%View()
+# resultsUV[resultsUV$withBest,]%>%group_by(impact)%>%reframe(models=length(model))
+# nrow(resultsUV)
+# 
+# # Order the variables by their importance, weighted by each models error value
+# varimport<-do.call(rbind,lapply(allimps,function(imps) {tmp<-filter(resultsUV,impact==imps);apply(tmp[tmp$withBest,-c(1:4,ncol(tmp),(ncol(tmp)-1))],2,function(x) weighted.mean(x,1/tmp$RelativeAbs[tmp$withBest]))}))
+# varimport<-100*varimport/rowSums(varimport)
+# varimport%<>%rbind(as.numeric(colMeans(varimport)))
+# rownames(varimport)<-c(allimps,"average")
+# varimport<-100*varimport/rowSums(varimport)
+# varimport%<>%t()
+# varimport%<>%as.data.frame(row.names = rownames(varimport))%>%mutate(Covariate=rownames(varimport))
+# 
+# varimport%<>%reshape2::melt(id.vars=6)
+# colnames(varimport)[2]<-"impact"
+# 
+# pal <- c(
+#   "mortality" = "red",
+#   "displacement" = "blue", 
+#   "buildDam" = "forestgreen", 
+#   "buildDest" = "purple",
+#   "average" = "black"
+# )
+# varimport%>%ggplot(aes(Covariate,value,group=impact))+geom_point(aes(colour=impact,shape=impact),size=2)+
+#   geom_line(aes(colour=impact),alpha=0.25)+scale_colour_manual(values = pal,limits = names(pal))
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# colnames(resultsUV)[2:4]<-c("RelativeAbs","RelativeAbsSD","maxHaz")
+# 
+# predictionsML%<>%rbind(resultsUV)
+# 
+# varimp<-predictionsML%>%arrange(RelativeAbs)%>%group_by(model)%>%
+#   summarise(Cost=prod(RelativeAbs),
+#             maxHaz=mean(maxHaz),
+#             ExpSchYrs=mean(ExpSchYrs),
+#             LifeExp=mean(LifeExp),
+#             GNIc=mean(GNIc),
+#             Vs30=mean(Vs30),
+#             EQFreq=mean(EQFreq),
+#             hazSD=mean(hazSD),
+#             time=mean(time),
+#             ExpDim1=mean(ExpDim1),
+#             ExpDim2=mean(ExpDim2),
+#             WIDDim1=mean(WIDDim1),
+#             WIDDim2=mean(WIDDim2))
+# 
+# varimp[3:ncol(varimp)]<-100*varimp[3:ncol(varimp)]/
+#   rowSums(varimp[3:ncol(varimp)])
+# # 
+# varimp%>%filter(model%in%c("rf","svmRadial","svmPoly","lognorm","nnet"))%>%xtable::xtable()%>%print(include.rownames=F)
 

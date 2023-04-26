@@ -2,6 +2,7 @@
 #                  dependencies = c("Depends", "Imports","Suggests"))
 # devtools::install_github("souravc83/fastAdaboost")
 # devtools::install_github("davpinto/fastknn")
+# install.packages("ROCit")
 
 library(dplyr)
 library(magrittr)
@@ -82,6 +83,8 @@ tmp<-apply(BDs[,3:11],2,function(x) length(unique(x)))<30
 BDs%<>%dplyr::select(-names(tmp[tmp]))
 BDs$hazMax%<>%log()
 
+covariates<-BDs%>%dplyr::select(colnames(BDs),-c(Event,grading,www,weighting,Damage))%>%colnames()
+
 train_control <- caret::trainControl(method="repeatedcv", number=8, repeats=2,
                                      search = "random",classProbs=T,
                                      summaryFunction=twoClassSummary)
@@ -99,7 +102,7 @@ train_control <- caret::trainControl(method="repeatedcv", number=8, repeats=2,
 #   
 # }
 
-parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
+parallelML_balanced<-function(algo,splitties=NULL,ncores=4,retmod=F) {
   
   # How many damaged buildings are there?
   numun<-round(table(BDs$Damage)["Damaged"]*1.5)
@@ -131,6 +134,10 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
     # Let me know!
     print(paste0(signif(100*i/splitties,2),"% done"))
     
+    if(retmod) return(as.data.frame(vip::vi(modeler,
+                                            feature_names=covariates))%>%dplyr::select(Variable,Importance))
+
+    
     return(cbind(filter(modeler$results[-1],ROC==max(ROC)),
                  t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
   })
@@ -152,13 +159,9 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4) {
 # checkerz<-unlist(lapply(carmods,function(stst) ifelse(is.null(tryCatch(checkInstall(getModelInfo(stst)$library),error=function(e) NA)),T,F)))
 # carmods<-carmods[checkerz]; rm(checkerz)
 
-minimods<-c("svmLinear","svmRadial","svmPoly","naive_bayes","rf","glmnet","AdaBoost")
+minimods<-c("svmLinear","svmRadial","svmPoly","naive_bayes","rf","glmnet","ada","adaboost")
 
 ncores<-60
-
-out<-parallelML_balanced("ada",ncores = ncores)
-
-stop()
 
 # Run ALL THE MODELLLLLSSS
 ML_BDs<-lapply(minimods,function(stst) tryCatch(parallelML_balanced(stst,ncores = ncores),error=function(e) NA))
@@ -197,6 +200,20 @@ knn.out <- fastknn::fastknn(data.matrix(datar[,!ind]),
 ROC<-max(yhat$cv_table$mean)
 ROCSD<-sd(yhat$cv_table[which.max(yhat$cv_table$mean),1:8])
 
+knn.out$pred<-factor(apply(knn.out$prob,1,which.max)-1,levels = c("Unaffected"=0,"Damaged"=1))
+
+score<-knn.out$prob[,1]
+class<-as.numeric(knn.out$class)-1
+
+perfy<-ROCit::measureit(score = score, class = class,
+          measure = c("SENS", "SPEC"))
+
+ROCit::rocit(score = score, negref = "-",
+      class = class, 
+      method = "emp")
+
+head(perfy)
+
 namerz<-c("ROC","Sens","Spec","ROCSD","SensSD","SpecSD",colnames(datar)); namerz<-namerz[1:(length(namerz)-1)]
 out<-as.data.frame(t(data.frame(namerz))); colnames(out)<-out[1,]
 out[1,]<-NA
@@ -205,47 +222,87 @@ out$ROCSD<-ROCSD
 
 saveRDS(out,"./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/ML-knn_2.RData")
 # 
-# loccy<-"./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/"
-# filez<-list.files(loccy)
-# 
-# out<-readRDS(paste0(loccy,filez[i]))
-# 
-# out<-do.call(rbind, lapply(seq_along(filez),
-#                            function(i){ cbind(data.frame(algo=filez[i]),
-#                                               dplyr::select(readRDS(paste0(loccy,filez[i])),namerz))}))
-# 
+loccy<-"./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/"
+filez<-list.files(loccy);filez<-filez[grepl("_2",filez)]
+
+out<-do.call(rbind,lapply(seq_along(filez),
+                           function(i){
+                             if(grepl("knn",filez[i])) return(cbind(data.frame(algo=filez[i]),readRDS(paste0(loccy,filez[i]))))
+                             cbind(data.frame(algo=filez[i]),
+                                   t(colMeans(dplyr::select(do.call(rbind,readRDS(paste0(loccy,filez[i]))),namerz))))
+                           }))
+
+row.names(out)<-NULL
+
+for(i in 8:ncol(out)) out[,i]%<>%as.numeric()
+out[,-c(1:7)]<-100*out[,-c(1:7)]/rowSums(out[,-c(1:7)],na.rm = T)
+
+out%>%ggplot(aes(algo,ROC))+geom_point()
+
+
 # tmp<-do.call(rbind,lapply(seq_along(out), function(i) out[[i]]$vippy))
 # outer<-data.frame(variable=colnames(tmp),meany=colMeans(tmp),vary=apply(tmp,2,sd))%>%
 #   arrange(desc(meany))
-# outer$meany<-100*outer$meany/sum(outer$meany)
+
+
+
+
+
+
+
+# outer<-do.call(rbind,parallelML_balanced("ada",ncores = 60,retmod = T))%>%
+#   group_by(Variable)%>%
+#   reframe(ImportanceSD=sd(Importance),
+#           Importance=mean(Importance))%>%
+#   dplyr::select(Variable,Importance,ImportanceSD)
+
+outer<-out[1,-(1:7)]%>%reshape2::melt()
+
+colnames(outer)<-c("Variable","Importance")
+
+outer$Importance<-100*outer$Importance/sum(outer$Importance)
+
+outer$Variable%<>%factor(levels=outer$Variable[rev(order(outer$Importance))])
+
+namerz<-1:nrow(outer); names(namerz)<-outer$Variable
+
+p<-outer%>%
+  ggplot(aes(Variable,Importance))+
+  geom_point(size=3)+
+  # scale_shape_manual(values=15:19,breaks=allimps)+
+  # scale_colour_manual(values = pal,limits = names(pal))+
+  xlab("Model Covariate") + ylab("Feature Importance [%]")+
+  ylim(c(0,25))+
+  # scale_x_discrete(labels=namerz)+
+  # labs(colour="Impact Type",shape="Impact Type")+
+  theme(axis.text.x = element_text(angle = 90));p
+ggsave("BD_Feat.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)
+
+outer%>%dplyr::select(meany)%>%t()%>%as.data.frame()%>%
+  ggplot(aes())
+
+out$algo<-str_split(str_split(out$algo,"_2.RData",simplify = T)[,1],"-",simplify = T)[,2]
+rownames(out)<-NULL
+out[,1:2]
+
+p<-out%>%ggplot(aes(algo,ROC)) +
+  geom_point(aes(colour=algo),size=3)+ylim(c(0.7,1))+
+  geom_errorbar(aes(ymin=ROC-ROCSD, ymax=ROC+ROCSD,colour=algo),width=.4)+
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(colour="Model");p
+
+ggsave("BD_Perf.eps",p,path="./Plots/IIDIPUS_Results/",width=8,height=5.,device = grDevices::cairo_ps)
+
+p<-BDs%>%dplyr::select(Population,Vs30,EQFreq,hazMax,hazSD,Damage)%>%
+  # mutate(hazMax=exp(hazMax))%>%
+  reshape2::melt("Damage")%>%
+  group_by(variable)%>%reframe(value=value/max(value),Damage=Damage)%>%
+  ggplot(aes(variable,value))+geom_violin(aes(fill=Damage),scale = "width");p
+ggsave("BD_Violin.eps",p,path="./Plots/IIDIPUS_Results/",width=12,height=4.,device = grDevices::cairo_ps)
 # 
-# outer$variable%<>%factor(levels=outer$variable[rev(order(outer$meany))])
-# 
-# namerz<-1:nrow(outer); names(namerz)<-outer$variable
-# 
-# p<-outer%>%
-#   ggplot(aes(variable,meany))+
-#   geom_point(size=3)+
-#   geom_line(alpha=0.5,linetype="dotdash")+
-#   # scale_shape_manual(values=15:19,breaks=allimps)+
-#   # scale_colour_manual(values = pal,limits = names(pal))+
-#   xlab("Model Covariate") + ylab("Feature Importance [%]")+
-#   # scale_x_discrete(labels=namerz)+
-#   # labs(colour="Impact Type",shape="Impact Type")+
-#   theme(axis.text.x = element_text(angle = 90));p
-# ggsave("BD_Feat.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)  
-# 
-# outer%>%dplyr::select(meany)%>%t()%>%as.data.frame()%>%
-#   ggplot(aes())
-# 
-# out$algo<-str_split(str_split(out$algo,".RData",simplify = T)[,1],"-",simplify = T)[,2]
-# rownames(out)<-NULL
-# out[,1:2]
-# 
-# out%>%ggplot(aes(algo,ROC)) + 
-#   geom_point(aes(colour=algo),size=3)+
-#   geom_errorbar(aes(ymin=ROC-ROCSD, ymax=ROC+ROCSD,colour=algo),width=.4)
-# # 
+
+
+#
 # 
 # 
 

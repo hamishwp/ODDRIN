@@ -753,7 +753,7 @@ fuller%<>%na.omit()
 
 # For the top-five models in terms of performance across all impacts
 fuller%>%group_by(impact,algo)%>%filter(RelativeAbsDiff==min(RelativeAbsDiff))%>%
-  ungroup()%>%group_by(algo)%>%reframe(Cost=prod(RelativeAbsDiff))%>%
+  ungroup()%>%group_by(algo)%>%summarise(Cost=prod(RelativeAbsDiff))%>%
   ungroup()%>%mutate(Cost=Cost/min(Cost))%>%arrange(Cost)
 
 
@@ -809,7 +809,9 @@ topOeach%<>%group_by(impact)%>%mutate(tval=sqrt(nn)*(RelativeAbsDiff-min(Relativ
                                         sqrt(RelativeAbsDiffSD^2+RelativeAbsDiffSD[which.min(RelativeAbsDiffSD)]^2))
 topOeach%<>%mutate(pval=dt(tval,df))
 
-topOeach%<>%filter(pval>0.05)%>%dplyr::select(-c(nn,minSD,thisSD,df,tval))
+topOeach%<>%dplyr::select(-c(nn,minSD,thisSD,df,tval))
+
+topOeach%<>%filter(pval>0.05)
 
 table(topOeach$impact[topOeach$pval>0.05])
 table(topOeach$algo[topOeach$pval>0.05])

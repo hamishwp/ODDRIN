@@ -1311,12 +1311,13 @@ performance<-data.frame()
 
 
 # Let's do this!
-oddCNN<-function(performance,cnnfilters,poolsize,denselayers){
+oddCNN<-function(cnnfilters,poolsize,denselayers,actie="relu",droppie=0.2){
   
   Hyperparams$cnnfilters<-cnnfilters
   Hyperparams$poolsize<-poolsize
   Hyperparams$denselayers<-denselayers
   
+  performance<-data.frame()
   cnamers<-c("Loss")
   for(j in 1:5){
     indies <- caret::createFolds(1:dim(outer)[1], k = Hyperparams$SCV, list = T, returnTrain = FALSE)
@@ -1334,10 +1335,11 @@ oddCNN<-function(performance,cnnfilters,poolsize,denselayers){
         # layer_random_rotation(0.2)%>%
         layer_conv_2d(filters = Hyperparams$cnnfilters, 
                       kernel_size = Hyperparams$kerneldim,
-                      activation = 'relu', 
+                      activation = actie, 
                       input_shape = c(Hyperparams$finDim,length(Hyperparams$nvul))) %>%
-        layer_max_pooling_2d(pool_size = c(1, Hyperparams$poolsize)) %>%
+        layer_max_pooling_2d(pool_size = c(Hyperparams$poolsize, Hyperparams$poolsize)) %>%
         layer_flatten() %>%
+        layer_dropout(droppie)%>%
         layer_dense(units = Hyperparams$denselayers) %>%
         layer_dense(units = 1)
       
@@ -1355,7 +1357,8 @@ oddCNN<-function(performance,cnnfilters,poolsize,denselayers){
         # epochs taken from DeFine
         epochs = Hyperparams$epocher,
         validation_split = 0.0,
-        verbose=0
+        verbose=0,
+        callbacks = list(callback_early_stopping(monitor = "loss", patience = 5, restore_best_weights = TRUE))
       )
       
       tmp<-cnn_model%>%evaluate(xtest,ytest)
@@ -1373,21 +1376,32 @@ oddCNN<-function(performance,cnnfilters,poolsize,denselayers){
   return(data.frame(avLoss=mean(performance$Loss),
                     filters=Hyperparams$cnnfilters,
                     denselayers=Hyperparams$denselayers,
-                    poolsize=Hyperparams$poolsize,
-                    CVfold=cv,j=j))
+                    poolsize=Hyperparams$poolsize))
 }
 
 performance<-data.frame()
 
-for(fff in 1:5){
-  for(ps in 1:5){
-    for(dl in 1:10){  
-      performance%<>%rbind(oddCNN(fff,ps,dl))
+for(ac in c("relu","sigmoid")){
+  for(fff in 1:5){
+    for(ps in 1:5){
+      for(dl in 1:10){  
+        for(dp in (1:8)/10){  
+          performance%<>%rbind(oddCNN(fff,ps,dl,ac,dp))
+        }
+      }
     }
   }
 }
 
+saveRDS(performance,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/CNN_performance.RData")
 
+
+# Sigmoid versus ReLu activation function in CNN layer
+# Try combining with different vulnerabilities (EQFreq and Vs30)
+# Try with the different impact types
+# Combine in a smart way the different types
+# How about a multivariate buildDest-buildDam model?
+# 
 
 
 

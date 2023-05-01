@@ -14,6 +14,9 @@ library(factoextra)
 library(parallel)
 library(doParallel)
 library(caret)
+library(sp)
+library(tensorflow)
+library(keras)
 
 # install.packages(c("ggcorrplot","vip","pdp","ggcorrplot"))
 
@@ -1096,6 +1099,293 @@ ggsave("MV_FeatCor.eps",p,path="./Plots/IIDIPUS_Results/",width=9,height=4.,devi
 
 
 
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%% CONVOLUTIONAL NEURAL NETWORKS %%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%% EXTRACT DATA %%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/ODDobjects/"
+filez<-list.files(folder)
+filez<-filez[filez!="EQ20170529IDN_136"]
+
+mnlo<-mnla<-10000; mxlo<-mxla<-0
+mnlof<-mnlaf<-c(); mxlof<-mxlaf<-c()
+for(fff in filez){
+  
+  ODDy<-readRDS(paste0(folder,fff))
+  
+  mnlo<-min(mnlo,ODDy@grid@cells.dim[1]);mnla<-min(mnla,ODDy@grid@cells.dim[2])
+  mxlo<-max(mxlo,ODDy@grid@cells.dim[1]);mxla<-max(mxla,ODDy@grid@cells.dim[2])
+  
+  mnlof<-c(mnlof,ODDy@grid@cells.dim[1]);mnlaf<-c(mnlaf,ODDy@grid@cells.dim[2])
+  mxlof<-c(mxlof,ODDy@grid@cells.dim[1]);mxlaf<-c(mxlaf,ODDy@grid@cells.dim[2])
+  
+}
+
+reddie<-4#min(mnlo,mnla)
+CNNdim<-3
+padding<-CNNdim-1 # this is the size of the filter -1
+
+finDim<-c((mxlo+reddie-mxlo%%reddie)/reddie,
+          (mxla+reddie-mxla%%reddie)/reddie)
+
+
+
+nevs<-length(filez)
+
+padArray<-function(arraz,padding=2){
+  out<-array(NA_real_,c(dim(arraz)[1:2]+padding*2L,dim(arraz)[3]))
+  out[(padding+1):(dim(arraz)[1]+padding),(padding+1):(dim(arraz)[2]+padding),]<-arraz
+  return(out)
+}
+
+resizeArray<-function(arraz,reddie=4,fn=mean){
+  
+  # indexes in the input array to apply the function over
+  indie<-seq.int(1,max(dim(arraz)[1:2]),reddie)
+  
+  if(length(dim(arraz))==3) {
+    
+    out<-array(NA_real_,c(dim(arraz)[1:2]/reddie,dim(arraz)[3]))
+    
+    for(k in 1:dim(arraz)[3]){
+      for(i in 1:nrow(out)){
+        for(j in 1:ncol(out)){
+          # Highlight the square
+          out[i,j,k]<-fn(arraz[indie[i]:(indie[i]+reddie-1),indie[j]:(indie[j]+reddie-1),k],na.rm=T)
+        }
+      }    
+    }
+    
+  } else {
+    
+    out<-array(NA_real_,c(dim(arraz)[1:2]/reddie))
+    
+    for(i in 1:nrow(out)){
+      for(j in 1:ncol(out)){
+        # Highlight the square
+        out[i,j]<-fn(arraz[indie[i]:(indie[i]+reddie-1),indie[j]:(indie[j]+reddie-1)],na.rm=T)
+      }
+    }
+  }
+  
+  return(out)
+  
+}
+
+
+outer<-array(NA,dim = c(nevs,finDim+2L*padding,8))
+impies<-data.frame()
+for(i in seq_along(filez)){
+  
+  fff<-filez[i]
+  # Read in the ODD object
+  ODDy<-readRDS(paste0(folder,fff))
+  # Get rid of unnecessary others
+  ODDy@data%<>%dplyr::select_if(!names(.) %in% c("Longitude","Latitude","nBuildings","ISO3C","nBuiltup"))
+  # Extract impact data per polygon
+  impacts<-ODDy@impact%>%filter(impact=="mortality")%>%filter(observed==max(observed))
+  # If there is no data for this specific mortality, remove event
+  if(nrow(impacts)==0) next
+  # if there is more than one polygon that shares the same total impact, take the bigger value (CNN will have to train over more point)
+  if(nrow(impacts)>1){
+    impacts<-impacts[which.max(sapply(ODDy@polygons[impacts$polygon],function(x) length(x$indexes),simplify = T)),]
+  }
+    # filter(polygon==ppp)%>%summarise(mortality=ifelse(length(observed[impact=="mortality"]==0),sum(observed[impact=="mortality"]),NA),
+    #                                                       displacement=ifelse(length(observed[impact=="displacement"]==0),sum(observed[impact=="displacement"]),NA),
+    #                                                       buildDam=ifelse(length(observed[impact=="buildDam"]==0),sum(observed[impact=="buildDam"]),NA),
+    #                                                       buildDest=ifelse(length(observed[impact=="buildDest"]==0),sum(observed[impact=="buildDest"]),NA))
+  ODDy@data[!1:nrow(ODDy@data)%in%ODDy@polygons[[impacts$polygon]]$indexes,]<-NA
+  # Make sure impact data is on log-scale
+  impacts$observed<-log(impacts$observed+10)
+  # Put it into the impacts file
+  impies%<>%rbind(impacts)
+  # Make MaxHaz function over all EQ fore and aftershocks:
+  if(length(names(ODDy)[grepl("hazMean",names(ODDy))])==1){
+    ODDy@data$hazMax<-ODDy@data$hazMean1
+  } else {
+    hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
+    for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+      tmp<-ODDy[variable]
+      tmp$hazard<-hazard
+      hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+    }
+    ODDy@data$hazMax<-hazard-ODDy@I0
+  }
+  # And for the S.D. of the hazard intensity
+  if(length(names(ODDy)[grepl("hazSD",names(ODDy))])==1){
+    hazard<-ODDy@data$hazSD1
+  } else {
+    for (variable in names(ODDy)[grepl("hazSD",names(ODDy))]){
+      tmp<-ODDy[variable]
+      tmp$hazard<-hazard
+      hazard<-apply(tmp@data,1,function(x) mean(x,na.rm=T))
+    }
+  }
+  
+  # Get rid of the other hazard info and leave only hazMax
+  ODDy@data<-ODDy@data[,!grepl("hazSD",names(ODDy)) & 
+                         !grepl("hazMean",names(ODDy))]
+  # Now we add the hazSD column back on
+  ODDy@data$hazSD<-hazard
+  rm(hazard)
+  # Reorder things for later
+  ODDy@data%<>%dplyr::select(Population,hazMax,everything())
+  
+  removers<-is.na(ODDy@data$hazMax)     |
+            is.na(ODDy@data$Population) |
+            ODDy@data$hazMax<ODDy@I0    |
+            ODDy@data$Population<=0
+  # Need to differentiate for the array resizing and padding done later
+  ODDy@data$Population[removers]<-0
+  ODDy@data[removers,-1]<-NA
+  # Convert from ODD object to SPDF to Array
+  tmp<-SpatialPixelsDataFrame(ODDy@coords,ODDy@data,grid = ODDy@grid,proj4string = ODDy@proj4string)%>%
+    convSPDF2Array()
+  # What are the missing rows to make it divisible by the reduction factor?
+  addie<-reddie-ODDy@grid@cells.dim%%reddie
+  
+  # Add these values as padding, with zeros
+  dimmie<-unname(c(addie+ODDy@grid@cells.dim,ncol(ODDy@data)-1)); rm(ODDy)
+  # Handle population data first
+  pop<-array(0,dim = dimmie[1:2])
+  pop[1:nrow(tmp),1:ncol(tmp)]<-tmp[,,1]
+  # Resize it using the sum of the population
+  pop%<>%resizeArray(reddie,fn=sum)
+  # Now handle the remaining columns, by taking the average
+  oth<-array(NA_real_,dim = c(dimmie[1:2],dimmie[3]))
+  oth[1:nrow(tmp),1:ncol(tmp),]<-tmp[,,-1]; rm(tmp)
+  # Resize it using the sum of the population
+  oth%<>%resizeArray(reddie,fn=mean)
+  # Combine both arrays into one
+  out<-array(NA_real_,dim = c(finDim,dim(oth)[3]+1))
+  out[1:nrow(pop),1:ncol(pop),1]<-pop; out[1:nrow(pop),1:ncol(pop),-1]<-oth
+  # Cleaning!
+  rm(oth,pop)
+  # Now pad me out!
+  out%<>%padArray(padding=padding)
+  # # Replace all NAs in hazMax with 0
+  # tmp<-out[,,2]; tmp[is.na(tmp)]<-0
+  # out[,,2]<-tmp; rm(tmp)
+  # Convert all the NAs in the remaining columns with the average values, to not confuse the CNN
+  out[is.na(out)]<-0
+  # The mother array
+  outer[i,,,]<-out
+  
+  print(paste0("Finished EQ: ",fff))
+}
+
+tmp<-outer[!apply(outer,1,function(x) all(is.na(x))),,,]; outer<-tmp; rm(tmp)
+
+saveRDS(list(outer=outer,impies=impies),"./IIDIPUS_Results/SpatialPolygons_ML-GLM/Input-CNN-Data_ODD.RData")
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%% MODEL CNNS! #%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+outer<-readRDS("./IIDIPUS_Results/SpatialPolygons_ML-GLM/Input-CNN-Data_ODD.RData")
+impies<-outer$impies; outer<-outer$outer
+
+finDim=dim(outer)[2:3]
+
+Hyperparams<-list(cnnfilters=1,
+                  kerneldim=c(3,3),
+                  poolsize=2,
+                  denselayers=3,
+                  epocher=100,
+                  SCV=10,
+                  finDim=finDim,
+                  nvul=1:2)
+
+outer<-outer[,,,Hyperparams$nvul]
+
+maxies<-apply(outer,4,max)
+for(i in seq_along(maxies)) outer[,,,i]<-outer[,,,i]/maxies[i]
+
+impies$observed<-(impies$observed-min(impies$observed))/(max(impies$observed)-min(impies$observed))
+
+# Output file
+performance<-data.frame()
+
+
+# Let's do this!
+oddCNN<-function(performance,cnnfilters,poolsize,denselayers){
+  
+  Hyperparams$cnnfilters<-cnnfilters
+  Hyperparams$poolsize<-poolsize
+  Hyperparams$denselayers<-denselayers
+  
+  cnamers<-c("Loss")
+  for(j in 1:5){
+    indies <- caret::createFolds(1:dim(outer)[1], k = Hyperparams$SCV, list = T, returnTrain = FALSE)
+    #@@@@@@@@@@@@@@@@@@@@@ STRATIFIED CROSS-VALIDATION @@@@@@@@@@@@@@@@@@@@@#
+    for(cv in 1:Hyperparams$SCV){
+      # Split it up!
+      xtrain <- outer[!1:dim(outer)[1]%in%indies[[cv]],,,]
+      xtest  <- outer[indies[[cv]],,,]
+      ytrain <- impies$observed[!1:dim(outer)[1]%in%indies[[cv]]]
+      ytest  <- impies$observed[indies[[cv]]]
+      ################# CNN SECTION #################
+      cnn_model <- keras_model_sequential() %>%
+        # Data augmentation
+        layer_random_flip("horizontal") %>%
+        # layer_random_rotation(0.2)%>%
+        layer_conv_2d(filters = Hyperparams$cnnfilters, 
+                      kernel_size = Hyperparams$kerneldim,
+                      activation = 'relu', 
+                      input_shape = c(Hyperparams$finDim,length(Hyperparams$nvul))) %>%
+        layer_max_pooling_2d(pool_size = c(1, Hyperparams$poolsize)) %>%
+        layer_flatten() %>%
+        layer_dense(units = Hyperparams$denselayers) %>%
+        layer_dense(units = 1)
+      
+      # summary(cnn_model)
+      # Compile it
+      cnn_model %>% compile(
+        loss = 'mean_absolute_error', # for some reason this was preferred over binary
+        optimizer = optimizer_adam() # could use optimizer_adadelta() or optimizer_adam() or optimizer_sgd()
+      )
+      # Fit the model!
+      cnn_history <- cnn_model %>% fit(
+        xtrain, ytrain,
+        # Batch size taken from DeFine
+        batch_size = length(ytrain),
+        # epochs taken from DeFine
+        epochs = Hyperparams$epocher,
+        validation_split = 0.0,
+        verbose=0
+      )
+      
+      tmp<-cnn_model%>%evaluate(xtest,ytest)
+      
+      # Bind to the output file
+      performance%<>%rbind(cbind(as.data.frame(as.list(t(tmp)),col.names=cnamers),
+                                 data.frame(filters=Hyperparams$cnnfilters,
+                                            denselayers=Hyperparams$denselayers,
+                                            poolsize=Hyperparams$poolsize,
+                                            CVfold=cv,j=j)))
+      # }
+    }
+  }
+  # colnames(performance)<-cnamers
+  return(data.frame(avLoss=mean(performance$Loss),
+                    filters=Hyperparams$cnnfilters,
+                    denselayers=Hyperparams$denselayers,
+                    poolsize=Hyperparams$poolsize,
+                    CVfold=cv,j=j))
+}
+
+performance<-data.frame()
+
+for(fff in 1:5){
+  for(ps in 1:5){
+    for(dl in 1:10){  
+      performance%<>%rbind(oddCNN(fff,ps,dl))
+    }
+  }
+}
 
 
 
@@ -1119,12 +1409,6 @@ ggsave("MV_FeatCor.eps",p,path="./Plots/IIDIPUS_Results/",width=9,height=4.,devi
 
 
 
-
-
-
-# Building damage assessment - classification with spatial element using kriging
-
-# CNNs and maybe some others (RBF-NN, ResNet?)
 
 # Then do multivariate model for displacement and mortality for CNNs
 

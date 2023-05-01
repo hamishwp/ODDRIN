@@ -172,6 +172,13 @@ checkMatlonglat<-function(array){
   return(array)
 }
 
+convSPDF2Array<-function(ODDy){
+  if("ISO3C"%in%colnames(ODDy@data)) ODDy@data%<>%dplyr::select(-ISO3C)
+  array(as.matrix(ODDy@data),
+        dim = unname(c(ODDy@grid@cells.dim,
+                       ncol(ODDy@data))))
+}
+
 convRaster2SPDF<-function(raster,name=NULL){
   
   raster%<>%as("SpatialPixelsDataFrame")

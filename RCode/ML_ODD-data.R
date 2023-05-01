@@ -1306,10 +1306,6 @@ for(i in seq_along(maxies)) outer[,,,i]<-outer[,,,i]/maxies[i]
 
 impies$observed<-(impies$observed-min(impies$observed))/(max(impies$observed)-min(impies$observed))
 
-# Output file
-performance<-data.frame()
-
-
 # Let's do this!
 oddCNN<-function(cnnfilters,poolsize,denselayers,actie="relu",droppie=0.2){
   
@@ -1376,7 +1372,9 @@ oddCNN<-function(cnnfilters,poolsize,denselayers,actie="relu",droppie=0.2){
   return(data.frame(avLoss=mean(performance$Loss),
                     filters=Hyperparams$cnnfilters,
                     denselayers=Hyperparams$denselayers,
-                    poolsize=Hyperparams$poolsize))
+                    poolsize=Hyperparams$poolsize,
+                    activation=actie,
+                    dropout=droppie))
 }
 
 performance<-data.frame()

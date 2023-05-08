@@ -377,6 +377,30 @@ saveRDS(out,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/InputData_ODD.RData")
 
 out<-readRDS("./IIDIPUS_Results/SpatialPolygons_ML-GLM/InputData_ODD.RData")
 
+avHS<-read.csv("~/Downloads/GDL-Population-(2021)-data.csv")%>%
+  filter(Level=="National")%>%dplyr::select(ISO_Code,HH.size)
+
+colnames(avHS)[1]<-"iso3"
+
+out%<>%left_join(avHS)
+
+out$buildDisp<-rowSums(cbind(out$buildDam,out$buildDest),na.rm = T)*out$HH.size
+
+out$buildDisp[is.na(out$buildDam) & is.na(out$buildDest)]<-NA
+
+
+nnn<-sum(!is.na(out$buildDisp) & !is.na(out$displacement))
+rsq<-summary(lm(log(displacement+10) ~ log(buildDisp+10) + 0,out))$adj.r.squared
+
+p<-out%>%ggplot(aes(displacement, buildDisp))+geom_point()+
+  scale_x_log10(limits=c(100,1.3e6))+scale_y_log10(limits=c(100,1.3e6)) + 
+  geom_abline(slope = 1,intercept = 0)+
+  xlab("Displacement")+ylab("Building Damage x Av. Household Size")+
+  annotate(geom="text", x=8e2, y=5e5, size=6,
+           label=paste0("Adj-R-sq = ",signif(rsq,2)));p
+  
+ggsave("DispHH-Size.eps",p,path="./Plots/IIDIPUS_Results/",width=6,height=5,device = grDevices::cairo_ps)  
+
 # Per impact, do the analysis (for all impacts, even without building data)
 outred<-dplyr::select(out,-c("iso3","date")); rm(out)
 outred[,-(1:5)]<-scale(outred[,-(1:5)])
@@ -1304,10 +1328,10 @@ outer<-outer[,,,Hyperparams$nvul]
 maxies<-apply(outer,4,max)
 for(i in seq_along(maxies)) outer[,,,i]<-outer[,,,i]/maxies[i]
 
-impies$observed<-(impies$observed-min(impies$observed))/(max(impies$observed)-min(impies$observed))
+# impies$observed<-(impies$observed-min(impies$observed))/(max(impies$observed)-min(impies$observed))
 
 # Let's do this!
-oddCNN<-function(cnnfilters,poolsize,denselayers,actie="relu",droppie=0.2){
+oddCNN<-function(cnnfilters,poolsize,denselayers,droppie=0.2){
   
   Hyperparams$cnnfilters<-cnnfilters
   Hyperparams$poolsize<-poolsize
@@ -1327,11 +1351,11 @@ oddCNN<-function(cnnfilters,poolsize,denselayers,actie="relu",droppie=0.2){
       ################# CNN SECTION #################
       cnn_model <- keras_model_sequential() %>%
         # Data augmentation
-        layer_random_flip("horizontal") %>%
+        layer_random_flip() %>%
         # layer_random_rotation(0.2)%>%
         layer_conv_2d(filters = Hyperparams$cnnfilters, 
                       kernel_size = Hyperparams$kerneldim,
-                      activation = actie, 
+                      # activation = actie, 
                       input_shape = c(Hyperparams$finDim,length(Hyperparams$nvul))) %>%
         layer_max_pooling_2d(pool_size = c(Hyperparams$poolsize, Hyperparams$poolsize)) %>%
         layer_flatten() %>%
@@ -1370,6 +1394,7 @@ oddCNN<-function(cnnfilters,poolsize,denselayers,actie="relu",droppie=0.2){
   }
   # colnames(performance)<-cnamers
   return(data.frame(avLoss=mean(performance$Loss),
+                    sdLoss=sd(performance$Loss),
                     filters=Hyperparams$cnnfilters,
                     denselayers=Hyperparams$denselayers,
                     poolsize=Hyperparams$poolsize,
@@ -1379,13 +1404,13 @@ oddCNN<-function(cnnfilters,poolsize,denselayers,actie="relu",droppie=0.2){
 
 performance<-data.frame()
 
-for(ac in c("relu","sigmoid")){
-  for(fff in 1:5){
-    for(ps in 1:5){
-      for(dl in 1:10){  
-        for(dp in (1:8)/10){  
-          performance%<>%rbind(oddCNN(fff,ps,dl,ac,dp))
-        }
+stop("Also vary padding width")
+
+for(fff in 1:5){
+  for(ps in 1:5){
+    for(dl in 1:10){  
+      for(dp in (1:9)/10){  
+        performance%<>%rbind(oddCNN(fff,ps,dl,dp))
       }
     }
   }

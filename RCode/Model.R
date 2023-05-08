@@ -191,8 +191,8 @@ Model$par_ub <- c(9.5, #Lambda1$mu
 
 Model$center<-ExtractCentering(dir,haz,T)
 
-Model$impacts <- list(labels = c('mortality', 'displacement', 'buildDam', 'buildDest'), 
-                      qualifiers = c('qualifierMort', 'qualifierDisp', 'qualifierBuildDam', 'qualifierBuildDest'),
+Model$impacts <- list(labels = c('mortality', 'displacement', 'buildDam', 'buildDest', 'buildDamDest'), 
+                      qualifiers = c('qualifierMort', 'qualifierDisp', 'qualifierBuildDam', 'qualifierBuildDest', 'qualifierBuildDamDest'),
                       sampled = c('mort_sampled', 'disp_sampled', 'buildDam_sampled', 'buildDest_sampled'))
 
 #Modifiers to capture change in probability of building damage from 1st to subsequent events
@@ -527,7 +527,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
 # Get the log-likelihood for the displacement data
 LL_IDP<-function(Y,  kernel_sd, kernel, cap){
   
-  if (is.nan(Y[,'observed']) || is.nan(Y[,'sampled'])) return(0)
+  if (any(c(is.nan(Y[,'observed']),is.nan(Y[,'sampled'])))) return(0)
   
   LL <- 0
   k <- 10
@@ -539,7 +539,12 @@ LL_IDP<-function(Y,  kernel_sd, kernel, cap){
   } else if (kernel == 'lognormal'){ #use a lognormal kernel 
     LL_impact = log(dlnormTrunc(Y[,'observed']+k, log(Y[,'sampled']+k), sdlog=kernel_sd[[Y[1,'impact']]], min=k))
   } else if (kernel =='log'){
-    LL_impact = abs(log(Y[,'observed']+k) - log(Y[,'sampled']+k)) * kernel_sd[[Y[1,'impact']]]
+    #Y_obs <- Y[,'observed']
+    #Y_sam <- Y[,'sampled']
+    #LL_impact = 20 * log(abs(Y_obs-Y_sam)+1)+abs(log((Y_obs+k)/(Y_sam+k)))
+    #LL_impact = abs(log((abs(Y[,'observed']-Y[,'sampled'])+Y[,'sampled']+k)/(Y[,'sampled']+k))) 
+    #LL_impact = abs(log((abs(Y[,'observed']-Y[,'sampled'])+Y[,'sampled']+k)/(Y[,'sampled']+k))) * kernel_sd[[Y[1,'impact']]]
+    LL_impact = abs(log(Y[,'observed']+k) - log(Y[,'sampled']+k)) * unlist(kernel_sd)[Y[,'impact']]
   } else {
     print(paste0("Failed to recognise kernel", AlgoParams$kernel))
     return(-Inf)
@@ -574,12 +579,14 @@ LL_IDP<-function(Y,  kernel_sd, kernel, cap){
 
 # for (x in c(1,100,10000)){
 #   dist_calc <- function(bound, x){
-#     return(1.2*abs(log(bound+10)-log(x+10)))
+#     return(0.9*abs(log(bound+10)-log(x+10)))
 #   }
 #   print(uniroot(function(bound) dist_calc(bound,x=x)-1,c(-10,x))$root)
 #   print(uniroot(function(bound) dist_calc(bound,x=x)-1,c(x,x*100))$root)
 # }
 # 
+# plot(seq(0,1000,1), abs(log(300+k) - log(seq(0,1000,1)+k)))
+
 LL_beta_apply<-function(b,value,BD_params) do.call(BD_params$functions[[value]],as.list(c(x=b,unlist(BD_params$Params[[value]]))))
 
 BDprob<-function(b,BD_params){

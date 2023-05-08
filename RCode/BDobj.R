@@ -75,13 +75,13 @@ setMethod(f="initialize", signature="BD",
             print("Forming SpatialPointsDataFrame from building damage data")
             Damage<-SpatialPointsDataFrame(coords = Damage[,c("Longitude","Latitude")],
                                         data = Damage[,c("grading","Confidence")],
-                                        proj4string = crs("+proj=longlat +datum=WGS84 +ellps=WGS84"))
+                                        proj4string = ODD@proj4string) #crs("+proj=longlat +datum=WGS84 +ellps=WGS84"))
             
             .Object@data <- Damage@data
             .Object@coords.nrs <-Damage@coords.nrs
             .Object@coords <-Damage@coords
             .Object@bbox <-Damage@bbox
-            .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            .Object@proj4string <- ODD@proj4string #crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             rm(Damage)
             
             print("Interpolating population density, hazard & GDP-PPP data")

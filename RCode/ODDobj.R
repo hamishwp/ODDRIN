@@ -242,7 +242,7 @@ setMethod(f="initialize", signature="ODD",
             .Object@grid.index <-obj@grid.index
             .Object@coords <-obj@coords
             .Object@bbox <-obj@bbox
-            .Object@proj4string <-crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            .Object@proj4string <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
           
             print("Adding hazard events")
@@ -358,7 +358,7 @@ setGeneric("DispX", function(ODD,Omega,center, BD_params, LL, sim=F, Method)
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F, 
                                    Method=list(Np=20,cores=8,cap=-300, 
-                                               kernel_sd=list(displacement=0.15,mortality=0.03,buildDam=0.15,buildDest=0.1), kernel='lognormal')
+                                               kernel_sd=list(displacement=1,mortality=16,buildDam=1.2,buildDest=0.9), kernel='lognormal')
 ){
   # ... Function description ...
   # LL: Returns 'likelihood' if true or data simulated from model if false
@@ -508,9 +508,15 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     for (polygon_id in unique(ODD@impact$polygon)){
       polygon_impacts <- ODD@impact$impact[which(ODD@impact$polygon==polygon_id)]
       for (impact in polygon_impacts){
-        impact_sampled %<>% rbind(data.frame(polygon=polygon_id, 
-                                             impact=impact,
-                                             sampled= floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact], na.rm=T))))
+        if (impact == 'buildDamDest'){
+          impacts_sampled %<>% rbind(data.frame(polygon=polygon_id,
+                                                impact=impact,
+                                                sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,c('buildDam', 'buildDest')], na.rm=T))))
+        } else {
+          impacts_sampled %<>% rbind(data.frame(polygon=polygon_id,
+                                                impact=impact,
+                                                sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact], na.rm=T))))
+        }
       }
     }
     impact_obs_sampled <- merge(impact_sampled, ODD@impact, by=c("polygon", "impact")) %>% arrange(desc(observed)) 

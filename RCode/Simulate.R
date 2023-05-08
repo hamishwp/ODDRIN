@@ -247,7 +247,7 @@ simulateEvent <- function(r, I0 = 4.5){
   # - The earthquake standard deviation in each cell is random uniform in [0.8,1.1]
   
   maxMag = runif(1, 6, 10)
-  sigma = runif(1, 3, 5)
+  sigma = runif(1, 8, 15)
   r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, s=r@nrows)) 
   r <- r * (maxMag/r@data@max)
   sd <- setValues(r, runif(r@ncols*r@nrows, 0.8,1.1))
@@ -326,12 +326,12 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   
   xmn <- round(runif(1, -180, 179.5)/0.05)*0.05
   ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
-  r <- raster(ncol=10, nrow=10, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   
   while(all(is.na(coords2country(as(r, 'SpatialPixelsDataFrame')@coords)))){ #repeat until over a country
     xmn <- round(runif(1, -180, 179.5)/0.05)*0.05
     ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
-    r <- raster(ncol=10, nrow=10, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+    r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   }
   
   lenny = rgeom(1, 0.8) + 1 #generate number of events according to a geometric distribution
@@ -456,6 +456,44 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   }
   return(Model$center)
 }
+
+perturb_impacts <- function(d=1900, AlgoParams){
+  folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+  ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  impacts_list <- list()
+  for (i in 1:length(ufiles)){
+    ufile <- ufiles[i]
+    impacts_list[[i]] <- readRDS(paste0(folderin,ufile))@impact
+  }
+  LL_sum = d + 1
+  d_recorded <- c()
+  while (LL_sum > d){
+    LL_sum <- 0
+    for(j in 1:length(impacts_list)){
+      print(j)
+      impacts_list[[j]]$sampled <- NA
+      for (k in 1:NROW(impacts_list[[j]])){
+        cap <- rexp(1, 0.2)
+        added_LL <- cap + 1
+        while (added_LL > cap){
+          impacts_list[[j]]$sampled[k] <- round(runif(1, 0, impacts_list[[j]]$observed[k] * 100+100))
+          added_LL <- LL_IDP(impacts_list[[j]][k,], kernel_sd=AlgoParams$kernel_sd, kernel=AlgoParams$kernel, cap=AlgoParams$cap)
+        }
+        LL_sum <- LL_sum + added_LL
+      }
+    }
+    d_recorded <- append(d_recorded, LL_sum)
+  }
+  
+  for (i in 1:length(ufiles)){
+    ufile <- ufiles[i]
+    ODDy <- readRDS(paste0(folderin,ufile))
+    ODDy@impact$observed <- impacts_list[[i]]$sampled
+    saveRDS(ODDy, paste0("IIDIPUS_InputPerturbed/ODDobjects/",ufile))
+  }
+  
+}
+
 
 #plot the S-curve for a given parameterisation (and optionally compare to a second)
 plot_S_curves <- function(Omega, Omega_curr=NULL){

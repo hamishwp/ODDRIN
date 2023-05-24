@@ -2,7 +2,7 @@
 #                  dependencies = c("Depends", "Imports","Suggests"))
 # devtools::install_github("souravc83/fastAdaboost")
 # devtools::install_github("davpinto/fastknn")
-# install.packages("ROCit")
+# install.packages("ROCit","vip")
 
 library(dplyr)
 library(magrittr)
@@ -22,14 +22,14 @@ library(sf)
 library(sp)
 source('RCode/BDobj.R')
 
-# folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/BDobjects/"
+# folder<-"./IIDIPUS_Input/IIDIPUS_Input_All_2023May19/BDobjects/"
 # filez<-list.files(folder)
 # haz<-"EQ"
 # if(haz=="EQ") funcyfun<-exp else funcyfun<-returnX
 # 
 # BDs<-data.frame()
 # for(fff in filez){
-# 
+#   print(fff)
 #   # if(fff%in%c("EQ20180225PNG_68","EQ20190925IDN_95","EQ20201030TUR_88")) next
 # 
 #   BDy<-readRDS(paste0(folder,fff))
@@ -45,7 +45,8 @@ source('RCode/BDobj.R')
 #   BDy@data%<>%dplyr::select(-c(grep(names(BDy@data),pattern = "hazMean",value = T),
 #                                grep(names(BDy@data),pattern = "hazSD",value = T),
 #                                grep(names(BDy@data),pattern = "itude",value = T),
-#                                grep(names(BDy@data),pattern = "nBuildings",value = T)))%>%
+#                                grep(names(BDy@data),pattern = "nBuildings",value = T),
+#                                grep(names(BDy@data),pattern = "nBuiltup",value = T)))%>%
 #     mutate(Event=fff,date=BDy@hazdates[1],hazMax=funcyfun(hazMax-BDy@I0),hazSD=hazSD)
 # 
 #   BDy@data$Longitude<-BDy@coords[,1]
@@ -114,7 +115,7 @@ train_control <- caret::trainControl(method="repeatedcv", number=8, repeats=2,
 parallelML_balanced<-function(algo,splitties=NULL,ncores=4,retmod=F) {
   
   # How many damaged buildings are there?
-  numun<-round(table(BDs$Damage)["Damaged"]*1.5)
+  numun<-table(BDs$Damage)["Damaged"]
   # By default, add all events that have less than 500 points
   permys<-BDs%>%filter(Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
   # Adding all damaged buildings, too
@@ -124,7 +125,7 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4,retmod=F) {
   # Lets reduce the bias towards predicting well only the unaffected buildings
   indies<-which(BDs$Damage=="Unaffected" & !BDs$Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
   # How many times to split the dataset and model
-  if(is.null(splitties)) splitties<-floor(length(indies)/numun)
+  if(is.null(splitties)) splitties<-unname(floor(length(indies)/numun))
   print(paste0("Working with the ",algo," model with data split into ",splitties," groups")) 
   # Now split the remaining into groups of indices
   indies <- createFolds(indies, k = splitties, list = T, returnTrain = FALSE)
@@ -144,16 +145,19 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4,retmod=F) {
     print(paste0(signif(100*i/splitties,2),"% done"))
     
     if(retmod) return(as.data.frame(vip::vi(modeler,
-                                            feature_names=covariates))%>%dplyr::select(Variable,Importance))
+                                            feature_names=covariates)))
 
-    
-    return(cbind(filter(modeler$results[-1],ROC==max(ROC)),
-                 t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
+    return(filter(modeler$results[-1],ROC==max(ROC)))
+
+    # return(cbind(filter(modeler$results[-1],ROC==max(ROC)),
+    #              t(as.data.frame((t(as.data.frame(varImp(modeler, scale=FALSE)$importance))[1,])))))
   })
   
   # Remember to close the computing cluster
   stopCluster(cl)
   registerDoSEQ()
+  
+  if(retmod) return(out)
   # Save out, then get out!
   saveRDS(out,paste0("./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/ML-",algo,"_2.RData"))
   
@@ -168,109 +172,78 @@ parallelML_balanced<-function(algo,splitties=NULL,ncores=4,retmod=F) {
 # checkerz<-unlist(lapply(carmods,function(stst) ifelse(is.null(tryCatch(checkInstall(getModelInfo(stst)$library),error=function(e) NA)),T,F)))
 # carmods<-carmods[checkerz]; rm(checkerz)
 
-minimods<-c("svmLinear","svmRadial","svmPoly","naive_bayes","rf","glmnet","ada","adaboost")
+minimods<-c("svmLinear","svmRadial","svmPoly","naive_bayes","rf","glmnet","ada")
 
 ncores<-60
 
 # Run ALL THE MODELLLLLSSS
 ML_BDs<-lapply(minimods,function(stst) tryCatch(parallelML_balanced(stst,ncores = ncores),error=function(e) NA))
 
-# Parallelise
-# cl <- makePSOCKcluster(60)  # Create computing clusters
-# registerDoParallel(cl)
-# getDoParWorkers()
-# # Run ALL THE MODELLLLLSSS
-# ML_BDs<-lapply(carmods,function(stst) tryCatch(parallelML_balanced(stst),error=function(e) NA))
-# # Remember to close the computing cluster
-# stopCluster(cl)
-# registerDoSEQ()
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%% KNN REGRESSION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-# plot(varImp(modeler, scale=FALSE))
-# tmp<-confusionMatrix(predict(modeler, BDs), BDs$Damage)
+# How many damaged buildings are there?
+numun<-table(BDs$Damage)["Damaged"]
+# By default, add all events that have less than 500 points
+permys<-BDs%>%filter(Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
+# Adding all damaged buildings, too
+permys<-BDs%>%filter(Damage=="Damaged" & 
+                       !Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))%>%
+  rbind(permys)
+# Lets reduce the bias towards predicting well only the unaffected buildings
+indies<-which(BDs$Damage=="Unaffected" & !BDs$Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
+# How many times to split the dataset and model
+splitties<-unname(floor(length(indies)/numun))
+# Now split the remaining into groups of indices
+indies <- createFolds(indies, k = splitties, list = T, returnTrain = FALSE)
+# Which columns to create/preserve
+namerz<-c("ROC","Sens","Spec","ROCSD","SensSD","SpecSD")
+# CV-split and model the damaged buildings
+out<-do.call(rbind,lapply(seq_along(indies),function(i){
+  # Setup the dataframe
+  datar<-rbind(BDs[indies[[i]],],permys)
+  datar%<>%dplyr::select(-c("Event","grading","weighting","www"))
+  ind<-colnames(datar)=="Damage"
+  
+  set.seed(123)
+  yhat <- fastknnCV(data.matrix(datar[,!ind]),as.factor(datar[,ind]),
+                    k = 1:15, method = "vote", folds = 8, eval.metric ="auc")
+  
+  ROC<-max(yhat$cv_table$mean)
+  ROCSD<-sd(yhat$cv_table[which.max(yhat$cv_table$mean),1:8])
+  
+  out<-as.data.frame(t(data.frame(namerz))); colnames(out)<-out[1,]
+  out[1,]<-NA_real_
+  out$ROC<-ROC
+  out$ROCSD<-ROCSD
+  
+  return(out)
+})); rownames(out)<-NULL
 
-datar<-BDs%>%dplyr::select(-c("Event","grading","weighting","www"))
-# datar<-datar[sample(1:nrow(datar),50000,F),]
-ind<-colnames(datar)=="Damage"
-# Let's run it!
-set.seed(123)
-yhat <- fastknnCV(data.matrix(datar[,!ind]),as.factor(datar[,ind]),
-                  k = 1:15, method = "vote", folds = 8, eval.metric ="auc")
+outtmp<-colMeans(out)
+imn<-names(out)=="ROC"
+isd<-names(out)=="ROCSD"
+outtmp[isd]<-sqrt(sd(out[,imn])^2 + outtmp[isd]^2)
+outtmp<-as.data.frame(t(as.data.frame(outtmp))); rownames(outtmp)<-NULL
 
-knn.out <- fastknn::fastknn(data.matrix(datar[,!ind]),
-                            as.factor(datar[,ind]),
-                            data.matrix(datar[,!ind]), k = yhat$best_k) 
+saveRDS(outtmp,"./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/ML-knn_2.RData")
 
-# split <- sample(1:nrow(datar), size = 0.8*nrow(datar),replace = F)
-# 
-# featies<-knnDecision(data.matrix(datar[split,!ind]), as.factor(datar[split,ind]),
-#                      data.matrix(datar[-split,!ind]), as.factor(datar[-split,ind]),
-#                      k = yhat$best_k)
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%% FEATURE IMPORTANCE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-ROC<-max(yhat$cv_table$mean)
-ROCSD<-sd(yhat$cv_table[which.max(yhat$cv_table$mean),1:8])
+train_control <- caret::trainControl(method="boot",
+                                     search = "random",classProbs=T,
+                                     summaryFunction=twoClassSummary)
 
-knn.out$pred<-factor(apply(knn.out$prob,1,which.max)-1,levels = c("Unaffected"=0,"Damaged"=1))
+outer<-parallelML_balanced("glmnet",splitties = 1,ncores = 60,retmod = T)
 
-score<-knn.out$prob[,1]
-class<-as.numeric(knn.out$class)-1
+saveRDS(outer[[1]],"./IIDIPUS_Results/SpatialPoints_ML-GLM/FeatureImportance.RData")
 
-perfy<-ROCit::measureit(score = score, class = class,
-          measure = c("SENS", "SPEC"))
+outer<-readRDS("./IIDIPUS_Results/SpatialPoints_ML-GLM/FeatureImportance.RData")
 
-ROCit::rocit(score = score, negref = "-",
-      class = class, 
-      method = "emp")
-
-head(perfy)
-
-namerz<-c("ROC","Sens","Spec","ROCSD","SensSD","SpecSD",colnames(datar)); namerz<-namerz[1:(length(namerz)-1)]
-out<-as.data.frame(t(data.frame(namerz))); colnames(out)<-out[1,]
-out[1,]<-NA
-out$ROC<-ROC
-out$ROCSD<-ROCSD
-
-saveRDS(out,"./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/ML-knn_2.RData")
-# 
-loccy<-"./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/"
-filez<-list.files(loccy);filez<-filez[grepl("_2",filez)];filez<-filez[!grepl("GPR",filez)]
-
-out<-do.call(rbind,lapply(seq_along(filez),
-                           function(i){
-                             print(filez[i])
-                             if(grepl("knn",filez[i])) return(cbind(data.frame(algo=filez[i]),dplyr::select(readRDS(paste0(loccy,filez[i])),namerz)))
-                             cbind(data.frame(algo=filez[i]),
-                                   t(colMeans(dplyr::select(do.call(rbind,readRDS(paste0(loccy,filez[i]))),namerz))))
-                           }))
-
-row.names(out)<-NULL
-
-for(i in 8:ncol(out)) out[,i]%<>%as.numeric()
-out[,-c(1:7)]<-100*out[,-c(1:7)]/rowSums(out[,-c(1:7)],na.rm = T)
-
-# out%>%ggplot(aes(algo,ROC))+geom_point()
-
-
-# tmp<-do.call(rbind,lapply(seq_along(out), function(i) out[[i]]$vippy))
-# outer<-data.frame(variable=colnames(tmp),meany=colMeans(tmp),vary=apply(tmp,2,sd))%>%
-#   arrange(desc(meany))
-
-
-
-
-
-
-
-# outer<-do.call(rbind,parallelML_balanced("ada",ncores = 60,retmod = T))%>%
-#   group_by(Variable)%>%
-#   reframe(ImportanceSD=sd(Importance),
-#           Importance=mean(Importance))%>%
-#   dplyr::select(Variable,Importance,ImportanceSD)
-
-outer<-out[1,-(1:7)]%>%reshape2::melt()
-
-colnames(outer)<-c("Variable","Importance")
-
-outer$Importance<-100*outer$Importance/sum(outer$Importance)
+outer$Variable[outer$Variable=="hazMax"]<-"max_MMI"
 
 outer$Variable%<>%factor(levels=outer$Variable[rev(order(outer$Importance))])
 
@@ -282,20 +255,23 @@ p<-outer%>%
   # scale_shape_manual(values=15:19,breaks=allimps)+
   # scale_colour_manual(values = pal,limits = names(pal))+
   xlab("Model Covariate") + ylab("Feature Importance [%]")+
-  ylim(c(0,25))+
+  # ylim(c(0,25))+
   # scale_x_discrete(labels=namerz)+
   # labs(colour="Impact Type",shape="Impact Type")+
-  theme(axis.text.x = element_text(angle = 90));p
+  theme(axis.text.x = element_text(angle = 45, hjust=1));p
 ggsave("BD_Feat.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)
 
-outer%>%dplyr::select(meany)%>%t()%>%as.data.frame()%>%
-  ggplot(aes())
+tmp<-BDs%>%dplyr::select(-c(Event,Longitude,Latitude,grading))#%>%dplyr::select(Population,Vs30,EQFreq,hazMax,hazSD,Damage)
+colnames(tmp)[colnames(tmp)=="hazMax"]<-"max_MMI"
+tmp%<>%reshape2::melt("Damage")
+tmp$variable%<>%as.character()
+tmp$variable%<>%factor(levels=outer$Variable[rev(order(outer$Importance))])
 
-p<-BDs%>%dplyr::select(Population,Vs30,EQFreq,hazMax,hazSD,Damage)%>%
-  # mutate(hazMax=exp(hazMax))%>%
-  reshape2::melt("Damage")%>%
-  group_by(variable)%>%reframe(value=value/max(value),Damage=Damage)%>%
-  ggplot(aes(variable,value))+geom_violin(aes(fill=Damage),scale = "width");p
+p<-tmp%>%
+  group_by(variable)%>%reframe(value=(value-min(value))/(max(value)-min(value)),Damage=Damage)%>%
+  ggplot(aes(variable,value))+geom_boxplot(aes(fill=Damage),scale = "width")+
+  ylab("Value")+xlab("Model Covariate")+scale_fill_manual(values=c("Unaffected"="cornflowerblue","Damaged"="brown1"))+
+  theme(axis.text.x = element_text(angle = 45, hjust=1));p
 ggsave("BD_Violin.eps",p,path="./Plots/IIDIPUS_Results/",width=12,height=4.,device = grDevices::cairo_ps)
 # 
 
@@ -315,10 +291,10 @@ bbs<-do.call(rbind,lapply(unique(BDs$Event), function(ev){
             bbox4=max(Latitude,na.rm = T))
 }))
 
-maxdist<-0.25 #max(0.5*sqrt((bbs[,3]-bbs[,1])*(bbs[,4]-bbs[,2])))/5
+maxdist<-0.075 #0.25 #max(0.5*sqrt((bbs[,3]-bbs[,1])*(bbs[,4]-bbs[,2])))/5
 
 # How many damaged buildings are there?
-numun<-round(table(BDs$Damage)["Damaged"]*1.5)
+numun<-round(table(BDs$Damage)["Damaged"])
 # By default, add all events that have less than 500 points
 permys<-BDs%>%filter(Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
 # Adding all damaged buildings, too
@@ -328,15 +304,19 @@ permys<-BDs%>%filter(Damage=="Damaged" &
 # Lets reduce the bias towards predicting well only the unaffected buildings
 indies<-which(BDs$Damage=="Unaffected" & !BDs$Event%in%names(table(BDs$Event)[table(BDs$Event)<500]))
 # How many times to split the dataset and model
-splitties<-8
-if(is.null(splitties)) splitties<-floor(length(indies)/numun)
+splitties<-floor(length(indies)/numun)
 print(paste0("Working with the GPR model with data split into ",splitties," groups")) 
 # Now split the remaining into groups of indices
 indies <- createFolds(indies, k = splitties, list = T, returnTrain = FALSE)
 # Initial variogram
-vario <- gstat::variogram(Damage~1, BDs, cutoff=maxdist)
-fit <- gstat::fit.variogram(vario, model=gstat::vgm(0.05, "Gau", 0.18, nugget = min(vario$gamma)))
-fit[1,2]<-0.004; fit[2,2:3]<-c(0.045,0.08); #plot(vario,fit)
+tmp<-BDs%>%dplyr::select(-Event)
+tmp$Damage<-as.numeric(tmp$Damage)-1
+coordinates(tmp) = ~Longitude+Latitude
+# Calculate the variogram
+vario <- gstat::variogram(Damage~1, data=tmp, cutoff=maxdist)
+# Now derive the fit from this
+fit <- gstat::fit.variogram(vario, model=gstat::vgm(0.085, "Gau", 0.05, nugget = min(vario$gamma)))
+fit[1,2]<-min(vario$gamma); fit[2,2:3]<-c(0.095,0.055); #plot(vario,fit)
 # Formulate the equations
 eqns<-c("Damage ~ 1")
 for(n in 1:length(covariates)){
@@ -349,7 +329,7 @@ eqns<-unique(eqns)
 # Ensure all unique values in BD object
 BDs[,covariates]<-BDs[,covariates]+rnorm(nrow(BDs),0,1e-5)
 # Parallelise
-ncores<-50
+ncores<-60
 cl <- makePSOCKcluster(ncores)  # Create computing clusters
 registerDoParallel(cl)
 getDoParWorkers()
@@ -400,8 +380,6 @@ outer%<>%mutate(tval=sqrt(nn)*(ROC-min(ROC))/
 outer%<>%mutate(pval=dt(tval,df))
 # 
 
-
-
 # Save out, then get out!
 saveRDS(outer,paste0("./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/ML-GPR_2.RData"))
 
@@ -411,6 +389,26 @@ GPR<-outer%>%arrange(desc(ROC))%>%slice(1)%>%dplyr::select(ROC,ROCSD)%>%
                    SensSD=NA,
                    SpecSD=NA))
 # 
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%% MODEL PERFORMANCE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+loccy<-"./IIDIPUS_Results/SpatialPoints_ML-GLM/NoSpace_ML_models/"
+filez<-list.files(loccy);filez<-filez[grepl("_2",filez)];filez<-filez[!grepl("GPR",filez)]
+
+# Which columns to create/preserve
+namerz<-c("ROC","Sens","Spec","ROCSD","SensSD","SpecSD")
+
+out<-do.call(rbind,lapply(seq_along(filez),
+                          function(i){
+                            print(filez[i])
+                            if(grepl("knn",filez[i])) return(cbind(data.frame(algo=filez[i]),dplyr::select(readRDS(paste0(loccy,filez[i])),namerz)))
+                            cbind(data.frame(algo=filez[i]),
+                                  t(colMeans(dplyr::select(do.call(rbind,readRDS(paste0(loccy,filez[i]))),namerz))))
+                          }))
+
+row.names(out)<-NULL
 
 out%<>%rbind(cbind(dplyr::select(GPR,namerz),data.frame(algo="ML-GPR_2.RData")))
 
@@ -423,9 +421,9 @@ ordz<-out%>%arrange(desc(ROC))%>%pull(algo)
 out$algo%<>%factor(levels=ordz)
 
 p<-out%>%ggplot(aes(algo,ROC)) +
-  geom_point(aes(colour=algo),size=3)+ylim(c(0.7,1))+
+  geom_point(aes(colour=algo),size=3)+
   geom_errorbar(aes(ymin=ROC-ROCSD, ymax=ROC+ROCSD,colour=algo),width=.4)+
-  theme(axis.text.x = element_text(angle = 90))+
+  theme(axis.text.x = element_text(angle = 45, hjust=1))+
   xlab("Model")+ylab("Area Under ROC Curve (AUC)")+
   labs(colour="Model");p
 

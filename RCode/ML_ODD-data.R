@@ -802,29 +802,8 @@ p<-predictions%>%filter(StandErr<0.6)%>%ggplot(aes(StandErr,group=algo)) +
   facet_wrap(.~impact,scales = "free");p
 ggsave("GLM_Errors.eps",p,path="./Plots/IIDIPUS_Results/GLM-ML_Work/",width=10,height=5,device = grDevices::cairo_ps)  
 
-allUV<-fuller%>%arrange(RelativeAbsDiff)%>%group_by(impact,algo)%>%slice(1)%>%
-  dplyr::select(impact,algo,RelativeAbsDiff,RelativeAbsDiffSD)%>%filter(algo!="lm")
 
 # colnames(allUV)<-c("Impact","Model","Avg. MADL Value", "S.D. MADL Value")
-pal <- c(
-  "mortality" = scales::hue_pal()(4)[1],
-  "displacement" = scales::hue_pal()(4)[2], 
-  "buildDam" = scales::hue_pal()(4)[3], 
-  "buildDest" = scales::hue_pal()(4)[4],
-  "average" = "black"
-)
-
-p<-allUV%>%ggplot(aes(algo,RelativeAbsDiff,group=impact))+
-  # geom_point(aes(colour=impact,shape=impact),size=4) +
-  geom_pointrange(aes(ymin=RelativeAbsDiff-RelativeAbsDiffSD,
-                    ymax=RelativeAbsDiff+RelativeAbsDiffSD,colour=impact,
-                    shape=impact),
-                size=1)+theme(axis.text.x = element_text(angle = 90))+
-  scale_y_log10()+scale_shape_manual(values=15:18,breaks=allimps)+
-  xlab("Model") + ylab("Mean Absolute Deviation of Logs (MADL)")+
-  scale_colour_manual(values = pal,limits = names(pal))+
-  labs(colour="Impact Type",shape="Impact Type");p
-ggsave("UV_MADL.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)  
 
 # For each of the top models, calculate the feature importance using vip package
 # See here for more info: https://cran.r-project.org/web/packages/vip/vignettes/vip-introduction.pdf
@@ -911,7 +890,7 @@ resultsUV%<>%filter(pval>0.05)
 
 # Order the variables by their importance, weighted by each models error value
 varimport<-resultsUV%>%group_by(impact)%>%
-  reframe(across(c("RelativeAbs","RelativeAbsSD",covariates), ~ weighted.mean(.x,pval)))%>%
+  reframe(across(all_of(c("RelativeAbs","RelativeAbsSD",covariates)), ~ weighted.mean(.x,pval)))%>%
   dplyr::select(-c(RelativeAbs,RelativeAbsSD))
 
 # To account for the variance in the estimates
@@ -938,6 +917,8 @@ pal <- c(
   "average" = "black"
 )
 
+saveRDS(varimport,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/varimport.RData")
+
 p<-varimport%>%
   ggplot(aes(variable,value,group=impact))+
   geom_point(aes(colour=impact,shape=impact),size=3)+
@@ -946,7 +927,7 @@ p<-varimport%>%
   scale_colour_manual(values = pal,limits = names(pal))+
   xlab("Model Covariate") + ylab("Feature Importance [%]")+
   labs(colour="Impact Type",shape="Impact Type")+
-  theme(axis.text.x = element_text(angle = 90));p
+  theme(axis.text.x = element_text(angle = 45, hjust=1));p
 
 ggsave("UV_FeatImp.eps",p,path="./Plots/IIDIPUS_Results/",width=9,height=4.,device = grDevices::cairo_ps)  
 
@@ -1108,23 +1089,22 @@ outer%<>%reshape2::melt("impacts")
 
 outer$variable%<>%factor(levels=ordy)
 
-# pal <- c(
-#   "mortality" = scales::hue_pal()(4)[1],
-#   "displacement" = scales::hue_pal()(4)[2], 
-#   "buildDam" = scales::hue_pal()(4)[3], 
-#   "buildDest" = scales::hue_pal()(4)[4],
-#   "average" = "black"
-# )
+pal <- c(
+  "mortality" = scales::hue_pal()(4)[1],
+  "displacement" = scales::hue_pal()(4)[2], 
+  "buildDam" = scales::hue_pal()(4)[3], 
+  "buildDest" = scales::hue_pal()(4)[4]
+)
 
 p<-outer%>%
   ggplot(aes(variable,value,group=impacts))+
   geom_point(aes(colour=impacts,shape=impacts),size=3)+
   geom_line(aes(colour=impacts),linewidth=0.7, alpha=0.5,linetype="dotdash")+
-  # scale_shape_manual(values=c(15:18,1),breaks=c(allimps,"average"))+
-  # scale_colour_manual(values = pal,limits = names(pal))+
+  scale_shape_manual(values=c(15:18,1),breaks=c(allimps,"average"))+
+  scale_colour_manual(values = pal,limits = names(pal))+
   xlab("Model Covariate") + ylab("Inter-impact Parameter Variance [Normalised]")+
   labs(colour="Impact Interactions",shape="Impact Interactions")+
-  theme(axis.text.x = element_text(angle = 90));p
+  theme(axis.text.x = element_text(angle = 45, hjust=1));p
 
 ggsave("MV_FeatCor.eps",p,path="./Plots/IIDIPUS_Results/",width=9,height=4.,device = grDevices::cairo_ps)  
 
@@ -1488,10 +1468,38 @@ outout<-rbind(morties,dispies,bdamies,bdesties)
 
 write_csv(outout,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/CNN_allimpacts.csv")
 
+outout<-read_csv("./IIDIPUS_Results/SpatialPolygons_ML-GLM/CNN_allimpacts.csv")
 
+allUV<-fuller%>%arrange(RelativeAbsDiff)%>%group_by(impact,algo)%>%slice(1)%>%
+  dplyr::select(impact,algo,RelativeAbsDiff,RelativeAbsDiffSD)%>%filter(algo!="lm")
 
-# Try combining with different vulnerabilities (EQFreq and Vs30)
+colnames(allUV)
+outout$algo<-"CNN"
+outout%<>%arrange(avLoss)%>%group_by(impact)%>%slice(1)%>%
+  dplyr::select(impact,algo,avLoss,sdLoss)
 
+colnames(outout)[3:4]<-c("RelativeAbsDiff","RelativeAbsDiffSD")
+
+allUV%<>%rbind(outout)
+
+pal <- c(
+  "mortality" = scales::hue_pal()(4)[1],
+  "displacement" = scales::hue_pal()(4)[2], 
+  "buildDam" = scales::hue_pal()(4)[3], 
+  "buildDest" = scales::hue_pal()(4)[4]
+)
+
+p<-allUV%>%ggplot(aes(algo,RelativeAbsDiff,group=impact))+
+  # geom_point(aes(colour=impact,shape=impact),size=4) +
+  geom_pointrange(aes(ymin=RelativeAbsDiff-RelativeAbsDiffSD,
+                      ymax=RelativeAbsDiff+RelativeAbsDiffSD,colour=impact,
+                      shape=impact),
+                  size=1)+theme(axis.text.x = element_text(angle = 45, hjust=1))+
+  scale_y_log10()+scale_shape_manual(values=15:18,breaks=allimps)+
+  xlab("Model") + ylab("Mean Absolute Deviation of Logs (MADL)")+
+  scale_colour_manual(values = pal,limits = names(pal))+
+  labs(colour="Impact Type",shape="Impact Type");p
+ggsave("UV_MADL_CNN.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)  
 
 
 

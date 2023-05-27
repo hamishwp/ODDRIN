@@ -21,6 +21,7 @@ GetSourceFiles<-function(packred){
     source('RCode/GetDisplacements.R')
     # source('RCode/GetHelix.R')
     # Demography & population related:
+    source('RCode/AddVulnerability.R')
     source('RCode/GetPopDemo.R')
     source('RCode/GetSocioEconomic.R')
     source('RCode/GetINFORM.R')

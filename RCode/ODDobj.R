@@ -94,6 +94,23 @@ ExtractI0poly<-function(hsdf,ODD){
   return(conts)
 }
 
+interp_overlay <- function(layer, ODD){
+  layer_df <- layer$z
+  rownames(layer_df) <- layer$x
+  colnames(layer_df) <- layer$y
+
+  layer_df <- as.data.frame(as.table(layer_df))
+  colnames(layer_df) <- c('Longitude', 'Latitude', 'var')
+  layer_df$Longitude <- as.numeric(as.character(layer_df$Longitude))
+  layer_df$Latitude <- as.numeric(as.character(layer_df$Latitude))
+  
+  coords_df <- as.data.frame(ODD@coords)
+  coords_df$order <- 1:NROW(coords_df)
+  coords_df %<>% merge(layer_df, by=c('Latitude', 'Longitude'))
+  coords_df %<>% arrange(order)
+  return(coords_df$var)
+}
+
 # Add GDP data to the ODD object by interpolating onto the grid using cubic splines
 setGeneric("AddHazSDF", function(ODD,lhazSDF) 
   standardGeneric("AddHazSDF") )
@@ -101,7 +118,7 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
   
   ODD@I0<-lhazSDF$hazard_info$I0
   # interpolate data onto the grid
-  coords<-Genx0y0(ODD)
+  coords<- list(xo=unique(ODD$Longitude), yo=unique(ODD$Latitude)) #Genx0y0(ODD)
   lenny<-length(lhazSDF) ; start<-2
   alertscores<-alertlevels<-c() ; dates<-rep(lhazSDF$hazard_info$sdate,lenny-start+1)
   
@@ -146,22 +163,53 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
       hsdf%<>%as.data.frame
       # Interpolate BOTH MEAN & SD onto the ODD grid
       print("mean")
+      
+      #DELETE:::::::::::::::::::::::::::::::::::::::::::
+      # rbPal <- colorRampPalette(c('red','blue'))
+      # layer2 <- layer$z
+      # rownames(layer2) <- layer$x
+      # colnames(layer2) <- layer$y
+      # layer_expand <- melt(layer2)
+      # Col <- rbPal(10)[as.numeric(cut(c(hsdf$mean, layer_expand$value),breaks = 10))]
+      # plot(hsdf$Longitude, hsdf$Latitude,col=Col[1:10605])
+      # points(layer_expand$Var1, layer_expand$Var2, col=Col[10606:16045], pch=19)
+      # 
+      # points(layer$x[20:34], rep(layer$y[66], 15), pch=19, col=Col[10606:10620])
+      # points(layer$x[20:34], rep(layer$y[67], 15), pch=19, col=Col[10621:10635])
+      # points(layer$x[20:34], rep(layer$y[68], 15), pch=19, col=Col[10636:10650])
+      # points(layer$x[20:34], rep(layer$y[69], 15), pch=19, col=Col[10651:10665])
+      # points(layer$x[20:34], rep(layer$y[70], 15), pch=19, col=Col[10666:10680])
+      
+      #::::::::::::::::::::::::::::::::::::::
+      
+      
       layer<-with(hsdf,akima::interp(x=Longitude,y=Latitude,z=mean,
                                      xo=coords$xo,yo=coords$yo,
-                                     linear=F,extrap = F))
-      layer<-c(layer$z)
-      layer[!insidepoly]<-NA
-      if(all(is.na(layer))) next
+                                     linear=T,extrap = F))
       
-      ODD@data[paste0("hazMean",i-start+1)]<-layer
+      layer$z[!insidepoly]<-NA
+      var <- interp_overlay(layer, ODD)
+      
+      #layer<-c(layer$z)
+      #layer[!insidepoly]<-NA
+      
+      if(all(is.na(var))) next
+      
+      ODD@data[paste0("hazMean",i-start+1)]<-var
       
       print("sd")
       layer<-with(hsdf,akima::interp(x=Longitude,y=Latitude,z=sd,
                                      xo=coords$xo,yo=coords$yo,
-                                     linear=F,extrap = F))
-      layer<-c(layer$z)
-      layer[!insidepoly]<-NA
-      ODD@data[paste0("hazSD",i-start+1)]<-layer
+                                     linear=T,extrap = F))
+      
+      
+      # layer<-c(layer$z)
+      # layer[!insidepoly]<-NA
+      
+      layer$z[!insidepoly]<-NA
+      var <- interp_overlay(layer, ODD)
+      
+      ODD@data[paste0("hazSD",i-start+1)]<-var
       
       polysave[,i-start+1]<-insidepoly
     }
@@ -235,7 +283,8 @@ setMethod(f="initialize", signature="ODD",
             year<-AsYear(dater)
             
             print("Fetching population data")
-            obj <-GetPopulationBbox(.Object@dir,bbox=bbox)
+            #obj <-GetPopulationBbox(.Object@dir,bbox=bbox)
+            obj <- getWorldPop_ODD(.Object@dir, year, bbox)
             .Object@data <- obj@data
             .Object@coords.nrs <-obj@coords.nrs
             .Object@grid <-obj@grid
@@ -262,13 +311,13 @@ setMethod(f="initialize", signature="ODD",
             print("Interpolate population values")
   
             # Note there are as many values returned as iso3c codes (returns as data.frame with columns 'iso3' and 'factor')
-            Popfactors<-InterpPopWB(iso3c,dater)
-            
-            for (iso in iso3c){
-              indie<-.Object@data$ISO3C==iso & !is.na(.Object@data$ISO3C)
-              .Object@data$Population[indie]%<>%
-                multiply_by(Popfactors$factor[Popfactors$iso3==iso])
-            }
+            # Popfactors<-InterpPopWB(iso3c,dater, normdate=as.Date(paste(year, "2015-01-01"))
+            # 
+            # for (iso in iso3c){
+            #   indie<-.Object@data$ISO3C==iso & !is.na(.Object@data$ISO3C)
+            #   .Object@data$Population[indie]%<>%
+            #     multiply_by(Popfactors$factor[Popfactors$iso3==iso])
+            # }
             
             # World Income Database (WID) data:
             if(year==AsYear(Sys.Date())) year<-AsYear(Sys.Date())-1
@@ -288,9 +337,9 @@ setMethod(f="initialize", signature="ODD",
             #print("Fetching GDP-PPP data")
             #.Object%<>%AddGDP(inds)
             
-            
             # # print("Fetching building count data")
-            # .Object%<>%AddBuildingCounts()
+            .Object%<>%AddBuildingCounts()
+            
             print("Checking ODD values")
             checkODD(.Object)
             
@@ -358,7 +407,7 @@ setGeneric("DispX", function(ODD,Omega,center, BD_params, LL, sim=F, Method)
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F, 
                                    Method=list(Np=20,cores=8,cap=-300, 
-                                               kernel_sd=list(displacement=1,mortality=16,buildDam=1.2,buildDest=0.9), kernel='lognormal')
+                                               kernel_sd=list(displacement=1,mortality=16,buildDam=1.2,buildDest=0.9, buildDamDest=1), kernel='lognormal')
 ){
   # ... Function description ...
   # LL: Returns 'likelihood' if true or data simulated from model if false
@@ -509,11 +558,11 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       polygon_impacts <- ODD@impact$impact[which(ODD@impact$polygon==polygon_id)]
       for (impact in polygon_impacts){
         if (impact == 'buildDamDest'){
-          impacts_sampled %<>% rbind(data.frame(polygon=polygon_id,
+          impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
                                                 impact=impact,
                                                 sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,c('buildDam', 'buildDest')], na.rm=T))))
         } else {
-          impacts_sampled %<>% rbind(data.frame(polygon=polygon_id,
+          impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
                                                 impact=impact,
                                                 sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact], na.rm=T))))
         }
@@ -666,7 +715,7 @@ GetVarName<-function(varname){
 
 plotODDy<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.5,map="terrain"){
   
-  if(is.null(breakings) & (var=="Population" | var=="Disp")) breakings<-c(0,1,5,10,50,100,500,1000)
+  if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
   
   if(is.null(bbox)) bbox<-ODDy@bbox
   

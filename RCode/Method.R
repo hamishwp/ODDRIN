@@ -33,7 +33,7 @@ AlgoParams<-list(Np=5, # Number of Monte Carlo particles
                  t_0 =200,
                  eps = 0.000000001,
                  kernel='log', #options are lognormal, loglaplace or log
-                 kernel_sd=list(displacement=1,mortality=16,buildDam=1.2,buildDest=0.9), 
+                 kernel_sd=list(displacement=1,mortality=16,buildDam=1.2,buildDest=0.9, buildDamDest=1), 
                  smc_steps = 200, #Number of steps in the ABC-SMC algorithm
                  smc_Npart = 1000, #Number of particles in the ABC-SMC algorithm
                  smc_alpha = 0.9,

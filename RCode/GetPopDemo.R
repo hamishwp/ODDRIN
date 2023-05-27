@@ -82,7 +82,7 @@ GetSEDACfnum<-function(long,lat){
   longCo<-c(-90L,0L,90L,180L)
   Llo<-longCo-long
   
-  if((Llo< -270L)||(Llo>360L)||(lat>90L)||(lat< -90L)){stop("Error in the longitude and latitude values for SEDACS data: see GetPopDemo.R\n")}
+  if(any(Llo< -270L)||any(Llo>360L)||(lat>90L)||(lat< -90L)){stop("Error in the longitude and latitude values for SEDACS data: see GetPopDemo.R\n")}
   
   SEDAC<-which.min(abs(Llo))
   llg<-longCo[SEDAC]
@@ -282,6 +282,46 @@ GetPopulationBbox<-function(directory,bbox,density=F,lowres=FALSE,yr="2015",plot
   pop_with_iso3 <- cbind(population, nations)
   
   return(pop_with_iso3)
+}
+
+GetNationsBbox<-function(directory,bbox){
+  # bbox is bounding box in the form 'min lon, max lat, max lon, min lat'
+  # DATA: NASA - SEDAC
+  
+  
+  if(abs(bbox[2])>90 | abs(bbox[4])>90 | abs(bbox[1])>180 | abs(bbox[3])>180) {stop("Error: non-physical bounding box values in GetPopulationBbox")}
+  
+  # if(!is.null(date)) {
+  #   date%<>%try(as.Date,silent=T)
+  #   if(class(date)=="try-error") {
+  #     print("WARNING: date badly specified in GetPopulationBbox (should be in format '2015-01-25'), no interpolation will be performed")
+  #     date<-NULL
+  #   }
+  # }
+  
+  #   GetSEDACfnum(LONG,   LAT)
+  LL<-GetSEDACfnum(bbox[1],bbox[2]) # Lower Left
+  LR<-GetSEDACfnum(bbox[3],bbox[2]) # Lower right
+  UL<-GetSEDACfnum(bbox[1],bbox[4]) # Upper Left
+  UR<-GetSEDACfnum(bbox[3],bbox[4]) # Upper right
+  
+  # if(abs(LL[1]-LR[1])>1L) {
+  #   print("Bounding box of SEDAC population data is too large, using lower resolution")
+  #   lowres<-TRUE
+  # }
+  
+  natloc<-paste0("Demography_Data/Population/gpw-v4-national-identifier-grid-rev11_30_sec_asc/")
+  natnom<-paste0("gpw_v4_national_identifier_grid_rev11_30_sec_")
+  strings_nat <- c(directory, natloc, natnom)
+  
+  nations<-ExtractSEDACS(strings_nat,  bbox)
+  nation_names_lookup <- read.csv(paste0(dir, natloc,'gpw_v4_national_identifier_grid_rev11_lookup.txt'), sep='\t')
+  
+  nations %<>% convMat2SPDF(name='ISO_id')
+  nations %<>% merge(nation_names_lookup %>% dplyr::select(Value, ISO3C = ISOCODE), by.x='ISO_id', by.y='Value', all.x=T, sort=F)
+  nations$ISO_id <- NULL
+  
+  return(nations)
 }
 
 # GetPopulationBboxSAFE<-function(bbox){

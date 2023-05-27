@@ -86,6 +86,8 @@ GetWID_natincome<-function(year=NULL,iso3c=NULL){
 
 GetWID_perc<-function(perc,iso3c,year){
   
+  if (year > 2021) year <- "2021" #currently no data past 2021
+  
   # Note that 'j' refers to the income divided equally between spouses 
   # (only chosen because it is the dataset with largest number of entries)
   perc <- paste0('p',seq(0,90,10), 'p', seq(10,100,10))

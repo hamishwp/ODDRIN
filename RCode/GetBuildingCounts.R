@@ -13,7 +13,7 @@ merge_rastered_spdf <- function(raster1_spdf, raster2_spdf, added_var_name){
                   by=c('Latitude', 'Longitude'), all.x = TRUE)
   colnames(data)[which(colnames(data)=='added_var')] <- added_var_name
   data <- data[order(data$id),]
-  data <- data[-which(colnames(data)=='id')]
+  data <- data[-which(colnames(data) %in% c('id', 'Latitude', 'Longitude'))]
   return(data)
 }
 
@@ -104,7 +104,7 @@ AddBuildingCounts <- function(ODD){
   if (any(iso3_unique %in% isos_bingbuildings)){
     ODD %<>% AddBingBuildingCounts(isos_bingbuildings)
   } 
-  if (is.null(ODD$nBuildings)) ODD$nBuildings <- NA
+  if (is.null(ODD$nBuildings)){return(ODD)} 
   missing_building_counts <- which(!is.na(ODD$ISO3C) & is.na(ODD$nBuildings))
   if (length(missing_building_counts)>0){
     stop(paste('Missing data for rows ', missing_building_counts, 'of countries:', unique(ODD$ISO3C[missing_building_counts])))

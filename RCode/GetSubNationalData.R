@@ -46,6 +46,7 @@ readSubNatData <- function(subnat_file){
   SubNatData$displacement <- as.integer(SubNatData$displacement)
   SubNatData$buildDam <- as.integer(SubNatData$buildDam)
   SubNatData$buildDest <- as.integer(SubNatData$buildDest)
+  SubNatData$EventID <- as.integer(SubNatData$EventID)
   
   return(SubNatData)
 }
@@ -289,7 +290,7 @@ pixelsInPoly <- function(poly, ODDy){
   }
   
   inside_poly <- unlist(mclapply(indies, check_intersection, mc.cores=6))
-  return(which(insidepoly == "TRUE"))
+  return(indies[which(inside_poly)])
 }
 
 addODDPolygons <- function(ODDy, polygons_list){
@@ -603,14 +604,14 @@ redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNatio
   # no corresponding existing ODD object can be found, creates a new ODD object.
 
   #existingODDloc <- paste0(dir, "IIDIPUS_Input/ODDobjects/")
-  existingODDloc <-"/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All_ODD_Edited/ODDobjects"
+  existingODDloc <-"/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All_Edited/ODDobjects/"
   existingODDfiles <- na.omit(list.files(path=existingODDloc,pattern=Model$haz,recursive = T, ignore.case = T))
   
   #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
   SubNatData <- readSubNatData(subnat_file)
 
   # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
-  SubNatDataByEvent <- SubNatData %>% group_by(event_name, sdate) %>% group_split()
+  SubNatDataByEvent <- SubNatData %>% group_by(sdate, event_name) %>% group_split() 
 
   # Extract all building damage points
   Damage<-ExtractBDfiles(dir = dir,haz = haz)
@@ -630,7 +631,7 @@ redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNatio
     if( any(filename_options %in% substr(existingODDfiles, 1, 13))){
       matched_index <- match(filename_options, substr(existingODDfiles, 1, 13))
       file_match <- existingODDfiles[matched_index[which(!is.na(matched_index ))]]
-      ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All_ODD_Edited/ODDobjects/', file_match))
+      ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All_Edited/ODDobjects/', file_match))
       event_date <- as.Date(substr(file_match, 3, 10), "%Y%m%d")
     } else {
       print(paste('No ODD object match found for ', miniDamSimplified))
@@ -653,7 +654,7 @@ redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNatio
       # Make building damage object BD
       BDy<- tryCatch(new("BD",Damage=miniDam,ODD=ODDy),error=function(e) NULL)
       if(is.null(BDy)) {print(paste0("BD FAIL: ",i, " ",unique(miniDamSimplified$iso3)[1]," ", unique(miniDamSimplified$sdate)[1])) ;next}
-      BDpath <-paste0(dir,"IIDIPUS_Input_All_ODD_Edited/BDobjects/",namer)
+      BDpath <-paste0(dir,"IIDIPUS_Input_All_Edited/BDobjects/",namer)
       # Save it out!
       saveRDS(BDy, BDpath)
     }
@@ -792,78 +793,198 @@ redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNatio
 
 # Re-do subnational impact data with double counting
 # Check impact seems to be MAR
-redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNational.xlsx'){
+# redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNational.xlsx'){
+#   # Works through EQ_Subnational.xlsx and, for each event, either updates the existing ODD object or, if
+#   # no corresponding existing ODD object can be found, creates a new ODD object.
+#   
+#   #existingODDloc <- paste0(dir, "IIDIPUS_Input/ODDobjects/")
+#   existingODDloc <-"/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NMAR/ODDobjects"
+#   existingODDfiles <- na.omit(list.files(path=existingODDloc,pattern=Model$haz,recursive = T, ignore.case = T))
+#   
+#   #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+#   SubNatData <- readSubNatData(subnat_file)
+#   
+#   # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
+#   SubNatDataByEvent <- SubNatData %>% group_by(sdate, event_name) %>% group_split()
+#   
+#   # Extract all building damage points
+#   #Damage<-ExtractBDfiles(dir = dir,haz = haz)
+#   
+#   DispData <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/DispData_EQ_V2.Rdata')
+#   
+#   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
+#   path<-data.frame()
+#   for (i in 1:10){
+#     
+#     # Subset displacement and disaster database objects
+#     miniDam<-SubNatDataByEvent[[i]]
+#     print(miniDam)
+#     miniDamSimplified <- data.frame(iso3=unique(trimws(unlist(strsplit(miniDam$source_listed_iso3, ";")))), 
+#                                     sdate=miniDam$sdate[1], fdate=miniDam$fdate[1], eventid=i, hazard=miniDam$hazard[1])
+#     
+#     #CHECK IF EXISTING ODD OBJECT AND UPDATE INSTEAD:
+#     filename_options <- paste0( miniDam$hazard[1], rep(gsub("-", "", seq(miniDam$sdate[1]-1, miniDam$sdate[1]+1, by='days')), each=length(miniDamSimplified$iso3)), miniDamSimplified$iso3)
+#     
+#     if( any(filename_options %in% substr(existingODDfiles, 1, 13))){
+#       matched_index <- match(filename_options, substr(existingODDfiles, 1, 13))
+#       file_match <- existingODDfiles[matched_index[which(!is.na(matched_index ))]]
+#       ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NMAR/ODDobjects/', file_match))
+#       print('Checking hazards for the event')
+#       event_date <- as.Date(substr(file_match, 3, 10), "%Y%m%d")
+#       print(paste('Event Date:', event_date, 'Countries:', paste(unique(ODDy@data$ISO3C[!is.na(ODDy@data$ISO3C)], na.rm=TRUE), collapse=" ")))
+#       print('Using the data:')
+#       print(head(miniDam))
+#     } else {
+#       print(paste('No ODD object match found for ', miniDamSimplified))
+#       stop()
+#       
+#       maxdate<-miniDamSimplified$sdate[1]-5
+#       if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
+#       
+#       bbox<-countriesbbox(unique(miniDamSimplified$iso3))
+#       bbox[1] <- max(bbox[1]-5, -180)
+#       bbox[2] <- max(bbox[2]-5, -90)
+#       bbox[3] <- min(bbox[3]+5, 180)
+#       bbox[4] <- min(bbox[4]+5, 90)
+#       # lhazSDF <- GetDisaster(miniDamSimplified, bbox = c(160, -11.8, 163, -9.7))
+#       lhazSDF<-GetDisaster(miniDamSimplified,bbox=bbox, EQparams=list(I0=4, minmag=4.5)) #, bbox=c(140,-9,147.5,-3)) #, EQparams=list(I0=4.5,minmag=4.5))
+#       
+#       if(is.null(lhazSDF)) {
+#         print(paste0("Warning: no hazard data found for event ", unique(miniDam$iso3),
+#                      " ",unique(miniDam$hazard), " ", min(miniDam$sdate) ))
+#         next
+#       }
+#       
+#       # Create the ODD object:
+#       ODDy<-new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified)
+#       if(is.null(ODDy)) {print(paste0("ODD FAIL: ",ev, " ",unique(miniDam$iso3)[1]," ", unique(miniDam$sdate)[1])) ;next}
+#     
+#     }
+#     
+#     
+#     ODDy_with_impact <- updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1])
+#     
+#     if(is.null(ODDy_with_impact)) stop()
+#     ODDy <- ODDy_with_impact
+#     
+#     # Create a unique hazard event name
+#     namer<-paste0(ODDy@hazard,
+#                   str_remove_all(as.character.Date(min(ODDy@hazdates)),"-"),
+#                   unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
+#                   "_",i)
+#     
+#     iso3_ODDy <- unique(ODDy$ISO3C)
+#     iso3_ODDy <- iso3_ODDy[which(!is.na(iso3_ODDy))]
+#     
+#     iso3_impact <- unique(ODDy@impact$iso3)
+#     
+#     if(any(!iso3_ODDy %in% iso3_impact)){
+#       stop(paste('No impact data found for an affected country'))
+#     }
+#     
+#     # Save out objects to save on RAM
+#     ODDpath<-paste0(dir,"IIDIPUS_Input_All_ODD_Edited/ODDobjects/",namer)
+#     saveRDS(ODDy,ODDpath)
+#     
+#     maxdate<-miniDamSimplified$sdate[1]-5
+#     if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
+#     
+#     DispData_event <- filter(DispData, (iso3 %in% iso3_ODDy) &  (as.Date(sdate) >= maxdate) & (as.Date(sdate) <= mindate))
+#     if (NROW(DispData_event)==0){
+#       stop('Event not found in disp data')
+#     }
+#     lhazSDF <- GetUSGS_id(DispData_event$USGSid[1])
+#     cellsize <- 0.008333333333333
+#     if (lhazSDF@bbox[1,1] < (ODDy@bbox[1,1]-cellsize) | lhazSDF@bbox[1,2] > (ODDy@bbox[1,2]+cellsize) | lhazSDF@bbox[2,1] < (ODDy@bbox[2,1]-cellsize) | lhazSDF@bbox[2,2] > (ODDy@bbox[2,2]+cellsize)){
+#       stop('BBOX not contained')
+#     }
+#     
+#     plot_impact(ODDy)
+#     
+#     # Save some RAM
+#     rm(ODDy,ODDy_with_impact)
+#   }
+#   
+#   return(path)
+#   
+# }
+
+createODD <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNational.xlsx'){
   # Works through EQ_Subnational.xlsx and, for each event, either updates the existing ODD object or, if
   # no corresponding existing ODD object can be found, creates a new ODD object.
-  
-  #existingODDloc <- paste0(dir, "IIDIPUS_Input/ODDobjects/")
-  existingODDloc <-"/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NMAR/ODDobjects"
-  existingODDfiles <- na.omit(list.files(path=existingODDloc,pattern=Model$haz,recursive = T, ignore.case = T))
   
   #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
   SubNatData <- readSubNatData(subnat_file)
   
   # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
-  SubNatDataByEvent <- SubNatData %>% group_by(sdate, event_name) %>% group_split()
-  
-  # Extract all building damage points
-  #Damage<-ExtractBDfiles(dir = dir,haz = haz)
+  SubNatDataByEvent <- SubNatData %>% group_by(EventID) %>% group_split()
   
   DispData <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/DispData_EQ_V2.Rdata')
   
+  # Extract all building damage points
+  Damage<-ExtractBDfiles(dir = dir,haz = haz)
+  
+  file_conn1 <- file('ODD_creation_notes/Missing_DispData', open = "a")
+  file_conn2 <- file('ODD_creation_notes/DispDataHazard_not_contained', open = "a")
+  file_conn3 <- file('ODD_creation_notes/lhazSDF_not_found', open = "a")
+  file_conn4 <- file('ODD_creation_notes/ODD_not_created', open = "a")
+  file_conn5 <- file('ODD_creation_notes/cannot_add_ODD_impact', open = "a")
+  file_conn5 <- file('ODD_creation_notes/BD_write_failed', open = "a")
+  
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
-  for (i in 1:10){
+  for (i in 1:length(SubNatDataByEvent)){
+    if (i %in% c(1, 140)){
+      next
+    }
     
     # Subset displacement and disaster database objects
     miniDam<-SubNatDataByEvent[[i]]
-    print(miniDam)
     miniDamSimplified <- data.frame(iso3=unique(trimws(unlist(strsplit(miniDam$source_listed_iso3, ";")))), 
                                     sdate=miniDam$sdate[1], fdate=miniDam$fdate[1], eventid=i, hazard=miniDam$hazard[1])
     
-    #CHECK IF EXISTING ODD OBJECT AND UPDATE INSTEAD:
-    filename_options <- paste0( miniDam$hazard[1], rep(gsub("-", "", seq(miniDam$sdate[1]-1, miniDam$sdate[1]+1, by='days')), each=length(miniDamSimplified$iso3)), miniDamSimplified$iso3)
+    maxdate<-miniDamSimplified$sdate[1]-5
+    if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
     
-    if( any(filename_options %in% substr(existingODDfiles, 1, 13))){
-      matched_index <- match(filename_options, substr(existingODDfiles, 1, 13))
-      file_match <- existingODDfiles[matched_index[which(!is.na(matched_index ))]]
-      ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NMAR/ODDobjects/', file_match))
-      print('Checking hazards for the event')
-      event_date <- as.Date(substr(file_match, 3, 10), "%Y%m%d")
-      print(paste('Event Date:', event_date, 'Countries:', paste(unique(ODDy@data$ISO3C[!is.na(ODDy@data$ISO3C)], na.rm=TRUE), collapse=" ")))
-      print('Using the data:')
-      print(head(miniDam))
+    if (!is.na(SubNatDataByEvent[[i]]$GetDisasterArgs_bbox[1])){
+      bbox = eval(parse(text = SubNatDataByEvent[[i]]$GetDisasterArgs_bbox[1]))
     } else {
-      print(paste('No ODD object match found for ', miniDamSimplified))
-      stop()
-      
-      maxdate<-miniDamSimplified$sdate[1]-5
-      if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
-      
       bbox<-countriesbbox(unique(miniDamSimplified$iso3))
-      bbox[1] <- max(bbox[1]-5, -180)
+      bbox[1] <- ifelse( (bbox[1]-5)  < (-180), 180 - (-180-(bbox[1]-5)), bbox[1]-5)
       bbox[2] <- max(bbox[2]-5, -90)
-      bbox[3] <- min(bbox[3]+5, 180)
+      bbox[3] <- ifelse( (bbox[3]+5)  > 180, -180 + (bbox[3]+5-180), bbox[3] + 5)
       bbox[4] <- min(bbox[4]+5, 90)
-      # lhazSDF <- GetDisaster(miniDamSimplified, bbox = c(160, -11.8, 163, -9.7))
-      lhazSDF<-GetDisaster(miniDamSimplified,bbox=bbox) #, bbox=c(140,-9,147.5,-3)) #, EQparams=list(I0=4.5,minmag=4.5))
-      
-      if(is.null(lhazSDF)) {
-        print(paste0("Warning: no hazard data found for event ", unique(miniDam$iso3),
-                     " ",unique(miniDam$hazard), " ", min(miniDam$sdate) ))
-        next
-      }
-      
-      # Create the ODD object:
-      ODDy<-new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified)
-      if(is.null(ODDy)) {print(paste0("ODD FAIL: ",ev, " ",unique(miniDam$iso3)[1]," ", unique(miniDam$sdate)[1])) ;next}
+    }
     
+    if (!is.na(SubNatDataByEvent[[i]]$GetDisasterArgs_EQ_Params[1])){
+      EQparams <- SubNatDataByEvent[[i]]$GetDisasterArgs_EQ_Params[1]
+    } else {
+      EQparams=list(I0=4.5, minmag=4.5)
     }
     
     
-    ODDy_with_impact <- updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1])
+    # lhazSDF <- GetDisaster(miniDamSimplified, bbox = c(160, -11.8, 163, -9.7))
+    lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL) #, bbox=c(140,-9,147.5,-3)) #, EQparams=list(I0=4.5,minmag=4.5))
+    if(is.null(lhazSDF)) {
+      writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1]), file_conn3)
+      #print(paste0("Warning: no hazard data found for event ", unique(miniDam$iso3), " ",unique(miniDam$hazard), " ", min(miniDam$sdate) ))
+      next
+    }
     
-    if(is.null(ODDy_with_impact)) stop()
+    # Create the ODD object:
+    ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified),error=function(e) NULL)
+    if(is.null(ODDy)) {
+      writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1]), file_conn4)
+      next
+    }
+    
+    ODDy_with_impact <- tryCatch(updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1]),error=function(e) NULL)
+    
+    if(is.null(ODDy_with_impact)) {
+      writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", sdate), file_conn5)
+      next
+    }
+    
     ODDy <- ODDy_with_impact
     
     # Create a unique hazard event name
@@ -872,42 +993,59 @@ redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNatio
                   unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
                   "_",i)
     
-    iso3_ODDy <- unique(ODDy$ISO3C)
-    iso3_ODDy <- iso3_ODDy[which(!is.na(iso3_ODDy))]
-    
-    iso3_impact <- unique(ODDy@impact$iso3)
-    
-    if(any(!iso3_ODDy %in% iso3_impact)){
-      stop(paste('No impact data found for an affected country'))
-    }
-    
     # Save out objects to save on RAM
-    ODDpath<-paste0(dir,"IIDIPUS_Input_All_ODD_Edited/ODDobjects/",namer)
+    ODDpath<-paste0(dir,"IIDIPUS_Input_I0_equals_4/ODDobjects/",namer)
     saveRDS(ODDy,ODDpath)
     
-    maxdate<-miniDamSimplified$sdate[1]-5
-    if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
+    HAZARDpath<-paste0(dir,"IIDIPUS_Input_I0_equals_4/HAZARDobjects/",namer)
+    saveRDS(lhazSDF,HAZARDpath)
+    rm(lhazSDF)
     
+    additional_poly_check(ODDy, i, print_to_xl=T)
+    
+    # Building damage subset
+    miniDam<-Damage%>%filter(iso3%in%unique(miniDamSimplified$iso3) & 
+                               sdate<mindate & sdate>maxdate)
+    
+    BDpath=NA_character_
+    if(nrow(miniDam)>0) {
+      # Make building damage object BD
+      BDy<- tryCatch(new("BD",Damage=miniDam,ODD=ODDy),error=function(e) NULL)
+      if(is.null(BDy)) {
+        writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", sdate), file_conn6)
+        next
+      }
+      BDpath <-paste0(dir,"IIDIPUS_Input_I0_equals_4/BDobjects/",namer)
+      # Save it out!
+      saveRDS(BDy, BDpath)
+    }
+    
+    # CHECK TO MAKE SURE OLD DISP DATA IS CONTAINED IN THE EVENT
     DispData_event <- filter(DispData, (iso3 %in% iso3_ODDy) &  (as.Date(sdate) >= maxdate) & (as.Date(sdate) <= mindate))
     if (NROW(DispData_event)==0){
-      stop('Event not found in disp data')
+      writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", sdate), file_conn1)
     }
-    lhazSDF <- GetUSGS_id(DispData_event$USGSid[1])
-    cellsize <- 0.008333333333333
-    if (lhazSDF@bbox[1,1] < (ODDy@bbox[1,1]-cellsize) | lhazSDF@bbox[1,2] > (ODDy@bbox[1,2]+cellsize) | lhazSDF@bbox[2,1] < (ODDy@bbox[2,1]-cellsize) | lhazSDF@bbox[2,2] > (ODDy@bbox[2,2]+cellsize)){
-      stop('BBOX not contained')
+    for (j in 1:length(DispData_event$USGSid)){
+      lhazSDF_DispData <- GetUSGS_id(DispData_event$USGSid[j])
+      cellsize <- 0.008333333333333
+      if (lhazSDF@bbox[1,1] < (ODDy@bbox[1,1]-cellsize) | lhazSDF@bbox[1,2] > (ODDy@bbox[1,2]+cellsize) | lhazSDF@bbox[2,1] < (ODDy@bbox[2,1]-cellsize) | lhazSDF@bbox[2,2] > (ODDy@bbox[2,2]+cellsize)){
+        writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", sdate), file_conn2)
+      }
     }
-    
-    plot_impact(ODDy)
     
     # Save some RAM
     rm(ODDy,ODDy_with_impact)
   }
   
+  close(file_conn1) 
+  close(file_conn2) 
+  close(file_conn3) 
+  close(file_conn4) 
+  close(file_conn5) 
+  close(file_conn6)
   return(path)
   
 }
-
 
 
 library(randomcoloR)
@@ -935,83 +1073,118 @@ plot_impact <- function(ODDy){
 }
 
 library(openxlsx)
-additional_poly_check <- function(ODDy, print_to_xl=F){
-  impacts_split <- ODDy@impact %>% group_by(impact) %>% group_split()
-  if(print_to_xl){wb <- createWorkbook()}
+additional_poly_check <- function(ODDy, i, print_to_xl=F){
   
+  noteworthy <- F
+  
+  impacts_split <- ODDy@impact %>% group_by(impact) %>% group_split()
+  
+  if(print_to_xl){wb <- createWorkbook()}
+
   for (j in 1:length(impacts_split)){
     
     if(print_to_xl){sheet <- addWorksheet(wb, impacts_split[[j]]$impact[1])}
+    
+    row = 1
     
     print(impacts_split[[j]]$impact[1])
     #check that all regions are on the same GADM admin level:
 
     polygons_impact <- ODDy@polygons[impacts_split[[j]]$polygon]
     polygon_names <- sapply(polygons_impact, function(x) x$name)
-    gadm_levels <- sapply(polygon_names, function(x) ifelse(grepl(",", x), length(gregexpr(",", x)[[1]]), 0))
+    # -1 = TOTAL
+    # 0 = NATIONAL
+    # 1 = SUBNATIONAL
+    # 2 = SUB-SUB NATIONAL
+    gadm_levels <- sapply(polygon_names, function(x) ifelse(grepl(",", x), length(gregexpr(",", x)[[1]]), ifelse(x=='TOTAL', -1, 0)))
+    
     if (length(unique(gadm_levels)) > 1){
+      noteworthy = T
+      writeData(wb, sheet, 'More than one admin level', startCol = 1, startRow = row)
+      row = row + 1
       print('More than one admin level. Go to data and manually delete if necessary.')
     }
     
-    for (gadm_level in unique(gadm_levels)){
-      row = 1
-      if (gadm_level == 0) {next} #handle countries manually
+    for (gadm_level in sort(unique(gadm_levels))){
+      writeData(wb, sheet, paste('GADM Level ', gadm_level), startCol = 1, startRow = row)
+      row = row + 1
+      if (gadm_level == -1){
+        writeData(wb, sheet, 'TOTAL', startCol = 1, startRow = row)
+        row = row + 1
+      }
+      if (gadm_level == 0) { #handle countries
+        iso3_incl <- c()
+        for (k in 1:NROW(impacts_split[[j]])){
+          if (gadm_levels[k] == gadm_level){
+            iso3_incl %<>% append(impacts_split[[j]]$iso3[k])
+          }
+        }
+        non_na_iso3 <- unique(ODDy$ISO3C)[which(!is.na(unique(ODDy$ISO3C)))]
+        iso3_missing <- non_na_iso3[which(!(non_na_iso3 %in% iso3_incl))]
+        for (iso3_miss in iso3_missing){
+          writeData(wb, sheet, iso3_miss, startCol = 1, startRow = row)
+          row = row + 1
+          noteworthy=T
+        }
+        next
+      }
       
       #check if there are any pixels not covered by the polygons:
-      iso3 <- impacts_split[[j]]$iso3[1]
       pixels_unallocated <- which(!is.na(ODDy$ISO3C))
       for (k in 1:NROW(impacts_split[[j]])){
         if (gadm_levels[k] == gadm_level)
         pixels_unallocated <- setdiff(pixels_unallocated, ODDy@polygons[[impacts_split[[j]]$polygon[k]]]$indexes)
       }
       if (length(pixels_unallocated) == 0){
-        print('No unallcoated pixels')
         next
       }
-
-      if (gadm_level == 0) next
-      if (gadm_level == 2){
-        regions_gadm_level <- getGADM(level=gadm_level, country=iso3)
-        regions_gadm_level <- sapply(seq_along(regions_gadm_level), function(i) paste0(regions_gadm_level[i], ', ', names(regions_gadm_level)[i]))
-        regions_gadm_level <- setdiff(regions_gadm_level, sub(",[^,]*$", "", polygon_names))
-      } else if (gadm_level == 1){
-        regions_gadm_level <- getGADM(level=gadm_level, country=iso3)
-        regions_gadm_level <- setdiff(regions_gadm_level, sub(",[^,]*$", "", polygon_names))
-      }
-
-      for (r in regions_gadm_level){
-        if (gadm_level==2){
-          r <- strsplit(r,',')[[1]]
-          r[2] <- substring(r[2], 2)
+      
+      for (iso3 in unique(impacts_split[[j]]$iso3)){
+        if (gadm_level == 2){
+          regions_gadm_level <- getGADM(level=gadm_level, country=iso3)
+          regions_gadm_level <- sapply(seq_along(regions_gadm_level), function(i) paste0(regions_gadm_level[i], ', ', names(regions_gadm_level)[i]))
+          regions_gadm_level <- setdiff(regions_gadm_level, sub(",[^,]*$", "", polygon_names))
+        } else if (gadm_level == 1){
+          regions_gadm_level <- getGADM(level=gadm_level, country=iso3)
+          regions_gadm_level <- setdiff(regions_gadm_level, sub(",[^,]*$", "", polygon_names))
         }
-        r_poly <- getGADM(r, level = gadm_level, country=iso3)
-        overlap <- (max(r_poly@bbox[1,]) >= ODDy@bbox[1] &
-                      min(r_poly@bbox[1,]) <= ODDy@bbox[3] &
-                      max(r_poly@bbox[2,]) >= ODDy@bbox[2] &
-                      min(r_poly@bbox[2,]) <= ODDy@bbox[4])
-        if (!overlap) next
-
-        if (length(pixels_unallocated)==0) next
-
-        spdf_pixels_unallocated <- SpatialPointsDataFrame(coords=ODDy@coords[pixels_unallocated,, drop=F],
-                                                          data=ODDy@data[pixels_unallocated,1:2, drop=F], #this is arbitrary, function just seems to require data
-                                                          proj4string=r_poly@proj4string)
-
-        contained <- gContains(r_poly, spdf_pixels_unallocated, byid=T)
-        if (any(contained)){
-          print(paste('Polygon', r, 'contains an unallocated pixel'))
-          pixels_unallocated <- pixels_unallocated[-which(contained)]
-          if(print_to_xl){ 
-            for (ll in 1:length(r)){
-              writeData(wb, sheet, r[ll], startCol = ll, startRow = row)
+        
+        for (r in regions_gadm_level){
+          if (gadm_level==2){
+            r <- strsplit(r,',')[[1]]
+            r[2] <- substring(r[2], 2)
+          }
+          r_poly <- getGADM(r, level = gadm_level, country=iso3)
+          overlap <- (max(r_poly@bbox[1,]) >= ODDy@bbox[1] &
+                        min(r_poly@bbox[1,]) <= ODDy@bbox[3] &
+                        max(r_poly@bbox[2,]) >= ODDy@bbox[2] &
+                        min(r_poly@bbox[2,]) <= ODDy@bbox[4])
+          if (!overlap) next
+          
+          if (length(pixels_unallocated)==0) next
+          
+          spdf_pixels_unallocated <- SpatialPointsDataFrame(coords=ODDy@coords[pixels_unallocated,, drop=F],
+                                                            data=ODDy@data[pixels_unallocated,1:2, drop=F], #this is arbitrary, function just seems to require data
+                                                            proj4string=r_poly@proj4string)
+          
+          contained <- gContains(r_poly, spdf_pixels_unallocated, byid=T)
+          if (any(contained)){
+            print(paste('Polygon', r, 'contains an unallocated pixel'))
+            pixels_unallocated <- pixels_unallocated[-which(contained)]
+            if(print_to_xl){ 
+              r <- rev(r)
+              for (ll in 1:length(r)){
+                writeData(wb, sheet, r[ll], startCol = ll, startRow = row)
+              }
+              row = row + 1
+              noteworthy=T
             }
           }
-          row = row + 1
         }
       }
     }
   }
-  if (print_to_xl){saveWorkbook(wb, "Regions_unallocated.xlsx")}
+  if (print_to_xl & noteworthy){saveWorkbook(wb, paste0("ODD_creation_notes/Missing Regions/Event_",i,".xlsx"))}
 }
 
 plot(ODDy@coords[which(!is.na(ODDy$Population)),], col='black')

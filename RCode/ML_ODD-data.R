@@ -283,19 +283,8 @@ LMFeatureSelection<-function(output,Nb=30,GLMer="LM",mvm=NULL,intercept=F,fn="+"
   
 }
 
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EXTRACT DATA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/ODDobjects/"
-filez<-list.files(folder)
-
-out<-data.frame()
-for(fff in filez){
-
-  if(fff=="EQ20170529IDN_136") next
-
-  ODDy<-readRDS(paste0(folder,fff))
-
+# Extract the data from the aggregated impact object and spatially aggregate to 0D
+convODD<-function(out,ODDy,Event){
   # Make MaxHaz function over all EQ fore and aftershocks:
   if(length(names(ODDy)[grepl("hazMean",names(ODDy))])==1){
     ODDy@data$hazMax<-ODDy@data$hazMean1
@@ -320,29 +309,29 @@ for(fff in filez){
     ODDy@data$hazSD<-hazard
     rm(hazard)
   }
-
+  
   for (iso in unique(ODDy@impact$iso3)){
-
+    
     if(!iso%in%ODDy@cIndies$iso3) next
-
+    
     inISO<-!is.na(ODDy@data$ISO3C) & ODDy@data$ISO3C==iso
-
+    
     tmp<-ODDy@cIndies%>%filter(iso3==iso)%>%dplyr::select(c(1,2))
     WID<-tmp$value%>%t()%>%as.data.frame(); colnames(WID)<-tmp$percentile; rm(tmp)
-
+    
     for (ppp in unique(ODDy@impact$polygon[ODDy@impact$iso3==iso])){
-
+      
       # extract which grid points lie within the given polygon
       inP<-rep(F,nrow(ODDy@data))
       inP[ODDy@polygons[[ppp]]$indexes] <-T
       indies<-inISO & inP
-
+      
       # Extract impact data per polygon
       impacts<-ODDy@impact%>%filter(polygon==ppp)%>%summarise(mortality=ifelse(length(observed[impact=="mortality"]==0),sum(observed[impact=="mortality"]),NA),
-                                                     displacement=ifelse(length(observed[impact=="displacement"]==0),sum(observed[impact=="displacement"]),NA),
-                                                     buildDam=ifelse(length(observed[impact=="buildDam"]==0),sum(observed[impact=="buildDam"]),NA),
-                                                     buildDest=ifelse(length(observed[impact=="buildDest"]==0),sum(observed[impact=="buildDest"]),NA))
-
+                                                              displacement=ifelse(length(observed[impact=="displacement"]==0),sum(observed[impact=="displacement"]),NA),
+                                                              buildDam=ifelse(length(observed[impact=="buildDam"]==0),sum(observed[impact=="buildDam"]),NA),
+                                                              buildDest=ifelse(length(observed[impact=="buildDest"]==0),sum(observed[impact=="buildDest"]),NA))
+      
       # Weighted (by population) vulnerability values
       vulny<-ODDy@data[inP & ODDy@data$hazMax>5,]%>%dplyr::select(c(ExpSchYrs,LifeExp,GNIc,Vs30,EQFreq,hazSD,Population))%>%
         summarise(ExpSchYrs=weighted.mean(ExpSchYrs,Population),
@@ -351,12 +340,12 @@ for(fff in filez){
                   Vs30=weighted.mean(Vs30,Population),
                   EQFreq=weighted.mean(EQFreq,Population),
                   hazSD=weighted.mean(hazSD,Population))
-
+      
       out%<>%rbind(
         cbind(impacts,data.frame(
           iso3=iso,
           date=ODDy@hazdates[1],
-          Event=fff,
+          Event=Event,
           Exp5=sum(ODDy@data$Population[ODDy@data$hazMax>=5 & indies],na.rm = T),
           Exp5.5=sum(ODDy@data$Population[ODDy@data$hazMax>=5.5 & indies],na.rm = T),
           Exp6=sum(ODDy@data$Population[ODDy@data$hazMax>=6 & indies],na.rm = T),
@@ -366,11 +355,30 @@ for(fff in filez){
           Exp8=sum(ODDy@data$Population[ODDy@data$hazMax>=8 & indies],na.rm = T),
           Exp8.5=sum(ODDy@data$Population[ODDy@data$hazMax>=8.5 & indies],na.rm = T),
           Exp9=sum(ODDy@data$Population[ODDy@data$hazMax>=9 & indies],na.rm = T),
-          maxHaz=max(ODDy@data$hazMax,na.rm = T)
+          maxHaz=max(ODDy@data$hazMax[indies],na.rm = T)
         ),WID,vulny)
       )
     }
   }
+  
+  return(out)
+}
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EXTRACT DATA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/ODDobjects/"
+filez<-list.files(folder)
+
+out<-data.frame()
+for(fff in filez){
+  # Exceptions... sigh
+  if(fff=="EQ20170529IDN_136") next
+  # Read in the hazard & impact object
+  ODDy<-readRDS(paste0(folder,fff))
+  # Convert it into the necessary form
+  out%<>%convODD(ODDy,fff)
+  
   print(paste0("Finished EQ: ",fff))
 }
 
@@ -404,31 +412,32 @@ out<-readRDS("./IIDIPUS_Results/SpatialPolygons_ML-GLM/InputData_ODD.RData")
 #   
 # ggsave("DispHH-Size.eps",p,path="./Plots/IIDIPUS_Results/",width=6,height=5,device = grDevices::cairo_ps)  
 
-# Per impact, do the analysis (for all impacts, even without building data)
-outred<-dplyr::select(out,-c("iso3","date")); rm(out)
-outred[,-(1:5)]<-scale(outred[,-(1:5)])
+scaleIMPs<-function(out){
+  # Per impact, do the analysis (for all impacts, even without building data)
+  outred<-dplyr::select(out,-c("iso3","date")); rm(out)
+  outred[,-(1:5)]<-scale(outred[,-(1:5)])
+  # This reveals 95% of variance is contained within 4 dimensions of the PCA
+  ExpPCA<-outred%>%dplyr::select(colnames(outred)[str_starts(colnames(outred),"Exp") & colnames(outred)!="ExpSchYrs"])%>%PCA(ncp = 5,graph = F)
+  iExp<-sum(ExpPCA$eig[,3]<95); iExp<-2
+  tmpExp<-as.data.frame(ExpPCA$ind$coord[,1:iExp]); colnames(tmpExp)<-paste0("ExpDim",1:iExp)
+  outred%<>%cbind(tmpExp)%>%dplyr::select(-colnames(outred)[str_starts(colnames(outred),"Exp") & colnames(outred)!="ExpSchYrs"])
+  rm(ExpPCA,iExp,tmpExp)
+  # This reveals 95% of variance is contained within 2 dimensions of the PCA
+  WIDPCA<-outred%>%dplyr::select(colnames(outred)[str_starts(colnames(outred),"p")])%>%PCA(ncp = 5,graph = F)
+  iWID<-sum(WIDPCA$eig[,3]<95)
+  tmpWID<-as.data.frame(WIDPCA$ind$coord[,1:iWID]); colnames(tmpWID)<-paste0("WIDDim",1:iWID)
+  outred%<>%cbind(tmpWID)%>%dplyr::select(-colnames(outred)[str_starts(colnames(outred),"p")])
+  rm(WIDPCA,iWID,tmpWID)
+  # Remove NAs from the object
+  outred<-outred[apply(outred[,-(1:4)],1,function(x) !any(is.na(x))),]
+  # Check the Variance Inflation Factor
+  print(paste0("Checking the VIF of the remaining variables: percentage that didn't pass = ",sum(multiColl::VIF(outred[,-(1:5)])>6)/ncol(outred[,-(1:5)])))
+  
+  return(outred)
+}
 
-# This reveals 95% of variance is contained within 4 dimensions of the PCA
-ExpPCA<-outred%>%dplyr::select(colnames(outred)[str_starts(colnames(outred),"Exp") & colnames(outred)!="ExpSchYrs"])%>%PCA(ncp = 5,graph = F)
-iExp<-sum(ExpPCA$eig[,3]<95); iExp<-2
-tmpExp<-as.data.frame(ExpPCA$ind$coord[,1:iExp]); colnames(tmpExp)<-paste0("ExpDim",1:iExp)
-outred%<>%cbind(tmpExp)%>%dplyr::select(-colnames(outred)[str_starts(colnames(outred),"Exp") & colnames(outred)!="ExpSchYrs"])
-rm(ExpPCA,iExp,tmpExp)
-# This reveals 95% of variance is contained within 2 dimensions of the PCA
-WIDPCA<-outred%>%dplyr::select(colnames(outred)[str_starts(colnames(outred),"p")])%>%PCA(ncp = 5,graph = F)
-iWID<-sum(WIDPCA$eig[,3]<95)
-tmpWID<-as.data.frame(WIDPCA$ind$coord[,1:iWID]); colnames(tmpWID)<-paste0("WIDDim",1:iWID)
-outred%<>%cbind(tmpWID)%>%dplyr::select(-colnames(outred)[str_starts(colnames(outred),"p")])
-rm(WIDPCA,iWID,tmpWID)
-
-# Remove NAs from the object
-outred<-outred[apply(outred[,-(1:4)],1,function(x) !any(is.na(x))),]
-
+outred<-scaleIMPs(out); rm(out)
 covariates<-colnames(outred)[-c(1:5)]
-# Check the Variance Inflation Factor
-print(paste0("Checking the VIF of the remaining variables: percentage that didn't pass = ",sum(multiColl::VIF(outred[,-(1:5)])>6)/ncol(outred[,-(1:5)])))
-colnames(outred)
-
 allimps<-c("mortality","displacement","buildDam","buildDest")
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -635,9 +644,9 @@ parallelML<-function(algo,impact,modRet=F,othimps=NULL) {
                         tuneLength = 12, trControl = train_control,linout = TRUE,
                         weights = weights, preProcess = c("center","scale"))
   
-  if(modRet) return(modeler)
-  
   print(modeler$results)
+  
+  if(modRet) return(modeler)
   
   out<-cbind(dplyr::select(filter(modeler$results,RelativeAbs==min(RelativeAbs)),RelativeAbs,RelativeAbsSD),
           t(as.data.frame((t(as.data.frame(varImp(modeler, useModel=F, nonpara=F, scale=FALSE)$importance))[1,]))))
@@ -836,55 +845,71 @@ colnames(topOeach)[5]<-"eqn"
 
 GLMmods%<>%merge(dplyr::select(topOeach,impact,algo,eqn,pval))
 
-resultsUV<-do.call(rbind,lapply(1:nrow(GLMmods),function(i){
-  inpy<-as.data.frame(GLMmods[i,])
-  # Sort out the data
-  outFrame<-dplyr::select(outred,-allimps[inpy$impact!=allimps])
-  names(outFrame)[1]<-"Y"
-  outFrame%<>%na.omit()
-  # Make weights from the different events to make sure that no single event dominates the model parameterisation
-  weights<-outFrame%>%group_by(Event)%>%summarise(www=1/length(time))%>%merge(outFrame)%>%pull(www)
-  # Remove the variable Event after weighting is calculated
-  outFrame%<>%dplyr::select(-Event)
-  # Find the GLM model
-  modeler<-GetModel(inpy$algo,weights)
-  # Extract the trained model
-  outmod<-modeler(inpy$eqn,outFrame,"Y",modout=T)
-  # Which variables to include
-  vars<-names(outmod$model)[-1];vars<-vars[-length(vars)]
-  # Feature importance (model-agnostic) calculation
-  vippy<-as.data.frame(vip::vi(outmod,scale=T,ice=T,
-                               feature_names=vars))%>%dplyr::select(Variable,Importance)
-  # Add missing columns
-  missies<-colnames(outFrame)[-1][!colnames(outFrame)[-1]%in%vippy$Variable]
-  if(length(missies)>0) vippy%<>%rbind(data.frame(Variable=missies,Importance=0))
-  # Reformulate to column form 
-  rownames(vippy)<-vippy$Variable; vippy%<>%dplyr::select(Importance)%>%t()%>%as.data.frame()
-  # colnames in alphabetical order and add the model information to the data frame
-  vippy%<>%dplyr::select(sort(colnames(vippy)))%>%cbind(inpy)%>%
-    dplyr::select(impact,algo,StandErr,StandErrSD,everything())
-  # output it all!
-  return(vippy)
-}))
+GLMvarImp<-function(GLMmods,tester=NULL,predictionsML=NULL){
+  # line by line model development and variable information extraction
+  resultsUV<-do.call(rbind,lapply(1:nrow(GLMmods),function(i){
+    inpy<-as.data.frame(GLMmods[i,])
+    # Sort out the data
+    outFrame<-dplyr::select(outred,-allimps[inpy$impact!=allimps])
+    names(outFrame)[1]<-"Y"
+    outFrame%<>%na.omit()
+    # Make weights from the different events to make sure that no single event dominates the model parameterisation
+    weights<-outFrame%>%group_by(Event)%>%summarise(www=1/length(time))%>%merge(outFrame)%>%pull(www)
+    # Remove the variable Event after weighting is calculated
+    outFrame%<>%dplyr::select(-Event)
+    # Find the GLM model
+    modeler<-GetModel(inpy$algo,weights)
+    # Extract the trained model
+    outmod<-modeler(inpy$eqn,outFrame,"Y",modout=T)
+    # In case we don't want feature importance but the performance on a separate validation dataset
+    if(!is.null(tester)){
+      return(data.frame(pred=exp(predict(outmod,tester))+10,
+                        true=tester[[inpy$impact]],
+                        impact=inpy$impact,model=inpy$algo))
+    }
+    # Which variables to include
+    vars<-names(outmod$model)[-1];vars<-vars[-length(vars)]
+    # Feature importance (model-agnostic) calculation
+    vippy<-as.data.frame(vip::vi(outmod,scale=T,ice=T,
+                                 feature_names=vars))%>%dplyr::select(Variable,Importance)
+    # Add missing columns
+    missies<-colnames(outFrame)[-1][!colnames(outFrame)[-1]%in%vippy$Variable]
+    if(length(missies)>0) vippy%<>%rbind(data.frame(Variable=missies,Importance=0))
+    # Reformulate to column form 
+    rownames(vippy)<-vippy$Variable; vippy%<>%dplyr::select(Importance)%>%t()%>%as.data.frame()
+    # colnames in alphabetical order and add the model information to the data frame
+    vippy%<>%dplyr::select(sort(colnames(vippy)))%>%cbind(inpy)%>%
+      dplyr::select(impact,algo,StandErr,StandErrSD,everything())
+    # output it all!
+    return(vippy)
+  }))
+  
+  if(!is.null(tester)) return(resultsUV)
+  # Reorder the dataframe
+  resultsUV%<>%dplyr::select(algo,impact,StandErr,StandErrSD,everything())%>%dplyr::select(-c(AIC,BIC,pval,eqn))
+  colnames(resultsUV)[1:4]<-colnames(predictionsML)[1:4]
+  rownames(resultsUV)<-NULL
+  # Scale to percentage the feature importance
+  resultsUV[,covariates]<-100*resultsUV[,covariates]/rowSums(resultsUV[,covariates])
+  # Potentially add the ML results as well
+  if(!is.null(predictionsML)) resultsUV%<>%rbind(predictionsML)
+  # Check for statistical significance.
+  # Sample size
+  resultsUV%<>%group_by(impact)%>%mutate(nn=sum(!is.na(outred[,unique(impact)])))
+  # degrees of freedom
+  resultsUV%<>%group_by(impact)%>%mutate(minSD=RelativeAbsSD[which.min(RelativeAbs)]^2/unique(nn),
+                                         thisSD=RelativeAbsSD^2/unique(nn))%>%
+    mutate(df=(nn-1)*(thisSD+minSD)^2/(thisSD^2+minSD^2))
+  # t-value from t-distribution
+  resultsUV%<>%group_by(impact)%>%mutate(tval=sqrt(nn)*(RelativeAbs-min(RelativeAbs))/
+                                           sqrt(RelativeAbsSD^2+RelativeAbsSD[which.min(RelativeAbsSD)]^2))
+  # p-value associated to the t-values
+  resultsUV%<>%mutate(pval=dt(tval,df))
+  
+  return(resultsUV)
+}
 
-# Reorder the dataframe
-resultsUV%<>%dplyr::select(algo,impact,StandErr,StandErrSD,everything())%>%dplyr::select(-c(AIC,BIC,pval,eqn))
-colnames(resultsUV)[1:4]<-colnames(predictionsML)[1:4]
-rownames(resultsUV)<-NULL
-
-resultsUV[,covariates]<-100*resultsUV[,covariates]/rowSums(resultsUV[,covariates])
-
-resultsUV%<>%rbind(predictionsML)
-
-resultsUV%<>%group_by(impact)%>%mutate(nn=sum(!is.na(outred[,unique(impact)])))
-
-resultsUV%<>%group_by(impact)%>%mutate(minSD=RelativeAbsSD[which.min(RelativeAbs)]^2/unique(nn),
-                                      thisSD=RelativeAbsSD^2/unique(nn))%>%
-  mutate(df=(nn-1)*(thisSD+minSD)^2/(thisSD^2+minSD^2))
-
-resultsUV%<>%group_by(impact)%>%mutate(tval=sqrt(nn)*(RelativeAbs-min(RelativeAbs))/
-                                        sqrt(RelativeAbsSD^2+RelativeAbsSD[which.min(RelativeAbsSD)]^2))
-resultsUV%<>%mutate(pval=dt(tval,df))
+resultsUV<-GLMvarImp(GLMmods)
 
 resultsUV%<>%filter(pval>0.05)
 
@@ -1502,25 +1527,117 @@ p<-allUV%>%ggplot(aes(algo,RelativeAbsDiff,group=impact))+
 ggsave("UV_MADL_CNN.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)  
 
 
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%% MODEL TURKEY! #%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
+folder<-"./IIDIPUS_Input/IIDIPUS_Input_All_2023May19/ODDobjects/"
+# Read in the Turkey earthquake
+ODDy<-readRDS(paste0(folder,"EQ20230206TUR_169"))
+# Convert it into the necessary form
+outT<-convODD(data.frame(),ODDy,"EQ20230206TUR_169")%>%filter(outT%in%c("LBN","TUR","SYR"))
+# Read in the rest of the events
+out<-readRDS("./IIDIPUS_Results/SpatialPolygons_ML-GLM/InputData_ODD.RData")
+# Add the time component before binding
+outT$time<-as.numeric(outT$date-min(out$date))
+# Bind them
+out%<>%rbind(outT)
+# Scale and adjust
+outred<-scaleIMPs(out)
 
+tursyr<-outred%>%filter(Event=="EQ20230206TUR_169")
+outred%<>%filter(Event!="EQ20230206TUR_169")
 
+ncores<-60
+cl <- makePSOCKcluster(ncores)  # Create computing clusters
+registerDoParallel(cl)
+getDoParWorkers()
+# Run it!
+ODD_RF<-do.call(rbind,lapply(allimps, function(impact) {
+    out<-parallelML("rf",impact,modRet = T)
+    return(data.frame(pred=(exp(unname(predict(out,tursyr)))-10),
+                      true=tursyr[[impact]],
+                      impact=impact,
+                      ISO3C=outT$iso3,
+                      model="rf"))
+  }))
 
+ODD_Rad<-do.call(rbind,lapply(allimps, function(impact) {
+  out<-parallelML("svmRadial",impact,modRet = T)
+  return(data.frame(pred=(exp(unname(predict(out,tursyr)))-10),
+                    true=tursyr[[impact]],
+                    impact=impact,
+                    ISO3C=outT$iso3,
+                    model="svmRadial"))
+}))
+# Remember to close the computing cluster
+stopCluster(cl)
+registerDoSEQ()
 
+ODD_ML<-rbind(ODD_RF,ODD_Rad)
+ODD_ML%<>%mutate(MADL=abs(log(pred+10)-log(true+10)))
 
+View(ODD_ML)
 
+saveRDS(ODD_ML,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/TUR-SYR_preds.RData")
 
+TURpreds<-do.call(rbind,lapply(1:nrow(tursyr),function(i){
+  out<-GLMvarImp(GLMmods,tursyr[i,])
+  return(cbind(out,data.frame(ISO3C=outT$iso3[i])))
+}))
 
+TURpreds%<>%group_by(impact,ISO3C)%>%
+  summarise(pred=exp(mean(log(pred+10))-10),
+            true=mean(true),
+            MADL=abs(log(pred+10)-log(true+10)),
+            model="GLM")
 
+finfin<-rbind(TURpreds,ODD_ML)
 
+finfin%>%group_by(model)%>%
+  summarise(avMADL=mean(MADL,na.rm=T))
 
+finfin%>%group_by(model)%>%filter(ISO3C=="TUR")%>%View()
 
+ExpHaz<-rbind(out,outT)%>%dplyr::select(grep("Exp",colnames(out),value = T),Event,iso3)%>%
+  dplyr::select(-LifeExp,-ExpSchYrs)%>%reshape2::melt()
+ExpHaz$variable%<>%extractnumbers()%>%as.character()
 
+p<-ExpHaz%>%ggplot()+geom_boxplot(aes(variable,value,fill=variable))+scale_y_log10()+
+  geom_point(data = filter(ExpHaz,iso3=="TUR" & Event=="EQ20230206TUR_169"),aes(variable,value),colour="red")+
+  scale_fill_ordinal()+labs(fill="Intensity")+
+  xlab("Min. Exposed Earthquake Intensity [MMI]")+ylab("Exposed Population");p
+ggsave("TUR_HazExp.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=5,device = grDevices::cairo_ps)  
 
+outred%>%ggplot()+geom_histogram(aes(ExpDim2))+scale_x_log10()
+# 
 
+ncores<-60
+cl <- makePSOCKcluster(ncores)  # Create computing clusters
+registerDoParallel(cl)
+getDoParWorkers()
+# Run it!
+ODD_all<-do.call(rbind,lapply(allimps, function(impact) {
+  out<-parallelML("rf",impact,modRet = T)
+  return(data.frame(pred=(exp(unname(predict(out,outred)))-10),
+                    true=outred[[impact]],
+                    impact=impact,
+                    Event=outred$Event,
+                    ISO3C=outT$iso3,
+                    model="rf"))
+}))
+# Remember to close the computing cluster
+stopCluster(cl)
+registerDoSEQ()
 
+ODD_all%<>%mutate(MADL=abs(log(pred+10)-log(true+10)))
 
-
+p<-ODD_all%>%ggplot()+geom_boxplot(aes(impact,MADL,fill=impact))+
+  geom_point(data = filter(ODD_ML,model=="rf" & ISO3C=="TUR"),aes(impact,MADL),colour="red")+
+  xlab("Impact Type")+ylab("MADL Prediction Error")+labs(fill="Impact Type")+
+  ggtitle("Random Forest (Top Model) Predictions")+
+  theme(plot.title = element_text(hjust = 0.5));p
+ggsave("agg_RF_Predictions.eps",p,path="./Plots/IIDIPUS_Results/",width=8,height=5,device = grDevices::cairo_ps)  
 
 # Then do multivariate model for displacement and mortality for CNNs
 

@@ -47,7 +47,7 @@ source('RCode/BDobj.R')
 #                                grep(names(BDy@data),pattern = "itude",value = T),
 #                                grep(names(BDy@data),pattern = "nBuildings",value = T),
 #                                grep(names(BDy@data),pattern = "nBuiltup",value = T)))%>%
-#     mutate(Event=fff,date=BDy@hazdates[1],hazMax=funcyfun(hazMax-BDy@I0),hazSD=hazSD)
+#     mutate(Event=fff,date=BDy@hazdates[1],max_MMI=funcyfun(hazMax-BDy@I0),hazSD=hazSD)
 # 
 #   BDy@data$Longitude<-BDy@coords[,1]
 #   BDy@data$Latitude<-BDy@coords[,2]
@@ -66,11 +66,11 @@ source('RCode/BDobj.R')
 # BDs$Damage<-abs(1-as.integer(BDs$grading=="notaffected"))
 # # BDs%<>%dplyr::select(-"grading")
 # 
-# BDs%>%ggplot(aes(log(hazMax),group=as.factor(grading)))+geom_density(aes(colour=as.factor(grading),fill=as.factor(grading)),alpha=0.1)
+# BDs%>%ggplot(aes(log(max_MMI),group=as.factor(grading)))+geom_density(aes(colour=as.factor(grading),fill=as.factor(grading)),alpha=0.1)
 # 
 # tmp<-BDs%>%group_by(Event)%>%summarise(weighting=1/length(GNIc))
 # BDs%<>%merge(tmp,by="Event")
-# BDs%>%group_by(grading)%>%summarise(wmean=weighted.mean(hazMax,weighting),wcov=modi::weighted.var(hazMax,weighting))
+# BDs%>%group_by(grading)%>%summarise(wmean=weighted.mean(max_MMI,weighting),wcov=modi::weighted.var(max_MMI,weighting))
 # 
 # # model<-e1071::svm(BDs[1:10000,-c(1,5)], BDs$Damage[1:10000], kernel = "polynomial", cost = 5, scale = FALSE)
 # BDs$www<-BDs$weighting
@@ -80,18 +80,20 @@ source('RCode/BDobj.R')
 # 
 # BDs$Damage%<>%as.factor()
 # levels(BDs$Damage)<-c("Unaffected","Damaged")
-# BDs$hazMax%<>%unname();BDs$hazSD%<>%unname()
+# BDs$max_MMI%<>%unname();BDs$hazSD%<>%unname()
 # 
 # saveRDS(BDs,"./IIDIPUS_Results/SpatialPoints_ML-GLM/InputData_BD.RData")
 
 BDs<-readRDS("./IIDIPUS_Results/SpatialPoints_ML-GLM/InputData_BD.RData")
+
+if(!is.null(BDs$hazMax)) {BDs$max_MMI<-BDs$hazMax; BDs$hazMax<-NULL}
 
 BDcoords<-BDs%>%dplyr::select(Longitude,Latitude)
 BDs%<>%dplyr::select(-Longitude,-Latitude)
 
 tmp<-apply(BDs[,3:11],2,function(x) length(unique(x)))<30
 BDs%<>%dplyr::select(-names(tmp[tmp]))
-BDs$hazMax%<>%log()
+BDs$max_MMI%<>%log()
 
 covariates<-BDs%>%dplyr::select(colnames(BDs),-c(Event,grading,www,weighting,Damage))%>%colnames()
 
@@ -243,8 +245,6 @@ saveRDS(outer[[1]],"./IIDIPUS_Results/SpatialPoints_ML-GLM/FeatureImportance.RDa
 
 outer<-readRDS("./IIDIPUS_Results/SpatialPoints_ML-GLM/FeatureImportance.RData")
 
-outer$Variable[outer$Variable=="hazMax"]<-"max_MMI"
-
 outer$Variable%<>%factor(levels=outer$Variable[rev(order(outer$Importance))])
 
 namerz<-1:nrow(outer); names(namerz)<-outer$Variable
@@ -261,8 +261,7 @@ p<-outer%>%
   theme(axis.text.x = element_text(angle = 45, hjust=1));p
 ggsave("BD_Feat.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=4.,device = grDevices::cairo_ps)
 
-tmp<-BDs%>%dplyr::select(-c(Event,Longitude,Latitude,grading))#%>%dplyr::select(Population,Vs30,EQFreq,hazMax,hazSD,Damage)
-colnames(tmp)[colnames(tmp)=="hazMax"]<-"max_MMI"
+tmp<-BDs%>%dplyr::select(-c(Event,Longitude,Latitude,grading))#%>%dplyr::select(Population,Vs30,EQFreq,max_MMI,hazSD,Damage)
 tmp%<>%reshape2::melt("Damage")
 tmp$variable%<>%as.character()
 tmp$variable%<>%factor(levels=outer$Variable[rev(order(outer$Importance))])
@@ -348,7 +347,7 @@ out<-lapply(eqns, function(eee) {print(eee);do.call(rbind,lapply(1:length(indies
   # test <- datar[-split,]
   
   # Run the model!
-  # vario <- gstat::variogram(Damage~Population + Vs30 + EQFreq + hazMax + hazSD, train, cutoff=maxdist)
+  # vario <- gstat::variogram(Damage~Population + Vs30 + EQFreq + max_MMI + hazSD, train, cutoff=maxdist)
   
   parts <- split(x = 1:nrow(test), f = 1:ncores)
   
@@ -434,15 +433,83 @@ ggsave("BD_Perf.eps",p,path="./Plots/IIDIPUS_Results/",width=8,height=5.,device 
 
 
 
+# TURKEY
+BDs%<>%cbind(BDcoords)
+BDs[,covariates]<-BDs[,covariates]+rnorm(nrow(BDs),0,1e-5)
+# CV-split and model the damaged buildings
+test<-BDs%>%filter(Event=="EQ20230206TUR_169")%>%dplyr::select(-c("Event","grading","www","weighting","Vs30","hazSD","Population","LifeExp"))
+train<-BDs%>%filter(Event!="EQ20230206TUR_169")%>%dplyr::select(-c("Event","grading","www","weighting","Vs30","hazSD","Population","LifeExp"))
+# Get it in the right format for GPR
+test$Damage<-as.numeric(test$Damage)-1; train$Damage<-as.numeric(train$Damage)-1
+coordinates(test) <- ~ Longitude + Latitude; coordinates(train) <- ~ Longitude + Latitude
+
+parts <- split(x = 1:nrow(test), f = 1:ncores)
+
+tmp<-BDs[1:100,]%>%dplyr::select(-c(Event,grading,www,weighting))
+tmp$Damage<-as.numeric(tmp$Damage)-1
+coordinates(tmp) = ~Longitude+Latitude
+vario <- gstat::variogram(Damage~1, data=tmp, cutoff=0.075)
+# Now derive the fit from this
+fit <- gstat::fit.variogram(vario, model=gstat::vgm(0.085, "Gau", 0.05, nugget = min(vario$gamma)))
+fit[1,2]<-0.00595; fit[2,2:3]<-c(0.095,0.055); #plot(vario,fit)
+
+cl <- makePSOCKcluster(ncores)  # Create computing clusters
+registerDoParallel(cl)
+getDoParWorkers()
+clusterExport(cl = cl, varlist = c("test", "train", "fit", "parts"), envir = environment())
+clusterEvalQ(cl = cl, expr = c(library('sp'), library('gstat')))
+
+out<-do.call(rbind,parLapply(cl = cl, X = 1:ncores, 
+                             fun = function(x) cbind(as.data.frame(krige(formula = as.formula("Damage~max_MMI+EQFreq+ExpSchYrs+GNIc+0"),
+                                                                         nmax=300, locations = train, newdata = test[parts[[x]],],
+                                                                         model = fit),col.names=c("prediction"))$var1.pred,as.data.frame(test[parts[[x]],]))))
+
+stopCluster(cl)
+registerDoSEQ()
+
+ROCit::rocit(score = out[,1], class = out$Damage)$AUC
+
+rocp<-do.call(rbind,lapply(1:99/100, function(eps){
+  
+  TPos<-out[out$Damage>eps,1]>eps
+  FPos<-out[out$Damage<eps,1]>eps
+  TNeg<-out[out$Damage<eps,1]<eps
+  FNeg<-out[out$Damage>eps,1]<eps
+  
+  return(data.frame(TPR=sum(TPos)/(sum(TPos)+sum(FNeg)),  # TPR
+                    TNR=sum(TNeg)/(sum(FPos)+sum(TNeg)),  # TNR
+                    FPR=sum(FPos)/(sum(FPos)+sum(TNeg)),  # FPR
+                    FNR=sum(FNeg)/(sum(TPos)+sum(FNeg)))) # FNR
+}))
+
+rocp%>%ggplot()+geom_point(aes(FPR,TPR))
+rocp%>%ggplot()+geom_point(aes(TNR,TPR))
 
 
 
+# ADABOOST!
+train_control <- caret::trainControl(method="repeatedcv", number=5, repeats=2,
+                                     search = "random",classProbs=T,
+                                     summaryFunction=twoClassSummary)
+# CV-split and model the damaged buildings
+test<-BDs%>%filter(Event=="EQ20230206TUR_169")%>%dplyr::select(-c("Event","grading","www","weighting","Vs30","hazSD","Population","LifeExp"))
+train<-BDs%>%filter(Event!="EQ20230206TUR_169")%>%dplyr::select(-c("Event","grading","www","weighting","Vs30","hazSD","Population","LifeExp"))
+# Parallelisation
+cl <- makePSOCKcluster(10)  # Create computing clusters
+registerDoParallel(cl)
+getDoParWorkers()
+# Run the model!
+ada<-caret::train(Damage~., data = train, method = "ada", metric="ROC",
+                      tuneLength = 12, trControl = train_control,
+                      preProcess = c("center","scale"))
+stopCluster(cl)
+registerDoSEQ()
 
-
+saveRDS(ada,"./IIDIPUS_Results/SpatialPoints_ML-GLM/TURSYR_Ada.RData")
 
 # vario<-geoR::variog(as.array(BDs[,c("Longitude","Latitude")]),option = "cloud",max.dist = maxdist)
 # 
-# tmpK<-krige.cv(Damage~Population + Vs30 + EQFreq + hazMax + hazSD, 
+# tmpK<-krige.cv(Damage~Population + Vs30 + EQFreq + max_MMI + hazSD, 
 #                test, fit, maxdist=maxdist, nfold=8)
 # 
 # 
@@ -457,9 +524,9 @@ ggsave("BD_Perf.eps",p,path="./Plots/IIDIPUS_Results/",width=8,height=5.,device 
 #                   data = train,
 #                   nonconvex_hull = FALSE)
 # 
-# BAUs@data%<>%cbind(dplyr::select(train@data,Population , Vs30 , EQFreq , hazMax , hazSD))
+# BAUs@data%<>%cbind(dplyr::select(train@data,Population , Vs30 , EQFreq , max_MMI , hazSD))
 # 
-# outFRK<-FRK(f = Damage~Population + Vs30 + EQFreq + hazMax + hazSD, # Formula to FRK
+# outFRK<-FRK(f = Damage~Population + Vs30 + EQFreq + max_MMI + hazSD, # Formula to FRK
 #          list(train), # All datasets are supplied in list
 #          nres = 2, # Low-rank model to reduce run-time
 #          response = "gaussian", # data model
@@ -471,7 +538,7 @@ ggsave("BD_Perf.eps",p,path="./Plots/IIDIPUS_Results/",width=8,height=5.,device 
 # 
 # ROCit::rocit(score = predy@data$mu, class = as.numeric(predy@data$Damage))
 # 
-# outFRK_full<-FRK(f = Damage~Population + Vs30 + EQFreq + hazMax + hazSD, # Formula to FRK
+# outFRK_full<-FRK(f = Damage~Population + Vs30 + EQFreq + max_MMI + hazSD, # Formula to FRK
 #             list(train), # All datasets are supplied in list
 #             nres = 2, # Low-rank model to reduce run-time
 #             response = "gaussian", # data model

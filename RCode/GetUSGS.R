@@ -52,7 +52,7 @@ ExtractUSGS<-function(url,namer,I0=NULL,plotty=F){
 SearchUSGSbbox<-function(bbox,sdate,fdate=NULL,minmag=5){
   
   debut<-"https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson"
-  FROM_GeoJson(paste0(debut,"&starttime=",as.Date(sdate)-1,"&endtime=",as.Date(fdate),
+  geojsonR::FROM_GeoJson(paste0(debut,"&starttime=",as.Date(sdate)-1,"&endtime=",as.Date(fdate),
                       "&minlongitude=",bbox[1],"&minlatitude=",bbox[2],
                       "&maxlongitude=",bbox[3],"&maxlatitude=",bbox[4],
                       "&minmagnitude=",minmag,"&orderby=magnitude",

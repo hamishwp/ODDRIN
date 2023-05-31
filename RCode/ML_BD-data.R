@@ -247,6 +247,8 @@ outer<-readRDS("./IIDIPUS_Results/SpatialPoints_ML-GLM/FeatureImportance.RData")
 
 outer$Variable%<>%factor(levels=outer$Variable[rev(order(outer$Importance))])
 
+outer$Importance<-100*outer$Importance/sum(outer$Importance)
+
 namerz<-1:nrow(outer); names(namerz)<-outer$Variable
 
 p<-outer%>%
@@ -459,7 +461,7 @@ getDoParWorkers()
 clusterExport(cl = cl, varlist = c("test", "train", "fit", "parts"), envir = environment())
 clusterEvalQ(cl = cl, expr = c(library('sp'), library('gstat')))
 
-out<-do.call(rbind,parLapply(cl = cl, X = 1:ncores, 
+gprout<-do.call(rbind,parLapply(cl = cl, X = 1:ncores, 
                              fun = function(x) cbind(as.data.frame(krige(formula = as.formula("Damage~max_MMI+EQFreq+ExpSchYrs+GNIc+0"),
                                                                          nmax=300, locations = train, newdata = test[parts[[x]],],
                                                                          model = fit),col.names=c("prediction"))$var1.pred,as.data.frame(test[parts[[x]],]))))
@@ -467,9 +469,9 @@ out<-do.call(rbind,parLapply(cl = cl, X = 1:ncores,
 stopCluster(cl)
 registerDoSEQ()
 
-ROCit::rocit(score = out[,1], class = out$Damage)$AUC
+ROCit::rocit(score = gprout[,1], class = gprout$Damage)$AUC
 
-rocp<-do.call(rbind,lapply(1:99/100, function(eps){
+bespROC<-function(out) {do.call(rbind,lapply(1:99/100, function(eps){
   
   TPos<-out[out$Damage>eps,1]>eps
   FPos<-out[out$Damage<eps,1]>eps
@@ -480,7 +482,9 @@ rocp<-do.call(rbind,lapply(1:99/100, function(eps){
                     TNR=sum(TNeg)/(sum(FPos)+sum(TNeg)),  # TNR
                     FPR=sum(FPos)/(sum(FPos)+sum(TNeg)),  # FPR
                     FNR=sum(FNeg)/(sum(TPos)+sum(FNeg)))) # FNR
-}))
+}))}
+
+rocp<-bespROC(gprout)
 
 rocp%>%ggplot()+geom_point(aes(FPR,TPR))
 rocp%>%ggplot()+geom_point(aes(TNR,TPR))
@@ -506,6 +510,17 @@ stopCluster(cl)
 registerDoSEQ()
 
 saveRDS(ada,"./IIDIPUS_Results/SpatialPoints_ML-GLM/TURSYR_Ada.RData")
+
+adout<-predict(ada,test, type = "prob")
+
+colnames(adout)[2]<-"Damage"
+adroc<-bespROC(gprout)
+adroc%>%ggplot()+geom_point(aes(TNR,TPR))
+
+ROCit::rocit(score = adout$Damage, class = test$Damage)$AUC
+ROCit::rocit(score = gprout[,1], class = gprout$Damage)$AUC
+
+saveRDS(list(adout=adout,gprout=gprout[,1],test=test),"./IIDIPUS_Results/SpatialPoints_ML-GLM/TURSYR_Ada-GPR_probs.RData")
 
 # vario<-geoR::variog(as.array(BDs[,c("Longitude","Latitude")]),option = "cloud",max.dist = maxdist)
 # 

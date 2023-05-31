@@ -1635,6 +1635,7 @@ ODD_all%<>%mutate(MADL=abs(log(pred+10)-log(true+10)))
 p<-ODD_all%>%ggplot()+geom_boxplot(aes(impact,MADL,fill=impact))+
   geom_point(data = filter(ODD_ML,model=="rf" & ISO3C=="TUR"),aes(impact,MADL),colour="red")+
   xlab("Impact Type")+ylab("MADL Prediction Error")+labs(fill="Impact Type")+
+  scale_fill_manual(values = pal,limits = names(pal))+
   ggtitle("Random Forest (Top Model) Predictions")+
   theme(plot.title = element_text(hjust = 0.5));p
 ggsave("agg_RF_Predictions.eps",p,path="./Plots/IIDIPUS_Results/",width=8,height=5,device = grDevices::cairo_ps)  

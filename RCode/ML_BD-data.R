@@ -22,42 +22,42 @@ library(sf)
 library(sp)
 source('RCode/BDobj.R')
 
-# folder<-"./IIDIPUS_Input/IIDIPUS_Input_All_2023May19/BDobjects/"
-# filez<-list.files(folder)
-# haz<-"EQ"
-# if(haz=="EQ") funcyfun<-exp else funcyfun<-returnX
-# 
-# BDs<-data.frame()
-# for(fff in filez){
-#   print(fff)
-#   # if(fff%in%c("EQ20180225PNG_68","EQ20190925IDN_95","EQ20201030TUR_88")) next
-# 
-#   BDy<-readRDS(paste0(folder,fff))
-#   if(length(BDy@data[,-grep(names(BDy@data),pattern = "haz",value = F)])<9) next
-# 
-#   if(length(grep(names(BDy@data),pattern = "hazMean",value = T))==1) {
-#     hazMax<-BDy$hazMean1
-#     hazSD<-BDy$hazSD1
-#   } else {
-#     hazMax<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazMean",value = T)],1,max,na.rm=T)
-#     hazSD<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazSD",value = T)],1,median,na.rm=T)
-#   }
-#   BDy@data%<>%dplyr::select(-c(grep(names(BDy@data),pattern = "hazMean",value = T),
-#                                grep(names(BDy@data),pattern = "hazSD",value = T),
-#                                grep(names(BDy@data),pattern = "itude",value = T),
-#                                grep(names(BDy@data),pattern = "nBuildings",value = T),
-#                                grep(names(BDy@data),pattern = "nBuiltup",value = T)))%>%
-#     mutate(Event=fff,date=BDy@hazdates[1],max_MMI=funcyfun(hazMax-BDy@I0),hazSD=hazSD)
-# 
-#   BDy@data$Longitude<-BDy@coords[,1]
-#   BDy@data$Latitude<-BDy@coords[,2]
-# 
-#   BDs%<>%rbind(BDy@data)
-# 
-# }
-# rm(BDy)
-# 
-# BDs$time<-as.numeric(BDs$date-min(BDs$date))
+folder<-"./IIDIPUS_Input/IIDIPUS_Input_All_2023May19/BDobjects/"
+filez<-list.files(folder)
+haz<-"EQ"
+if(haz=="EQ") funcyfun<-exp else funcyfun<-returnX
+
+BDs<-data.frame()
+for(fff in filez){
+  print(fff)
+  # if(fff%in%c("EQ20180225PNG_68","EQ20190925IDN_95","EQ20201030TUR_88")) next
+
+  BDy<-readRDS(paste0(folder,fff))
+  if(length(BDy@data[,-grep(names(BDy@data),pattern = "haz",value = F)])<9) next
+
+  if(length(grep(names(BDy@data),pattern = "hazMean",value = T))==1) {
+    hazMax<-BDy$hazMean1
+    hazSD<-BDy$hazSD1
+  } else {
+    hazMax<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazMean",value = T)],1,max,na.rm=T)
+    hazSD<-apply(BDy@data[,grep(names(BDy@data),pattern = "hazSD",value = T)],1,median,na.rm=T)
+  }
+  BDy@data%<>%dplyr::select(-c(grep(names(BDy@data),pattern = "hazMean",value = T),
+                               grep(names(BDy@data),pattern = "hazSD",value = T),
+                               grep(names(BDy@data),pattern = "itude",value = T),
+                               grep(names(BDy@data),pattern = "nBuildings",value = T),
+                               grep(names(BDy@data),pattern = "nBuiltup",value = T)))%>%
+    mutate(Event=fff,date=BDy@hazdates[1],max_MMI=funcyfun(hazMax-BDy@I0),hazSD=hazSD)
+
+  BDy@data$Longitude<-BDy@coords[,1]
+  BDy@data$Latitude<-BDy@coords[,2]
+
+  BDs%<>%rbind(BDy@data)
+
+}
+rm(BDy)
+
+BDs$time<-as.numeric(BDs$date-min(BDs$date))
 # 
 # BDs%<>%dplyr::select(-c("date","Confidence","ISO3C"))
 # BDs$Population<-log(BDs$Population+1)

@@ -37,7 +37,7 @@ WID_perc<- c("p0p10", # Bottom 10% share of Income Distribution
 Model%<>%c(list(WID_perc=WID_perc))
 
 if(haz=='EQ'){
-  Model$vuln_terms <- c('PDens', 'ExpSchYrs','LifeExp', 'GNIc', 'Vs30', 'EQFreq')
+  Model$vuln_terms <- c('PDens', 'AveSchYrs','LifeExp', 'GNIc', 'Vs30', 'EQFreq')
 }
 
 ab_bounded <- function(x, a, b){
@@ -63,7 +63,7 @@ Model$skeleton <- list(
   Lambda3=list(mu=NA,sigma=NA),
   Lambda4=list(mu=NA,sigma=NA),
   eps=list(local=NA,hazard=NA),
-  vuln_coeff=list(PDens=NA, ExpSchYrs=NA, 
+  vuln_coeff=list(PDens=NA, AveSchYrs=NA, 
                   LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA),
   check=list(check=NA)
 )
@@ -81,7 +81,7 @@ Model$Priors <- list( #currently not included in the acceptance probability.
            hazard=list(dist='unif', min=0, max=0.5)),
   vuln_coeff=list(PDens=list(dist='unif', min=-0.15, max=0.15),
                   EQFreq=list(dist='unif', min=-0.15, max=0.15),
-                  ExpSchYrs=list(dist='unif', min=-0.15, max=0.15),
+                  AveSchYrs=list(dist='unif', min=-0.15, max=0.15),
                   LifeExp=list(dist='unif', min=-0.15, max=0.15),
                   GNIc=list(dist='unif', min=-0.15, max=0.15),
                   Vs30=list(dist='unif', min=-0.15, max=0.15)),
@@ -116,7 +116,7 @@ for (i in 1:length(Model$links)){
 #   Lambda4=list(nu='ab_bounded',omega='ab_bounded'), 
 #   theta=list(e='ab_bounded'),
 #   eps=list(eps='ab_bounded'),
-#   vuln_coeff=list(itc='ab_bounded',PDens='ab_bounded', ExpSchYrs='ab_bounded', 
+#   vuln_coeff=list(itc='ab_bounded',PDens='ab_bounded', AveSchYrs='ab_bounded', 
 #                   LifeExp='ab_bounded', GNIc='ab_bounded', Vs30='ab_bounded', EQFreq='ab_bounded') 
 # )
 # 
@@ -127,7 +127,7 @@ for (i in 1:length(Model$links)){
 #   Lambda4=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
 #   theta=list(e='ab_bounded_inv'),
 #   eps=list(eps='ab_bounded_inv'),
-#   vuln_coeff=list(itc='ab_bounded_inv',PDens='ab_bounded_inv', ExpSchYrs='ab_bounded_inv', 
+#   vuln_coeff=list(itc='ab_bounded_inv',PDens='ab_bounded_inv', AveSchYrs='ab_bounded_inv', 
 #                   LifeExp='ab_bounded_inv', GNIc='ab_bounded_inv', Vs30='ab_bounded_inv', 
 #                   EQFreq='ab_bounded_inv'))
 # 
@@ -138,7 +138,7 @@ for (i in 1:length(Model$links)){
 #   Lambda4=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
 #   theta=list(e='ab_bounded_acc'), 
 #   eps=list(eps='ab_bounded_acc'),
-#   vuln_coeff=list(itc='ab_bounded_acc',PDens='ab_bounded_acc', ExpSchYrs='ab_bounded_acc', 
+#   vuln_coeff=list(itc='ab_bounded_acc',PDens='ab_bounded_acc', AveSchYrs='ab_bounded_acc', 
 #                   LifeExp='ab_bounded_acc', GNIc='ab_bounded_acc', Vs30='ab_bounded_acc', 
 #                   EQFreq='ab_bounded_acc') 
 # )
@@ -155,7 +155,7 @@ Model$par_lb <- c(6.5, #Lambda1$mu
                   0, #epsilon_local
                   0, #epsilon_hazard
                   -0.15, #PDens
-                  -0.15, #ExpSchYrs
+                  -0.15, #AveSchYrs
                   -0.15, #LifeExp
                   -0.15, #GNIc
                   -0.15, #Vs30
@@ -174,7 +174,7 @@ Model$par_ub <- c(9.5, #Lambda1$mu
                   0.5, #epsilon_local
                   0.5, #epsilon_hazard
                   0.15, #PDens
-                  0.15, #ExpSchYrs
+                  0.15, #AveSchYrs
                   0.15, #LifeExp
                   0.15, #GNIc
                   0.15, #Vs30
@@ -339,6 +339,7 @@ if(Model$BinR=="weibull") {
 } else stop("Incorrect binary regression function name, try e.g. 'weibull'")
 # Stochastic damage function process
 stochastic<-function(n,eps){
+  #return(rnorm(n=n, mean=0, sd=eps))
   return(rgammaM(n = n,mu = 1, sig_percent = eps ))
 }
 
@@ -352,8 +353,10 @@ h_0<-function(I,I0,theta){
 
 # Calculate the unscaled damage function
 fDamUnscaled<-function(I,Params,Omega){ 
-  (h_0(I,Params$I0,Omega$theta) * 
+  (h_0(I,Params$I0,Omega$theta) *
      stochastic(Params$Np,Omega$eps$local)) %>%return()
+  #(h_0(I,Params$I0,Omega$theta) + 
+  #   stochastic(Params$Np,Omega$eps$local)) %>%return()
 }
 
 addTransfParams <- function(Omega, I0=4.5){
@@ -447,21 +450,21 @@ fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
 Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
   
   min_PDens <- 0; max_PDens <- 109043.5 #minimum and maximum population density from the training dataset
-  min_ExpSchYrs <- 0.342; max_ExpSchYrs <- 18 #minimum and maximum from all regions in GDL dataset
+  min_AveSchYrs <- 0.342; max_AveSchYrs <- 18 #minimum and maximum from all regions in GDL dataset
   min_LifeExp <- 24.511; max_LifeExp <- 85.413 #minimum and maximum from all regions in GDL dataset
   min_GNIc <- exp(5.887395); max_GNIc <- exp(12.23771) #minimum and maximum from all regions in GDL dataset
   min_Vs30 <- 98; max_Vs30 <- 2197 #minimum and maximum from all regions in soil stiffness dataset
   min_EQFreq <- 1; max_EQFreq <- 10 #minimum and maximum from all regions in PGA dataset
   
   linp_min <- GetLP_single(Omega, Model$center, vuln_terms=list(PDens=ifelse(Omega$vuln_coeff$PDens>0, min_PDens, max_PDens), 
-                                                                ExpSchYrs=ifelse(Omega$vuln_coeff$ExpSchYrs>0, min_ExpSchYrs, max_ExpSchYrs),
+                                                                AveSchYrs=ifelse(Omega$vuln_coeff$AveSchYrs>0, min_AveSchYrs, max_AveSchYrs),
                                                                 LifeExp=ifelse(Omega$vuln_coeff$LifeExp>0, min_LifeExp, max_LifeExp),
                                                                 GNIc=ifelse(Omega$vuln_coeff$GNIc>0, min_GNIc, max_GNIc),
                                                                 Vs30=ifelse(Omega$vuln_coeff$Vs30>0, min_Vs30, max_Vs30),
                                                                 EQFreq=ifelse(Omega$vuln_coeff$EQFreq>0, min_EQFreq, max_EQFreq)))
   
   linp_max <- GetLP_single(Omega, Model$center, vuln_terms=list(PDens=ifelse(Omega$vuln_coeff$PDens<0, min_PDens, max_PDens), 
-                                                                ExpSchYrs=ifelse(Omega$vuln_coeff$ExpSchYrs<0, min_ExpSchYrs, max_ExpSchYrs),
+                                                                AveSchYrs=ifelse(Omega$vuln_coeff$AveSchYrs<0, min_AveSchYrs, max_AveSchYrs),
                                                                 LifeExp=ifelse(Omega$vuln_coeff$LifeExp<0, min_LifeExp, max_LifeExp),
                                                                 GNIc=ifelse(Omega$vuln_coeff$GNIc<0, min_GNIc, max_GNIc),
                                                                 Vs30=ifelse(Omega$vuln_coeff$Vs30<0, min_Vs30, max_Vs30),
@@ -539,12 +542,13 @@ LL_IDP<-function(Y,  kernel_sd, kernel, cap){
   } else if (kernel == 'lognormal'){ #use a lognormal kernel 
     LL_impact = log(dlnormTrunc(Y[,'observed']+k, log(Y[,'sampled']+k), sdlog=kernel_sd[[Y[1,'impact']]], min=k))
   } else if (kernel =='log'){
-    #Y_obs <- Y[,'observed']
-    #Y_sam <- Y[,'sampled']
+    Y_obs <- Y[,'observed']
+    Y_sam <- Y[,'sampled']
+    LL_impact = ifelse(abs(log((Y_obs+10)/(Y_sam+10))) > 0.05, 1, 0)
     #LL_impact = 20 * log(abs(Y_obs-Y_sam)+1)+abs(log((Y_obs+k)/(Y_sam+k)))
     #LL_impact = abs(log((abs(Y[,'observed']-Y[,'sampled'])+Y[,'sampled']+k)/(Y[,'sampled']+k))) 
     #LL_impact = abs(log((abs(Y[,'observed']-Y[,'sampled'])+Y[,'sampled']+k)/(Y[,'sampled']+k))) * kernel_sd[[Y[1,'impact']]]
-    LL_impact = abs(log(Y[,'observed']+k) - log(Y[,'sampled']+k)) * unlist(kernel_sd)[Y[,'impact']]
+    #LL_impact = abs(log(Y[,'observed']+k) - log(Y[,'sampled']+k)) * unlist(kernel_sd)[Y[,'impact']]
   } else {
     print(paste0("Failed to recognise kernel", AlgoParams$kernel))
     return(-Inf)
@@ -552,6 +556,43 @@ LL_IDP<-function(Y,  kernel_sd, kernel, cap){
   LL_impact[which(is.na(LL_impact))] <- cap
   LL <- sum(LL_impact)
   return(LL)
+}
+
+crps <- function(sample, obs){
+  sample <- sort(sample)
+  m <- length(sample)
+  crps <- 0
+  for (i in 1:m){
+    crps <- crps + (sample[i]-obs)*(m*as.numeric(obs<sample[i]) -i + 0.5)
+  }
+  crps <- (crps*2)/(m^2)
+  return(crps)
+}
+
+logTarget3 <- function(dist_sample, AlgoParams){
+  dist <- 0
+  for(i in 1:NROW(dist_sample$Disps[[1]])){
+    observed_val <- dist_sample$Disps[[1]]$observed[i]
+    sampled_vals <- sapply(dist_sample$Disps, function(x){x$sampled[i]})
+    dist <- dist + crps(log(sampled_vals+10), log(observed_val+10))
+  }
+  dist_tot <- dist
+  # sumBD_dists <- function(BDDists_p){
+  #   Dist_0.5 <- which(names(BDDists_p) %in% c('N12', 'N21', 'N23', 'N32'))
+  #   Dist_1 <- which(names(BDDists_p) %in% c('N13', 'N31'))
+  #   return(0.5*sum(BDDists_p[Dist_0.5])+sum(BDDists_p[Dist_1]))
+  # }
+  # 
+  # if (length(dist_sample$BDDists) > 0){
+  #   LL_BD <- apply(dist_sample$BDDists, 2, sumBD_dists)
+  # } else {
+  #   LL_BD <- 0
+  # }
+  # 
+  # print(paste0('Dist_agg: ',LL_disps, ' Dist_sat: ', LL_BD))
+  #dist_tot <- LL_disps + LL_BD 
+  
+  return(dist_tot)
 }
 
 # Plot to compare normal and laplace kernels

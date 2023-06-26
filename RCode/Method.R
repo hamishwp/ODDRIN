@@ -678,7 +678,7 @@ initialise_particles <- function(dir, Model, AlgoParams, AlgoResults){
     dist_sample <- sampleDist(dir = dir,Model = Model,
                               proposed = AlgoResults$Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                               AlgoParams = AlgoParams)
-    AlgoResults$d[n,,1] <- logTarget2(dist_sample, AlgoParams)
+    AlgoResults$d[n,,1] <- logTarget3(dist_sample, AlgoParams)
     
     end_time <- Sys.time()
     
@@ -777,7 +777,7 @@ perturb_particles <- function(s, propCOV, AlgoParams, AlgoResults){
       dist_sample <- sampleDist(dir = dir,Model = Model,
                                 proposed = Omega_prop_phys %>% addTransfParams(), 
                                 AlgoParams = AlgoParams)
-      d_prop <- logTarget2(dist_sample, AlgoParams)
+      d_prop <- rep(logTarget3(dist_sample, AlgoParams), AlgoParams$Np)
       
       if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
         d_prop <- Inf

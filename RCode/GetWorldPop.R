@@ -93,6 +93,8 @@ GetWorldPopISO3C<-function(iso3c,year=NULL,folder="./Data/Exposure/PopDemo/",con
   # Try to download the most recent dataset
   if(is.null(year)) {year<-AsYear(Sys.Date()); mostrecent<-T} else mostrecent<-F
   # If we left the year blank, then let's search for the most recent CONSTRAINED dataset
+  if (year > 2022) year = 2022;
+  if (iso3c == 'KOS' & year > 2018) year=2021; #No WorldPop population data in Kosovo before 2021
   if(mostrecent){
     # Go through every year from now until 2020 until we find some data!
     yr<-year; extracter<-T
@@ -117,7 +119,7 @@ GetWorldPopISO3C<-function(iso3c,year=NULL,folder="./Data/Exposure/PopDemo/",con
 #---------------EXTRACTION-----------------------
 #------------------------------------------------
 
-ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All_2023May19/ODDobjects/EQ20170614GTM_64')
+#ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_All_2023May19/ODDobjects/EQ20170614GTM_64')
 
 getmode <- function(x) {
   ux <- unique(x)
@@ -130,7 +132,7 @@ mode_non_na <- function(arr,...){
   else{return(getmode(arr[non_zero]))}
 }
 
-getWorldPop_ODD <- function(dir, year, bbox_vect, folder='Demography_Data/Population/WorldPop/'){
+getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demography_Data/Population/WorldPop/'){
   
   bbox <- rbind(c(bbox_vect[1], bbox_vect[3]), c(bbox_vect[2],bbox_vect[4]))
   
@@ -138,15 +140,26 @@ getWorldPop_ODD <- function(dir, year, bbox_vect, folder='Demography_Data/Popula
   iso3c_all <- unique(nations$ISO3C)[which(!is.na(unique(nations$ISO3C)))]
   
   popy <- GetWorldPopISO3C(iso3c_all[1], year=year, constrained=F, folder=paste0(dir, folder)) %>% raster()
-  popy_cropped <- crop(popy, extent(bbox), snap='out')
+  popy_cropped <- crop(popy, bbox)
   if (length(iso3c_all)>1){
     for (iso3c in iso3c_all[2:length(iso3c_all)]){
+      if (iso3c == 'UMI') next; #No WorldPop data. Have no permanent residents so ignoring. e.g. Navassa island in Haiti event i=164
+      if (iso3c == 'KOS' & year==2016){ #No WorldPop data for Kosovo before 2021. Use 2021 data scaled by change in total population (https://data.worldbank.org/indicator/SP.POP.TOTL?locations=XK)
+        popy_add <- GetWorldPopISO3C(iso3c, year=2021, constrained=F, folder=paste0(dir, folder)) %>% raster()
+        popy_add@extent <- popy_add@extent
+        popy_add_cropped <- crop(popy_add, bbox) * 1777557/1786038
+        popy_cropped %<>% merge(popy_add_cropped)
+        next
+      } 
       popy_add <- GetWorldPopISO3C(iso3c, year=year, constrained=F, folder=paste0(dir, folder)) %>% raster()
-      popy_add_cropped <- crop(popy_add, extent(bbox), snap='out')
+      popy_add@extent <- popy_add@extent
+      popy_add_cropped <- crop(popy_add, bbox)
       popy_cropped %<>% merge(popy_add_cropped)
     }
+    
+    
   }
-  spat_agg <- aggregate(popy_cropped, fact=2, fun=sum, expand=F) 
+  spat_agg <- aggregate(popy_cropped, fact=agg_level, fun=sum, expand=F) 
   
   names(spat_agg) <- 'Population'
   spat_agg$dummy <- 0 #need to add some variable so that pixels with 0 population are not lost when converting to SpatialPixelsDataFrame
@@ -247,8 +260,8 @@ GetDemog<-function(Pop_totl,ADM,ISO){
 #Demographics from WorldPop
 ##----------------Get AgeSex_structure - Constrained UN adjusted data 1km.--------------- 
 #highly simplified code: update later with more function parameters for the urls------
-library(RCurl)
-library(XML)
+# library(RCurl)
+# library(XML)
 
 #Download data
 GetWAgSx_L2<-function(iso,year,folder){

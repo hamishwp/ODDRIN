@@ -99,7 +99,7 @@ setMethod(f="initialize", signature="BD",
             .Object@modifier<-linp
             
             print("Checking BD values")
-            # checkBD(.Object)
+            #checkBD(.Object)
             
             return(.Object)
           }
@@ -176,8 +176,8 @@ setMethod("BDinterpODD", "BD", function(BD,ODD){
       if (length(unique(pcontour$id)) > 0){
         for(p in 1:length(unique(pcontour$id))){
           tcont<-filter(pcontour,id==p)
-          insidepoly<-insidepoly | sp::point.in.polygon(BD@coords[,1],
-                                                        BD@coords[,2],
+          insidepoly<-insidepoly | sp::point.in.polygon(BD@coords[,1, drop=F],
+                                                        BD@coords[,2, drop=F],
                                                         tcont$Longitude,
                                                         tcont$Latitude)>0
         }
@@ -185,7 +185,7 @@ setMethod("BDinterpODD", "BD", function(BD,ODD){
       
       if(sum(insidepoly)==0) next
       # Add the hazard to the building damage object
-      subBD<-ODD[var]%>%raster%>%raster::extract(BD@coords[insidepoly,])
+      subBD<-ODD[var]%>%raster%>%raster::extract(BD@coords[insidepoly,, drop=F])
       tmp<-rep(NA_real_,nrow(BD)); tmp[insidepoly]<-subBD; tmp%<>%data.frame; colnames(tmp)<-var
       BD@data%<>%cbind(tmp)
       polysave[,extractnumbers(var)]<-insidepoly
@@ -195,7 +195,7 @@ setMethod("BDinterpODD", "BD", function(BD,ODD){
     # Add the standard deviations of the hazard intensity
     for (var in grep("hazSD",names(ODD),value = T)){
       if(sum(polysave[,extractnumbers(var)])==0) next
-      subBD<-ODD[var]%>%raster%>%raster::extract(BD@coords[polysave[,extractnumbers(var)],])
+      subBD<-ODD[var]%>%raster%>%raster::extract(BD@coords[polysave[,extractnumbers(var)],, drop=F])
       tmp<-rep(NA_real_,nrow(BD)); tmp[polysave[,extractnumbers(var)]]<-subBD; tmp%<>%data.frame; colnames(tmp)<-var
       BD@data%<>%cbind(tmp)
     }

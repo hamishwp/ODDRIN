@@ -26,6 +26,7 @@ GetSourceFiles<-function(packred){
     source('RCode/GetSocioEconomic.R')
     source('RCode/GetINFORM.R')
     source('RCode/GetWorldBank.R')
+    source('RCode/GetWorldPop.R')
     # Damage estimate related:
     source('RCode/GetOSM.R')
     source('RCode/GetSatDamage.R')  

@@ -17,20 +17,19 @@ merge_rastered_spdf <- function(raster1_spdf, raster2_spdf, added_var_name){
   return(data)
 }
 
-AddOpenBuildingCounts <- function(ODD, isos_openbuildings){
+# wkt polygons for events:
+# i = 44: POLYGON((30.5 -2, 30.5 0.5, 32.5 0.5, 32.5 -2, 30.5 -2))
+# i = 82: POLYGON((34.8 -17.5, 34.8 -16.2, 36.1 -16.2, 36.1 -17.5, 34.8 -17.5))
+# i = 146: POLYGON((5.9 36.1,5.9 36.9,6.8 36.9,6.8 36.1, 5.9 36.1))
+AddOpenBuildingCounts <- function(ODD, isos_openbuildings, i, national_coverage=T){
   lon_min <- ODD@bbox[1,1]; lon_max <- ODD@bbox[1,2]
   lat_min <- ODD@bbox[2,1]; lat_max <- ODD@bbox[2,2]
   
   indies_open_buildings <- which(ODD$ISO3C %in% isos_openbuildings)
   
   iso3_unique <- unique(ODD$ISO3C)[!is.na(unique(ODD$ISO3C))]
-
-  open_buildings_files <- paste0(dir, 'Demography_Data/Buildings/open_buildings_v2_points_your_own_wkt_polygon_',iso3_unique,gsub("-", "", ODD@hazdates[1]),'.csv')
-
-  event_match <- ifelse(any(file.exists(open_buildings_files)), T, F)
-  if(event_match){
-    open_buildings_file <- open_buildings_files[which(file.exists(open_buildings_files))]
-  } else {
+  
+  if (national_coverage){
     open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/open_buildings_v2_points_your_own_wkt_polygon_',iso3_unique[1],'.csv')
     if(!file.exists(open_buildings_file)){
       stop('Download Open Buildings data from: https://colab.research.google.com/github/google-research/google-research/blob/master/building_detection/open_buildings_download_region_polygons.ipynb')
@@ -38,7 +37,14 @@ AddOpenBuildingCounts <- function(ODD, isos_openbuildings){
     #When downloading, insert the polygon bounding the country of interest into your_own_wkt_polygon field
     # alternatively, can select the region_border_source and country, although this doesn't seem to work well when working with small islands in Philippines (and potentially other small regions)
     # select 'points' in the data_type field
+  } else {
+    open_buildings_files <- paste0(dir, 'Demography_Data/Buildings/open_buildings_v2_points_your_own_wkt_polygon_i',i,'.csv')
+    if(!any(file.exists(open_buildings_files))){
+      stop('Download Open Buildings data from: https://colab.research.google.com/github/google-research/google-research/blob/master/building_detection/open_buildings_download_region_polygons.ipynb')
+    }
+    open_buildings_file <- open_buildings_files[which(file.exists(open_buildings_files))]
   }
+
   # doesn't work once files exceed a certain size:
   # building_locs <- read.csv.sql(open_buildings_file,
   #                               paste0("select longitude, latitude from file where latitude > ", lat_min, ' AND longitude > ', lon_min, 
@@ -55,7 +61,7 @@ AddOpenBuildingCounts <- function(ODD, isos_openbuildings){
     i <- i + nrow_tmp
   }
   
-  if (length(iso3_unique) > 1 & event_match==F){
+  if (length(iso3_unique) > 1 & national_coverage==T){
     for (i in 2:length(iso3_unique)){
       open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/open_buildings_v2_points_your_own_wkt_polygon_',iso3_unique[i],'.csv')
       if(!file.exists(open_buildings_file)){
@@ -73,13 +79,14 @@ AddOpenBuildingCounts <- function(ODD, isos_openbuildings){
       }
     }
   }
+  
   building_locs <- building_locs[,c('longitude', 'latitude')]
   
   rastered_buildings <- rasterize(building_locs, raster(ODD), 1, fun='count')
   rastered_buildings_spdf <- as(rastered_buildings, "SpatialPixelsDataFrame")
   
   ODD@data <- merge_rastered_spdf(ODD, rastered_buildings_spdf, 'nBuildings')
-  if (!event_match){
+  if (national_coverage){
     ODD$nBuildings[indies_open_buildings[which(is.na(ODD$nBuildings[indies_open_buildings]))]] <- 0
     ODD$nBuildings[-indies_open_buildings] <- NA
   } else {
@@ -94,24 +101,34 @@ AddOpenBuildingCounts <- function(ODD, isos_openbuildings){
   return(ODD)
 }
 
-AddBuildingCounts <- function(ODD){
-  isos_openbuildings <- c('BGD', 'COD', 'IDN', 'NPL', 'PHL', 'TLS', 'MOZ', 'LAO', 'DZA', 'TZA')
-  isos_bingbuildings <- c('COL', 'ECU', 'USA')
+AddBuildingCounts <- function(ODD, i){
+  isos_openbuildings <- c('IDN', 'PHL') 
+  events_openbuildings <- c(34, 44, 82, 131, 146)
+  #have checked for coverage
+  events_bingbuildings <- c(5, 39, 40, 53, 95, 142) #not covered: 15 #partially covered: 42, 50, 78
+  
   iso3_unique <- unique(ODD$ISO3C)[!is.na(unique(ODD$ISO3C))]
-  if (any(iso3_unique %in% isos_openbuildings)){
-    ODD %<>% AddOpenBuildingCounts(isos_openbuildings)
-  } 
-  if (any(iso3_unique %in% isos_bingbuildings)){
-    ODD %<>% AddBingBuildingCounts(isos_bingbuildings)
+  
+  if (i %in% events_openbuildings){
+    ODD %<>% AddOpenBuildingCounts(isos_openbuildings, i, national_coverage=F)
+  } else if (any(iso3_unique %in% isos_openbuildings)){
+    ODD %<>% AddOpenBuildingCounts(isos_openbuildings, i, national_coverage=T)
+  } else if (i %in% events_bingbuildings){#(any(iso3_unique %in% isos_bingbuildings)){
+    ODD %<>% AddBingBuildingCounts()
+    # file_conn8 <- file('ODD_creation_notes/DoBuildingCountsManually', open = "a")
+    # writeLines(paste("Bing Build Count Missing", paste(iso3_unique, sep='_'), "Event Date:", ODD@hazdates[1]), file_conn8)
+    # close(file_conn8)
+    #stop('Double check ODD object to ensure that Bing Building Footprints provides full coverage')
   } 
   if (is.null(ODD$nBuildings)){return(ODD)} 
   missing_building_counts <- which(!is.na(ODD$ISO3C) & is.na(ODD$nBuildings))
   if (length(missing_building_counts)>0){
-    stop(paste('Missing data for rows ', missing_building_counts, 'of countries:', unique(ODD$ISO3C[missing_building_counts])))
-  } 
-  else {
-    return(ODD)
+    file_conn <- file('IIDIPUS_Input_June20/ODD_creation_notes', open = "a")
+    writeLines(paste("Build Count Missing for pixels in countries", paste(unique(ODD$ISO3C[missing_building_counts]), sep='_'), "Event Date:", ODD@hazdates[1]), file_conn)
+    close(file_conn) 
+    next
   }
+  return(ODD)
 }
 
 ReplaceBuildingCounts <- function(){
@@ -153,16 +170,24 @@ resave_geojsonl <- function(iso3, USA_state=NULL){
 }
 
 
-AddBingBuildingCounts <- function(ODD, isos_bingbuildings){
+AddBingBuildingCounts <- function(ODD, plot_only = F){
+  isos_bingbuildings <- c('COL', 'ECU', 'USA', 'PER')
+  
   lon_min <- ODD@bbox[1,1]; lon_max <- ODD@bbox[1,2]
   lat_min <- ODD@bbox[2,1]; lat_max <- ODD@bbox[2,2]
   
   iso3_unique <- unique(ODD$ISO3C)[!is.na(unique(ODD$ISO3C))]
   
+  if (any(!iso3_unique %in% isos_bingbuildings) ){
+    file_conn <- file('IIDIPUS_Input_June20/ODD_creation_notes', open = "a")
+    writeLines(paste("Bing buildings missing for a country. Event countries:", paste(unique(ODD$ISO3C), sep='_'), "Event Date:", ODD@hazdates[1]), file_conn)
+    close(file_conn) 
+  }
+  
   indies_bing_buildings <- which(ODD$ISO3C %in% isos_bingbuildings)
   
   open_buildings_files <- c()
-  for (iso3 in iso3_unique){
+  for (iso3 in intersect(iso3_unique, isos_bingbuildings)){
     if (iso3 !='USA'){
       open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/',countrycode(iso3, origin='iso3c', destination='country.name'),'.RDS')
       if (!file.exists(open_buildings_file)){
@@ -194,6 +219,14 @@ AddBingBuildingCounts <- function(ODD, isos_bingbuildings){
     }
   }
   
+  if (plot_only){ 
+    #plot convex hull of building_locs and compare to region of ODD object, to see if there is reasonable coverage
+    plot(ODD@coords[which(ODD$hazMean1>4 & !is.na(ODD$ISO3C)),])
+    hull <- chull(building_locs)
+    lines(rbind(building_locs[hull,], building_locs[hull[1],]), col='red')
+    return(NULL)
+  }
+  
   rastered_buildings <- rasterize(building_locs, raster(ODD), 1, fun='count')
   rastered_buildings_spdf <- as(rastered_buildings, "SpatialPixelsDataFrame")
   
@@ -209,7 +242,6 @@ AddBingBuildingCounts <- function(ODD, isos_bingbuildings){
   
   return(ODD)
 }
-
 
 
 # filename <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NoBuildingDat/ODDobjects/EQ20150425NPL_14'

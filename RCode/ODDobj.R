@@ -202,7 +202,6 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
                                      xo=coords$xo,yo=coords$yo,
                                      linear=T,extrap = F))
       
-      
       # layer<-c(layer$z)
       # layer[!insidepoly]<-NA
       
@@ -241,7 +240,7 @@ setMethod(f="initialize", signature="ODD",
                           "p70p80", # Income share held by 70th - 80th percentiles
                           "p80p90", # Income share held by 80th - 90th percentiles
                           "p90p100") # top 10% share of Income Distribution
-            )) {
+            ), agg_level=2) {
             
             if(is.null(lhazSDF)) return(.Object)
             if(!class(lhazSDF[[length(lhazSDF)]])[1]=="HAZARD") return(.Object)
@@ -284,7 +283,7 @@ setMethod(f="initialize", signature="ODD",
             
             print("Fetching population data")
             #obj <-GetPopulationBbox(.Object@dir,bbox=bbox)
-            obj <- getWorldPop_ODD(.Object@dir, year, bbox)
+            obj <- getWorldPop_ODD(.Object@dir, year, bbox, agg_level)
             .Object@data <- obj@data
             .Object@coords.nrs <-obj@coords.nrs
             .Object@grid <-obj@grid
@@ -337,11 +336,11 @@ setMethod(f="initialize", signature="ODD",
             #print("Fetching GDP-PPP data")
             #.Object%<>%AddGDP(inds)
             
-            # # print("Fetching building count data")
-            .Object%<>%AddBuildingCounts()
-            
             print("Checking ODD values")
             checkODD(.Object)
+            
+            return(.Object)
+            
             
             return(.Object)
           }
@@ -419,7 +418,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
   Sinc<-ExtractCIndy(ODD,var = SincN)
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
-  if(!LL) {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$ExpSchYrs)))
+  if(!LL) {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$AveSchYrs)))
   } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) ))#!ODD$ISO3C%in%ODD@impact$iso3))
   
   nBuildings_sample <- array(0, dim=c(NROW(ODD@data), Method$Np))
@@ -482,7 +481,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       for (s in 1:length(SincN)){
         if(all(lPopS[s,]==0)) next
         # Predict damage at coordinate {i,j} (vector with MC particles)
-        Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp[s] * eps_event[h_i,], error=function(e) NA)
+        Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega) * locallinp[s] * eps_event[h_i,], error=function(e) NA)
         if(any(is.na(Damage))) print(ij)
         
         #LOOSEEND: Include [ind] here 
@@ -515,7 +514,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       }
 
       I_ij<-ODD@data[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp_buildings*eps_event[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega) * locallinp_buildings * eps_event[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
       
       D_DestDam <- D_DestDam_calc(Damage, Omega, first_haz, Model$DestDam_modifiers) #First row of D_DestDam is D_Dest, second row is D_Dam
       D_Rem <- pmax(0, 1 - D_DestDam[1,] - D_DestDam[2,]) #probability of neither damaged nor destroyed. Use pmax to avoid errors caused by numerical accuracy.
@@ -846,6 +845,9 @@ OutputODDyFile<-function(ODDy,filer=NULL){
   return(ODDy)
   
 }
+
+
+
 
 # setMethod("DispX", "ODD", function(ODD,Omega,center,saver=F,
 #                                    Method=list(Np=20,cores=4,

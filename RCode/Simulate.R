@@ -523,3 +523,121 @@ plot_S_curves <- function(Omega, Omega_curr=NULL){
     lines(Intensity, D_Dest_curr, col='cyan', lty=2, lwd=2); lines(Intensity, D_Dam_curr, col='green', lty=2, lwd=2);
   }
 }
+
+
+# # -------------------------------------------------------------------------
+# 
+# #Plot the simulated data
+# #Names: ODDSim.png, Sim DispMortBD.png  
+# #Size: 1500 x 700
+# 
+# ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20110222ABC_-1')
+# ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130409ABC_-3')
+# ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130416ABC_-4')
+# 
+# grid.arrange(plotODDy(ODDSim, var='Population') + coord_fixed(),
+#              plotODDy(ODDSim, var='nBuildings') + coord_fixed(),
+#              plotODDy(ODDSim, var='GNIc') + coord_fixed(), nrow=1) # 10 x 4, Input
+# 
+# grid.arrange(plotODDy(ODDSim, var='Mort') + coord_fixed(),
+#              plotODDy(ODDSim, var='BuildDam') + coord_fixed(), nrow=1)
+# 
+# plotODDy(ODDSim, var='Population') + coord_fixed() # 3.5 x 3.5, Population
+# plotODDy(ODDSim, var='nBuildings') + coord_fixed() # 3.5 x 3.5, BuildCount
+# plotODDy(ODDSim, var='GNIc') + coord_fixed()  # 3.5 x 3.5, GNIc
+# 
+# plotODDy(ODDSim, var='Disp') + coord_fixed() #5.5 x 5.5, Displacement
+# plotODDy(ODDSim, var='BuildDest') + coord_fixed() #5.5 x 5.5, BuildDest
+# 
+# # \begin{figure}
+# # \centering
+# # \makebox[\textwidth][c]{\begin{subfigure}{1.4\textwidth}
+# #   \includegraphics[width=\textwidth]{Images/ODDSim.pdf}
+# #   \caption{From left to right, the simulated population, building count, and GNI per capita for a simulated event.}
+# #   \label{fig:ODDSim}
+# #   \end{subfigure}}
+# # \makebox[\textwidth][c]{\begin{subfigure}{1.4\textwidth}
+# #   \includegraphics[width=\textwidth]{Images/Sim DispMortBD.png}
+# #   \caption{Simulated Damage Data}
+# #   \label{fig:DamSim}
+# #   \end{subfigure}}
+# # \caption{Simulated Data}
+# # \end{figure}
+# 
+# plotODDy<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.5,map="terrain"){
+#   
+#   if(is.null(bbox)) bbox<-ODDy@bbox
+#   
+#   mad_map <- get_stamenmap(bbox,source = "stamen",maptype = map,zoom=zoomy)
+#   p<- ggplot() #plggmap(mad_map) + xlab("Longitude") + ylab("Latitude")
+#   
+#   hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
+#   for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+#     tmp<-ODDy[variable]
+#     tmp$hazard<-hazard
+#     hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+#   }
+#   ODDy@data$hazard<-hazard
+#   brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
+#   
+#   if (var=="GNIc"){
+#     ODDy@data[is.na(ODDy@data$ISO3C),var]<-NA
+#     dat <- as.data.frame(ODDy)
+#     dat <- dat[which(!is.na(dat$GNIc)),]
+#     p<-p+geom_tile(data = dat,
+#                    mapping = aes(Longitude,Latitude,fill=as.factor(round(dat[[var]]))),alpha=alpha)+ 
+#       labs(fill = 'GNI') +
+#       scale_fill_brewer(palette = "RdYlGn")
+#     #p<-p+geom_contour(data = as.data.frame(ODDy),
+#     #                   mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
+#     #                   alpha=1.0,breaks = brks) +
+#     #   scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent", guide='none') + 
+#     #   labs(colour = "Hazard Intensity") 
+#     
+#     return(p)
+#   } else if(var!="hazard")  {
+#     ODDy@data[is.na(ODDy@data$ISO3C),var]<-NA
+#     
+#     p<-p+geom_contour_filled(data = as.data.frame(ODDy),
+#                              mapping = aes(Longitude,Latitude,z=as.numeric(ODDy@data[[var]])),alpha=alpha)+ 
+#       scale_fill_brewer(palette = "RdYlGn", direction=-1) + 
+#       labs(fill = GetVarName(var))
+#     if (var %in% c('Disp', 'Mort', 'BuildDam', 'BuildDest')){
+#       p<-p+geom_contour(data = as.data.frame(ODDy),
+#                         mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
+#                         alpha=1.0,breaks = brks) +
+#         scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent") + 
+#         labs(colour = "Hazard Intensity") + guides(fill = guide_legend(order = 1))
+#     }
+#     
+#     
+#     # p+geom_contour_filled(data = as.data.frame(ODDy),
+#     #                       mapping = aes(Longitude,Latitude,z=1-ODDy@data$tmp),
+#     #                       fill="green",alpha=alpha)+ 
+#     #   labs(fill = "Hazard>5")
+#     
+#     return(p)
+#   }
+#   
+#   ODDy@data$hazard[ODDy@data$hazard==0]<-NA
+#   
+#   p<-p+geom_contour_filled(data = as.data.frame(ODDy),
+#                            mapping = aes(Longitude,Latitude,z=hazard),
+#                            alpha=alpha,breaks = brks) +
+#     scale_fill_brewer(palette = "RdYlGn", direction=-1) + 
+#     labs(fill = "Hazard Intensity")
+#   
+#   # scale_fill_discrete(low = "transparent",high = "red",na.value = "transparent") + 
+#   
+#   
+#   return(p)
+#   
+# }
+# 
+# grid.arrange(plotODDy(ODDSim, var='Population') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
+#              plotODDy(ODDSim, var='GNI')+ xlim(-0.25,0.25) + ylim(-0.25,0.25), 
+#              plotODDy(ODDSim, var='nBuildings')+ xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)
+# 
+# grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
+#              plotODDy(ODDSim, var='Mort') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
+#              plotODDy(ODDSim, var='nBD') + xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)

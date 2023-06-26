@@ -13,15 +13,13 @@ IIDIPUS_Results
 
 IIDIPUS_Input/
 
-IIDIPUS_SimInput/
+IIDIPUS_Input_NonFinal/
+
+Hazard_Data/gdpga/
+
+Hazard_Data/global_vs30_tif/
 
 IIDIPUS_Results/
-
-IIDIPUS_Input_All/
-
-IIDIPUS_Input_BuildingDat/
-
-IIDIPUS_Input_NoBuildingDat/
 
 Unfinished/
 

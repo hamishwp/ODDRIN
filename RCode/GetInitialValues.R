@@ -20,14 +20,14 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   
   # # Read in Global Data Lab data and calculate the mean and standard deviation of each variable
   # # Note that we calculate the mean and sd using all regions (not just those in the training set)
-  # GDLdata <- readGlobalDataLab()
+  GDLdata <- readGlobalDataLab()
   
-  ExpSchYrs_mean <- 11.64138 # mean(GDLdata$ExpectedSchoolYrs); 
-  ExpSchYrs_sd <- 3.478292 #sd(GDLdata$ExpectedSchoolYrs);
+  AveSchYrs_mean <- 7.014779 #mean(GDLdata$AveSchYrs, na.rm=T); 
+  AveSchYrs_sd <- 3.407637 #sd(GDLdata$AveSchYrs);
   LifeExp_mean <- 68.30403 #mean(GDLdata$LifeExp); 
   LifeExp_sd <- 9.607136 #sd(GDLdata$LifeExp);
-  GNIc_mean <- 8.913694 #mean(log(GDLdata$GrossNatInc)); 
-  GNIc_sd <- 1.18729 #sd(log(GDLdata$GrossNatInc));
+  GNIc_mean <- 8.913694 #mean(log(GDLdata$GNIc)); 
+  GNIc_sd <- 1.18729 #sd(log(GDLdata$GNIc));
   
   
   # # Read in Stiff data and calculate the mean and standard deviation, again using all regions in the dataset:
@@ -47,7 +47,7 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   EQFreq_sd <- 2.918439 # sd(pga$PGA, na.rm=T)
     
   center<-list(PDens=list(mean=PDens_mean, sd=PDens_sd), #LOOSEEND: CAME UP WITH THIS SD. CHECK
-               ExpSchYrs=list(mean=ExpSchYrs_mean, sd=ExpSchYrs_sd),
+               AveSchYrs=list(mean=AveSchYrs_mean, sd=AveSchYrs_sd),
                LifeExp=list(mean=LifeExp_mean, sd=LifeExp_sd),
                GNIc=list(mean=GNIc_mean, sd=GNIc_sd),
                Vs30=list(mean=Vs30_mean, sd=Vs30_sd),
@@ -431,14 +431,14 @@ HLPrior_sample <- function(Model, AlgoParams){
 
 # for(fff in ufiles){
 #   ODDy<-readRDS(paste0(path,fff))
-#   missing_GDL_observed_Pop <- which(!is.na(ODDy@data$Population) & is.na(ODDy@data$ExpSchYrs))
-#   missing_GDL <- which(is.na(ODDy@data$ExpSchYrs))
+#   missing_GDL_observed_Pop <- which(!is.na(ODDy@data$Population) & is.na(ODDy@data$AveSchYrs))
+#   missing_GDL <- which(is.na(ODDy@data$AveSchYrs))
 #   #assign these with the GDL of the closest pixel if within a distance of 2 arcminutes
 #   for (i in missing_GDL_observed_Pop){
 #     closest <- which.min(rowSums(sweep(ODDy@coords[-missing_GDL,], 2, ODDy@coords[i,], FUN='-')^2 ))
 #     dist <- sqrt(sum((ODDy@coords[i,] - ODDy@coords[-missing_GDL,][closest,])^2))
 #     if (dist < 0.05){
-#       ODDy@data$ExpSchYrs[i] <- ODDy@data$ExpSchYrs[-missing_GDL][closest]
+#       ODDy@data$AveSchYrs[i] <- ODDy@data$AveSchYrs[-missing_GDL][closest]
 #       ODDy@data$LifeExp[i] <- ODDy@data$LifeExp[-missing_GDL][closest]
 #       ODDy@data$GNIc[i] <- ODDy@data$GNIc[-missing_GDL][closest]
 #     } else {

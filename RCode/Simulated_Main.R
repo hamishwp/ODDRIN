@@ -19,7 +19,7 @@ Omega <- list(Lambda1 = list(mu=9, sigma=1.1),
               Lambda3 = list(mu=8.5, sigma=1.1),
               Lambda4 = list(mu=9.8, sigma=0.85),
               eps = list(local=0.05, hazard=0.1),
-              vuln_coeff = list(PDens=0, ExpSchYrs=0,LifeExp=0, GNIc=0.03, Vs30=0, EQFreq=0),
+              vuln_coeff = list(PDens=0, AveSchYrs=0,LifeExp=0, GNIc=0.03, Vs30=0, EQFreq=0),
               check = list(check=0.5)) 
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
@@ -29,11 +29,11 @@ Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 dist_sample <- sampleDist(dir = dir,Model = Model,
                           proposed = Omega %>% addTransfParams(),
                           AlgoParams = AlgoParams)
-d_i <- logTarget2(dist_sample, AlgoParams)
+d_i <- logTarget3(dist_sample, AlgoParams)
 # end_time <- Sys.time()
 # print(paste('Time:', end_time-start_time))
 
-Model$center <- simulateDataSet(50, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)
+Model$center <- simulateDataSet(5, Omega %>% addTransfParams(), Model=Model, dir = dir, outliers = FALSE)
 
 #After generating the simulated data, need to move 'from 'centerings' 
 #and 'ODDobjects' from 'IIDIPUS_SimInput' to 'IIDIPUS_Input'
@@ -69,18 +69,3 @@ main_simulated <- function(){
               Parameterisation=output,
               fullvulnerability=vulnerability))
 }
-
-
-# -------------------------------------------------------------------------
-
-#Plot the simulated data
-#Names: ODDSim.png, Sim DispMortBD.png  
-#Size: 1500 x 700
-grid.arrange(plotODDy(ODDSim, var='Population') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
-             plotODDy(ODDSim, var='GNI')+ xlim(-0.25,0.25) + ylim(-0.25,0.25), 
-             plotODDy(ODDSim, var='nBuildings')+ xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)
-grid.arrange(plotODDy(ODDSim, var='Disp') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
-             plotODDy(ODDSim, var='Mort') + xlim(-0.25,0.25) + ylim(-0.25,0.25), 
-             plotODDy(ODDSim, var='nBD') + xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)
-
-

@@ -179,6 +179,18 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
       lhazdat$hazard_info$NumEvents<-lhazdat$hazard_info$NumEvents-1
       next
     }
+    
+    #check to see if there are any identical events stored in USGS and remove if so
+    if (length(lhazdat) > 1){
+      duplicate <- F
+      for (j in 2:length(lhazdat)){
+        if(length(hazsdf$mmi_mean)==length(lhazdat[[j]]$mean)){
+          if(all(hazsdf$mmi_mean==lhazdat[[j]]$mean)) duplicate <- T
+        }
+      }
+      if (duplicate) next
+    }
+    
     # Create HAZARD object
     hazsdf<-new("HAZARD",
                 obj=hazsdf,

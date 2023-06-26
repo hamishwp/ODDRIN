@@ -411,7 +411,7 @@ library(sp)
 coords2country = function(points,iso=T)
 {  
   if(dim(points)[2]!=2) stop("coords2country Error: long/lat coords are invalid")
-  if(dim(points)[1]==1) points=rbind(points,points)
+  if(dim(points)[1]==1) points=t(points[1,])
   
   countriesSP <- rworldmap::getMap(resolution='high')
   #setting CRS directly to that from rworldmap

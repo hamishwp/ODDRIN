@@ -481,7 +481,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       for (s in 1:length(SincN)){
         if(all(lPopS[s,]==0)) next
         # Predict damage at coordinate {i,j} (vector with MC particles)
-        Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega) * locallinp[s] * eps_event[h_i,], error=function(e) NA)
+        Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega) + locallinp[s] + eps_event[h_i,], error=function(e) NA)
         if(any(is.na(Damage))) print(ij)
         
         #LOOSEEND: Include [ind] here 
@@ -514,7 +514,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       }
 
       I_ij<-ODD@data[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega) * locallinp_buildings * eps_event[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega) + locallinp_buildings + eps_event[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
       
       D_DestDam <- D_DestDam_calc(Damage, Omega, first_haz, Model$DestDam_modifiers) #First row of D_DestDam is D_Dest, second row is D_Dam
       D_Rem <- pmax(0, 1 - D_DestDam[1,] - D_DestDam[2,]) #probability of neither damaged nor destroyed. Use pmax to avoid errors caused by numerical accuracy.

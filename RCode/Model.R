@@ -278,7 +278,7 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
   
   LP_ij <- array(NA, dim=NROW(ODD@data))
   
-  LP_ij[notnans] <- 1 # Omega$vuln_coeff$itc #intercept term
+  LP_ij[notnans] <- 0 # Omega$vuln_coeff$itc #intercept term
   
   #could perform all centering outside before model fitting? may allow a bit of speedup
   
@@ -339,8 +339,8 @@ if(Model$BinR=="weibull") {
 } else stop("Incorrect binary regression function name, try e.g. 'weibull'")
 # Stochastic damage function process
 stochastic<-function(n,eps){
-  #return(rnorm(n=n, mean=0, sd=eps))
-  return(rgammaM(n = n,mu = 1, sig_percent = eps ))
+  return(rnorm(n=n, mean=0, sd=eps))
+  #return(rgammaM(n = n,mu = 1, sig_percent = eps ))
 }
 
 # Baseline hazard function h_0
@@ -556,43 +556,6 @@ LL_IDP<-function(Y,  kernel_sd, kernel, cap){
   LL_impact[which(is.na(LL_impact))] <- cap
   LL <- sum(LL_impact)
   return(LL)
-}
-
-crps <- function(sample, obs){
-  sample <- sort(sample)
-  m <- length(sample)
-  crps <- 0
-  for (i in 1:m){
-    crps <- crps + (sample[i]-obs)*(m*as.numeric(obs<sample[i]) -i + 0.5)
-  }
-  crps <- (crps*2)/(m^2)
-  return(crps)
-}
-
-logTarget3 <- function(dist_sample, AlgoParams){
-  dist <- 0
-  for(i in 1:NROW(dist_sample$Disps[[1]])){
-    observed_val <- dist_sample$Disps[[1]]$observed[i]
-    sampled_vals <- sapply(dist_sample$Disps, function(x){x$sampled[i]})
-    dist <- dist + crps(log(sampled_vals+10), log(observed_val+10))
-  }
-  dist_tot <- dist
-  # sumBD_dists <- function(BDDists_p){
-  #   Dist_0.5 <- which(names(BDDists_p) %in% c('N12', 'N21', 'N23', 'N32'))
-  #   Dist_1 <- which(names(BDDists_p) %in% c('N13', 'N31'))
-  #   return(0.5*sum(BDDists_p[Dist_0.5])+sum(BDDists_p[Dist_1]))
-  # }
-  # 
-  # if (length(dist_sample$BDDists) > 0){
-  #   LL_BD <- apply(dist_sample$BDDists, 2, sumBD_dists)
-  # } else {
-  #   LL_BD <- 0
-  # }
-  # 
-  # print(paste0('Dist_agg: ',LL_disps, ' Dist_sat: ', LL_BD))
-  #dist_tot <- LL_disps + LL_BD 
-  
-  return(dist_tot)
 }
 
 # Plot to compare normal and laplace kernels
@@ -870,6 +833,11 @@ sampleDisps <-function(dir,Model,proposed,AlgoParams){
   folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
   
+  if(AlgoParams$kernel == 'crps'){
+    #if using continuous ranked probability score as distance function, need multiple samples per particle
+    AlgoParams$Np <- AlgoParams$Np * AlgoParams$m_CRPS
+  }
+  
   # Parallelise appropriately
   if(AlgoParams$AllParallel){
     # Task parallelism: this parallelisation calculates each event side-by-side, which is ideal if we have many CPU threads available and many ODD objects
@@ -934,6 +902,11 @@ sampleBDDist <- function(dir,Model,proposed,AlgoParams,expLL=T){
   # Load BD files
   folderin<-paste0(dir,"IIDIPUS_Input/BDobjects/")
   ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  
+  # if(AlgoParams$kernel == 'crps'){
+  #   #if using continuous ranked probability score as distance function, need multiple samples per particle
+  #   AlgoParams$Np <- AlgoParams$Np * AlgoParams$m_CRPS
+  # }
   
   # Parallelise appropriately
   if(AlgoParams$AllParallel){
@@ -1002,7 +975,49 @@ sampleDist <- function(dir,Model,proposed,AlgoParams,expLL=T){
   return(list(Disps=Disps, BDDists=BDDists))
 }
 
+crps <- function(sample, obs){
+  sample <- sort(sample)
+  m <- length(sample)
+  crps <- 0
+  for (i in 1:m){
+    crps <- crps + (sample[i]-obs)*(m*as.numeric(obs<sample[i]) -i + 0.5)
+  }
+  crps <- (crps*2)/(m^2)
+  return(crps)
+}
+
+logTarget_CRPS <- function(dist_sample, AlgoParams){
+  
+  crps_eval <- function(n, obs){
+    samples_allocated <- 1:AlgoParams$m_CRPS * n
+    samples_combined <- sapply(dist_sample$Disps[samples_allocated], function(x){x$sampled})
+    crps_vals <- sapply(1:NROW(samples_combined), function(i){crps(log(samples_combined[i,]+10), log(obs[i]+10))})
+    return(sum(crps_vals))
+  }
+  
+  LL_disps <- unlist(mclapply(1:AlgoParams$Np, crps_eval, mc.cores=1, obs=dist_sample$Disps[[1]]$observed))
+
+  #is there a way to do this using a scoring rule as well? : 
+  sumBD_dists <- function(BDDists_p){
+    Dist_0.5 <- which(names(BDDists_p) %in% c('N12', 'N21', 'N23', 'N32'))
+    Dist_1 <- which(names(BDDists_p) %in% c('N13', 'N31'))
+    return(0.5*sum(BDDists_p[Dist_0.5])+sum(BDDists_p[Dist_1]))
+  }
+
+  if (length(dist_sample$BDDists) > 0){
+    LL_BD <- apply(dist_sample$BDDists, 2, sumBD_dists)
+  } else {
+    LL_BD <- 0
+  }
+
+  print(paste0('Dist_agg: ',LL_disps, ' Dist_sat: ', LL_BD))
+  dist_tot <- LL_disps + LL_BD
+  
+  return(dist_tot)
+}
+
 logTarget2 <- function(dist_sample, AlgoParams){
+  if (AlgoParams$kernel == 'crps'){ return(logTarget_CRPS(dist_sample, AlgoParams))}
   
   sumLLs <- function(Disps_p){
     LL = 0 

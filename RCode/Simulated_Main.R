@@ -29,7 +29,8 @@ Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 dist_sample <- sampleDist(dir = dir,Model = Model,
                           proposed = Omega %>% addTransfParams(),
                           AlgoParams = AlgoParams)
-d_i <- logTarget3(dist_sample, AlgoParams)
+
+d_i <- logTarget2(dist_sample, AlgoParams)
 # end_time <- Sys.time()
 # print(paste('Time:', end_time-start_time))
 

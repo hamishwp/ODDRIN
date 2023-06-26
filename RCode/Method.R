@@ -32,12 +32,13 @@ AlgoParams<-list(Np=5, # Number of Monte Carlo particles
                  minVar=1e-4, # Prevent certain parameters from being too sure of themselves
                  t_0 =200,
                  eps = 0.000000001,
-                 kernel='log', #options are lognormal, loglaplace or log
+                 kernel='crps', #options are lognormal, loglaplace or log
                  kernel_sd=list(displacement=1,mortality=16,buildDam=1.2,buildDest=0.9, buildDamDest=1), 
                  smc_steps = 200, #Number of steps in the ABC-SMC algorithm
                  smc_Npart = 1000, #Number of particles in the ABC-SMC algorithm
                  smc_alpha = 0.9,
-                 n_nodes=1
+                 n_nodes=1,
+                 m_CRPS = 2 # number of draws to estimate CRPS for each particle. Number of samples from model therefore becomes Np * m_CRPS
                  )
 		 
 if(is.null(AlgoParams$AllParallel)){
@@ -678,7 +679,7 @@ initialise_particles <- function(dir, Model, AlgoParams, AlgoResults){
     dist_sample <- sampleDist(dir = dir,Model = Model,
                               proposed = AlgoResults$Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                               AlgoParams = AlgoParams)
-    AlgoResults$d[n,,1] <- logTarget3(dist_sample, AlgoParams)
+    AlgoResults$d[n,,1] <- logTarget2(dist_sample, AlgoParams)
     
     end_time <- Sys.time()
     
@@ -777,7 +778,7 @@ perturb_particles <- function(s, propCOV, AlgoParams, AlgoResults){
       dist_sample <- sampleDist(dir = dir,Model = Model,
                                 proposed = Omega_prop_phys %>% addTransfParams(), 
                                 AlgoParams = AlgoParams)
-      d_prop <- rep(logTarget3(dist_sample, AlgoParams), AlgoParams$Np)
+      d_prop <- logTarget2(dist_sample, AlgoParams)
       
       if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
         d_prop <- Inf

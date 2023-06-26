@@ -390,7 +390,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
       #             sd = BD@data[ij,paste0("hazSD",h)]/10)
       
       I_ij<-BD@data[ij,h]
-      Damage <-fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega)*locallinp*eps_event[h_i,]
+      Damage <-fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega) + locallinp + eps_event[h_i,]
       D_DestDam <- D_DestDam_calc(Damage, Omega, first_haz, Model$DestDam_modifiers, ind_dam)
       D_DestDamUnaf <- rbind(D_DestDam, pmax(0,1-colSums(D_DestDam)))
       

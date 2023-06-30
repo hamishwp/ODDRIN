@@ -11,7 +11,9 @@ The aim of this software is to predict the number of people displaced and the nu
 
 ### Authors
 
-ODDRIN was designed, developed, made operational and is managed by Dr. Hamish Patten at the Department of Statistics, University of Oxford [@HamishPatten](https://www.linkedin.com/in/hamish-patten), with support and formal supervision from Professor David Steinsaltz [@DavidSteinsaltz](https://www.steinsaltz.me.uk/).
+ODDRIN was designed, developed, made operational and is managed by Dr. Hamish Patten [@HamishPatten](https://www.linkedin.com/in/hamish-patten), 
+Max Loake [@MaxLoake](https://www.linkedin.com/in/max-anderson-loake-943045195)
+and Professor David Steinsaltz [@DavidSteinsaltz](https://www.steinsaltz.me.uk/), as part of a project developed at the Department of Statistics, University of Oxford.
 
 ## Documentation
 

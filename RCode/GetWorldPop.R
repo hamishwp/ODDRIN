@@ -152,7 +152,10 @@ getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demograph
         next
       } 
       popy_add <- GetWorldPopISO3C(iso3c, year=year, constrained=F, folder=paste0(dir, folder)) %>% raster()
-      popy_add@extent <- popy_add@extent
+      if (bbox[1] > popy_add@extent[2] | bbox[3] < popy_add@extent[1] | bbox[2] > popy_add@extent[4] | bbox[4] < popy_add@extent[3]){
+        warning('SEDACS is placing a country inside bbox but WorldPop is not.')
+        next
+      }
       popy_add_cropped <- crop(popy_add, bbox)
       popy_cropped %<>% merge(popy_add_cropped)
     }

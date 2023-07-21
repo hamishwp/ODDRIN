@@ -412,6 +412,9 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   # LL: Returns 'likelihood' if true or data simulated from model if false
   # Sim: Set to true when generating data for a simulated ODD object. 
   
+  elapsed_time <- c()
+  start_time <- Sys.time()
+  
   # Extract 0D parameters & speed up loop
   Params<-FormParams(ODD,list(Np=Method$Np,center=center))
   # Income distribution percentiles & extract income percentile  
@@ -421,24 +424,14 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   if(!LL) {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$AveSchYrs)))
   } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) ))#!ODD$ISO3C%in%ODD@impact$iso3))
   
-  nBuildings_sample <- array(0, dim=c(NROW(ODD@data), Method$Np))
-  if (!is.null(ODD@data$nBuildings)){
-    indies_openbuildings <- which(!is.na(ODD@data$nBuildings))
-    nBuildings_sample[indies_openbuildings,] <- matrix(ODD@data$nBuildings[indies_openbuildings] , length(ODD@data$nBuildings[indies_openbuildings]), Method$Np)
-    BD_data_present <- T
-  } else if (!is.null(ODD@data$nBuiltup)){
-    indies_osm <- which(ODD@data$nBuiltup > 0)
-    nBuildings_sample[indies_osm,] <- sampleBuildingsFromBuiltup(ODD$nBuiltup[indies_osm], ODD$ISO3C[indies_osm], reg_coefs, Method$Np)
-    BD_data_present <- T
-  } else {
-    BD_data_present <- F
-  }
-  
   # Calculate non-local linear predictor values
-  LP<-GetLP(ODD,Omega,Params,Sinc,notnans)
-  LP_buildings <- GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=F) #could be sped up by combining
-    
+  LP<-GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=T)
+  LP_buildings <- GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=F)
+  
+  finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetLP = finish_time-start_time); start_time <- Sys.time()
+  
   # Speed things up a little
+  BD_data_present <- !is.null(ODD$nBuildings)
   hrange<-grep("hazMean",names(ODD),value = T)
   
   eps_event <- array(0, dim=c(length(hrange), Method$Np))
@@ -446,71 +439,97 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     eps_event[h,] <- stochastic(Method$Np,Omega$eps$hazard)
   }
   
-  # Function to predict displacement per gridpoint
+  finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
+  
+  #Function to predict damage per gridpoint
   CalcDam<-function(ij){
     # Calculate local linear predictor (NOTE: is a vector due to income distribution)
     locallinp<- LP[ij,] # LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] 
     #locallinp<-rep(1,10) #reduces parameter space and removes demographic covariates
-    locallinp_buildings <- LP_buildings[ij]
+    
     # Sample population per income distribution (Assumes 9 percentiles):
     lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) 
+    lPopDisp <- array(0, dim=c(length(locallinp), Method$Np))
+    lPopMort <- array(0, dim=c(length(locallinp), Method$Np))
     tPop <-array(0,c(3, Method$Np)) #row 1 = tDisp, #row 2 = tMort, #row 3 = tRem
     tPop[3,]=colSums(lPopS)
     for(h_i in 1:length(hrange)){
       h <- hrange[h_i]
-      # for(h in c(1)){
+
       if(is.na(ODD@data[ij,h])) next
+      
       # Resample population based on who is remaining
-      ind<-tPop[3,]>0
-      if(h_i!=1) {
-        if(sum(ind)==0) break #if no remaining population, skip modelling
-        if(length(lPopS[,ind])==0) break #if no remaining population, skip modelling
-        #if(sum(ind)>1) sumz<-colSums(lPopS[,ind])
-        #else sumz<-sum(lPopS[,ind])
-        #lPopS[,!ind]<-0
-        lPopS[,ind]<-SplitSamplePop(Pop=tPop[3,ind])
-      }
+      
+      # ind<-tPop[3,]>0
+      # if(h_i!=1) {
+      #   if(sum(ind)==0) break #if no remaining population, skip modelling
+      #   if(length(lPopS[,ind])==0) break #if no remaining population, skip modelling
+      #   if(sum(ind)>1) sumz<-colSums(lPopS[,ind])
+      #   else sumz<-sum(lPopS[,ind])
+      #   lPopS[,!ind]<-0
+      #   lPopS[,ind]<-SplitSamplePop(Pop=tPop[3,ind]) # don't understand why we would be resampling population between income groups here?
+      # }
+      
+      nonzero_pop <- which(lPopS != 0, arr.ind=T)
+      if (length(nonzero_pop)==0) next
+      
       # Sample hazard Intensity 
       # the uncertainty is too high... so I scale it to get some interpretable results (I know, I'm not really a statistician, I don't even have a degree, I was actually just having a look around the department when they confused me for the interviewee. I didn't have the heart to say anything. You don't hate me as much as I do)
       # I_ij<-rnorm(n = Method$Np,
       #             mean = ODD@data[ij,paste0("hazMean",h)],
       #             sd = ODD@data[ij,paste0("hazSD",h)]/10)
-      I_ij<-ODD@data[ij,h]
       
-      # Separate into income distributions (as each have 10% of population, order doesn't matter)
-      for (s in 1:length(SincN)){
-        if(all(lPopS[s,]==0)) next
-        # Predict damage at coordinate {i,j} (vector with MC particles)
-        Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega) + locallinp[s] + eps_event[h_i,], error=function(e) NA)
-        if(any(is.na(Damage))) print(ij)
-        
-        #LOOSEEND: Include [ind] here 
-        D_MortDisp <- D_MortDisp_calc(Damage, Omega) #First row of D_MortDisp is D_Mort, second row is D_Disp
-        D_Rem <- pmax(0, 1 - D_MortDisp[2,] - D_MortDisp[1,]) #probability of neither death nor displacement. Use pmax to avoid errors caused by numerical accuracy.
-        
-        # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
-        tPop[3,ind]<-0
-        tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_MortDisp[2,ind], D_MortDisp[1,ind], D_Rem[ind]) 
-      } 
+      I_ij<-ODD@data[ij,h]
+
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]] + eps_event[h_i,nonzero_pop[,2]], error=function(e) NA)
+      if(any(is.na(Damage))) print(ij)
+      
+      D_MortDisp <- D_MortDisp_calc(Damage, Omega) #First row of D_MortDisp is D_Mort, second row is D_Disp
+      D_Rem <- pmax(0, 1 - D_MortDisp[2,] - D_MortDisp[1,]) #probability of neither death nor displacement. Use pmax to avoid errors caused by numerical accuracy.
+      Dam <- Fbdam(lPopS[nonzero_pop], D_MortDisp[2,], D_MortDisp[1,], D_Rem)
+      
+      lPopS[nonzero_pop] <- Dam[3,]
+      lPopDisp[nonzero_pop] <- lPopDisp[nonzero_pop] + Dam[1,]
+      lPopMort[nonzero_pop] <- lPopMort[nonzero_pop] + Dam[2,]
+      tPop[3,] <- colSums(lPopS[,])
+      
+      # # This is a bit clearer than the above but slower:
+      # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
+      # tPop[3,ind]<-0
+      # for (s in 1:length(SincN)){ #Separate into income distributions (as each have 10% of population, order doesn't matter)
+      #   if(all(lPopS[s,]==0)) next
+      #   # Predict damage at coordinate {i,j} (vector with MC particles)
+      #   Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=sum(ind)),Omega) + locallinp[s] + eps_event[h_i,ind], error=function(e) NA)
+      #   if(any(is.na(Damage))) print(ij)
+      # 
+      #   #LOOSEEND: Include [ind] here
+      #   D_MortDisp <- D_MortDisp_calc(Damage, Omega) #First row of D_MortDisp is D_Mort, second row is D_Disp
+      #   D_Rem <- pmax(0, 1 - D_MortDisp[2,] - D_MortDisp[1,]) #probability of neither death nor displacement. Use pmax to avoid errors caused by numerical accuracy.
+      # 
+      #   tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_MortDisp[2,], D_MortDisp[1,], D_Rem)
+      # }
     }
+    
+    tPop[1,] <- colSums(lPopDisp)
+    tPop[2,] <- colSums(lPopMort)
+    
     #ensure the total displaced, deceased or remaining does not exceed total population
-    tPop[tPop>ODD@data$Population[ij]]<-floor(ODD@data$Population[ij])
+    tPop[tPop>ODD@data$Population[ij]] <- floor(ODD@data$Population[ij])
     
     #if no building destruction data:
     if(!BD_data_present) return(rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np), rep(NA, Method$Np))) #return total displacement and mortality, set number of buildings damaged and destroyed to NA
     
-    #otherwise, sample from the model for the number of buildings destroyed:
-    #we take locallinp[5] which corresponds to locallinp for the median GDP
+    locallinp_buildings <- LP_buildings[ij]
     
     nBuild <-array(0,c(3, Method$Np)) #row 1 = nDam, #row 2 = nDest, #row 3 = nRem
-    nBuild[3,]= nBuildings_sample[ij,]
+    nBuild[3,]= ODD@data$nBuildings[ij]
     first_haz = T
     for (h_i in 1:length(hrange)){
       h <- hrange[h_i]
       if(is.na(ODD@data[ij,h])) next
       if(h_i!=1) {
         first_haz = F
-        if(all(nBuild[3,]==0)) break #if no remaining buildings, skip modelling LOOSEEND
+        if(all(nBuild[3,]==0)) break #if no remaining buildings, skip modelling
       }
 
       I_ij<-ODD@data[ij,h]
@@ -532,13 +551,15 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     }
     return(rbind(tPop[1:2,,drop=FALSE], nBuild[1:2,,drop=FALSE]))
   }
-
+  
   Dam<-array(0,c(nrow(ODD),Method$Np,4)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged, Dam[,,4] = Buildings Destroyed
   
   #Method$cores is equal to AlgoParams$NestedCores (changed in Model file)
   if(Method$cores>1) { Dam[notnans,,]<-aperm(simplify2array(mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$cores)), perm=c(3,2,1))
   } else  Dam[notnans,,]<- aperm(simplify2array(lapply(X = notnans,FUN = CalcDam)), perm=c(3,2,1))
 
+  finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, dam_sample = finish_time-start_time); start_time <- Sys.time()
+  
   # return(Disp)
 
   # If the IDMC estimate is foreseen to be a lower or upper bound, or a generally poor estimate
@@ -548,7 +569,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   # }
   
   
-  funcy<-function(i,LLout=T, kernel_sd=Method$kernel_sd, kernel=Method$kernel, cap=Method$cap,polygons_indexes=ODD@polygons) {
+  funcy<-function(i,LLout=T, kernel_sd=Method$kernel_sd, kernel=Method$kernel, cap=Method$cap, polygons_indexes=ODD@polygons) {
     
     tmp<-data.frame(iso3=ODD$ISO3C, displacement=Dam[,i,1], mortality=Dam[,i,2], buildDam=Dam[,i,3], buildDest=Dam[,i,4])
     impact_sampled<-data.frame(polygon = numeric(), impact = character(), sampled = numeric())
@@ -559,18 +580,18 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
         if (impact == 'buildDamDest'){
           impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
                                                 impact=impact,
-                                                sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,c('buildDam', 'buildDest')], na.rm=T))))
+                                                sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,c('buildDam', 'buildDest')]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
         } else {
           impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
                                                 impact=impact,
-                                                sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact], na.rm=T))))
+                                                sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
         }
       }
     }
     impact_obs_sampled <- merge(impact_sampled, ODD@impact, by=c("polygon", "impact")) %>% arrange(desc(observed)) 
     if(LLout) return(LL_IDP(impact_obs_sampled, kernel_sd,  kernel, cap))
     return(impact_obs_sampled)
-    
+  
   }
   
   if (sim == T){ 
@@ -581,6 +602,21 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     ODD@predictDisp<-funcy(1,LLout=F) 
     return(ODD)
   }
+  
+  for (i in 1:length(ODD@polygons)){
+    if(is.null(ODD@polygons[[i]]$weights)){
+      ODD@polygons[[i]]$weights <- rep(1, length=length(ODD@polygons[[i]]$indexes))
+    }
+  }
+  
+  #IF TIMING (remove if not): ------------------
+  # if (LL==F){
+  #   dummy <- lapply(1:Method$Np, funcy, LLout=F)
+  #   finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, agg_dam = finish_time-start_time); start_time <- Sys.time()
+  #   return(elapsed_time)
+  # }
+  # --------------------------------------------
+  
   
   if(LL == F){
     return(lapply(1:Method$Np, funcy, LLout=F))

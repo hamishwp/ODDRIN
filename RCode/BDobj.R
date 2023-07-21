@@ -336,6 +336,9 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   # Only calculate buildings with all key parameters
   hrange<-grep("hazMean",names(BD),value = T)
   
+  elapsed_time <- c()
+  start_time <- Sys.time()
+  
   if(!LL) {notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | all(is.na(BD@data[,hrange]))))
   } else notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$grading) | all(is.na(BD@data[,hrange]))))
   BD<-BD[notnans,] ; notnans<-1:nrow(BD)
@@ -344,6 +347,9 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
     else return(BD)
   }
   # Get parameters for model
+  
+  # finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetNans = finish_time-start_time); start_time <- Sys.time()
+  
   Params<-FormParams(BD,list(Np=Method$Np,center=Model$center))
   # Income distribution percentiles & extract income percentile  
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
@@ -355,15 +361,20 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   # Calculate non-local linear predictor values
   LP<-GetLP(BD,Omega,Params,Sinc,notnans, split_GNI=F)
   
+  # finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetLP = finish_time-start_time); start_time <- Sys.time()
+  
   eps_event <- array(0, dim=c(length(hrange), Method$Np))
   for (h in 1:length(hrange)){
     eps_event[h,] <- stochastic(Method$Np,Omega$eps$hazard)
   }
+  
+  # finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetEpsEvent = finish_time-start_time); start_time <- Sys.time()
+  
   # for each building in list,
   CalcBD<-function(ij){
-    iso3c<-BD@data$ISO3C[ij]
     # Calculate local linear predictor (NOTE: is a scalar - we randomly sample one value)
     #locallinp<-sample(LP[ij,], Method$Np, replace=T)
+    
     locallinp <- LP[ij]
     #tryCatch(sample(LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]],size=Method$Np, replace=TRUE)*
     #LP$Plinp[ij]*LP$linp[[iso3c]],         error=function(e) NA) #LOOSEEND: Assumes that a house is equally likely to be from each income bracket. 
@@ -372,35 +383,48 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
     # locallinp<-1.
     bDamage<-0
     bDamage<-rep(0, Method$Np) #0 = notaffected, 1 = damaged, 2 = destroyed
-    ind <- 1:Method$Np
+    ind <- rep(T, Method$Np)
     first_haz <- T
     ind_dam <- c()
+    
     for(h_i in 1:length(hrange)){
       h <- hrange[h_i]
-      if(length(BD@data[ij,h])==0) next
+      #if(length(BD@data[ij,h])==0) next
       if(is.na(BD@data[ij,h])) next
-      if(length(ind)==0) break
       if (h_i != 1){
-        ind_dam <- which(bDamage == 1)
+        ind_dam <- which(bDamage[ind] == 1)
         first_haz <- F
       }
+      
       # calculate the sampled hazard intensity I_ij
       # I_ij<-rnorm(n = Method$Np,
       #             mean = BD@data[ij,h],
       #             sd = BD@data[ij,paste0("hazSD",h)]/10)
       
-      I_ij<-BD@data[ij,h]
-      Damage <-fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega) + locallinp + eps_event[h_i,]
+      I_ij <- BD@data[ij,h]
+      Damage <-fDamUnscaled(I_ij,list(I0=Params$I0, Np=sum(ind)),Omega) + locallinp + eps_event[h_i,ind]
       D_DestDam <- D_DestDam_calc(Damage, Omega, first_haz, Model$DestDam_modifiers, ind_dam)
       D_DestDamUnaf <- rbind(D_DestDam, pmax(0,1-colSums(D_DestDam)))
       
-      bDamage[ind] <- pmax(bDamage[ind], apply(D_DestDamUnaf[,ind, drop=F], 2, sample, x=2:0, size=1, replace=F)) #note that positional matching of arguments to sample
-                                                                                          #is overridden by matching names
-      ind <- which(bDamage != 2)
+      sampleDamDest <- function(p){
+        return(3- which(rmultinom(1, 1, D_DestDamUnaf[,p])==1))
+      }
+      
+      bDamage[ind] <- vapply(1:sum(ind), sampleDamDest, numeric(1))
+      
+      #bDamage[ind] <- apply(D_DestDamUnaf, 2, function(p){3- which(rmultinom(1, 1, p)==1)}) #slower
+      #bDamage[ind] <- apply(D_DestDamUnaf, 2, sample, x=2:0, size=1, replace=F) #even slower: note that positional matching of arguments to sample
+                                                                                                                  #is overridden by matching names
+      # if (h_i == 3){
+      #   finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, pmaxbDam = finish_time-start_time); start_time <- Sys.time()
+      # }
+      
+      ind <- bDamage != 2
+      if(all(!ind)) break
     }
     
     bPred <- ifelse(bDamage > 0, ifelse(bDamage==1,'Damaged', 'Destroyed'),'notaffected')
-
+    
     if(LL) return(bPred!=BD@data$grading[ij]) #return 1 if incorrectly classified
     
     if(sim == F){
@@ -415,17 +439,25 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
     if(sim == T) return(bPred)
   }
   
+  #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, DefCalcBD = finish_time-start_time); start_time <- Sys.time()
+  
   #LOOSEEND: This should be moved outside of BDX and have the BD objects resaved without possibly the damaged buildings
   #also need to replace 'Minor', 'Moderate' and 'Severe' with just 'Damaged'
   possiblyDamaged_ij <- which(BD@data$grading=='possible') 
   notnans <- notnans[!notnans %in% possiblyDamaged_ij]
+  if (length(notnans) == 0) return(array(0, dim=c(9, Method$Np)))
+  
+  #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, findPossiblyDam = finish_time-start_time); start_time <- Sys.time()
   
   if(LL) { #return the proportion of buildings correctly classified
     if(Method$cores>1) {return(colSums(t(matrix(unlist(mclapply(X = notnans,FUN = CalcBD,mc.cores = Method$cores)),ncol=length(notnans)))))
     } else return(colSums(t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans)))))
   }
+  
   # classified<-t(matrix(unlist(mclapply(X = notnans,FUN = predBD,mc.cores = Method$cores)),ncol=length(notnans)))
   classified<-t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans)))
+  
+  #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, calcBD = finish_time-start_time); start_time <- Sys.time()
   
   #find values in contingency table between simulated and observed
   N11 <- colSums(classified=='S:Naff,O:NAff') #simulated: notaffected, observed: notaffected
@@ -437,6 +469,10 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   N31 <- colSums(classified=='S:Naff,O:Dest')
   N32 <- colSums(classified=='S:Dam,O:Dest')
   N33 <- colSums(classified=='S:Dest,O:Dest')
+  
+  #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, classifications = finish_time-start_time); start_time <- Sys.time()
+  
+  #return(elapsed_time)
   
   if(sim == F){ return(rbind(N11, N12, N13, N21, N22, N23, N31, N32, N33))}
   

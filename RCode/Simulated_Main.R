@@ -1,4 +1,4 @@
-
+  
 # Extract Environment Variables
 source('RCode/GetEnv.R')
 # Download and install the necessary packages:
@@ -24,11 +24,35 @@ Omega <- list(Lambda1 = list(mu=9, sigma=1.1),
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June24_AggFactor5/ODDobjects/EQ20150425NPL_31')
+DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
 
+
+
+start_time <- Sys.time()
+sampleBDDist(dir,Model, Omega %>% addTransfParams(),AlgoParams)
+finish_time <- Sys.time()
+finish_time - start_time
+
+
+sum(elapsed_time)
+
+
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June24_AggFactor5/ODDobjects/EQ20131015PHL_16')
+DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
+
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June20/ODDobjects/EQ20151026AFG_170')
+DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
+
+sampleBDDist(dir,Model,proposed = Omega %>% addTransfParams(),AlgoParams,expLL=T)
+  
 # start_time <- Sys.time()
 dist_sample <- sampleDist(dir = dir,Model = Model,
                           proposed = Omega %>% addTransfParams(),
                           AlgoParams = AlgoParams)
+
+
+
 
 d_i <- logTarget2(dist_sample, AlgoParams)
 # end_time <- Sys.time()

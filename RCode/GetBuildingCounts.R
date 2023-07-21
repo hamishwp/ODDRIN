@@ -17,6 +17,7 @@ merge_rastered_spdf <- function(raster1_spdf, raster2_spdf, added_var_name){
   return(data)
 }
 
+
 # wkt polygons for events:
 # i = 44: POLYGON((30.5 -2, 30.5 0.5, 32.5 0.5, 32.5 -2, 30.5 -2))
 # i = 82: POLYGON((34.8 -17.5, 34.8 -16.2, 36.1 -16.2, 36.1 -17.5, 34.8 -17.5))
@@ -101,11 +102,11 @@ AddOpenBuildingCounts <- function(ODD, isos_openbuildings, i, national_coverage=
   return(ODD)
 }
 
-AddBuildingCounts <- function(ODD, i){
+AddBuildingCounts <- function(ODD, i, file_write='IIDIPUS_Input/Building_count_notes'){
   isos_openbuildings <- c('IDN', 'PHL') 
   events_openbuildings <- c(34, 44, 82, 131, 146)
   #have checked for coverage
-  events_bingbuildings <- c(5, 39, 40, 53, 95, 142) #not covered: 15 #partially covered: 42, 50, 78
+  #events_bingbuildings <- c(5, 39, 40, 53, 95, 142) #not covered: 15 #partially covered: 42, 50, 78
   
   iso3_unique <- unique(ODD$ISO3C)[!is.na(unique(ODD$ISO3C))]
   
@@ -119,14 +120,20 @@ AddBuildingCounts <- function(ODD, i){
     # writeLines(paste("Bing Build Count Missing", paste(iso3_unique, sep='_'), "Event Date:", ODD@hazdates[1]), file_conn8)
     # close(file_conn8)
     #stop('Double check ODD object to ensure that Bing Building Footprints provides full coverage')
+  } else {
+    ODD %<>% getBingBuildingsGlobal()
+  }
+  if (is.null(ODD$nBuildings)){
+    file_conn <- file(file_write, open = "a")
+    writeLines(paste("Event", i, ": No building counts"), file_conn)
+    close(file_conn) 
+    return(ODD)
   } 
-  if (is.null(ODD$nBuildings)){return(ODD)} 
   missing_building_counts <- which(!is.na(ODD$ISO3C) & is.na(ODD$nBuildings))
   if (length(missing_building_counts)>0){
-    file_conn <- file('IIDIPUS_Input_June20/ODD_creation_notes', open = "a")
+    file_conn <- file(file_write, open = "a")
     writeLines(paste("Build Count Missing for pixels in countries", paste(unique(ODD$ISO3C[missing_building_counts]), sep='_'), "Event Date:", ODD@hazdates[1]), file_conn)
     close(file_conn) 
-    next
   }
   return(ODD)
 }
@@ -267,12 +274,6 @@ AddBingBuildingCounts <- function(ODD, plot_only = F){
 
 
 
-
-
-
-
-
-
 AddFBBuildingEstimates <- function(ODD, isos_osm){
   indies_osm <- which(ODD$ISO3C %in% isos_osm)
 
@@ -349,6 +350,151 @@ addRegCoefs <- function(iso3, bbox_list, filename){
   
   return(nBuildSamplingCoefs)
 }
+
+
+# ----------------- Bing building footprints global --------------------------
+
+
+# ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June24_AggFactor5/ODDobjects/EQ20131015PHL_16')
+
+getMercantileTile <- function(latitude, longitude, zoom){
+  sinLatitude = sin(latitude * pi/180)
+  pixelX = ((longitude + 180) / 360) * 256 * (2^zoom)
+  pixelY = (0.5 - log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * pi)) * 256 * (2^zoom)
+  tileX <- floor(pixelX/256)
+  tileY <- floor(pixelY/256)
+  return(c(tileX, tileY, zoom))
+}
+
+getMercantileTiles <- function(west, south, east, north, zoom){
+  minTile <- getMercantileTile(north, west, zoom)
+  maxTile <- getMercantileTile(south, east, zoom)
+  tiles_contained <- expand.grid(x=minTile[1]:maxTile[1], y=minTile[2]:maxTile[2])
+  tiles_contained <- add_column(tiles_contained, z=zoom)
+  return(tiles_contained)
+}
+
+getQuadKey <- function(Tile) {
+  tileX <- as.integer(Tile[1])
+  tileY <- as.integer(Tile[2])
+  zoom <- as.integer(Tile[3])
+  binX <- rev(as.integer(intToBits(tileX))[1:zoom])
+  binY <- rev(as.integer(intToBits(tileY))[1:zoom])
+  
+  # Alternate the letters from each string
+  #combined[seq(1, 2*zoom, by = 2)] <- substr(binY, 1, zoom)
+  #combined[seq(2, 2*zoom, by = 2)] <- substr(binX, 1, zoom)
+  
+  result <- character(zoom)
+  for(i in 1:length(result)){
+    result[i] <- 2*binY[i] + binX[i]
+  }
+  
+  return(as.integer(paste(result, collapse='')))
+}
+
+
+getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Building_count_notes'){
+  # Note that if you choose to proceed with some missing quadkeys, the values in these pixels will be 0 rather than NA (making them indistinguishable from true 0s)
+  # This could be addressed by determining the polygons of the missing quadkeys and assigning the intersecting pixels to NA, but haven't had time to implement this yet. 
+  
+  bbox <- ODD@bbox
+  zoom <- 8
+  
+  tiles <- getMercantileTiles(bbox[1], bbox[2], bbox[3], bbox[4], 9)
+  quad_keys <- list()
+  for (i in 1:NROW(tiles)){
+    quad_keys[[i]] <- getQuadKey(tiles[i,])
+  }
+  
+  cat(sprintf("The input area spans %d tiles: %s\n", length(quad_keys), paste(quad_keys, collapse = ", ")))
+  
+  df <- read.csv("https://minedbuildings.blob.core.windows.net/global-buildings/dataset-links.csv")
+  
+  # Download the GeoJSON files for each tile that intersects the input geometry
+  build_coords <- array(dim=c(0,2))
+  
+  missing_quadkeys <- unlist(quad_keys)[!unlist(quad_keys) %in% df$QuadKey]
+  if (length(missing_quadkeys)> (0.2 * length(quad_keys))){
+    file_conn <- file(file_write, open = "a")
+    writeLines(paste("Event:", event_id, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, not adding building data."), file_conn)
+    close(file_conn) 
+    return(ODD)
+  } else if (length(missing_quadkeys)> 0){
+    file_conn <- file(file_write, open = "a")
+    writeLines(paste("Event:", event_id, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, but still adding building data."), file_conn)
+    close(file_conn) 
+  }
+  
+  missing_quadkeys_flag <- F
+  
+  for (quad_key in quad_keys) {
+    rows <- df[df$QuadKey == quad_key, ]
+    if (nrow(rows) >= 1) {
+      for (url in rows$Url){
+        tmp <- tempfile()
+        download.file(url, destfile =tmp,quiet = FALSE, mode = "wb")
+        out <- lapply(readLines(tmp), fromJSON)
+        
+        #convert building polygons to points by just taking the first in the coordinate 
+        build_coords %<>% rbind(t(sapply(out, function(build) return(build$geometry$coordinates[1,1,]))))
+      }
+    } else {
+      missing_quadkeys_flag <- T
+      # file_conn <- file('IIDIPUS_Input_NonFinal/IIDIPUS_Input_June24_AggFactor5/BingGlobalNotes', open = "a")
+      # writeLines(paste("               Event Date:", ODD@hazdates[1], ". No building data for quadkey", quad_key), file_conn)
+      # close(file_conn) 
+      # print(paste("QuadKey not found in dataset:", quad_key))
+      #stop(paste("QuadKey not found in dataset:", quad_key))
+    }
+  }
+  inside_bbox <- which(build_coords[,1] > bbox[1] & build_coords[,1] < bbox[3] & build_coords[,2] > bbox[2] & build_coords[,2] < bbox[4])
+  building_locs <- build_coords[inside_bbox,]
+  
+  if (!missing_quadkeys_flag){
+    file_conn <- file(file_write, open = "a")
+    writeLines(paste("Event:", event_id, ", Complete Building Count from Global Bing Building Footprints"), file_conn)
+    close(file_conn) 
+  }
+  
+  colnames(building_locs) <- c('Longitude', 'Latitude')
+  len_fun <- function(x, na.rm=T){
+    if (na.rm) length(na.omit(x)) 
+    else (length(x))
+  }                                                
+  rastered_buildings <- rasterize(building_locs, raster(ODD), 1, fun='count', background=0)
+  rastered_buildings_spdf <- as(rastered_buildings, "SpatialPixelsDataFrame")
+  
+  ODD@data <- merge_rastered_spdf(ODD, rastered_buildings_spdf, 'nBuildings')
+  
+  #sedacs2020 <- GetPopulationBbox(dir, ODD@bbox, yr=2020)
+  #population2020 <- merge(ODD@coords, cbind(sedacs2020@coords, population2020=sedacs2020$Population), by=c('Longitude', 'Latitude'), all.x=T, sort=F)
+  #nonzero_pop <- which(population2020$population2020 > 0)
+  #ODD$nBuildings[nonzero_pop] <- round(ODD$nBuildings[nonzero_pop] * (ODD$Population[nonzero_pop] / population2020$population2020[nonzero_pop]))
+  
+  return(ODD)
+}
+
+
+#-----------------------
+
+# folderin<- paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_June24_AggFactor5/ODDobjects/') #"/home/manderso/Documents/GitHub/IIDIPUS_InputRealwithMort/ODDobjects/"
+# ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) 
+# for (ODD_file in ufiles[5:length(ufiles)]){
+#   print(ODD_file)
+#   ODDy <- readRDS(paste0(folderin, ODD_file))
+#   if (is.null(ODDy$nBuildings)){
+#     ODDy <- getBingBuildingsGlobal(ODDy)
+#     saveRDS(ODDy, paste0(folderin, ODD_file))
+#   }
+#   #saveRDS(ODDy, paste0(folderin, ufiles[i])) 
+# }
+
+
+
+
+
+
 
 
 

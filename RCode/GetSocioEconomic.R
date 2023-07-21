@@ -84,6 +84,69 @@ GetWID_natincome<-function(year=NULL,iso3c=NULL){
   return(WID)
 }
 
+#https://data.worldbank.org/indicator/SI.DST.10TH.10?end=2012&locations=SB&start=2011 (data from 2012 but only source I can find)
+SLB_WID <- data.frame(variable = paste0('p',seq(0,90,10), 'p', seq(10,100,10)), 
+                      value=c(0.028, 0.07-0.028,0.114/2,0.114/2,0.155/2, 0.155/2, 0.215/2, 0.215/2, .446-.292, 0.292), 
+                      iso3='SLB')
+
+#https://data.worldbank.org/indicator/SI.DST.10TH.10?end=2012&locations=SB&start=2011 (data from 2012 but only source I can find)
+VUT_WID <- data.frame(variable = paste0('p',seq(0,90,10), 'p', seq(10,100,10)), 
+                      value=c(0.03, 0.075-0.03,0.124/2,0.124/2,0.172/2, 0.172/2, 0.23/2, 0.23/2, .399-.247, 0.247), 
+                      iso3='VUT')
+
+#Use WID data from Panama as it has an extremely similar Gini Coefficient according to: https://link.springer.com/article/10.1007/s11205-022-03010-8
+PRT_WID <- data.frame(variable = paste0('p',seq(0,90,10), 'p', seq(10,100,10)), 
+                      value=c(0.0006, 0.0075,0.0208,0.0321,0.0427, 0.0549, 0.0702, 0.0942, 0.1462, 0.5308), 
+                      iso3='PRT')
+
+filter_WID_by_iso3c <- function(WID_all, iso3c){
+  return(WID_all %>% filter(variable=='sptinc992j')%>%
+                   mutate(iso3=ifelse(country=='KS', 'KOS', convIso2Iso3(country)))%>%
+                   dplyr::select(-c(variable,country,year)) %>%
+                   filter(iso3%in%iso3c))
+}
+
+getMissingWID <- function(missing_iso3c, WID, WID_all){
+  if ('PRI' %in% missing_iso3c){ # Use WID data from Panama in place of Puerto Rico as it has an extremely similar Gini Coefficient 
+              # according to: https://link.springer.com/article/10.1007/s11205-022-03010-8
+    PRI_WID <- filter_WID_by_iso3c(WID_all, 'PAN')
+    PRI_WID$iso3 = 'PRI'
+    WID %<>% rbind(PRI_WID)
+    missing_iso3c <- missing_iso3c[-which(missing_iso3c=='PRI')]
+  }
+  if ('CYM' %in% missing_iso3c){ #Population is small so just use the WID data from Cuba
+    CYM_WID <- filter_WID_by_iso3c(WID_all, 'CUB')
+    CYM_WID$iso3 = 'CYM'
+    WID %<>% rbind(CYM_WID)
+    missing_iso3c <- missing_iso3c[-which(missing_iso3c=='CYM')]
+  }
+  if ('GRD' %in% missing_iso3c){ #Population/exposed region is small so just use WID data from Venezuela 
+    GRD_WID <- filter_WID_by_iso3c(WID_all, 'VEN')
+    GRD_WID$iso3 = 'GRD'
+    WID %<>% rbind(GRD_WID)
+    missing_iso3c <- missing_iso3c[-which(missing_iso3c=='GRD')]
+  }
+  if ('VCT' %in% missing_iso3c){ #Population/exposed region is small so just use WID data from Venezuela 
+    VCT_WID <- filter_WID_by_iso3c(WID_all, 'VEN')
+    VCT_WID$iso3 = 'VCT'
+    WID %<>% rbind(VCT_WID)
+    missing_iso3c <- missing_iso3c[-which(missing_iso3c=='VCT')]
+  }
+  if ('SLB' %in%  missing_iso3c){
+    WID %<>% rbind(SLB_WID)
+    missing_iso3c <- missing_iso3c[-which(missing_iso3c=='SLB')]
+  } 
+  if ('VUT' %in%  missing_iso3c){
+    WID %<>% rbind(VUT_WID)
+    missing_iso3c <- missing_iso3c[-which(missing_iso3c=='VUT')]
+  } 
+  if (length(missing_iso3c) > 0){
+    stop(paste('No WID data for', missing_iso3c, 'for', year))
+  }
+  return(WID)
+}
+
+
 GetWID_perc<-function(perc,iso3c,year){
   
   if (year > 2021) year <- "2021" #currently no data past 2021
@@ -91,14 +154,19 @@ GetWID_perc<-function(perc,iso3c,year){
   # Note that 'j' refers to the income divided equally between spouses 
   # (only chosen because it is the dataset with largest number of entries)
   perc <- paste0('p',seq(0,90,10), 'p', seq(10,100,10))
-  WID<-download_wid(indicators = "sptinc",years=as.character(year),perc = as.character(perc), pop = "j")
+  WID_all <-download_wid(indicators = "sptinc",years=as.character(year),perc = as.character(perc), pop = "j")
+  
   # Filter by most popular variable (usually 'sptinc992j')
   # WID%<>%filter(variable==names(which.max(table(WID$variable))))%>%
-  WID%<>%filter(variable=='sptinc992j')%>%
-    mutate(iso3=convIso2Iso3(country))%>%
+  WID <- WID_all %>% filter(variable=='sptinc992j')%>%
+    mutate(iso3=ifelse(country=='KS', 'KOS', convIso2Iso3(country)))%>%
     dplyr::select(-c(variable,country,year)) %>%
     filter(iso3%in%iso3c)
   
+  if (!all(iso3c %in% WID$iso3)){
+    missing_iso3c <- iso3c[which(!iso3c %in% WID$iso3)]
+    WID <- getMissingWID(missing_iso3c, WID, WID_all)
+  }
   #WID$value<-1-WID$value
   #names(WID)[names(WID)=="percentile"]<-"variable"
   #mins<-WID%>%group_by(iso3)%>%summarise(mins=min(value),.groups = 'drop_last')

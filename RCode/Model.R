@@ -63,12 +63,11 @@ Model$skeleton <- list(
   Lambda3=list(mu=NA,sigma=NA),
   Lambda4=list(mu=NA,sigma=NA),
   eps=list(local=NA,hazard=NA),
-  vuln_coeff=list(PDens=NA, AveSchYrs=NA, 
-                  LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA),
+  vuln_coeff=list(PDens=NA, AveSchYrs=NA, LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA),
   check=list(check=NA)
 )
 
-Model$Priors <- list( #currently not included in the acceptance probability. 
+Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
   Lambda1=list(mu=list(dist='unif', min=6.5, max=9.5), 
                sigma=list(dist='unif', min=0, max=2)), 
   Lambda2=list(mu=list(dist='unif', min=8, max=12.5), 
@@ -88,10 +87,15 @@ Model$Priors <- list( #currently not included in the acceptance probability.
   check=list(check=list(dist='unif', min=0, max=1))
 )
 
-Model$links <- Model$skeleton
-Model$unlinks <- Model$skeleton
-Model$acceptTrans <- Model$skeleton 
+#Set up the same structure to links, unlinks and acceptance transformations as Model$skeleton
+# Links: transforms the parameters onto a more convenient domain (e.g. for MCMC proposals)
+# Unlinks: untransforms the parameters
+# AcceptTrans: function to apply to proposed and current parameters to modify acceptance probability to account for parameter transformations
+#              (see here e.g. https://umbertopicchini.files.wordpress.com/2017/12/transformed-proposals2.pdf)
 
+Model$links <-Model$unlinks <- Model$acceptTrans <- Model$skeleton
+
+#Currently, all parameters use a lower and upper bound
 for (i in 1:length(Model$links)){
   if (is.list(Model$links[[i]])){
     for (j in 1:length(Model$links[[i]])){
@@ -106,85 +110,32 @@ for (i in 1:length(Model$links)){
   }
 }
 
-#Model$nBuildSamplingCoefs <- getBuildSamplingCoefs('Demography_Data/Buildings/nBuildModelCoefs')
+#Set lower and upper bounds for the parameters, using the range of the uniform prior plaved over the parameters.
+Model$par_lb <- c()
+Model$par_ub <- c()
+  
+for (i in 1:length(Model$Priors)){
+  if (is.list(Model$Priors[[i]])){
+    for (j in 1:length(Model$Priors[[i]])){
+      if(Model$Priors[[i]][[j]]$dist == 'unif'){
+        Model$par_lb = c(Model$par_lb, Model$Priors[[i]][[j]]$min)
+        Model$par_ub = c(Model$par_ub, Model$Priors[[i]][[j]]$max)
+      } else {
+        stop('Please update Method.R to adjust acceptance probability to account for non-uniform prior before continuing.')
+      }
+    }
+  } else {
+    if(Model$Priors[[i]]$dist == 'unif'){
+      Model$par_lb = c(Model$par_lb, Model$Priors[[i]]$min)
+      Model$par_ub = c(Model$par_ub, Model$Priors[[i]]$max)
+    } else {
+      stop('Please update Method.R to adjust acceptance probability to account for non-uniform prior before continuing.')
+    }
+  }
+}
 
-# Link functions (MUST BE SAME LENGTH AS OMEGA)
-# Model$links<-list(
-#   Lambda1=list(nu='ab_bounded',omega='ab_bounded'),
-#   Lambda2=list(nu='ab_bounded',omega='ab_bounded'),
-#   Lambda3=list(nu='ab_bounded',omega='ab_bounded'),
-#   Lambda4=list(nu='ab_bounded',omega='ab_bounded'), 
-#   theta=list(e='ab_bounded'),
-#   eps=list(eps='ab_bounded'),
-#   vuln_coeff=list(itc='ab_bounded',PDens='ab_bounded', AveSchYrs='ab_bounded', 
-#                   LifeExp='ab_bounded', GNIc='ab_bounded', Vs30='ab_bounded', EQFreq='ab_bounded') 
-# )
-# 
-# Model$unlinks<-list(
-#   Lambda1=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-#   Lambda2=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-#   Lambda3=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-#   Lambda4=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
-#   theta=list(e='ab_bounded_inv'),
-#   eps=list(eps='ab_bounded_inv'),
-#   vuln_coeff=list(itc='ab_bounded_inv',PDens='ab_bounded_inv', AveSchYrs='ab_bounded_inv', 
-#                   LifeExp='ab_bounded_inv', GNIc='ab_bounded_inv', Vs30='ab_bounded_inv', 
-#                   EQFreq='ab_bounded_inv'))
-# 
-# Model$acceptTrans <- list(
-#   Lambda1=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
-#   Lambda2=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
-#   Lambda3=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
-#   Lambda4=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
-#   theta=list(e='ab_bounded_acc'), 
-#   eps=list(eps='ab_bounded_acc'),
-#   vuln_coeff=list(itc='ab_bounded_acc',PDens='ab_bounded_acc', AveSchYrs='ab_bounded_acc', 
-#                   LifeExp='ab_bounded_acc', GNIc='ab_bounded_acc', Vs30='ab_bounded_acc', 
-#                   EQFreq='ab_bounded_acc') 
-# )
-
-#Set lower and upper bounds for the parameters
-Model$par_lb <- c(6.5, #Lambda1$mu 
-                  0, #Lambda1$sigma
-                  8, #Lambda2$mu 
-                  0, #Lambda2$sigma
-                  5.5,  #Lambda3$mu 
-                  0, #Lambda3$sigma
-                  7.5, #Lambda4$mu 
-                  0, #Lambda4$sigma
-                  0, #epsilon_local
-                  0, #epsilon_hazard
-                  -0.15, #PDens
-                  -0.15, #AveSchYrs
-                  -0.15, #LifeExp
-                  -0.15, #GNIc
-                  -0.15, #Vs30
-                  -0.15, #EQFreq
-                  0 #check
-                  ) 
-
-Model$par_ub <- c(9.5, #Lambda1$mu 
-                  2, #Lambda1$sigma
-                  12.5, #Lambda2$mu 
-                  2, #Lambda2$sigma
-                  9.5,  #Lambda3$mu 
-                  2, #Lambda3$sigma
-                  11.5, #Lambda4$mu 
-                  2, #Lambda4$sigma
-                  0.5, #epsilon_local
-                  0.5, #epsilon_hazard
-                  0.15, #PDens
-                  0.15, #AveSchYrs
-                  0.15, #LifeExp
-                  0.15, #GNIc
-                  0.15, #Vs30
-                  0.15, #EQFreq
-                  1 #check
-)
-
-
-# Get the binary regression function
- Model$BinR<-"weibull" # "gompertz" #currently not implemented, only have option for normal cdf
+# Get the binary regression function (currently not implemented, only have option for normal cdf)
+# Model$BinR<- "pnorm" #"weibull" # "gompertz" 
 
 # Implement higher order Bayesian priors?
 # Model$higherpriors<-TRUE
@@ -211,67 +162,6 @@ Model$DestDam_modifiers <- c(1,1,1)
 # Linear predictor calculations (act to modify the expected damage values)
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-# # Linear predictor function - ugly, but very fast!
-# llinpred<-function(Params,beta,center,func) { # Note all of these are vectors, not single values
-#   # if(is.null(func)) func<-replicate(length(beta),function(x) x)
-#   linp<-list()
-#   for(j in 1:length(Params)) {
-#     vars<-Params[[j]]$var
-#     # This part uses the name of the variable to search for the following:
-#     # 1) link function - func, 2) centering value - center, 3) linear predictor parameterisation - beta
-#     linp[[names(Params[j])]]<-prod(exp(vapply(1:nrow(vars),
-#                                 function(i) beta[[vars$variable[i]]]*(do.call(func[[vars$variable[i]]],
-#                                                                               list(vars$value[i]-center[[vars$variable[i]]] ))),
-#                                 FUN.VALUE = numeric(1))))
-#   }
-#   return(linp)
-# }
-# 
-# # Quicker version of llinpred for when only one vars$variable exists
-# dlinpred<-function(vars,beta,center,func) { # Note all of these are vectors, not single values
-#   # Quicker version of llinpred for when only one vars$variable exists
-#   return(exp(beta[[vars$variable[1]]]*(do.call(func[[vars$variable[1]]],list(vars$value-center[[vars$variable[1]]] )))))
-# }
-# 
-# WeibullScaleFromShape<-function(shape,center){
-#   # Scale parameter
-#   return(center/(log(2)^(1/shape)))
-# }
-# # Linear predictor for subnational variables
-# locpred<-function(x,params){
-#   exp(params$M*(pweibull(x,shape=params$shape,scale=params$scale)-0.5))
-# }
-# 
-# GDPlinp<-function(ODD,Sinc,beta,center,notnans){
-#   iGDP<-as.numeric(factor(interaction(ODD@data$GDP, ODD@data$ISO3C), levels=unique(interaction(ODD@data$GDP, ODD@data$ISO3C))))
-#   dGDP<-data.frame(ind=iGDP[notnans],GDP=ODD@data$GDP[notnans],iso=ODD@data$ISO3C[notnans])
-#   dGDP%<>%group_by(ind)%>%summarise(value=log(unique(GDP)*(Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"value"]/
-#                                       Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]) & Sinc$variable=="p50p100","value"])),
-#                               income=Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"variable"],
-#                               variable="dollar",
-#                               iso3c=unique(dGDP$iso[dGDP$ind==unique(ind)]),.groups = 'drop_last')
-#   dGDP$linp<-rep(NA_real_,nrow(dGDP))
-#   # Autocalculate the Weibull scale parameter using the shape and centering values
-#   tp<-list(shape=beta$k,M=beta$M,
-#         scale=WeibullScaleFromShape(shape = beta$k,center = center$dollar))
-#   dGDP$linp[which(!is.na(dGDP$ind))]<-locpred(dGDP$value[!is.na(dGDP$ind)],tp)
-#   # dGDP$linp[which(!is.na(dGDP$ind))]<-dlinpred(dGDP[!is.na(dGDP$ind),],beta,center,fIndies)
-#   
-#   return(list(dGDP=dplyr::select(dGDP,c(ind,income,linp)),iGDP=iGDP))
-# }
-# 
-# Plinpred<-function(Pdens,beta,center,notnans){
-#   
-#   Plinp<-rep(NA_real_,length(Pdens))
-#   # Plinp[notnans]<-dlinpred(data.frame(variable=rep("Pdens",length(Pdens[notnans])),value=log(Pdens[notnans]+1)),beta,center,fIndies)
-#   # Autocalculate the Weibull scale parameter using the shape and centering values
-#   tp<-list(shape=beta$k,M=beta$M,
-#         scale=WeibullScaleFromShape(shape = beta$k,center = center$Pdens))
-#   Plinp[notnans]<-locpred(log(Pdens[notnans]+1),tp)
-#   return(Plinp)
-#   
-# }
-
 GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
   #if (split_GNI){return(array(1, dim=c(NROW(ODD@data), 8)))}
   #else {return(rep(1, NROW(ODD@data)))}
@@ -283,15 +173,14 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
   #could perform all centering outside before model fitting? may allow a bit of speedup
   
   #Population density term:
-  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff$PDens * ((log(ODD@data$Population[notnans]+1) - Params$center$PDens$mean)/Params$center$PDens$sd)
+  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff$PDens * ((log(ODD@data$PDens[notnans]+1) - Params$center$PDens$mean)/Params$center$PDens$sd)
   for (vuln_term in names(Omega$vuln_coeff)[!(names(Omega$vuln_coeff) %in%  c('itc', 'PDens', 'GNIc'))]){
     #All remaining terms except GNIc:
     LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff[[vuln_term]] * ((ODD@data[notnans, vuln_term] - Params$center[[vuln_term]]$mean)/Params$center[[vuln_term]]$sd)
   }
   
   #GNIc:
-  
-  if (!split_GNI){ #don't split into the eight GNIc deciles:  
+  if (split_GNI==F){ #don't split into the eight GNIc deciles:  
     LP_ij[notnans] <-  LP_ij[notnans] + Omega$vuln_coeff$GNIc * (log(ODD@data$GNIc[notnans]) - Params$center$GNIc$mean)/Params$center$GNIc$sd
     return(LP_ij)
   }
@@ -324,19 +213,12 @@ GetLP_single <- function(Omega, center, vuln_terms){
   LP_ij <- LP_ij + Omega$vuln_coeff$GNIc * (log(vuln_terms[['GNIc']]) - center$GNIc$mean)/center$GNIc$sd
   
   return(LP_ij)
-  
 }
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 # Generalised Linear Models for building damage & displacement calcs
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-# Binary regression function
-if(Model$BinR=="weibull") {
-  BinR<-function(x,zeta) pweibull(x,shape=zeta$k,scale=zeta$lambda)
-} else if(Model$BinR=="gompertz") {
-  BinR<-function(x,zeta) flexsurv::pgompertz(x,shape=zeta$varrho,rate=zeta$eta)
-} else stop("Incorrect binary regression function name, try e.g. 'weibull'")
 # Stochastic damage function process
 stochastic<-function(n,eps){
   return(rnorm(n=n, mean=0, sd=eps))
@@ -381,17 +263,17 @@ D_DestDam_calc <- function(Damage, Omega, first_haz=T, DestDam_modifiers = c(1,1
   if(first_haz == T){
     D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sigma)
     D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma)
-    D_Dam <- D_Dest_and_Dam - D_Dest
-    D_Dam <- ifelse(D_Dam<0, 0, D_Dam)
+    D_Dam <- pmax(D_Dest_and_Dam - D_Dest, 0)
   } else {
     if (length(ind_dam>0)){
+      #D_Dam = 1 - D_Dest
       D_Dest_and_Dam <- D_Dam <- D_Dest <- rep(0, length(Damage))
       D_Dest_and_Dam[-ind_dam] <- pnorm(Damage[-ind_dam], mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sigma) ^ DestDam_modifiers[1]
-      D_Dest[-ind_dam] <- pnorm(Damage[-ind_dam], mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma) ^ DestDam_modifiers[2]
       D_Dest_and_Dam[ind_dam] <- 1
-      D_Dest[ind_dam] <- pnorm(Damage[ind_dam], mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma) ^ DestDam_modifiers[3]
-      D_Dam <- D_Dest_and_Dam - D_Dest
-      D_Dam <- ifelse(D_Dam<0, 0, D_Dam)
+      D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma)
+      D_Dest[-ind_dam] <- D_Dest[-ind_dam] ^ DestDam_modifiers[2]
+      D_Dest[ind_dam] <- D_Dest[ind_dam] ^ DestDam_modifiers[3]
+      D_Dam <- pmax(D_Dest_and_Dam - D_Dest, 0)
     } else {
       D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sigma) ^ DestDam_modifiers[1]
       D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma) ^ DestDam_modifiers[2]
@@ -402,47 +284,8 @@ D_DestDam_calc <- function(Damage, Omega, first_haz=T, DestDam_modifiers = c(1,1
   return(rbind(D_Dest, D_Dam))
 }
 
-# Building damage baseline hazard function hBD_0
-hBD<-function(Ab,Population,rho,center){
-  exp(-rho$A*(log(Ab)-center$A) - rho$H*(log(Population)-center$H))
-}
-
-# For building damage assessment data
-fDamageBuilding<-function(BD,I,Params,Omega,linp,Ik){
-  fDamUnscaled(I,Params,Omega)*linp#*hBD(BD$Ab,BD$Population,Omega$rho,Params$center[c("A","H")]),
-}
-
-qualifierDisp<-function(Disp,qualifier,mu) {
-  if(qualifier%in%c("total","approximately")) return(Disp)
-  else if(qualifier=="more than") {
-    return(vapply(Disp,function(Disp) rgammaM(n=1,mu = mu$muplus*Disp,
-                                              sig_percent = mu$sigplus),numeric(1)))
-  } else if(qualifier=="less than") {
-    return(vapply(Disp,function(Disp) rgammaM(n=1,mu = mu$muminus*Disp,
-                                              sig_percent = mu$sigminus),numeric(1)))
-  } else stop(paste0("qualifier is not recognised - ",qualifier))
-}
-
-# Binomial displacement calculator function
-rbiny<-function(size,p) rbinom(n = 1,size,p); 
-Fbdisp<-function(lPopS,Dprime) mapply(rbiny,lPopS,Dprime);
-
-#when working with buildings, D_Disp is equivalent to D_BuildDam and D_Mort is equivalent to D_BuildDest
-rmultinomy<-function(size, D_Disp, D_Mort, D_Rem) rmultinom(n=1, size, c(D_Disp, D_Mort, D_Rem))
-Fbdam<-function(PopRem, D_Disp, D_Mort, D_Rem) mapply(rmultinomy, PopRem, D_Disp, D_Mort, D_Rem)
-
-lBD<-function(D_B, BD_params){
-  #input: probability of Building Damage D^B
-  #output: probability of Building Destruction D^BD
-  relative_probs = BDprob(D_B, BD_params) %>% mutate('damaged' = rowSums(.[1:4]))
-  D_BD = (relative_probs[['destroyed']] + relative_probs[['severe']])/rowSums(relative_probs)
-  return(D_BD)
-}
-
-fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
-
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-# Log likelihood, posterior and prior distribution calculations
+# Log likelihood, posterior and higher-level prior distribution calculations
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
 # These high-level priors are to include expert opinion in the 
@@ -502,10 +345,9 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     adder <- adder + sum(impact_intens_7[1,] > impact_intens_7[2,]) + sum(impact_intens_7[3,] > impact_intens_7[4,])
 
     return(adder) #looseend: need to address when including modifiers
-    #return(adder)
     
   } else if(Model$haz=="TC"){
-    
+    # Would need to be udpated:
     Dfun<-function(I_ij) h_0(I = I_ij,I0 = 3,theta = Omega$theta) 
     Dispfun<-function(I_ij) c(BinR(Dfun(I_ij)*Dfun(I_ij)*Omega$Lambda1$kappa+Omega$Lambda1$nu*Dfun(I_ij) + Omega$Lambda1$omega,Omega$zeta)%o%lp)
     Damfun<-function(I_ij) c(BinR(Dfun(I_ij),Omega$zeta)%o%lp)
@@ -920,6 +762,7 @@ sampleBDDist <- function(dir,Model,proposed,AlgoParams,expLL=T){
     tmpFn<-function(filer){
       # Extract the BD object
       BDy<-readRDS(paste0(folderin,filer))
+      
       if(nrow(BDy@data)==0){return()}
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       #BDy@fIndies<-Model$fIndies
@@ -1074,6 +917,162 @@ logTargetSingle<-function(ODDy,Model,Omega,AlgoParams){
    
 }
 
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+# Currently not implemented:
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+#Currently not implemented:
+# Building damage baseline hazard function hBD_0
+# hBD<-function(Ab,Population,rho,center){
+#   exp(-rho$A*(log(Ab)-center$A) - rho$H*(log(Population)-center$H))
+# }
+
+# For building damage assessment data
+# fDamageBuilding<-function(BD,I,Params,Omega,linp,Ik){
+#   fDamUnscaled(I,Params,Omega)*linp #*hBD(BD$Ab,BD$Population,Omega$rho,Params$center[c("A","H")]),
+# }
+
+# qualifierDisp<-function(Disp,qualifier,mu) {
+#   if(qualifier%in%c("total","approximately")) return(Disp)
+#   else if(qualifier=="more than") {
+#     return(vapply(Disp,function(Disp) rgammaM(n=1,mu = mu$muplus*Disp,
+#                                               sig_percent = mu$sigplus),numeric(1)))
+#   } else if(qualifier=="less than") {
+#     return(vapply(Disp,function(Disp) rgammaM(n=1,mu = mu$muminus*Disp,
+#                                               sig_percent = mu$sigminus),numeric(1)))
+#   } else stop(paste0("qualifier is not recognised - ",qualifier))
+# }
+
+# lBD<-function(D_B, BD_params){
+#   #input: probability of Building Damage D^B
+#   #output: probability of Building Destruction D^BD
+#   relative_probs = BDprob(D_B, BD_params) %>% mutate('damaged' = rowSums(.[1:4]))
+#   D_BD = (relative_probs[['destroyed']] + relative_probs[['severe']])/rowSums(relative_probs)
+#   return(D_BD)
+# }
+
+# Binary regression function (currently using normal distribution)
+# if(Model$BinR=="weibull") {
+#   BinR<-function(x,zeta) pweibull(x,shape=zeta$k,scale=zeta$lambda)
+# } else if(Model$BinR=="gompertz") {
+#   BinR<-function(x,zeta) flexsurv::pgompertz(x,shape=zeta$varrho,rate=zeta$eta)
+# } else stop("Incorrect binary regression function name, try e.g. 'weibull'")
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+# Old Code:
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+
+############### Linear predictor function - ugly, but very fast!
+
+# llinpred<-function(Params,beta,center,func) { # Note all of these are vectors, not single values
+#   # if(is.null(func)) func<-replicate(length(beta),function(x) x)
+#   linp<-list()
+#   for(j in 1:length(Params)) {
+#     vars<-Params[[j]]$var
+#     # This part uses the name of the variable to search for the following:
+#     # 1) link function - func, 2) centering value - center, 3) linear predictor parameterisation - beta
+#     linp[[names(Params[j])]]<-prod(exp(vapply(1:nrow(vars),
+#                                 function(i) beta[[vars$variable[i]]]*(do.call(func[[vars$variable[i]]],
+#                                                                               list(vars$value[i]-center[[vars$variable[i]]] ))),
+#                                 FUN.VALUE = numeric(1))))
+#   }
+#   return(linp)
+# }
+# 
+# # Quicker version of llinpred for when only one vars$variable exists
+# dlinpred<-function(vars,beta,center,func) { # Note all of these are vectors, not single values
+#   # Quicker version of llinpred for when only one vars$variable exists
+#   return(exp(beta[[vars$variable[1]]]*(do.call(func[[vars$variable[1]]],list(vars$value-center[[vars$variable[1]]] )))))
+# }
+
+# 
+# WeibullScaleFromShape<-function(shape,center){
+#   # Scale parameter
+#   return(center/(log(2)^(1/shape)))
+# }
+# # Linear predictor for subnational variables
+# locpred<-function(x,params){
+#   exp(params$M*(pweibull(x,shape=params$shape,scale=params$scale)-0.5))
+# }
+# 
+# GDPlinp<-function(ODD,Sinc,beta,center,notnans){
+#   iGDP<-as.numeric(factor(interaction(ODD@data$GDP, ODD@data$ISO3C), levels=unique(interaction(ODD@data$GDP, ODD@data$ISO3C))))
+#   dGDP<-data.frame(ind=iGDP[notnans],GDP=ODD@data$GDP[notnans],iso=ODD@data$ISO3C[notnans])
+#   dGDP%<>%group_by(ind)%>%summarise(value=log(unique(GDP)*(Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"value"]/
+#                                       Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]) & Sinc$variable=="p50p100","value"])),
+#                               income=Sinc[Sinc$iso3==unique(dGDP$iso[dGDP$ind==unique(ind)]),"variable"],
+#                               variable="dollar",
+#                               iso3c=unique(dGDP$iso[dGDP$ind==unique(ind)]),.groups = 'drop_last')
+#   dGDP$linp<-rep(NA_real_,nrow(dGDP))
+#   # Autocalculate the Weibull scale parameter using the shape and centering values
+#   tp<-list(shape=beta$k,M=beta$M,
+#         scale=WeibullScaleFromShape(shape = beta$k,center = center$dollar))
+#   dGDP$linp[which(!is.na(dGDP$ind))]<-locpred(dGDP$value[!is.na(dGDP$ind)],tp)
+#   # dGDP$linp[which(!is.na(dGDP$ind))]<-dlinpred(dGDP[!is.na(dGDP$ind),],beta,center,fIndies)
+#   
+#   return(list(dGDP=dplyr::select(dGDP,c(ind,income,linp)),iGDP=iGDP))
+# }
+# 
+# Plinpred<-function(Pdens,beta,center,notnans){
+#   
+#   Plinp<-rep(NA_real_,length(Pdens))
+#   # Plinp[notnans]<-dlinpred(data.frame(variable=rep("Pdens",length(Pdens[notnans])),value=log(Pdens[notnans]+1)),beta,center,fIndies)
+#   # Autocalculate the Weibull scale parameter using the shape and centering values
+#   tp<-list(shape=beta$k,M=beta$M,
+#         scale=WeibullScaleFromShape(shape = beta$k,center = center$Pdens))
+#   Plinp[notnans]<-locpred(log(Pdens[notnans]+1),tp)
+#   return(Plinp)
+#   
+# }
+
+#################### 'Likelihood' calculations:
+
+# Binomial displacement calculator function
+# rbiny<-function(size,p) rbinom(n = 1,size,p); 
+# Fbdisp<-function(lPopS,Dprime) mapply(rbiny,lPopS,Dprime);
+
+#when working with buildings, D_Disp is equivalent to D_BuildDam and D_Mort is equivalent to D_BuildDest
+# rmultinomy<-function(size, D_Disp, D_Mort, D_Rem) rmultinom(n=1, size, c(D_Disp, D_Mort, D_Rem))
+# Fbdam<-function(PopRem, D_Disp, D_Mort, D_Rem) mapply(rmultinomy, PopRem, D_Disp, D_Mort, D_Rem)
+
+# fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
+
+############## Parameter set-up (would be useful if links are not all the same)
+
+# Link functions (MUST BE SAME LENGTH AS OMEGA)
+# Model$links<-list(
+#   Lambda1=list(nu='ab_bounded',omega='ab_bounded'),
+#   Lambda2=list(nu='ab_bounded',omega='ab_bounded'),
+#   Lambda3=list(nu='ab_bounded',omega='ab_bounded'),
+#   Lambda4=list(nu='ab_bounded',omega='ab_bounded'), 
+#   theta=list(e='ab_bounded'),
+#   eps=list(eps='ab_bounded'),
+#   vuln_coeff=list(itc='ab_bounded',PDens='ab_bounded', AveSchYrs='ab_bounded', 
+#                   LifeExp='ab_bounded', GNIc='ab_bounded', Vs30='ab_bounded', EQFreq='ab_bounded') 
+# )
+# 
+# Model$unlinks<-list(
+#   Lambda1=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   Lambda2=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   Lambda3=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   Lambda4=list(nu='ab_bounded_inv',omega='ab_bounded_inv'),
+#   theta=list(e='ab_bounded_inv'),
+#   eps=list(eps='ab_bounded_inv'),
+#   vuln_coeff=list(itc='ab_bounded_inv',PDens='ab_bounded_inv', AveSchYrs='ab_bounded_inv', 
+#                   LifeExp='ab_bounded_inv', GNIc='ab_bounded_inv', Vs30='ab_bounded_inv', 
+#                   EQFreq='ab_bounded_inv'))
+# 
+# Model$acceptTrans <- list(
+#   Lambda1=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
+#   Lambda2=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
+#   Lambda3=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
+#   Lambda4=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
+#   theta=list(e='ab_bounded_acc'), 
+#   eps=list(eps='ab_bounded_acc'),
+#   vuln_coeff=list(itc='ab_bounded_acc',PDens='ab_bounded_acc', AveSchYrs='ab_bounded_acc', 
+#                   LifeExp='ab_bounded_acc', GNIc='ab_bounded_acc', Vs30='ab_bounded_acc', 
+#                   EQFreq='ab_bounded_acc') 
+# )
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 # Choose your vulnerability variables to be correlated with

@@ -43,8 +43,11 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   # pga<-SortDemoData(paste0(dir,"Hazard_Data/gdpga/gdpga.asc"))
   # pga%<>%convMat2SPDF(name="PGA")
   
-  EQFreq_mean <- 5.411167 # mean(pga$PGA, na.rm=T)
-  EQFreq_sd <- 2.918439 # sd(pga$PGA, na.rm=T)
+  #pga <- raster(paste0(dir,"Hazard_Data/gdpga/pga_475y.tif"))
+  #pga_vals <- values(pga)
+  
+  EQFreq_mean <- 2.568421 #mean(log(pga_vals+0.1)[which(pga_vals > 0.01)]) 5.411167 # mean(pga$PGA, na.rm=T) 
+  EQFreq_sd <- 1.860136 #sd(log(pga_vals+0.1)[which(pga_vals > 0.01)]) 2.918439 # sd(pga$PGA, na.rm=T)
     
   center<-list(PDens=list(mean=PDens_mean, sd=PDens_sd), #LOOSEEND: CAME UP WITH THIS SD. CHECK
                AveSchYrs=list(mean=AveSchYrs_mean, sd=AveSchYrs_sd),

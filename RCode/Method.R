@@ -857,7 +857,7 @@ retrieve_UnfinishedAlgoResults <- function(dir, oldtag, Npart, AlgoResults){
 update_tolerance_and_weights <- function(s, alpha, AlgoResults){
   #Find the new tolerance such that alpha proportion of the current alive particles stay alive
   toleranceold <- AlgoResults$tolerance[s-1]
-  d_old <-AlgoResults$d[,,s-1]
+  d_old <- adrop(AlgoResults$d[,,s-1,drop=FALSE], drop = 3)
   reflevel <- alpha * tpa(toleranceold, d_old)
   tolerance<-uniroot(function(tolerance) tpa(tolerance,d=d_old)-reflevel,c(0,toleranceold))$root
   print(paste('      Step:', s, ', New tolerance is:', tolerance))
@@ -883,19 +883,19 @@ resample_particles <- function(s, N_T, Npart, AlgoResults){
     choice<- sample(1:Npart,Npart,replace= TRUE, prob = AlgoResults$W[,s])
     AlgoResults$Omega_sample[,,s] <- AlgoResults$Omega_sample[choice,,s-1] 
     AlgoResults$Omega_sample_phys[,,s] <- AlgoResults$Omega_sample_phys[choice,,s-1] 
-    AlgoResults$d[,,s] <- AlgoResults$d[choice,,s-1] 
+    AlgoResults$d[,,s] <- adrop(AlgoResults$d[choice,,s-1, drop=F], drop=3)
     AlgoResults$W[,s] <-rep(1/Npart,Npart) 
   } else { #otherwise do not resample (the particles will be perturbed later via a MCMC step) 
     AlgoResults$Omega_sample[,,s] <- AlgoResults$Omega_sample[,,s-1] 
     AlgoResults$Omega_sample_phys[,,s] <- AlgoResults$Omega_sample_phys[,,s-1] 
-    AlgoResults$d[,,s] <- AlgoResults$d[,,s-1] 
+    AlgoResults$d[,,s] <- adrop(AlgoResults$d[,,s-1, drop=F], drop=3)
   }
   return(AlgoResults)
 }
 
 calc_propCOV <- function(s, n_x, Npart, AlgoResults){
   #calculate perturbation covariance based on Filippi et al., 2012
-  tilda_i <- which(rowSums(AlgoResults$d[,,s-1]<AlgoResults$tolerance[s])>0) #identify old particles that fall within the new tolerance
+  tilda_i <- which(rowSums(adrop(AlgoResults$d[,,s-1, drop=F], drop=3)<AlgoResults$tolerance[s])>0) #identify old particles that fall within the new tolerance
   Omega_tilda <- AlgoResults$Omega_sample[tilda_i,,s-1] 
   W_tilda <- AlgoResults$W[tilda_i,s-1]
   W_tilda <- W_tilda/sum(W_tilda) #normalise weights
@@ -987,7 +987,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     
     if(AlgoParams$n_nodes>1){
       node_return <- mpi.remote.exec(perturb_particles_Rmpi, dir, AlgoParams$smc_Npart, AlgoParams$n_nodes, 
-                                     AlgoResults$W[,s], AlgoResults$Omega_sample[,,s], AlgoResults$Omega_sample_phys[,,s], 
+                                     AlgoResults$W[,s], AlgoResults$Omega_sample[,,s, drop=F], AlgoResults$Omega_sample_phys[,,s, drop=F], 
                                      AlgoResults$d[,,s], propCOV, AlgoResults$tolerance[s])
       
       particle_divisions <- split(1:AlgoParams$smc_Npart, sort(1:AlgoParams$smc_Npart%%AlgoParams$n_nodes))

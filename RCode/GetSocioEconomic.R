@@ -85,19 +85,14 @@ GetWID_natincome<-function(year=NULL,iso3c=NULL){
 }
 
 #https://data.worldbank.org/indicator/SI.DST.10TH.10?end=2012&locations=SB&start=2011 (data from 2012 but only source I can find)
-SLB_WID <- data.frame(variable = paste0('p',seq(0,90,10), 'p', seq(10,100,10)), 
+SLB_WID <- data.frame(percentile = paste0('p',seq(0,90,10), 'p', seq(10,100,10)), 
                       value=c(0.028, 0.07-0.028,0.114/2,0.114/2,0.155/2, 0.155/2, 0.215/2, 0.215/2, .446-.292, 0.292), 
                       iso3='SLB')
 
 #https://data.worldbank.org/indicator/SI.DST.10TH.10?end=2012&locations=SB&start=2011 (data from 2012 but only source I can find)
-VUT_WID <- data.frame(variable = paste0('p',seq(0,90,10), 'p', seq(10,100,10)), 
+VUT_WID <- data.frame(percentile = paste0('p',seq(0,90,10), 'p', seq(10,100,10)), 
                       value=c(0.03, 0.075-0.03,0.124/2,0.124/2,0.172/2, 0.172/2, 0.23/2, 0.23/2, .399-.247, 0.247), 
                       iso3='VUT')
-
-#Use WID data from Panama as it has an extremely similar Gini Coefficient according to: https://link.springer.com/article/10.1007/s11205-022-03010-8
-PRT_WID <- data.frame(variable = paste0('p',seq(0,90,10), 'p', seq(10,100,10)), 
-                      value=c(0.0006, 0.0075,0.0208,0.0321,0.0427, 0.0549, 0.0702, 0.0942, 0.1462, 0.5308), 
-                      iso3='PRT')
 
 filter_WID_by_iso3c <- function(WID_all, iso3c){
   return(WID_all %>% filter(variable=='sptinc992j')%>%

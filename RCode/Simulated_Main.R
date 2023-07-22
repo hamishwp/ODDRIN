@@ -27,10 +27,15 @@ Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June24_AggFactor5/ODDobjects/EQ20150425NPL_31')
 DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
 
+start_time <- Sys.time()
+impact_sample <- SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams)
+finish_time <- Sys.time()
+finish_time-start_time
 
+CalcDist(impact_sample, AlgoParams)
 
 start_time <- Sys.time()
-sampleBDDist(dir,Model, Omega %>% addTransfParams(),AlgoParams)
+SamplePointImpact(dir,Model, Omega %>% addTransfParams(),AlgoParams)
 finish_time <- Sys.time()
 finish_time - start_time
 
@@ -44,17 +49,17 @@ DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_p
 ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June20/ODDobjects/EQ20151026AFG_170')
 DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
 
-sampleBDDist(dir,Model,proposed = Omega %>% addTransfParams(),AlgoParams,expLL=T)
+SamplePointImpact(dir,Model,proposed = Omega %>% addTransfParams(),AlgoParams,expLL=T)
   
 # start_time <- Sys.time()
-dist_sample <- sampleDist(dir = dir,Model = Model,
+impact_sample <- SampleImpact(dir = dir,Model = Model,
                           proposed = Omega %>% addTransfParams(),
                           AlgoParams = AlgoParams)
 
 
 
 
-d_i <- logTarget2(dist_sample, AlgoParams)
+d_i <- CalcDist(impact_sample, AlgoParams)
 # end_time <- Sys.time()
 # print(paste('Time:', end_time-start_time))
 

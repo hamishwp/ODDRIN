@@ -415,15 +415,21 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   build_coords <- array(dim=c(0,2))
   
   missing_quadkeys <- unlist(quad_keys)[!unlist(quad_keys) %in% df$QuadKey]
-  if (length(missing_quadkeys)> (0.2 * length(quad_keys))){
+  # if (length(missing_quadkeys)> (0.2 * length(quad_keys))){
+  #   file_conn <- file(file_write, open = "a")
+  #   writeLines(paste("Event:", event_id, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, not adding building data."), file_conn)
+  #   close(file_conn) 
+  #   return(ODD)
+  # } else if (length(missing_quadkeys)> 0){
+  #   file_conn <- file(file_write, open = "a")
+  #   writeLines(paste("Event:", event_id, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, but still adding building data."), file_conn)
+  #   close(file_conn) 
+  # }
+  if (length(missing_quadkeys)> 0){
     file_conn <- file(file_write, open = "a")
     writeLines(paste("Event:", event_id, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, not adding building data."), file_conn)
-    close(file_conn) 
+    close(file_conn)
     return(ODD)
-  } else if (length(missing_quadkeys)> 0){
-    file_conn <- file(file_write, open = "a")
-    writeLines(paste("Event:", event_id, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, but still adding building data."), file_conn)
-    close(file_conn) 
   }
   
   missing_quadkeys_flag <- F

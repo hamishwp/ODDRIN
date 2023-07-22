@@ -35,7 +35,7 @@ AlgoParams<-list(Np=5, # Number of Monte Carlo particles
                  kernel='crps', #options are lognormal, loglaplace or log
                  kernel_sd=list(displacement=1,mortality=16,buildDam=1.2,buildDest=0.9, buildDamDest=1), 
                  smc_steps = 200, #Number of steps in the ABC-SMC algorithm
-                 smc_Npart = 1000, #Number of particles in the ABC-SMC algorithm
+                 smc_Npart = 500, #Number of particles in the ABC-SMC algorithm
                  smc_alpha = 0.9,
                  n_nodes=1,
                  m_CRPS = 2 # number of draws to estimate CRPS for each particle. Number of samples from model therefore becomes Np * m_CRPS
@@ -314,10 +314,10 @@ abcSmc <- function(AlgoParams, Model, unfinished=F, oldtag=''){
         Omega_sample_phys[n,,1] <-  Omega_sample[n,,1] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
         #calculate distance
         
-        dist_sample <- sampleDist(dir = dir,Model = Model,
+        impact_sample <- SampleImpact(dir = dir,Model = Model,
                                   proposed = Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                                   AlgoParams = AlgoParams)
-        d_i <- logTarget2(dist_sample, AlgoParams)
+        d_i <- CalcDist(impact_sample, AlgoParams)
         max_d_i <- max(d_i)
         d[n,1] <- log(mean(exp(d_i-max_d_i),na.rm=T))+ max_d_i
       } 
@@ -381,11 +381,11 @@ abcSmc <- function(AlgoParams, Model, unfinished=F, oldtag=''){
                                           Proposed2Physical(Model) %>% unlist() #convert to physical space
         
         HP<- Model$HighLevelPriors(Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), Model)
-        if (HP> AlgoParams$ABC) next
-        dist_sample <- sampleDist(dir = dir,Model = Model,
+        if (HP> AlgoParams$ABC & Model$higherpriors) next
+        impact_sample <- SampleImpact(dir = dir,Model = Model,
                                   proposed = Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                                   AlgoParams = AlgoParams)
-        d_i <- logTarget2(dist_sample, AlgoParams)
+        d_i <- CalcDist(impact_sample, AlgoParams)
         max_d_i <- max(d_i)
         d[n,s] <- log(mean(exp(d_i-max_d_i),na.rm=T))+ max_d_i
       }
@@ -479,10 +479,10 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
       Omega_sample_phys[n,,1] <-  Omega_sample[n,,1] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
       #calculate distance
       #CHECK HLP
-      dist_sample <- sampleDist(dir = dir,Model = Model,
+      impact_sample <- SampleImpact(dir = dir,Model = Model,
                            proposed = Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                            AlgoParams = AlgoParams)
-      d[n,,1] <- logTarget2(dist_sample, AlgoParams)
+      d[n,,1] <- CalcDist(impact_sample, AlgoParams)
       #d_full[n,,,1] <- 
     }
     saveRDS(
@@ -583,12 +583,12 @@ abcSmc_delmoral <- function(AlgoParams, Model, unfinished=F, oldtag=''){
         Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
         
         HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
-        if (HP> AlgoParams$ABC) next
+        if (HP> AlgoParams$ABC & Model$higherpriors) next
         
-        dist_sample <- sampleDist(dir = dir,Model = Model,
+        impact_sample <- SampleImpact(dir = dir,Model = Model,
                                   proposed = Omega_prop_phys %>% addTransfParams(), 
                                   AlgoParams = AlgoParams)
-        d_prop <- logTarget2(dist_sample, AlgoParams)
+        d_prop <- CalcDist(impact_sample, AlgoParams)
         
         if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
           d_prop <- Inf
@@ -676,10 +676,10 @@ initialise_particles <- function(dir, Model, AlgoParams, AlgoResults){
     AlgoResults$Omega_sample_phys[n,,1] <-  AlgoResults$Omega_sample[n,,1] %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model) %>% unlist()
     
     start_time <- Sys.time()
-    dist_sample <- sampleDist(dir = dir,Model = Model,
+    impact_sample <- SampleImpact(dir = dir,Model = Model,
                               proposed = AlgoResults$Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                               AlgoParams = AlgoParams)
-    AlgoResults$d[n,,1] <- logTarget2(dist_sample, AlgoParams)
+    AlgoResults$d[n,,1] <- CalcDist(impact_sample, AlgoParams)
     
     end_time <- Sys.time()
     
@@ -723,10 +723,10 @@ initialise_particles_Rmpi <- function(dir, Npart, n_nodes){
     start_time <- Sys.time()
   
     #calculate distance
-    dist_sample <- sampleDist(dir = dir, Model = Model,
+    impact_sample <- SampleImpact(dir = dir, Model = Model,
                       proposed = Omega_sample_phys_i %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                       AlgoParams = AlgoParams)
-    d_node[n,] = logTarget2(dist_sample, AlgoParams) 
+    d_node[n,] = CalcDist(impact_sample, AlgoParams) 
     
     end_time <- Sys.time()
     iter_times <- append(iter_times, end_time-start_time)
@@ -773,12 +773,12 @@ perturb_particles <- function(s, propCOV, AlgoParams, AlgoResults){
       if (any(unlist(Omega_prop_phys) < Model$par_lb) | any(unlist(Omega_prop_phys) > Model$par_ub)) next
       
       HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
-      if (HP> AlgoParams$ABC) next
+      if (HP> AlgoParams$ABC & Model$higherpriors) next
       
-      dist_sample <- sampleDist(dir = dir,Model = Model,
+      impact_sample <- SampleImpact(dir = dir,Model = Model,
                                 proposed = Omega_prop_phys %>% addTransfParams(), 
                                 AlgoParams = AlgoParams)
-      d_prop <- logTarget2(dist_sample, AlgoParams)
+      d_prop <- CalcDist(impact_sample, AlgoParams)
       
       if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
         d_prop <- Inf
@@ -814,10 +814,10 @@ perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omeg
       Omega_prop <- multvarNormProp(xt=Omega_curr[n,], propPars=propCOV) #perturb the proposal
       Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
       
-      dist_sample <-  sampleDist(dir = dir, Model = Model,
+      impact_sample <-  SampleImpact(dir = dir, Model = Model,
                             proposed = Omega_prop_phys %>% addTransfParams(), 
                             AlgoParams = AlgoParams) 
-      d_prop <- logTarget2(dist_sample, AlgoParams)
+      d_prop <- CalcDist(impact_sample, AlgoParams)
       
       acc <- sum(d_prop<tolerance)/sum(d_curr[n,]<tolerance) * modifyAcc(Omega_prop, Omega_curr[n,], Model)
       u <- runif(1)
@@ -1011,12 +1011,12 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
   if (AlgoParams$n_nodes > 1) mpi.close.Rslaves()
 }
 
-# sampleDist <- function(dir, Model, proposed, AlgoParams){
+# SampleImpact <- function(dir, Model, proposed, AlgoParams){
 #   return(rep(sum(abs(unlist(proposed)[1:16] - unlist(Omega)[1:16])), AlgoParams$Np) + rnorm(5,0,0.05))
 # }  
 # 
-# logTarget2 <- function(dist_sample, AlgoParams){
-#   return(dist_sample)
+# CalcDist <- function(impact_sample, AlgoParams){
+#   return(impact_sample)
 # }  
 #   
 # for (i in 1:1000){

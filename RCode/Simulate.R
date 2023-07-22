@@ -477,7 +477,7 @@ perturb_impacts <- function(d=1900, AlgoParams){
         added_LL <- cap + 1
         while (added_LL > cap){
           impacts_list[[j]]$sampled[k] <- round(runif(1, 0, impacts_list[[j]]$observed[k] * 100+100))
-          added_LL <- LL_IDP(impacts_list[[j]][k,], kernel_sd=AlgoParams$kernel_sd, kernel=AlgoParams$kernel, cap=AlgoParams$cap)
+          added_LL <- CalcPolyDist(impacts_list[[j]][k,], kernel_sd=AlgoParams$kernel_sd, kernel=AlgoParams$kernel, cap=AlgoParams$cap)
         }
         LL_sum <- LL_sum + added_LL
       }

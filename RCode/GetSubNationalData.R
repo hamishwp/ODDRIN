@@ -1359,7 +1359,7 @@ removeWeights <- function(ODD){
 increaseAggregation <- function(ODD){
   ODD$PDens <- exp(round(log(ODD$PDens)))
   ODD$Vs30 <- round(ODD$Vs30, -2)
-  ODD$EQFreq <- round(ODD$EQFreq, 0)
+  ODD$EQFreq <- exp(round(log(ODD$EQFreq+0.1)/0.2, 0)*0.2)-0.1
   hrange<-grep("hazMean",names(ODD),value = T)
   ODD@data[,hrange] <- log(round(1.3^(1.5*ODD@data[,hrange])),base=1.3)/1.5  #round(ODD@data[,hrange]/0.2)*0.2 #
   
@@ -1372,7 +1372,7 @@ increaseAggregation <- function(ODD){
   grouped_by_covar <- ODD@data %>% group_by(across(all_of(c(hrange, 'ISO3C',  'PDens', 'Vs30', 'EQFreq', 'AveSchYrs', 'LifeExp', 'GNIc', 'polyMatch'))))
   
   if (!is.null(ODD@data$nBuildings)){
-    summarised <- grouped_by_covar %>% summarize(Population=sum(Population, na.rm=T), nBuildingsAgg=sum(nBuildings, na.rm=T))
+    summarised <- grouped_by_covar %>% summarize(Population=sum(Population, na.rm=T), nBuildings=sum(nBuildings, na.rm=T))
   } else {
     summarised <- grouped_by_covar %>% summarize(Population=sum(Population, na.rm=T))
   }
@@ -1389,8 +1389,8 @@ increaseAggregation <- function(ODD){
       ODDagg@polygons[[j]]$indexes <- c(ODDagg@polygons[[j]]$indexes, i)
     }
   }
-  for (i in 1:length(ODDy@polygons)){
-    ODDy@polygons[[i]]$weights <- rep(1, length(ODDy@polygons[[i]]$indexes))
+  for (i in 1:length(ODDagg@polygons)){
+    ODDagg@polygons[[i]]$weights <- rep(1, length(ODDagg@polygons[[i]]$indexes))
   }
   return(ODDagg)
   
@@ -1414,21 +1414,21 @@ increaseAggregation <- function(ODD){
 
 increaseAggregation_all <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
+  ODD_folderout<-paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July21_Agg', '/ODDobjects/')
   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
   for (file in ufiles){
     event_id <- as.numeric(strsplit(file, "_")[[1]][2])
-    if (!event_id %in% c(69, 169, 170)){
-      next
-    }
     ODDy <- readRDS(paste0(ODD_folderin, file))
-    ODDy <- removeWeights(ODDy)
-    ODDy <- increaseAggregation(ODDy)
-    saveRDS(ODDy, paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July20_Agg', '/ODDobjects/', file))
+    ODDy$EQFreq <- exp(ODDy$EQFreq)-0.1
+    saveRDS(ODDy, paste0(dir, folder_in, '/ODDobjects_EQFreqNew/', file))
+    ODDyAgg <- increaseAggregation(removeWeights(ODDy))
+    saveRDS(ODDyAgg, paste0(ODD_folderout, file))
   }
 }
 
+
 # compare impact for aggregated and non-aggregated approaches
-ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects_BuildCountUpdated/EQ20151207TJK_35')
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/EQ20151207TJK_35')
 ODDyAgg <- ODDy %>% removeWeights() %>% increaseAggregation()
 for (i in 1:length(ODDyAgg@polygons)){
   ODDyAgg@polygons[[i]]$weights <- rep(1, length(ODDyAgg@polygons[[i]]$indexes))
@@ -1480,6 +1480,29 @@ remove_partially_missing_buildings <- function(folder_in='IIDIPUS_Input_NonFinal
       ODDy$nBuildings[which(is.na(ODDy$nBuildings))] <- 0
       saveRDS(ODDy, paste0(ODD_folderout, file))
     }
+  }
+}
+
+getPolysRightLength <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July21_Agg'){
+  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
+  ODD_folderout<-paste0(dir, folder_in, '/ODDobjectsnBuildingsCol/')
+  ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  for (file in ufiles){
+    ODDy <- readRDS(paste0(ODD_folderin, file))
+    if(!is.null(ODDy$nBuildingsAgg)){
+      ODDy$nBuildings <- ODDy$nBuildingsAgg
+      ODDy$nBuildingsAgg <- NULL
+    }
+    saveRDS(ODDy, paste0(ODD_folderout, file))
+  }
+  
+  BD_folderin<-paste0(dir, folder_in, '/BDobjects/')
+  BD_folderout<-paste0(dir, folder_in, '/BDobjectsPDens/')
+  ufiles<-list.files(path=BD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  for (file in ufiles){
+    BDy <- readRDS(paste0(BD_folderin, file))
+    BDy$PDens <- BDy$Population
+    saveRDS(BDy, paste0(BD_folderout, file))
   }
 }
 

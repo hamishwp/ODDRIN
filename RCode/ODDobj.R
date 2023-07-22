@@ -589,7 +589,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       }
     }
     impact_obs_sampled <- merge(impact_sampled, ODD@impact, by=c("polygon", "impact")) %>% arrange(desc(observed)) 
-    if(LLout) return(LL_IDP(impact_obs_sampled, kernel_sd,  kernel, cap))
+    if(LLout) return(CalcPolyDist(impact_obs_sampled, kernel_sd,  kernel, cap))
     return(impact_obs_sampled)
   
   }
@@ -616,7 +616,9 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   #   return(elapsed_time)
   # }
   # --------------------------------------------
-  
+  if(is.null(ODD$nBuildings)){
+    ODD@impact <- ODD@impact[!ODD@impact$impact %in% c('buildDam', 'buildDest', 'buildDamDest'),]
+  }
   
   if(LL == F){
     return(lapply(1:Method$Np, funcy, LLout=F))

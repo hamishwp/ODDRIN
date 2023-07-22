@@ -69,21 +69,21 @@ Model$skeleton <- list(
 
 Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
   Lambda1=list(mu=list(dist='unif', min=6.5, max=9.5), 
-               sigma=list(dist='unif', min=0, max=2)), 
+               sigma=list(dist='unif', min=0.1, max=2)), 
   Lambda2=list(mu=list(dist='unif', min=8, max=12.5), 
-               sigma=list(dist='unif', min=0, max=2)),
-  Lambda3=list(mu=list(dist='unif', min=5.5, max=9.5), 
-               sigma=list(dist='unif', min=0, max=2)),
+               sigma=list(dist='unif', min=0.1, max=2)),
+  Lambda3=list(mu=list(dist='unif', min=6, max=9.5), 
+               sigma=list(dist='unif', min=0.1, max=2)),
   Lambda4=list(mu=list(dist='unif', min=7.5, max=11.5), 
-               sigma=list(dist='unif', min=0, max=2)),
+               sigma=list(dist='unif', min=0.1, max=2)),
   eps=list(local=list(dist='unif', min=0, max=1),
            hazard=list(dist='unif', min=0, max=1)),
-  vuln_coeff=list(PDens=list(dist='unif', min=-0.15, max=0.15),
-                  EQFreq=list(dist='unif', min=-0.15, max=0.15),
-                  AveSchYrs=list(dist='unif', min=-0.15, max=0.15),
-                  LifeExp=list(dist='unif', min=-0.15, max=0.15),
-                  GNIc=list(dist='unif', min=-0.15, max=0.15),
-                  Vs30=list(dist='unif', min=-0.15, max=0.15)),
+  vuln_coeff=list(PDens=list(dist='unif', min=-0.2, max=0.2),
+                  EQFreq=list(dist='unif', min=-0.2, max=0.2),
+                  AveSchYrs=list(dist='unif', min=-0.2, max=0.2),
+                  LifeExp=list(dist='unif', min=-0.2, max=0.2),
+                  GNIc=list(dist='unif', min=-0.2, max=0.2),
+                  Vs30=list(dist='unif', min=-0.2, max=0.2)),
   check=list(check=list(dist='unif', min=0, max=1))
 )
 
@@ -202,7 +202,7 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
 # Used in higher-level prior to calculate linear predictor for a given set of vulnerability terms
 GetLP_single <- function(Omega, center, vuln_terms){
   #return(1)
-  LP_ij <- 1 #Omega$vuln_coeff$itc 
+  LP_ij <- 0 #Omega$vuln_coeff$itc 
   
   LP_ij <- LP_ij + Omega$vuln_coeff$PDens * ((log(vuln_terms[['PDens']]+1) - center$PDens$mean)/center$PDens$sd)
   LP_ij <- LP_ij + Omega$vuln_coeff$EQFreq * ((log(vuln_terms[['EQFreq']]+0.1) - center$EQFreq$mean)/center$EQFreq$sd)
@@ -336,12 +336,13 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     
     Upp_bounds_4.6 <- c(0.01, 0.01, 0.01, 0.1)
     Low_bounds_6 <- c(0, 0.001, 0, 0.001)
-    Upp_bounds_6 <- c(0.3, 0.5, 0.5, 0.8)
-    Low_bounds_9 <- c(0.001,0.1,0.01,0.2)
+    Upp_bounds_6 <- c(0.05, 0.3, 0.15, 0.5)
+    Low_bounds_9 <- c(0.0001,0.1,0.01,0.2)
+    Upp_bounds_9 <- c(0.6,0.99,0.95,0.99)
     
     HLP_impacts <- function(I_ij, lp, Omega){
-      rbind(apply(D_MortDisp_calc(h_0(I_ij, I0=4.5, theta=Omega$theta) * lp, Omega),2,cumsum), 
-            apply(D_DestDam_calc(h_0(I_ij, I0=4.5, theta=Omega$theta) * lp, Omega), 2,cumsum))
+      rbind(apply(D_MortDisp_calc(h_0(I_ij, I0=4.5, theta=Omega$theta) + lp, Omega),2,cumsum), 
+            apply(D_DestDam_calc(h_0(I_ij, I0=4.5, theta=Omega$theta) + lp, Omega), 2,cumsum))
     }
     
     adder <- 0
@@ -350,7 +351,8 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     adder <- adder + sum(apply(HLP_impacts(6, lp, Omega), 2, 
                                function (x) sum(c(x > Upp_bounds_6, x<Low_bounds_6))))
     
-    adder <- adder + sum(apply(HLP_impacts(9, lp, Omega), 2, function (x) sum(x < Low_bounds_9)))
+    adder <- adder + sum(apply(HLP_impacts(9, lp, Omega), 2, 
+                               function (x) sum(c(x > Upp_bounds_9, x<Low_bounds_9))))
     
     #check that at intensity 7, D_disp > D_mort and D_builddam > D_builddest
     impact_intens_7 <- HLP_impacts(7, lp, Omega)

@@ -39,6 +39,16 @@ SamplePointImpact(dir,Model, Omega %>% addTransfParams(),AlgoParams)
 finish_time <- Sys.time()
 finish_time - start_time
 
+impact_filt <- 'mortality'
+plot_df <- data.frame(
+  obs = impact_sample$poly[[1]] %>% filter(impact==impact_filt) %>% pull(observed),
+  sample1 = impact_sample$poly[[1]] %>% filter(impact==impact_filt) %>% pull(sampled),
+  sample2 = impact_sample$poly[[2]] %>% filter(impact==impact_filt) %>% pull(sampled))
+
+ggplot(plot_df) + geom_errorbar(aes(x=log(obs+0.1), ymin=log(sample1+0.1), ymax=log(sample2+0.1), width=0.2)) + 
+  geom_abline(slope=1, intercept=0) + ggtitle(impact_filt)
+
+plot(log(impact_sample_filt$observed+0.1), log(impact_sample_filt$sampled+0.1))
 
 sum(elapsed_time)
 

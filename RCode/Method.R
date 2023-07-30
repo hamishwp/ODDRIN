@@ -18,7 +18,7 @@
 ##########################################################################
 
 # Methodology parameters required
-AlgoParams<-list(Np=5, # Number of Monte Carlo particles
+AlgoParams<-list(Np=1, # Number of Monte Carlo particles
                  cores=6, # Number of parallelised threads per event
                  NestedCores=1, # How many cores are to be used inside the ODD displacement calculations?
                  AllParallel=T, # Do you want fully-nested (data) parallelisation?
@@ -38,7 +38,7 @@ AlgoParams<-list(Np=5, # Number of Monte Carlo particles
                  smc_Npart = 500, #Number of particles in the ABC-SMC algorithm
                  smc_alpha = 0.9,
                  n_nodes=1,
-                 m_CRPS = 2 # number of draws to estimate CRPS for each particle. Number of samples from model therefore becomes Np * m_CRPS
+                 m_CRPS = 3 # number of draws to estimate CRPS for each particle. Number of samples from model therefore becomes Np * m_CRPS
                  )
 		 
 if(is.null(AlgoParams$AllParallel)){

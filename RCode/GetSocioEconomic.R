@@ -158,6 +158,8 @@ GetWID_perc<-function(perc,iso3c,year){
     dplyr::select(-c(variable,country,year)) %>%
     filter(iso3%in%iso3c)
   
+  WID$value[which(WID$value==0)] <- 0.0001
+  
   if (!all(iso3c %in% WID$iso3)){
     missing_iso3c <- iso3c[which(!iso3c %in% WID$iso3)]
     WID <- getMissingWID(missing_iso3c, WID, WID_all)

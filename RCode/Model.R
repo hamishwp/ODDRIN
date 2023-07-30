@@ -614,7 +614,7 @@ logTarget_CRPS <- function(impact_sample, AlgoParams){
   }
   
   dist_poly <- unlist(mclapply(1:AlgoParams$Np, crps_eval, mc.cores=1, obs=impact_sample$poly[[1]]$observed, weights=unlist(AlgoParams$kernel_sd)[impact_sample$poly[[1]]$impact]))
-
+  
   #is there a way to do this using a scoring rule as well? : 
   sumPointDat_dists <- function(PointDat_p){
     Dist_0.5 <- which(names(PointDat_p) %in% c('N12', 'N21', 'N23', 'N32'))

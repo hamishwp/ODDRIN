@@ -491,7 +491,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       lPopS[nonzero_pop] <- Dam[3,]
       lPopDisp[nonzero_pop] <- lPopDisp[nonzero_pop] + Dam[1,]
       lPopMort[nonzero_pop] <- lPopMort[nonzero_pop] + Dam[2,]
-      tPop[3,] <- colSums(lPopS[,])
+      tPop[3,] <- colSums(lPopS)
       
       # # This is a bit clearer than the above but slower:
       # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population

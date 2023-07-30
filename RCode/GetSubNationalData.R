@@ -40,6 +40,13 @@ readSubNatData <- function(subnat_file){
   red_cells <- red_cells[-which(red_cells$col > NCOL(SubNatData)), ]
   SubNatData[as.matrix(red_cells)] <- NA
   
+  pink_cells <- x %>% filter(local_format_id %in% which(formats$local$fill$patternFill$fgColor$rgb == "FFFF00FF")) %>% dplyr::select(row, col)
+  SubNatData$buildDamInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDam_exlusion_reason'))]-1)
+  SubNatData$buildDestInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDest_exlusion_reason'))]-1)
+  SubNatData$buildDamDestInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDamDest_exlusion_reason'))]-1)
+  SubNatData$mortalityInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='mortality_exlusion_reason'))]-1)
+  SubNatData$displacementInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='displacement_exlusion_reason'))]-1)
+  
   SubNatData <- SubNatData[rowSums(is.na(SubNatData)) != ncol(SubNatData), ]
   
   SubNatData$source_date <- openxlsx::convertToDate(SubNatData$source_date)
@@ -51,6 +58,7 @@ readSubNatData <- function(subnat_file){
   SubNatData$displacement <- as.integer(SubNatData$displacement)
   SubNatData$buildDam <- as.integer(SubNatData$buildDam)
   SubNatData$buildDest <- as.integer(SubNatData$buildDest)
+  SubNatData$buildDamDest <- as.integer(SubNatData$buildDamDest)
   SubNatData$EventID <- suppressWarnings(as.integer(SubNatData$EventID)) #will set non-integers to NA but suppress the warning for this
   SubNatData$Region <- ifelse(trimws(SubNatData$Region) == "", NA, SubNatData$Region)
   SubNatData$Subregion <- ifelse(trimws(SubNatData$Subregion) == "", NA, SubNatData$Subregion)
@@ -208,6 +216,7 @@ getSubNatImpact <- function(SubNatEvent, subnational=TRUE){
                                                                          impact=impact_type,
                                                                          observed=!!sym(impact_type), 
                                                                          qualifier=!!sym(paste0(impact_type, '_qualifier')), 
+                                                                         inferred=!!sym(paste0(impact_type, 'Inferred')),
                                                                          build_type=ifelse(rep(impact_type, length(sources_selected)) %in% c('buildDam', 'buildDest', 'buildDamDest'), building_type, NA),
                                                                          polygon=polygon_id))
     }
@@ -1420,10 +1429,11 @@ increaseAggregation_all <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_In
     event_id <- as.numeric(strsplit(file, "_")[[1]][2])
     ODDy <- readRDS(paste0(ODD_folderin, file))
     ODDy$EQFreq <- exp(ODDy$EQFreq)-0.1
-    saveRDS(ODDy, paste0(dir, folder_in, '/ODDobjects_EQFreqNew/', file))
+    saveRDS(ODDy, paste0(dir, folder_in, '/ODDobjects/', file))
     ODDyAgg <- increaseAggregation(removeWeights(ODDy))
     saveRDS(ODDyAgg, paste0(ODD_folderout, file))
   }
+  
 }
 
 
@@ -1463,45 +1473,62 @@ ggplot(plot_df) +
 
 
 
-remove_partially_missing_buildings <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
-  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects_BuildCountOld/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects/')
+remove_partially_missing_buildings <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July21_Agg'){
+  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
+  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_InferredFlag/')
   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  SubNatData <- readSubNatData(subnat_file)
   for (file in ufiles){
+    print(file)
     ODDy <- readRDS(paste0(ODD_folderin, file))
-    if (is.null(ODDy$nBuildings)){
-      saveRDS(ODDy, paste0(ODD_folderout, file))
-      next
+    impact <- ODDy@impact
+    SubNatData_filt <- SubNatData %>% filter(EventID==as.numeric(strsplit(file, "_")[[1]][2]))
+    SubNatData_filt$poly_name <- SubNatData_filt$country
+    if(length(unique(impact$iso3))==1){
+      SubNatData_filt$poly_name <- ifelse(SubNatData_filt$poly_name=='TOTAL',  ifelse(unique(impact$iso3)=='TOT', 'TOTAL', countrycode(unique(impact$iso3), origin='iso3c', destination='country.name')),SubNatData_filt$poly_name)
     }
-    if (event_id %in% c(3, 5, 18, 21, 22, 38, 40, 41, 43, 56, 59, 62, 71, 83, 94, 98, 106, 112, 113,  133, 136, 150, 151, 152)){
-      ODDy$nBuildings <- NULL
-      saveRDS(ODDy, paste0(ODD_folderout, file))
-    } else {
-      ODDy$nBuildings[which(is.na(ODDy$nBuildings))] <- 0
-      saveRDS(ODDy, paste0(ODD_folderout, file))
+    SubNatData_filt$poly_name <- ifelse(is.na(SubNatData_filt$Region), SubNatData_filt$poly_name, paste0(SubNatData_filt$Region, ', ', SubNatData_filt$poly_name))
+    SubNatData_filt$poly_name <- ifelse(is.na(SubNatData_filt$Subregion), SubNatData_filt$poly_name, paste0(SubNatData_filt$Subregion, ', ', SubNatData_filt$poly_name))
+    impact$inferred <- NA
+    for (i in 1:NROW(impact)){
+      matched_row <- SubNatData_filt %>% filter(poly_name==ODDy@polygons[[impact$polygon[i]]]$name & SubNatData_filt[[impact$impact[i]]]==impact$observed[i])
+      if(NROW(matched_row) > 1){
+        if(length(unique(matched_row[[paste0(impact$impact[i], 'Inferred')]]))==1){
+          matched_row <- matched_row[1,]
+        } else {
+          stop('More than one matching row')
+        }
+      }
+      impact$inferred[i] <- matched_row[[paste0(impact$impact[i], 'Inferred')]]
     }
+    ODDy@impact <- impact
+    
+    saveRDS(ODDy, paste0(ODD_folderout, file))
   }
 }
 
-getPolysRightLength <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July21_Agg'){
+fix_Zero_cIndies <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjectsnBuildingsCol/')
+  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_cIndiesFixed/')
   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
   for (file in ufiles){
     ODDy <- readRDS(paste0(ODD_folderin, file))
-    if(!is.null(ODDy$nBuildingsAgg)){
-      ODDy$nBuildings <- ODDy$nBuildingsAgg
-      ODDy$nBuildingsAgg <- NULL
+    if(any(ODDy@cIndies$value==0)){
+      print(paste(ODDy@hazdates, unique(ODDy$ISO3C)))
+      ODDy@cIndies$value[which(ODDy@cIndies$value==0)] = 0.0001
     }
     saveRDS(ODDy, paste0(ODD_folderout, file))
   }
   
   BD_folderin<-paste0(dir, folder_in, '/BDobjects/')
-  BD_folderout<-paste0(dir, folder_in, '/BDobjectsPDens/')
+  BD_folderout<-paste0(dir, folder_in, '/BDobjects_cIndiesFixed//')
   ufiles<-list.files(path=BD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
   for (file in ufiles){
     BDy <- readRDS(paste0(BD_folderin, file))
-    BDy$PDens <- BDy$Population
+    if(any(BDy@cIndies$value==0)){
+      print(paste(BDy@hazdates, unique(BDy$ISO3C)))
+      BDy@cIndies$value[which(BDy@cIndies$value==0)] = 0.0001
+    }
     saveRDS(BDy, paste0(BD_folderout, file))
   }
 }

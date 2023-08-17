@@ -123,6 +123,25 @@ GetUSGSdatetime<-function(USGSid){
   return(as.Date(eventtime))
 }
 
+GetUSGSfeatures<-function(USGSid){
+  url<-paste0("https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=",USGSid,"&format=geojson")
+  tmp<-FROM_GeoJson(url)
+  
+  #have swapped here from using dyfi as default to shakemap as default as the dyfi seems a bit dodgy at times (e.g. with maxmmi)
+  eventtime <- tmp$properties$products$shakemap[[1]]$properties$eventtime
+  magnitude<- tmp$properties$products$shakemap[[1]]$properties$magnitude
+  max_mmi <- tmp$properties$products$shakemap[[1]]$properties$maxmmi
+  depth <- tmp$properties$products$shakemap[[1]]$properties$depth
+  
+  if(is.null(eventtime)){
+    eventtime <- tmp$properties$products$dyfi[[1]]$properties$eventtime
+    magnitude<- tmp$properties$products$dyfi[[1]]$properties$magnitude
+    max_mmi <- tmp$properties$products$dyfi[[1]]$properties$maxmmi
+    depth <- tmp$properties$products$dyfi[[1]]$properties$depth
+  }
+  return(list(eventtime=as.Date(eventtime), magnitude=as.numeric(magnitude), max_mmi=as.numeric(max_mmi), depth=as.numeric(depth)))
+}
+
 # Extract EQ data from USGS for a specified event
 GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5){
   
@@ -164,7 +183,8 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
   if(lenny==0) return(NULL)
   
   # lhazdat<-c(list(bbox=bbox,sdate=sdate,fdate=fdate,NumEvents=lenny,hazard="EQ",I0=I0,eventdates=NULL))
-  lhazdat<-list(hazard_info=list(bbox=bbox,sdate=sdate,fdate=fdate,NumEvents=lenny,hazard="EQ",I0=I0,eventdates=c()))
+  lhazdat<-list(hazard_info=list(bbox=bbox,sdate=sdate,fdate=fdate,NumEvents=lenny,hazard="EQ",I0=I0,eventdates=c(), 
+                                 depths=c(), magnitudes=c(), max_mmi=c()))
   tbbox<-rep(NA,4)
   for (i in 1:lenny){
     # Find the details of the raster file for the EQ in the USGS database
@@ -192,14 +212,19 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     }
     
     # Create HAZARD object
+    event_features <- GetUSGSfeatures(USGS$features[[i]]$id)
     hazsdf<-new("HAZARD",
                 obj=hazsdf,
                 hazard="EQ",
-                dater=GetUSGSdatetime(USGS$features[[i]]$id),
+                dater=event_features$eventtime,
                 I0=I0,
                 alertlevel=ifelse(is.null(tmp$properties$alert),"green",tmp$properties$alert),
                 #alertscore=ifelse(i<=length(alertscores),alertscores[i],0))
-                alertscore=0)
+                alertscore=0, 
+                depth=event_features$depth, 
+                magnitude=event_features$magnitude, 
+                max_mmi=event_features$max_mmi 
+                )
     # Add to the list of hazards
     lhazdat[[length(lhazdat)+1]]<-hazsdf
     # Extend the bounding box to account for this earthquake
@@ -207,6 +232,9 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     tbbox[c(3,4)]<-apply(cbind(tbbox[c(3,4)],hazsdf@bbox[c(3,4)]),1,max,na.rm=T)
     # Extract dates for each hazard event
     lhazdat$hazard_info$eventdates%<>%c(as.character(hazsdf@eventdate))
+    lhazdat$hazard_info$depths%<>%c(hazsdf@depth)
+    lhazdat$hazard_info$magnitudes%<>%c(hazsdf@magnitude)
+    lhazdat$hazard_info$max_mmi%<>%c(hazsdf@max_mmi)
   }
   if(any(is.na(tbbox))) return(NULL)
   # Modify the bounding box to fit around all hazards extracted

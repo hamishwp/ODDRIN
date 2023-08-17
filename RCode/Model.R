@@ -22,6 +22,7 @@ Model<-list()
 haz<-"EQ"
 # haz<-"TC"
 Model$haz<-haz
+Model$I0 <- 4.3
 
 WID_perc<- c("p0p10", # Bottom 10% share of Income Distribution
               "p10p20", # Income share held by 10th - 20th percentiles
@@ -58,32 +59,35 @@ returnX <- function(x,a,b){
 
 # Skeleton
 Model$skeleton <- list(
-  Lambda1=list(mu=NA,sigma=NA),
+  Lambda1=list(mu=NA,sigma=NA#,alpha=NA
+               ), 
   Lambda2=list(mu=NA,sigma=NA),
   Lambda3=list(mu=NA,sigma=NA),
   Lambda4=list(mu=NA,sigma=NA),
   eps=list(local=NA,hazard=NA),
-  vuln_coeff=list(PDens=NA, AveSchYrs=NA, LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA),
+  vuln_coeff=list(PDens=NA, AveSchYrs=NA, LifeExp=NA, GNIc=NA, Vs30=NA, EQFreq=NA, Mag=NA),
   check=list(check=NA)
 )
 
 Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
-  Lambda1=list(mu=list(dist='unif', min=6.5, max=9.5), 
-               sigma=list(dist='unif', min=0.1, max=2)), 
-  Lambda2=list(mu=list(dist='unif', min=8, max=12.5), 
-               sigma=list(dist='unif', min=0.1, max=2)),
-  Lambda3=list(mu=list(dist='unif', min=6, max=9.5), 
-               sigma=list(dist='unif', min=0.1, max=2)),
-  Lambda4=list(mu=list(dist='unif', min=7.5, max=11.5), 
-               sigma=list(dist='unif', min=0.1, max=2)),
+  Lambda1=list(mu=list(dist='unif', min=6.5, max=10.5), 
+               sigma=list(dist='unif', min=0.25, max=2) #, alpha=list(dist='unif', min=-0.1, max=0.5)
+               ), 
+  Lambda2=list(mu=list(dist='unif', min=9, max=12.5), 
+               sigma=list(dist='unif', min=0.25, max=2)),
+  Lambda3=list(mu=list(dist='unif', min=6.5, max=10), 
+               sigma=list(dist='unif', min=0.25, max=2)),
+  Lambda4=list(mu=list(dist='unif', min=8, max=12.5), 
+               sigma=list(dist='unif', min=0.25, max=2.5)),
   eps=list(local=list(dist='unif', min=0, max=1),
            hazard=list(dist='unif', min=0, max=1)),
-  vuln_coeff=list(PDens=list(dist='unif', min=-0.2, max=0.2),
-                  EQFreq=list(dist='unif', min=-0.2, max=0.2),
-                  AveSchYrs=list(dist='unif', min=-0.2, max=0.2),
-                  LifeExp=list(dist='unif', min=-0.2, max=0.2),
-                  GNIc=list(dist='unif', min=-0.2, max=0.2),
-                  Vs30=list(dist='unif', min=-0.2, max=0.2)),
+  vuln_coeff=list(PDens=list(dist='unif', min=-0.15, max=0.15),
+                  EQFreq=list(dist='unif', min=-0.15, max=0.15),
+                  AveSchYrs=list(dist='unif', min=-0.15, max=0.15),
+                  LifeExp=list(dist='unif', min=-0.15, max=0.15),
+                  GNIc=list(dist='unif', min=-0.15, max=0.15),
+                  Vs30=list(dist='unif', min=-0.15, max=0.15), 
+                  Mag=list(dist='unif', min=-0.15, max=0.15)),
   check=list(check=list(dist='unif', min=0, max=1))
 )
 
@@ -168,14 +172,14 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
   
   LP_ij <- array(NA, dim=NROW(ODD@data))
   
-  LP_ij[notnans] <- 0 # Omega$vuln_coeff$itc #intercept term
+  LP_ij[notnans] <- Omega$vuln_coeff$Mag * (max(ODD@hazinfo$magnitudes) - Params$center$Mag$mean) / Params$center$Mag$sd #0 # Omega$vuln_coeff$itc #intercept term
   
   #could perform all centering outside before model fitting? may allow a bit of speedup
   
   #Population density term:
   LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff$PDens * ((log(ODD@data$PDens[notnans]+1) - Params$center$PDens$mean)/Params$center$PDens$sd)
   LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff$EQFreq * ((log(ODD@data$EQFreq[notnans]+0.1) - Params$center$EQFreq$mean)/Params$center$EQFreq$sd)
-  for (vuln_term in names(Omega$vuln_coeff)[!(names(Omega$vuln_coeff) %in%  c('itc', 'PDens', 'GNIc', 'EQFreq'))]){
+  for (vuln_term in names(Omega$vuln_coeff)[!(names(Omega$vuln_coeff) %in%  c('itc', 'PDens', 'GNIc', 'EQFreq', 'Mag'))]){
     #All remaining terms except GNIc:
     LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff[[vuln_term]] * ((ODD@data[notnans, vuln_term] - Params$center[[vuln_term]]$mean)/Params$center[[vuln_term]]$sd)
   }
@@ -202,12 +206,12 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
 # Used in higher-level prior to calculate linear predictor for a given set of vulnerability terms
 GetLP_single <- function(Omega, center, vuln_terms){
   #return(1)
-  LP_ij <- 0 #Omega$vuln_coeff$itc 
+  LP_ij <- Omega$vuln_coeff$Mag * (vuln_terms[['Mag']] - center$Mag$mean) / center$Mag$sd #0 #Omega$vuln_coeff$itc 
   
   LP_ij <- LP_ij + Omega$vuln_coeff$PDens * ((log(vuln_terms[['PDens']]+1) - center$PDens$mean)/center$PDens$sd)
   LP_ij <- LP_ij + Omega$vuln_coeff$EQFreq * ((log(vuln_terms[['EQFreq']]+0.1) - center$EQFreq$mean)/center$EQFreq$sd)
   
-  for (vuln_term in names(Omega$vuln_coeff)[!(names(Omega$vuln_coeff) %in%  c('itc', 'PDens', 'GNIc', 'EQFreq'))]){
+  for (vuln_term in names(Omega$vuln_coeff)[!(names(Omega$vuln_coeff) %in%  c('itc', 'PDens', 'GNIc', 'EQFreq', 'Mag'))]){
     #All remaining terms except GNIc:
     LP_ij <- LP_ij + Omega$vuln_coeff[[vuln_term]] * ((vuln_terms[[vuln_term]] - center[[vuln_term]]$mean)/center[[vuln_term]]$sd)
   }
@@ -228,10 +232,11 @@ stochastic<-function(n,eps){
 }
 
 # Baseline hazard function h_0
-h_0<-function(I,I0,theta){
+h_0<-function(I,I0, Omega){
   ind<-I>I0
   h<-rep(0,length(I))
   h[ind]<- I[ind]-I0
+  h[ind] <- h[ind] #* exp(Omega$Lambda1$alpha*(I-6.5))
   return(h)
 }
 
@@ -243,7 +248,7 @@ fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
 
 # Calculate the unscaled damage function
 fDamUnscaled<-function(I,Params,Omega){ 
-  (h_0(I,Params$I0,Omega$theta) +
+  (h_0(I,Params$I0,Omega) +
      stochastic(Params$Np,Omega$eps$local)) %>%return()
   #(h_0(I,Params$I0,Omega$theta) + 
   #   stochastic(Params$Np,Omega$eps$local)) %>%return()
@@ -310,20 +315,23 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
   min_GNIc <- exp(5.887395); max_GNIc <- exp(12.23771) #minimum and maximum from all regions in GDL dataset
   min_Vs30 <- 98; max_Vs30 <- 2197 #minimum and maximum from all regions in soil stiffness dataset
   min_EQFreq <- 0; max_EQFreq <- 949.4231 #minimum and maximum from all regions in PGA dataset
+  min_Mag <- 4.5; max_Mag <- 8.2
   
   linp_min <- GetLP_single(Omega, Model$center, vuln_terms=list(PDens=ifelse(Omega$vuln_coeff$PDens>0, min_PDens, max_PDens), 
                                                                 AveSchYrs=ifelse(Omega$vuln_coeff$AveSchYrs>0, min_AveSchYrs, max_AveSchYrs),
                                                                 LifeExp=ifelse(Omega$vuln_coeff$LifeExp>0, min_LifeExp, max_LifeExp),
                                                                 GNIc=ifelse(Omega$vuln_coeff$GNIc>0, min_GNIc, max_GNIc),
                                                                 Vs30=ifelse(Omega$vuln_coeff$Vs30>0, min_Vs30, max_Vs30),
-                                                                EQFreq=ifelse(Omega$vuln_coeff$EQFreq>0, min_EQFreq, max_EQFreq)))
+                                                                EQFreq=ifelse(Omega$vuln_coeff$EQFreq>0, min_EQFreq, max_EQFreq),
+                                                                Mag=ifelse(Omega$vuln_coeff$Mag>0, min_Mag, max_Mag)))
   
   linp_max <- GetLP_single(Omega, Model$center, vuln_terms=list(PDens=ifelse(Omega$vuln_coeff$PDens<0, min_PDens, max_PDens), 
                                                                 AveSchYrs=ifelse(Omega$vuln_coeff$AveSchYrs<0, min_AveSchYrs, max_AveSchYrs),
                                                                 LifeExp=ifelse(Omega$vuln_coeff$LifeExp<0, min_LifeExp, max_LifeExp),
                                                                 GNIc=ifelse(Omega$vuln_coeff$GNIc<0, min_GNIc, max_GNIc),
                                                                 Vs30=ifelse(Omega$vuln_coeff$Vs30<0, min_Vs30, max_Vs30),
-                                                                EQFreq=ifelse(Omega$vuln_coeff$EQFreq<0, min_EQFreq, max_EQFreq)))
+                                                                EQFreq=ifelse(Omega$vuln_coeff$EQFreq<0, min_EQFreq, max_EQFreq),
+                                                                Mag=ifelse(Omega$vuln_coeff$Mag<0, min_Mag, max_Mag)))
   
   #if(!is.null(modifier)) lp<-exp(as.numeric(unlist(modifier))) else lp<-1.
   lp <- c(linp_min, linp_max) 
@@ -334,25 +342,34 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     # where DispMort is the sum of the probabilities of displacement and mortality
     # and DamDest is the sum of the probabilities of building damage and destruction.
     
-    Upp_bounds_4.6 <- c(0.01, 0.01, 0.01, 0.1)
-    Low_bounds_6 <- c(0, 0.001, 0, 0.001)
-    Upp_bounds_6 <- c(0.05, 0.3, 0.15, 0.5)
-    Low_bounds_9 <- c(0.0001,0.1,0.01,0.2)
-    Upp_bounds_9 <- c(0.6,0.99,0.95,0.99)
+    Upp_bounds_4.6 <- c(0.03, 0.1, 0.03, 0.15)
+    Low_bounds_6 <- c(0, 0.00001, 0, 0.00001)
+    Upp_bounds_6 <- c(0.15, 0.6, 0.3, 0.75)
+    Low_bounds_9 <- c(0.00005,0.01,0.001,0.15)
+    Upp_bounds_9 <- c(0.7,0.995,0.99,0.995)
+    
+    Upp_bounds_4.6_zero_lp <- c(0.0005, 0.005, 0.001, 0.002)
+    Low_bounds_6_zero_lp <- c(0, 0.001, 0, 0.001)
+    Upp_bounds_6_zero_lp <- c(0.01, 0.1, 0.05, 0.1)
+    Low_bounds_9_zero_lp <- c(0.0001,0.1,0.05,0.2)
+    Upp_bounds_9_zero_lp <- c(0.2,0.9,0.5,0.8)
     
     HLP_impacts <- function(I_ij, lp, Omega){
-      rbind(apply(D_MortDisp_calc(h_0(I_ij, I0=4.5, theta=Omega$theta) + lp, Omega),2,cumsum), 
-            apply(D_DestDam_calc(h_0(I_ij, I0=4.5, theta=Omega$theta) + lp, Omega), 2,cumsum))
+      rbind(apply(D_MortDisp_calc(h_0(I_ij, I0=4.5, Omega=Omega) + lp, Omega),2,cumsum), 
+            apply(D_DestDam_calc(h_0(I_ij, I0=4.5, Omega=Omega) + lp, Omega), 2,cumsum))
     }
     
     adder <- 0
-    adder <- sum(apply(HLP_impacts(4.6, lp, Omega), 2, function (x) sum(x > Upp_bounds_4.6)))
+    adder <- sum(apply(HLP_impacts(4.6, lp, Omega), 2, function (x) sum(x > Upp_bounds_4.6))) + 
+      apply(HLP_impacts(4.6, 0, Omega), 2, function (x) sum(x > Upp_bounds_4.6_zero_lp))
     
     adder <- adder + sum(apply(HLP_impacts(6, lp, Omega), 2, 
-                               function (x) sum(c(x > Upp_bounds_6, x<Low_bounds_6))))
+                               function (x) sum(c(x > Upp_bounds_6, x<Low_bounds_6))))  + 
+      apply(HLP_impacts(6, 0, Omega), 2, function (x) sum(x > Upp_bounds_6_zero_lp, x < Low_bounds_6_zero_lp))
     
     adder <- adder + sum(apply(HLP_impacts(9, lp, Omega), 2, 
-                               function (x) sum(c(x > Upp_bounds_9, x<Low_bounds_9))))
+                               function (x) sum(c(x > Upp_bounds_9, x<Low_bounds_9)))) + 
+      apply(HLP_impacts(9, 0, Omega), 2, function (x) sum(x > Upp_bounds_9_zero_lp, x < Low_bounds_9_zero_lp))
     
     #check that at intensity 7, D_disp > D_mort and D_builddam > D_builddest
     impact_intens_7 <- HLP_impacts(7, lp, Omega)
@@ -362,7 +379,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     
   } else if(Model$haz=="TC"){
     # Would need to be udpated:
-    Dfun<-function(I_ij) h_0(I = I_ij,I0 = 3,theta = Omega$theta) 
+    Dfun<-function(I_ij) h_0(I = I_ij,I0 = 3,Omega = Omega) 
     Dispfun<-function(I_ij) c(BinR(Dfun(I_ij)*Dfun(I_ij)*Omega$Lambda1$kappa+Omega$Lambda1$nu*Dfun(I_ij) + Omega$Lambda1$omega,Omega$zeta)%o%lp)
     Damfun<-function(I_ij) c(BinR(Dfun(I_ij),Omega$zeta)%o%lp)
     
@@ -444,13 +461,20 @@ CalcPolyDist <- function(Y,  kernel_sd, kernel, cap){
 # ------------------------------- Pulling out and breaking down the distances ---------------------------------------
 # -------------------------------------------------------------------------------------------------------------------
 
-SamplePolyImpact <-function(dir,Model,proposed,AlgoParams){
+SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train'){
   
   # Load ODD files
   folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+  
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
   
-  if(AlgoParams$kernel == 'crps'){
+  if (tolower(dat)=='train'){
+    ufiles <- grep('^Train/' , ufiles, value = TRUE)
+  } else if (tolower(dat)=='test'){
+    ufiles <- grep('^Test/' , ufiles, value = TRUE)
+  }
+  
+  if(AlgoParams$kernel == 'crps' | AlgoParams$kernel == 'crps_with_mean'){
     #if using continuous ranked probability score as distance function, need multiple samples per particle
     AlgoParams$Np <- AlgoParams$Np * AlgoParams$m_CRPS
   }
@@ -470,6 +494,11 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams){
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       #ODDy@fIndies<-Model$fIndies
       ODDy@impact%<>%as.data.frame.list()
+      
+      
+      ODDy@impact$event_id = as.numeric(gsub(".*_(\\d+)$", "\\1", filer))
+      
+      
       # Apply DispX
       tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
                     error=function(e) NA)
@@ -515,10 +544,17 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams){
   # }
 }
 
-SamplePointImpact <- function(dir,Model,proposed,AlgoParams,expLL=T){
+SamplePointImpact <- function(dir,Model,proposed,AlgoParams,expLL=T, dat='Train'){
   # Load BD files
   folderin<-paste0(dir,"IIDIPUS_Input/BDobjects/")
+  
   ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  
+  if (tolower(dat)=='train'){
+    ufiles <- grep('^Train/' , ufiles, value = TRUE)
+  } else if (tolower(dat)=='test'){
+    ufiles <- grep('^Test/' , ufiles, value = TRUE)
+  }
   
   # if(AlgoParams$kernel == 'crps'){
   #   #if using continuous ranked probability score as distance function, need multiple samples per particle
@@ -585,10 +621,10 @@ SamplePointImpact <- function(dir,Model,proposed,AlgoParams,expLL=T){
   # }
 }
 
-SampleImpact <- function(dir,Model,proposed,AlgoParams,expLL=T){
+SampleImpact <- function(dir,Model,proposed,AlgoParams,expLL=T, dat='Train'){
 
-  impact_sample_poly<-SamplePolyImpact(dir,Model,proposed,AlgoParams)
-  impact_sample_point<- SamplePointImpact(dir, Model, proposed, AlgoParams, expLL=T)
+  impact_sample_poly<-SamplePolyImpact(dir,Model,proposed,AlgoParams, dat=dat)
+  impact_sample_point<- SamplePointImpact(dir, Model, proposed, AlgoParams, expLL=T, dat=dat)
 
   return(list(poly=impact_sample_poly, point=impact_sample_point))
 }
@@ -604,7 +640,7 @@ crps <- function(sample, obs){
   return(crps)
 }
 
-logTarget_CRPS <- function(impact_sample, AlgoParams){
+logTarget_CRPS <- function(impact_sample, AlgoParams, dist_poly_means=NULL){
   
   crps_eval <- function(n, obs, weights){
     samples_allocated <- 1:AlgoParams$m_CRPS * n
@@ -615,12 +651,23 @@ logTarget_CRPS <- function(impact_sample, AlgoParams){
   
   dist_poly <- unlist(mclapply(1:AlgoParams$Np, crps_eval, mc.cores=1, obs=impact_sample$poly[[1]]$observed, weights=unlist(AlgoParams$kernel_sd)[impact_sample$poly[[1]]$impact]))
   
+  if(AlgoParams$kernel == 'crps_with_mean'){
+    if (is.null(dist_poly_means)){
+      k <- 10
+      Y <- impact_sample$poly[[1]] %>% filter(impact %in% c('mortality', 'displacement'))
+      dist_poly_means <- sum(abs(log(Y[,'observed']+k) - log(Y[,'mean']+k)) * unlist(AlgoParams$kernel_sd)[Y[,'impact']])
+    }
+  } else {
+    dist_poly_means = 0
+  }
+  
   #is there a way to do this using a scoring rule as well? : 
   sumPointDat_dists <- function(PointDat_p){
     Dist_0.5 <- which(names(PointDat_p) %in% c('N12', 'N21', 'N23', 'N32'))
     Dist_1 <- which(names(PointDat_p) %in% c('N13', 'N31'))
     return(0.5*sum(PointDat_p[Dist_0.5])+sum(PointDat_p[Dist_1]))
   }
+  
 
   if (length(impact_sample$point) > 0){
     dist_point <- apply(impact_sample$point, 2, sumPointDat_dists) * 0.1 #LOOSEEND: Currently using 0.1 as point data distance is around 10 times the poly data distance, but no real justification
@@ -628,15 +675,16 @@ logTarget_CRPS <- function(impact_sample, AlgoParams){
     dist_point <- 0
   }
 
-  print(paste0('Dist_agg: ',dist_poly, ' Dist_sat: ', dist_point))
-  dist_tot <- dist_poly + dist_point
+  print(paste0('Dist_agg: ',dist_poly, ' Dist_agg_means: ', dist_poly_means,' Dist_sat: ', dist_point))
+  dist_tot <- dist_poly + dist_poly_means + dist_point
   
-  return(dist_tot)
+  return(cbind(dist_poly, dist_poly_means, dist_point))
+  #return(dist_tot)
 }
 
-CalcDist <- function(impact_sample, AlgoParams){
+CalcDist <- function(impact_sample, AlgoParams, dist_poly_means=NULL){
   
-  if (AlgoParams$kernel == 'crps'){ return(logTarget_CRPS(impact_sample, AlgoParams))}
+  if (AlgoParams$kernel == 'crps' | AlgoParams$kernel == 'crps_with_mean'){ return(logTarget_CRPS(impact_sample, AlgoParams, dist_poly_means))}
   
   sumDists <- function(poly_p){
     dist_p = 0 

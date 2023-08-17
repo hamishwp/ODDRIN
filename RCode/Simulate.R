@@ -499,10 +499,10 @@ perturb_impacts <- function(d=1900, AlgoParams){
 plot_S_curves <- function(Omega, Omega_curr=NULL){
   Intensity <- seq(4,12,0.01)
   I0 = 4.5
-  D_MortDisp <- D_MortDisp_calc(h_0(Intensity, I0, Omega$theta), Omega %>% addTransfParams())
+  D_MortDisp <- D_MortDisp_calc(h_0(Intensity, I0, Omega), Omega %>% addTransfParams())
   D_Mort <- D_MortDisp[1,]
   D_Disp <- D_MortDisp[2,]
-  D_DestDam <- D_DestDam_calc(h_0(Intensity, I0, Omega$theta), Omega %>% addTransfParams())
+  D_DestDam <- D_DestDam_calc(h_0(Intensity, I0, Omega), Omega %>% addTransfParams())
   D_Dest <- D_DestDam[1,]
   D_Dam <- D_DestDam[2,]
   D_DestDamTot <- colSums(D_DestDam)
@@ -512,10 +512,10 @@ plot_S_curves <- function(Omega, Omega_curr=NULL){
   
   if(!is.null(Omega_curr)){
     
-    D_MortDisp_curr <- D_MortDisp_calc(h_0(Intensity, I0, Omega_curr$theta), Omega_curr %>% addTransfParams())
+    D_MortDisp_curr <- D_MortDisp_calc(h_0(Intensity, I0, Omega_curr), Omega_curr %>% addTransfParams())
     D_Mort_curr <- D_MortDisp_curr[1,]
     D_Disp_curr <- D_MortDisp_curr[2,]
-    D_DestDam_curr <- D_DestDam_calc(h_0(Intensity, I0, Omega_curr$theta), Omega_curr %>% addTransfParams())
+    D_DestDam_curr <- D_DestDam_calc(h_0(Intensity, I0, Omega_curr), Omega_curr %>% addTransfParams())
     D_Dest_curr <- D_DestDam_curr[1,]
     D_Dam_curr <- D_DestDam_curr[2,]
     

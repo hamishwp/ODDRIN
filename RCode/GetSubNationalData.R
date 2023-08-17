@@ -47,7 +47,7 @@ readSubNatData <- function(subnat_file){
   SubNatData$mortalityInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='mortality_exlusion_reason'))]-1)
   SubNatData$displacementInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='displacement_exlusion_reason'))]-1)
   
-  SubNatData <- SubNatData[rowSums(is.na(SubNatData)) != ncol(SubNatData), ]
+  SubNatData <- SubNatData[!is.na(SubNatData$iso3), ]
   
   SubNatData$source_date <- openxlsx::convertToDate(SubNatData$source_date)
   SubNatData$sdate <- openxlsx::convertToDate(SubNatData$sdate)
@@ -1325,6 +1325,129 @@ createODD <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
   
 }
 
+createHAZARD <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
+  # Works through EQ_Subnational.xlsx and, for each event, either updates the existing ODD object or, if
+  # no corresponding existing ODD object can be found, creates a new ODD object.
+  
+  #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+  SubNatData <- readSubNatData(subnat_file)
+  
+  # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
+  SubNatDataByEvent <- SubNatData %>% group_by(EventID) %>% group_split()
+  
+  DispData <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/DispData_EQ_V2.Rdata')
+  
+  # Extract all building damage points
+  Damage<-ExtractBDfiles(dir = dir,haz = haz)
+  
+  # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
+  path<-data.frame()
+  for (i in 2:170){
+    # if (!i %in% c(8, 13, 25, 28, 31, 39, 47, 52, 54, 59, 65, 67, 72, 74, 79, 80, 81, 85, 89, 
+    #               109, 111, 116, 118, 123, 124, 125, 128, 131, 132, 133, 135, 137, 144, 145,
+    #               151, 157, 164, 166)){
+    #   next
+    # }
+    if (i %in% c(1, 126)){
+      next
+    }
+    print(i)
+    #Needs redoing: 69, 169, 170
+    #Needs redoing: c(20, 52, 68, 70, 91, 92, 137, 139, 140, 144, 162, 170)
+    #Needs redoing: c(20, 52, 67, 68, 70, 75, 76, 81, 82, 84, 91:122, 125, 130, 139, 140, 144, 162, 170)
+    #failed: 67, 68, 137, 169 
+    ###89 (lhazsdf not found), 78, 68, 69, 45, 35, 21, 16, 131,
+    #lhazsdf_dispdat not found: 8, 9, 76, 84
+    #no dispdat: 3,4, 30, 34, 45, 55, 71, 77, 82, 90, 91, 92, 129, 136, 164, 165, 166, 167, 168, 169, 170
+    #ODD bbox not contained by disp data bbox: 7, 48, 52, 66, 67, 86, 104, 107, 108, 109, 117 (x2), 133, 145
+    #Impact larger than 0 outside of I > I0: 92, 97, 114
+    
+    
+    #building counts not added: 24, 31, 36, 55, 56, 57, 81, 99, 101, 114
+    #missing bing building count: peru 2013-02-09, peru 2016-04-16, 2018-09-07
+    #check weights:
+    #   - Philippines 2013-10-15 Iloilo, Jordan
+    #BD failed: 2019-08-08
+    
+    # Subset displacement and disaster database objects
+    SubNatDataByEvent[[i]] <- SubNatDataByEvent[[i]][rowSums(is.na(SubNatDataByEvent[[i]][,-1])) != ncol(SubNatDataByEvent[[i]])-1, ]
+    miniDam<-SubNatDataByEvent[[i]]
+    
+    miniDamSimplified <- data.frame(iso3=unique(trimws(unlist(strsplit(miniDam$source_listed_iso3, ";")))), 
+                                    sdate=data.table::fifelse(is.na(miniDam$GetDisaster_sdate[1]), miniDam$sdate[1]-5, miniDam$GetDisaster_sdate[1]), #miniDam$sdate[which(!is.na(miniDam$sdate))[1]], 
+                                    fdate=data.table::fifelse(is.na(miniDam$GetDisaster_fdate[1]), miniDam$fdate[1]+21, miniDam$GetDisaster_fdate[1]), #miniDam$fdate[which(!is.na(miniDam$sdate))[1]], 
+                                    eventid=i, hazard=miniDam$hazard[which(!is.na(miniDam$sdate))[1]])
+    
+    sdate <- miniDamSimplified$sdate[1]
+    maxdate<-miniDamSimplified$sdate[1]-5
+    if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
+    
+    if (!is.na(SubNatDataByEvent[[i]]$GetDisasterArgs_bbox[1])){
+      bbox = eval(parse(text = SubNatDataByEvent[[i]]$GetDisasterArgs_bbox[1]))
+    } else {
+      bbox<-countriesbbox(unique(miniDamSimplified$iso3))
+      bbox[1] <- ifelse( (bbox[1]-5)  < (-180), 180 - (-180-(bbox[1]-5)), bbox[1]-5)
+      bbox[2] <- max(bbox[2]-5, -90)
+      bbox[3] <- ifelse( (bbox[3]+5)  > 180, -180 + (bbox[3]+5-180), bbox[3] + 5)
+      bbox[4] <- min(bbox[4]+5, 90)
+    }
+    
+    if (!is.na(SubNatDataByEvent[[i]]$GetDisasterArgs_EQ_Params[1])){
+      EQparams <- eval(parse(text=SubNatDataByEvent[[i]]$GetDisasterArgs_EQ_Params[1]))
+    } else {
+      EQparams=list(I0=4.3, minmag=5)
+    }
+    
+    
+    # lhazSDF <- GetDisaster(miniDamSimplified, bbox = c(160, -11.8, 163, -9.7))
+    lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
+    if(is.null(lhazSDF)) {
+      stop(i)
+    }
+    
+    # Create a unique hazard event name
+    namer<-paste0('EQ',
+                  str_remove_all(as.character.Date(min(lhazSDF$hazard_info$eventdates)),"-"),
+                  unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
+                  "_",i)
+    HAZARDpath<-paste0(dir,folder_write, "HAZARDobjects_additionalInfo/",namer)
+    saveRDS(lhazSDF,HAZARDpath)
+    rm(lhazSDF)
+    
+  }
+  
+  return(path)
+  
+}
+
+fix_Zero_cIndies <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
+  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
+  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_cIndiesFixed/')
+  ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  for (file in ufiles){
+    ODDy <- readRDS(paste0(ODD_folderin, file))
+    if(any(ODDy@cIndies$value==0)){
+      print(paste(ODDy@hazdates, unique(ODDy$ISO3C)))
+      ODDy@cIndies$value[which(ODDy@cIndies$value==0)] = 0.0001
+    }
+    saveRDS(ODDy, paste0(ODD_folderout, file))
+  }
+  
+  BD_folderin<-paste0(dir, folder_in, '/BDobjects/')
+  BD_folderout<-paste0(dir, folder_in, '/BDobjects_cIndiesFixed//')
+  ufiles<-list.files(path=BD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  for (file in ufiles){
+    BDy <- readRDS(paste0(BD_folderin, file))
+    if(any(BDy@cIndies$value==0)){
+      print(paste(BDy@hazdates, unique(BDy$ISO3C)))
+      BDy@cIndies$value[which(BDy@cIndies$value==0)] = 0.0001
+    }
+    saveRDS(BDy, paste0(BD_folderout, file))
+  }
+}
+
+
+
 ODD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June20/ODDobjects/EQ20180908CHN_96')
 ODD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June20/ODDobjects/EQ20171112IRN_70')
 
@@ -1428,10 +1551,35 @@ increaseAggregation_all <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_In
   for (file in ufiles){
     event_id <- as.numeric(strsplit(file, "_")[[1]][2])
     ODDy <- readRDS(paste0(ODD_folderin, file))
-    ODDy$EQFreq <- exp(ODDy$EQFreq)-0.1
     saveRDS(ODDy, paste0(dir, folder_in, '/ODDobjects/', file))
     ODDyAgg <- increaseAggregation(removeWeights(ODDy))
     saveRDS(ODDyAgg, paste0(ODD_folderout, file))
+  }
+  
+}
+
+moveTestData <- function(folder_in='IIDIPUS_Input'){
+  ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
+  ODD_foldertest<-paste0(dir, folder_in, '/ODDobjectsTest/')
+  ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
+  i <- 0
+  for (file in ufiles){
+    i <- i + 1
+    if (i %%3 != 0){next}
+    file.copy(from = paste0(ODD_folderall, file),
+              to = paste0(ODD_foldertest, file))
+    file.remove(from = paste0(ODD_folderall, file))
+  }
+  BD_folderall<-paste0(dir, folder_in, '/BDobjects/')
+  BD_foldertest<-paste0(dir, folder_in, '/BDobjectsTest/')
+  ufiles<-list.files(path=BD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
+  i <- 0
+  for (file in ufiles){
+    i <- i + 1
+    if (i %%3 != 0){next}
+    file.copy(from = paste0(BD_folderall, file),
+              to = paste0(BD_foldertest, file))
+    file.remove(from = paste0(BD_folderall, file))
   }
   
 }
@@ -1543,7 +1691,39 @@ fix_Zero_cIndies <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_Jul
 
 
 
-
+addMagnitude <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/'){
+  BD_folderin<-paste0(dir, folder_in, 'BDobjects_noMag/')
+  BD_folderout<-paste0(dir, folder_in, 'BDobjects/')
+  ufiles<-list.files(path=BD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  magnitudes <- c()
+  for (file in ufiles){
+    BDy <- readRDS(paste0(BD_folderin, file))
+    haz_file = tail(strsplit(file, "/")[[1]], 1)
+    if (file == 'EQ20200124TUR_139'){haz_file = 'EQ20200125TUR_139'}
+    if (file == 'EQ20200128CUB_140'){haz_file = 'EQ20200129CUB_140'}
+    if (file == 'Train/EQ20200124TUR_139'){haz_file = 'EQ20200125TUR_139'}
+    if (file == 'Test/EQ20200128CUB_140'){haz_file = 'EQ20200129CUB_140'}
+    HAZARDy <- readRDS(paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_additionalInfo/', haz_file))
+    
+    BDy@hazinfo = list(depths = HAZARDy$hazard_info$depths, 
+                        magnitudes = HAZARDy$hazard_info$magnitudes,
+                        max_mmi = HAZARDy$hazard_info$max_mmi)
+    magnitudes <- c(magnitudes, max(HAZARDy$hazard_info$magnitudes))
+    saveRDS(BDy, paste0(BD_folderout, file))
+  }
+  
+  BD_folderin<-paste0(dir, folder_in, '/BDobjects/')
+  BD_folderout<-paste0(dir, folder_in, '/BDobjects_cIndiesFixed//')
+  ufiles<-list.files(path=BD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  for (file in ufiles){
+    BDy <- readRDS(paste0(BD_folderin, file))
+    if(any(BDy@cIndies$value==0)){
+      print(paste(BDy@hazdates, unique(BDy$ISO3C)))
+      BDy@cIndies$value[which(BDy@cIndies$value==0)] = 0.0001
+    }
+    saveRDS(BDy, paste0(BD_folderout, file))
+  }
+}
 
 
 

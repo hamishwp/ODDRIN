@@ -46,15 +46,28 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   #pga <- raster(paste0(dir,"Hazard_Data/gdpga/pga_475y.tif"))
   #pga_vals <- values(pga)
   
-  EQFreq_mean <- 2.568421 #mean(log(pga_vals+0.1)[which(pga_vals > 0.01)]) 5.411167 # mean(pga$PGA, na.rm=T) 
-  EQFreq_sd <- 1.860136 #sd(log(pga_vals+0.1)[which(pga_vals > 0.01)]) 2.918439 # sd(pga$PGA, na.rm=T)
+  # EQfreqs <- c()
+  # Mags <- c()
+  # for (file in ufiles){
+  #   ODDy <- readRDS(paste0(folderin, file))
+  #   EQfreqs <- c(EQfreqs, log(median(ODDy$EQFreq)+0.1))
+  #   Mags <- c(Mags, max(ODDy@hazinfo$magnitudes))
+  # }
+  
+  EQFreq_mean <- 5.124551 # mean(EQfreqs) #2.568421 #mean(log(pga_vals+0.1)[which(pga_vals > 0.01)]) 5.411167 # mean(pga$PGA, na.rm=T) 
+  EQFreq_sd <- 0.5032984 # sd(EQfreqs) #1.860136 #sd(log(pga_vals+0.1)[which(pga_vals > 0.01)]) 2.918439 # sd(pga$PGA, na.rm=T)
+  
+  #mean and sd of magnitudes in data (max magnitude taken from each event)
+  Mag_mean <- 6.187425
+  Mag_sd <- 0.7543592
     
   center<-list(PDens=list(mean=PDens_mean, sd=PDens_sd), #LOOSEEND: CAME UP WITH THIS SD. CHECK
                AveSchYrs=list(mean=AveSchYrs_mean, sd=AveSchYrs_sd),
                LifeExp=list(mean=LifeExp_mean, sd=LifeExp_sd),
                GNIc=list(mean=GNIc_mean, sd=GNIc_sd),
                Vs30=list(mean=Vs30_mean, sd=Vs30_sd),
-               EQFreq=list(mean=EQFreq_mean, sd=EQFreq_sd))
+               EQFreq=list(mean=EQFreq_mean, sd=EQFreq_sd),
+               Mag=list(mean=Mag_mean, sd=Mag_sd))
   
   # center<-list(Gov=98.7,Vuln=51,CC=44,MPI=53.7,Pinf=103,Pexp=112,Sinc=0.2152956,Ik=0.4,A=3.6,H=1.65)
   print(unlist(center))

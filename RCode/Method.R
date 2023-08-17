@@ -19,8 +19,8 @@
 
 # Methodology parameters required
 AlgoParams<-list(Np=1, # Number of Monte Carlo particles
-                 cores=6, # Number of parallelised threads per event
-                 NestedCores=1, # How many cores are to be used inside the ODD displacement calculations?
+                 cores=1, # Number of parallelised threads per event
+                 NestedCores=6, # How many cores are to be used inside the ODD displacement calculations?
                  AllParallel=T, # Do you want fully-nested (data) parallelisation?
                  itermax=10000, # How many iterations do we want?
                  ABC=0, # Approximate Bayesian Computation rejection
@@ -32,14 +32,14 @@ AlgoParams<-list(Np=1, # Number of Monte Carlo particles
                  minVar=1e-4, # Prevent certain parameters from being too sure of themselves
                  t_0 =200,
                  eps = 0.000000001,
-                 kernel='crps', #options are lognormal, loglaplace or log
+                 kernel='crps_with_mean', #options are lognormal, loglaplace or log
                  kernel_sd=list(displacement=1,mortality=16,buildDam=1.2,buildDest=0.9, buildDamDest=1), 
                  smc_steps = 200, #Number of steps in the ABC-SMC algorithm
                  smc_Npart = 500, #Number of particles in the ABC-SMC algorithm
                  smc_alpha = 0.9,
                  n_nodes=1,
-                 m_CRPS = 3 # number of draws to estimate CRPS for each particle. Number of samples from model therefore becomes Np * m_CRPS
-                 )
+                 m_CRPS = 3, # number of draws to estimate CRPS for each particle. Number of samples from model therefore becomes Np * m_CRPS
+                 tol0 = 15000)
 		 
 if(is.null(AlgoParams$AllParallel)){
   if(AlgoParams$cores>4) { AlgoParams$AllParallel<-T
@@ -670,18 +670,22 @@ initialise_particles <- function(dir, Model, AlgoParams, AlgoResults){
   iter_times <- c()
   for (n in 1:AlgoParams$smc_Npart){
     print(paste('Step: 1, Particle:', n))
-
+    AlgoResults$d[n,,1] <- AlgoParams$tol0 + 1
+    while (all(AlgoResults$d[n,,1] > AlgoParams$tol0)){
+      AlgoResults$Omega_sample[n,,1] <- HLPrior_sample(Model, AlgoParams)
+      AlgoResults$Omega_sample_phys[n,,1] <-  AlgoResults$Omega_sample[n,,1] %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model) %>% unlist()
+      
+      start_time <- Sys.time()
+      impact_sample <- SampleImpact(dir = dir,Model = Model,
+                                    proposed = AlgoResults$Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
+                                    AlgoParams = AlgoParams)
+      d_prop <- CalcDist(impact_sample, AlgoParams)
+      AlgoResults$d_full[n,,1] <- c(t(d_prop))
+      AlgoResults$d[n,,1] <- rowSums(d_prop)
+      
+      end_time <- Sys.time()
+    }
     #draw initial particle values from the prior and ensure that they satisfy the higher level prior
-    AlgoResults$Omega_sample[n,,1] <- HLPrior_sample(Model, AlgoParams)
-    AlgoResults$Omega_sample_phys[n,,1] <-  AlgoResults$Omega_sample[n,,1] %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model) %>% unlist()
-    
-    start_time <- Sys.time()
-    impact_sample <- SampleImpact(dir = dir,Model = Model,
-                              proposed = AlgoResults$Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
-                              AlgoParams = AlgoParams)
-    AlgoResults$d[n,,1] <- CalcDist(impact_sample, AlgoParams)
-    
-    end_time <- Sys.time()
     
     iter_times <- append(iter_times, end_time-start_time)
   }
@@ -779,18 +783,39 @@ perturb_particles <- function(s, propCOV, AlgoParams, AlgoResults){
                                 proposed = Omega_prop_phys %>% addTransfParams(), 
                                 AlgoParams = AlgoParams)
       d_prop <- CalcDist(impact_sample, AlgoParams)
+      d_prop_tot <- rowSums(d_prop)
       
       if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
         d_prop <- Inf
       } 
       
+      Omega_curr_phys <- AlgoResults$Omega_sample[n,,s] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
+      impact_sample <- SampleImpact(dir = dir,Model = Model,
+                                    proposed = Omega_curr_phys %>% addTransfParams(), 
+                                    AlgoParams = replace(AlgoParams, which(names(AlgoParams)==c('kernel')), ifelse(AlgoParams$kernel=='crps_with_mean', 'crps', AlgoParams$kernel)))
+      
+      d_curr <- CalcDist(impact_sample, AlgoParams, dist_poly_means=AlgoResults$d_full[n,2,s]) #no need to resample mean
+      d_curr_tot <- rowSums(d_curr)
+      
       #calculate the acceptance probability:
-      acc <- sum(d_prop<AlgoResults$tolerance[s])/sum(AlgoResults$d[n,,s]<AlgoResults$tolerance[s]) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[n,,s], Model)
+      #this next bit is improvised/unchecked to allow for resampling the current distance
+      if (all(d_curr_tot>AlgoResults$tolerance[s])){
+        if (all(d_prop_tot>AlgoResults$tolerance[s])){
+          AlgoResults$W[n,s] <- 0
+          next
+        } else {
+          acc <- 1
+        }
+      } else {
+        acc <- sum(d_prop_tot<AlgoResults$tolerance[s])/sum(d_curr_tot<AlgoResults$tolerance[s]) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[n,,s], Model)
+      }
+
       u <- runif(1)
       if(u < acc){
         AlgoResults$Omega_sample[n,,s] <- Omega_prop
         AlgoResults$Omega_sample_phys[n,,s] <- AlgoResults$Omega_sample[n,,s] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
-        AlgoResults$d[n,,s] <- d_prop
+        AlgoResults$d_full[n,,s] <- c(t(d_prop))
+        AlgoResults$d[n,,s] <- d_prop_tot
       }
       saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
     }
@@ -841,6 +866,7 @@ retrieve_UnfinishedAlgoResults <- function(dir, oldtag, Npart, AlgoResults){
   # carry out these steps in case s differs between the unfinished and current runs
   AlgoResults$W[,1:s_finish] <- AlgoResults_unfinished$W[,1:s_finish]
   AlgoResults$d[,,1:s_finish] <- AlgoResults_unfinished$d[,,1:s_finish]
+  AlgoResults$d_full[,,1:s_finish] <- AlgoResults_unfinished$d_full[,,1:s_finish]
   AlgoResults$Omega_sample[,,1:s_finish] <- AlgoResults_unfinished$Omega_sample[,,1:s_finish]
   AlgoResults$Omega_sample_phys[,,1:s_finish] <- AlgoResults_unfinished$Omega_sample_phys[,,1:s_finish]
   AlgoResults$tolerancestore[1:s_finish] <- AlgoResults_unfinished$tolerancestore[1:s_finish]
@@ -859,7 +885,10 @@ update_tolerance_and_weights <- function(s, alpha, AlgoResults){
   toleranceold <- AlgoResults$tolerance[s-1]
   d_old <- adrop(AlgoResults$d[,,s-1,drop=FALSE], drop = 3)
   reflevel <- alpha * tpa(toleranceold, d_old)
-  tolerance<-uniroot(function(tolerance) tpa(tolerance,d=d_old)-reflevel,c(0,toleranceold))$root
+  # if ((s+1)%%5 == 0){
+  #   reflevel=0.95
+  # }
+  tolerance<-uniroot(function(tolerance) tpa(tolerance,d=d_old)-reflevel,c(0,toleranceold*3))$root
   print(paste('      Step:', s, ', New tolerance is:', tolerance))
 
   AlgoResults$tolerancestore[s] <- tolerance
@@ -884,11 +913,13 @@ resample_particles <- function(s, N_T, Npart, AlgoResults){
     AlgoResults$Omega_sample[,,s] <- AlgoResults$Omega_sample[choice,,s-1] 
     AlgoResults$Omega_sample_phys[,,s] <- AlgoResults$Omega_sample_phys[choice,,s-1] 
     AlgoResults$d[,,s] <- adrop(AlgoResults$d[choice,,s-1, drop=F], drop=3)
+    AlgoResults$d_full[,,s] <- adrop(AlgoResults$d_full[choice,,s-1, drop=F], drop=3)
     AlgoResults$W[,s] <-rep(1/Npart,Npart) 
   } else { #otherwise do not resample (the particles will be perturbed later via a MCMC step) 
     AlgoResults$Omega_sample[,,s] <- AlgoResults$Omega_sample[,,s-1] 
     AlgoResults$Omega_sample_phys[,,s] <- AlgoResults$Omega_sample_phys[,,s-1] 
     AlgoResults$d[,,s] <- adrop(AlgoResults$d[,,s-1, drop=F], drop=3)
+    AlgoResults$d_full[,,s] <- adrop(AlgoResults$d_full[,,s-1, drop=F], drop=3)
   }
   return(AlgoResults)
 }
@@ -951,6 +982,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     Omega_sample_phys = array(NA, dim=c(AlgoParams$smc_Npart, n_x, AlgoParams$smc_steps)), #store sampled parameters on the untransformed space
     W = array(NA, dim=c(AlgoParams$smc_Npart, AlgoParams$smc_steps)), #Weights
     d = array(Inf, dim=c(AlgoParams$smc_Npart, AlgoParams$Np, AlgoParams$smc_steps)), #Distances
+    d_full = array(Inf, dim=c(AlgoParams$smc_Npart, 3 * AlgoParams$Np, AlgoParams$smc_steps)), #Distances broken down into: poly_crps, poly_mean, point
     tolerancestore=array(NA, AlgoParams$smc_steps),
     essstore=array(NA, AlgoParams$smc_steps)
   )
@@ -972,6 +1004,25 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     AlgoResults <- UnfinishedAlgoResults$AlgoResults
     s_start <- UnfinishedAlgoResults$s_start
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag)) 
+  }
+  
+  s <- 1
+  for(n in 1:AlgoParams$smc_Npart){
+    print(paste(' Step:', s, ', Particle:', n))
+    if(AlgoResults$W[n,s]>0){
+      impact_sample <- SampleImpact(dir = dir,Model = Model,
+                                    proposed = AlgoResults$Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(),
+                                    AlgoParams = AlgoParams)
+      d_prop <- CalcDist(impact_sample, AlgoParams)
+
+      if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
+        d_prop <- Inf
+      }
+
+      #calculate the acceptance probability:
+      AlgoResults$d_full[n,,s] <- c(t(d_prop))
+      AlgoResults$d[n,,s] <- rowSums(d_prop)
+    }
   }
   
   for (s in s_start:AlgoParams$smc_steps){
@@ -1000,6 +1051,25 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     } else {
       AlgoResults <- perturb_particles(s, propCOV, AlgoParams, AlgoResults)
     }
+    
+    # if ((s+2)%%5 == 0){
+    #   for(n in 1:AlgoParams$smc_Npart){
+    #     print(paste(' Step:', s, ', Particle:', n))
+    #     if(AlgoResults$W[n,s]>0){
+    #       impact_sample <- SampleImpact(dir = dir,Model = Model,
+    #                                     proposed = AlgoResults$Omega_sample_phys[n,,s] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
+    #                                     AlgoParams = AlgoParams)
+    #       d_prop <- CalcDist(impact_sample, AlgoParams)
+    #       
+    #       if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
+    #         d_prop <- Inf
+    #       } 
+    #       
+    #       #calculate the acceptance probability:
+    #       AlgoResults$d[n,,s] <- d_prop
+    #     }
+    #   }
+    # }
     
     print(s)
     

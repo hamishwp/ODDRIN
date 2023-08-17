@@ -55,7 +55,8 @@ setClass("BD",
                    eventid="numeric",
                    coefs="numeric",
                    buildingsfile="character",
-                   modifier="list"),
+                   modifier="list", 
+                   hazinfo="list"),
          contains = "SpatialPointsDataFrame")
 
 setMethod(f="initialize", signature="BD",
@@ -351,6 +352,8 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   # finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetNans = finish_time-start_time); start_time <- Sys.time()
   
   Params<-FormParams(BD,list(Np=Method$Np,center=Model$center))
+  Params$I0 <- Model$I0 #some objects have different I0 but don't want this to affect the model
+  
   # Income distribution percentiles & extract income percentile  
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
   Sinc<-ExtractCIndy(BD,var = SincN)

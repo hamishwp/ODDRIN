@@ -19,14 +19,14 @@ Omega <- list(Lambda1 = list(mu=9, sigma=1.1),
               Lambda3 = list(mu=8.5, sigma=1.1),
               Lambda4 = list(mu=9.8, sigma=0.85),
               eps = list(local=0.05, hazard=0.1),
-              vuln_coeff = list(PDens=0, AveSchYrs=0,LifeExp=0, GNIc=0.03, Vs30=0, EQFreq=0),
+              vuln_coeff = list(PDens=0, AveSchYrs=0,LifeExp=0, GNIc=0.03, Vs30=0, EQFreq=0, Mag=0),
               check = list(check=0.5)) 
-
-Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 
 ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June24_AggFactor5/ODDobjects/EQ20150425NPL_31')
 DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
 
+AlgoParams$cores <- 1
+AlgoParams$NestedCores <- 6
 start_time <- Sys.time()
 impact_sample <- SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams)
 finish_time <- Sys.time()

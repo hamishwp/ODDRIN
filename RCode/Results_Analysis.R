@@ -2,7 +2,7 @@
 #results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2023-07-30_185759'
 #results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2023-07-22_193115'
 #results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2023-08-04_134932'
-results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2023-08-11_164714'
+#results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2023-08-11_164714'
 
 AlgoResults <- readRDS(results_file)
 
@@ -50,7 +50,7 @@ plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
                                       pairings=rbind(c(1,2), c(3,4), c(5,6), c(7,8), c(9,10), c(11,12))){
   AlgoResults %<>% addAlgoParams()
   post_samples <- AlgoResults$Omega_sample_phys[,,AlgoResults$s_finish]
-  if (include_priors) prior_samples <- AlgoResults$Omega_sample_phys[,,82]
+  if (include_priors) prior_samples <- AlgoResults$Omega_sample_phys[,,1]
   
   par(mfrow=c(2,3))
   for (p in 1:NROW(pairings)){
@@ -133,7 +133,7 @@ sample_post_predictive <- function(AlgoResults, M, s, dat='Train', single_partic
     df_poly$train_flag <- ifelse(df_poly$event_id %in% i_train, 'TRAIN', 'TEST')
   }
   
-  if(tolower(return_type=='poly')){
+  if(tolower(return_type)=='poly'){
     return(df_poly)
   } else {
     df_point = point_sampled
@@ -452,20 +452,29 @@ manual_modify_params = function(AlgoResults){
 plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all'){
   #plot covariates against discrepancy between sampled and observed
   
-  M <- 5
+  M <- 10
   AlgoResults %<>% addAlgoParams()
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
   df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat=dat, single_particle=T, particle_i = particle_min.d)
   df_poly$sampled_median <- apply(df_poly[grep("sampled", names(df_poly))], 1, median)
   df_poly$sampled_mean <- apply(df_poly[grep("sampled", names(df_poly))], 1, mean)
   
-  impact_type <- 'mortality'
+  
+  length(which(all(df_poly_mort$observed < df_poly_mort[grep("sampled", names(df_poly))])))
+  
+  impact_type <- 'displacement'
   k <- 10
   
-  ggplot(df_poly %>% filter(impact==impact_type), aes(x= log(observed+k), y=log(sampled_mean+k))) +
-    geom_point(aes(color=train_flag)) +theme_minimal()
+  df_poly %>% filter(impact=='displacement' & log(df_poly$sampled_median+10)> 10 & log(df_poly$observed+10)<3)
+  
+  
+  ggplot(df_poly %>% filter(impact==impact_type & inferred==F), aes(x= log(observed+10), y=log(sampled_median+10))) +
+    geom_point(aes(color=train_flag)) +theme_minimal() + ggtitle(impact_type) +
+    scale_color_manual(values = c("TRAIN" = "black", "TEST" = "red")) + geom_abline(intercept = 0, slope = 1, linetype = "dashed") + coord_fixed(ratio = 1)
 
-  # df_poly %>% filter(magnitude> 7.5 & ((log(sampled_median+k)-log(observed+k))>2))
+  
+  df_poly %>% filter(impact==impact_type & abs((log(sampled_median+k)-log(observed+k)))>4)
+  
   df_poly %>% filter(impact==impact_type)
   
   df_poly %<>% add_hazard_info()
@@ -483,14 +492,14 @@ plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all'){
     geom_point(aes(color = log(EQFreq))) +
     scale_color_gradientn(colors = RColorBrewer::brewer.pal(11, "RdYlGn")) + theme_minimal()
   
-  ggplot(df_poly %>% filter(impact == impact_type & train_flag=='TRAIN'), aes(x = log(GNIc), y = log(sampled_median + k) - log(observed + k))) + geom_point() +
+  ggplot(df_poly %>% filter(impact == impact_type), aes(x = log(GNIc), y = log(sampled_median + k) - log(observed + k))) + geom_point() +
     geom_point(color = "black", size = 1, stroke = 1) +
-    geom_point(aes(color = log(GNIc))) +
-    scale_color_gradientn(colors = RColorBrewer::brewer.pal(11, "RdYlGn")) + theme_minimal()
+    geom_point(aes(color = train_flag)) + scale_color_manual(values = c("TRAIN" = "black", "TEST" = "red"))
+    #scale_color_gradientn(colors = RColorBrewer::brewer.pal(11, "RdYlGn")) + theme_minimal()
   
-  ggplot(df_poly %>% filter(impact == impact_type & train_flag=='TRAIN'), aes(x = AveSchYrs, y = log(sampled_median + k) - log(observed + k))) + geom_point() +
+  ggplot(df_poly %>% filter(impact == impact_type), aes(x = AveSchYrs, y = log(sampled_median + k) - log(observed + k))) + geom_point() +
     geom_point(color = "black", size = 1, stroke = 1) +
-    geom_point(aes(color = AveSchYrs)) +
+    geom_point(aes(color = train_flag)) + scale_color_manual(values = c("TRAIN" = "black", "TEST" = "red"))
     scale_color_gradientn(colors = RColorBrewer::brewer.pal(11, "RdYlGn")) + theme_minimal()
   
   ggplot(df_poly %>% filter(impact == impact_type & train_flag=='TRAIN'), aes(x = LifeExp, y = log(sampled_median + k) - log(observed + k))) + geom_point() +
@@ -563,8 +572,8 @@ plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all'){
   
   #how reliable is landslide data?
   df_poly_landslide = add_landslide_flag(df_poly)
-  ggplot(df_poly_landslide %>% filter(impact == impact_type), aes(x = Depth, y = log(sampled_median + k) - log(observed + k))) + 
-    geom_point(aes(color=landslide_flag))
+  ggplot(df_poly_landslide %>% filter(impact == impact_type), aes(x = hazMean, y = log(sampled_median + k) - log(observed + k))) + 
+    geom_point(aes(color=landslide_flag)) + xlab('Maximum intensity to which Population > 1000 is exposed')
   
   # ggplot(df_poly_landslide %>% filter(impact == impact_type), aes(x = hazMean, y = log(sampled_median + k) - log(observed -ifelse(is.na(Landslide.Fatalities), 0,Landslide.Fatalities) + k))) + 
   #   geom_point(aes(color=landslide_flag))
@@ -572,12 +581,10 @@ plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all'){
   
   
   df_poly %<>% add_regions()
-  ggplot(df_poly %>% filter(impact==impact_type), aes(x=region, y=log(observed+k)-log(sampled_median+k))) +
+  ggplot(df_poly %>% filter(impact==impact_type), aes(x=region, y=log(sampled_median+k) - log(observed+k))) +
     geom_point(aes(color=as.factor(event_id))) + ggtitle(impact_type) +
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), legend.position='none')
   
-  + 
-    geom_point(aes(shape=as.factor(event_id), color=as.factor(event_id)))
   
   plot(df_poly$EQFreq[ix], log(df_poly$sampled_median[ix]+k)-log(df_poly$observed[ix]+k), xlab=covar, ylab='log(Sampled+10) - log(Observed+10)')
   
@@ -585,6 +592,24 @@ plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all'){
   #ggplot(df_poly, aes(x=countrycode(iso3, origin='iso3c', destination='continent'), y=log(observed+k)-log(sampled_median+k))) + geom_point()
   
   
+  #count number of points that lie within credible intervals
+  df_poly_filt <- df_poly %>% filter(impact=='mortality')
+  count_min <- 0
+  count_max <- 0
+  total <- 0
+  for (i in 1:NROW(df_poly_filt)){
+    if (all(c(df_poly_filt$observed[i], df_poly_filt[i, grep("sampled", names(df_poly_filt))])==0)){
+      next
+    }
+    if(all(df_poly_filt$observed[i] > df_poly_filt[i, grep("sampled", names(df_poly_filt))])){
+      count_max <- count_max + 1
+    }
+    if(all(df_poly_filt$observed[i] < df_poly_filt[i, grep("sampled", names(df_poly_filt))])){
+      count_min <- count_min + 1
+    }
+    total <- total + 1
+  }
+  (count_max+count_min)/total
   
   
   
@@ -687,13 +712,26 @@ plot_post_predictive = function(AlgoResults, M){
   AlgoResults %<>% addAlgoParams()
   
   df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish)
+  df_poly$min <- NA
+  df_poly$max <- NA
+  for (i in 1:NROW(df_poly)){
+    df_poly$min[i] <- min(df_poly[i, grep("sampled", names(df_poly))])
+    df_poly$max[i] <- max(df_poly[i, grep("sampled", names(df_poly))])
+  }
+  
+  ggplot(df_poly %>% filter(impact=='mortality'), aes(x=log(observed+10), ymin=log(min+10), ymax=log(max+10))) + 
+    geom_errorbar() + geom_abline(intercept=0,slope=1) +ylab('Sampled range across 10 simulations')
+  
   
   df_long_sampled <-   df_poly %>% pivot_longer(paste0('sampled.', 1:M))
   df_long_sampled$log_observed <- log(df_long_sampled$observed+10)
   df_long_sampled$log_sampled <- log(df_long_sampled$value+10)
   
+  
   # Create the ggplot
-  ggplot(df_long_sampled %>% filter(impact=='mortality', obs_id %in% 900:1000), aes(x = as.factor(obs_id), y=log_sampled)) + 
+  
+  id_plot <- sample((df_long_sampled %>% filter(impact=='mortality' & train_flag=='TEST'))$obs_id, 50, replace=F)
+  ggplot(df_long_sampled %>% filter(impact=='mortality' & train_flag=='TEST' & obs_id %in% id_plot), aes(x = as.factor(obs_id), y=log_sampled)) + 
     geom_violin(color = "darkgray", trim = FALSE, scale='width') + geom_point(aes(x=as.factor(obs_id), y=log_observed))
   
   ggplot(df_long_sampled %>% filter(impact=='mortality', observed != 0, obs_id >1000), aes(x = as.factor(obs_id), y=log_sampled)) + 
@@ -733,4 +771,60 @@ plot_correlated_posteriors(AlgoResults, include_priors=T)
 plot_density_vs_step(AlgoResults, Omega)
 
 
+plot_satellite_data = function(AlgoResults, dat='all'){
+
+  M <- 5
+  AlgoResults %<>% addAlgoParams()
+  particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
+  df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat=dat, single_particle=T, particle_i = particle_min.d, return_type='all')
+  df_point <- df_poly$point
+  
+  NROW(df_point)
+  colnames(df_point)[2] <- 'distance'
+  df_point_class <- rownames(df_point)
+  df_point %<>% as.data.frame()
+  rownames(df_point) <- NULL
+  df_point$classification <- df_point_class
+  df_point$impact_true <- ifelse(df_point$classification %in% c('N11', 'N12', 'N13'), 'Unaffected', ifelse(df_point$classification %in% c('N21', 'N22', 'N23'), 'Damaged', 'Destroyed'))
+  df_point$impact_sampled <- ifelse(df_point$classification %in% c('N11', 'N21', 'N31'), 'Unaffected', ifelse(df_point$classification %in% c('N12', 'N22', 'N32'), 'Damaged', 'Destroyed'))
+  df_point$event_i <- (1:NROW(df_point)- 1) %/% 9 + 1
+  
+  
+  p1 <- ggplot(df_point %>% filter(impact_true=='Unaffected'), aes(fill= impact_sampled, alpha = (impact_sampled==impact_true),y=ifelse(count==0, 0, log(count)), x=event_i)) + 
+    geom_bar(position="stack", stat="identity") + 
+    scale_alpha_manual(values=c(0.2, 1)) +
+    xlim(0,27) + ylim(0,30) + ylab('log(count)') + 
+    scale_fill_manual(values = c("Unaffected" = "forestgreen", "Damaged" = "orange", "Destroyed" = "red"))
+  
+  p2 <- ggplot(df_point %>% filter(impact_true=='Damaged'), aes(fill= impact_sampled, alpha = (impact_sampled==impact_true),y=ifelse(count==0, 0, log(count)), x=event_i)) + 
+    geom_bar(position="stack", stat="identity") + 
+    scale_alpha_manual(values=c(0.2, 1)) +
+    xlim(0,27) + ylim(0,30) + ylab('log(count)') + 
+    scale_fill_manual(values = c("Unaffected" = "forestgreen", "Damaged" = "orange", "Destroyed" = "red"))
+  
+  p3 <- ggplot(df_point %>% filter(impact_true=='Destroyed'), aes(fill= impact_sampled, alpha = (impact_sampled==impact_true),y=ifelse(count==0, 0, log(count)), x=event_i)) + 
+    geom_bar(position="stack", stat="identity") + 
+    scale_alpha_manual(values=c(0.2, 1)) +
+    xlim(0,27) + ylim(0,30) + ylab('log(count)') + 
+    scale_fill_manual(values = c("Unaffected" = "forestgreen", "Damaged" = "orange", "Destroyed" = "red"))
+  
+  ggarrange(p1, p2, p3, 
+            labels = c("Unaffected Buildings", "Damaged Buildings", "Destroyed Buildings"),
+            ncol = 1, nrow = 3)
+  
+  ggplot(df_point, aes(fill= paste('Obs:', impact_true, ', Sampled:', impact_sampled), y=ifelse(count==0, 0, log(count)), x=event_i)) + 
+    geom_bar(position="stack", stat="identity") + 
+    scale_alpha_manual(values=c(0.2, 1)) +
+    scale_fill_manual(values = c("Obs: Unaffected , Sampled: Unaffected" = "green", 
+                                 "Obs: Unaffected , Sampled: Damaged" = "forestgreen",
+                                 "Obs: Unaffected , Sampled: Destroyed" = "darkgreen",
+                                 "Obs: Damaged , Sampled: Unaffected" = "cyan",
+                                 "Obs: Damaged , Sampled: Damaged" = "blue",
+                                 "Obs: Damaged , Sampled: Destroyed" = "darkblue",
+                                 "Obs: Destroyed , Sampled: Unaffected" = "yellow",
+                                 "Obs: Destroyed , Sampled: Damaged" = "orange",
+                                 "Obs: Destroyed , Sampled: Destroyed" = "red"))
+  
+  
+}
 

@@ -385,19 +385,13 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
       # if(is.na(locallinp)) stop(ij)
     # locallinp<-1.
     bDamage<-0
-    bDamage<-rep(0, Method$Np) #0 = notaffected, 1 = damaged, 2 = destroyed
+    bDamage<-rep(0, Method$Np) #0 = notaffected, 1 = damaged
     ind <- rep(T, Method$Np)
-    first_haz <- T
-    ind_dam <- c()
     
     for(h_i in 1:length(hrange)){
       h <- hrange[h_i]
       #if(length(BD@data[ij,h])==0) next
       if(is.na(BD@data[ij,h])) next
-      if (h_i != 1){
-        ind_dam <- which(bDamage[ind] == 1)
-        first_haz <- F
-      }
       
       # calculate the sampled hazard intensity I_ij
       # I_ij<-rnorm(n = Method$Np,
@@ -406,14 +400,9 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
       
       I_ij <- BD@data[ij,h]
       Damage <-fDamUnscaled(I_ij,list(I0=Params$I0, Np=sum(ind)),Omega) + locallinp + eps_event[h_i,ind]
-      D_DestDam <- D_DestDam_calc(Damage, Omega, first_haz, Model$DestDam_modifiers, ind_dam)
-      D_DestDamUnaf <- rbind(D_DestDam, pmax(0,1-colSums(D_DestDam)))
+      D_Dam <- D_Dam_calc(Damage, Omega)
       
-      sampleDamDest <- function(p){
-        return(3- which(rmultinom(1, 1, D_DestDamUnaf[,p])==1))
-      }
-      
-      bDamage[ind] <- vapply(1:sum(ind), sampleDamDest, numeric(1))
+      bDamage[ind] <- rbinom(sum(ind), rep(1, sum(ind)), D_Dam) #vapply(1:sum(ind), sampleDamDest, numeric(1))
       
       #bDamage[ind] <- apply(D_DestDamUnaf, 2, function(p){3- which(rmultinom(1, 1, p)==1)}) #slower
       #bDamage[ind] <- apply(D_DestDamUnaf, 2, sample, x=2:0, size=1, replace=F) #even slower: note that positional matching of arguments to sample
@@ -422,21 +411,19 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
       #   finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, pmaxbDam = finish_time-start_time); start_time <- Sys.time()
       # }
       
-      ind <- bDamage != 2
+      ind <- bDamage != 1
       if(all(!ind)) break
     }
     
-    bPred <- ifelse(bDamage > 0, ifelse(bDamage==1,'Damaged', 'Destroyed'),'notaffected')
+    bPred <- ifelse(bDamage == 1, 'Damaged','notaffected')
     
     if(LL) return(bPred!=BD@data$grading[ij]) #return 1 if incorrectly classified
     
     if(sim == F){
       if(BD@data$grading[ij] == 'notaffected'){ # S: refers to simulated value, O: refers to observed value
-        return(ifelse(bPred != 'notaffected', ifelse(bPred=='Damaged','S:Dam,O:NAff','S:Dest,O:NAff'),'S:Naff,O:NAff'))
-      } else if (BD@data$grading[ij] == 'Damaged'){
-        return(ifelse(bPred != 'notaffected', ifelse(bPred=='Damaged','S:Dam,O:Dam','S:Dest,O:Dam'),'S:Naff,O:Dam'))
+        return(ifelse(bPred == 'Damaged', 'S:Dam,O:NAff','S:Naff,O:NAff'))
       } else {
-        return(ifelse(bPred != 'notaffected', ifelse(bPred=='Damaged','S:Dam,O:Dest','S:Dest,O:Dest'),'S:Naff,O:Dest'))
+        return(ifelse(bPred == 'Damaged', 'S:Dam,O:Dam', 'S:Naff,O:Dam'))
       }
     }
     if(sim == T) return(bPred)
@@ -448,7 +435,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   #also need to replace 'Minor', 'Moderate' and 'Severe' with just 'Damaged'
   possiblyDamaged_ij <- which(BD@data$grading=='possible') 
   notnans <- notnans[!notnans %in% possiblyDamaged_ij]
-  if (length(notnans) == 0) return(array(0, dim=c(9, Method$Np)))
+  if (length(notnans) == 0) return(array(0, dim=c(4, Method$Np)))
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, findPossiblyDam = finish_time-start_time); start_time <- Sys.time()
   
@@ -465,19 +452,14 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   #find values in contingency table between simulated and observed
   N11 <- colSums(classified=='S:Naff,O:NAff') #simulated: notaffected, observed: notaffected
   N12 <- colSums(classified=='S:Dam,O:NAff') #simulated: damaged, observed: notaffected
-  N13 <- colSums(classified=='S:Dest,O:NAff') # ...
   N21 <- colSums(classified=='S:Naff,O:Dam')
   N22 <- colSums(classified=='S:Dam,O:Dam')
-  N23 <- colSums(classified=='S:Dest,O:Dam')
-  N31 <- colSums(classified=='S:Naff,O:Dest')
-  N32 <- colSums(classified=='S:Dam,O:Dest')
-  N33 <- colSums(classified=='S:Dest,O:Dest')
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, classifications = finish_time-start_time); start_time <- Sys.time()
   
   #return(elapsed_time)
   
-  if(sim == F){ return(rbind(N11, N12, N13, N21, N22, N23, N31, N32, N33))}
+  if(sim == F){ return(rbind(N11, N12, N21, N22))}
   
   # Therefore, sim==F and LL==F
   # Save into the file

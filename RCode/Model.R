@@ -272,29 +272,9 @@ D_MortDisp_calc <- function(Damage, Omega){
 }
 
 # Calculate Mortality and Displacement probabilities from the unscaled damage
-D_DestDam_calc <- function(Damage, Omega, first_haz=T, DestDam_modifiers = c(1,1,1), ind_dam=c()){
-  if(first_haz == T){
-    D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sigma)
-    D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma)
-    D_Dam <- pmax(D_Dest_and_Dam - D_Dest, 0)
-  } else {
-    if (length(ind_dam>0)){
-      #D_Dam = 1 - D_Dest
-      D_Dest_and_Dam <- D_Dam <- D_Dest <- rep(0, length(Damage))
-      D_Dest_and_Dam[-ind_dam] <- pnorm(Damage[-ind_dam], mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sigma) ^ DestDam_modifiers[1]
-      D_Dest_and_Dam[ind_dam] <- 1
-      D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma)
-      D_Dest[-ind_dam] <- D_Dest[-ind_dam] ^ DestDam_modifiers[2]
-      D_Dest[ind_dam] <- D_Dest[ind_dam] ^ DestDam_modifiers[3]
-      D_Dam <- pmax(D_Dest_and_Dam - D_Dest, 0)
-    } else {
-      D_Dest_and_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sigma) ^ DestDam_modifiers[1]
-      D_Dest <- pnorm(Damage, mean = Omega$Lambda4$loc, sd = Omega$Lambda4$sigma) ^ DestDam_modifiers[2]
-      D_Dam <- D_Dest_and_Dam - D_Dest
-      D_Dam <- ifelse(D_Dam<0, 0, D_Dam)
-    }
-  }
-  return(rbind(D_Dest, D_Dam))
+D_Dam_calc <- function(Damage, Omega){
+  D_Dam <- pnorm(Damage, mean = Omega$Lambda3$loc, sd = Omega$Lambda3$sigma)
+  return(D_Dam)
 }
 
 #when working with buildings, D_Disp is equivalent to D_BuildDam and D_Mort is equivalent to D_BuildDest
@@ -662,15 +642,24 @@ logTarget_CRPS <- function(impact_sample, AlgoParams, dist_poly_means=NULL){
   }
   
   #is there a way to do this using a scoring rule as well? : 
-  sumPointDat_dists <- function(PointDat_p){
-    Dist_0.5 <- which(names(PointDat_p) %in% c('N12', 'N21', 'N23', 'N32'))
-    Dist_1 <- which(names(PointDat_p) %in% c('N13', 'N31'))
-    return(0.5*sum(PointDat_p[Dist_0.5])+sum(PointDat_p[Dist_1]))
-  }
+  # sumPointDat_dists <- function(PointDat_p){
+  #   Dist_0.5 <- which(names(PointDat_p) %in% c('N12', 'N21', 'N23', 'N32'))
+  #   Dist_1 <- which(names(PointDat_p) %in% c('N13', 'N31'))
+  #   return(0.5*sum(PointDat_p[Dist_0.5])+sum(PointDat_p[Dist_1]))
+  # }
   
+  #F1 score
+  sumPointDat_dists <- function(PointDat_p){
+    F1 = c()
+    for (i in 1:(NROW(PointDat_p)/4)){
+      event_dat <- PointDat_p[((i-1)*4+1):(i*4)]
+      F1 = c(F1, (2 * event_dat[which(names(event_dat)=='N22')]) / (2 * event_dat[which(names(event_dat)=='N22')] + 2 * event_dat[which(names(event_dat)=='N12')] + 2 * event_dat[which(names(event_dat)=='N21')]))
+    }
+    return(sum(1-F1)*100) # LOOSEEND: don't have solid justification for this choice. 
+  }
 
   if (length(impact_sample$point) > 0){
-    dist_point <- apply(impact_sample$point, 2, sumPointDat_dists) * 0.1 #LOOSEEND: Currently using 0.1 as point data distance is around 10 times the poly data distance, but no real justification
+    dist_point <- apply(impact_sample$point, 2, sumPointDat_dists)
   } else {
     dist_point <- 0
   }

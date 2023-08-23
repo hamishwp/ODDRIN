@@ -543,40 +543,40 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     
     locallinp_buildings <- LP_buildings[ij]
     
-    nBuild <-array(0,c(3, Method$Np)) #row 1 = nDam, #row 2 = nDest, #row 3 = nRem
-    nBuild[3,]= ODD@data$nBuildings[ij]
-    first_haz = T
+    #use Np+1 as we add a last slot for the mean
+    nUnaff = rep(ODD@data$nBuildings[ij], Method$Np)
+    nDam = rep(0, Method$Np)
+    
+    nUnaff_mean = ODD@data$nBuildings[ij]
+    nDam_mean = 0
+    
     for (h_i in 1:length(hrange)){
       h <- hrange[h_i]
       if(is.na(ODD@data[ij,h])) next
-      if(h_i!=1) {
-        first_haz = F
-        if(all(nBuild[3,]==0)) break #if no remaining buildings, skip modelling
-      }
+      if(all(nUnaff==0)) break #if no remaining buildings, skip modelling
 
       I_ij<-ODD@data[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Params$Np),Omega) + locallinp_buildings + eps_event[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + eps_event[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      Damage_mean <- h_0(I_ij,Params$I0,Omega) + locallinp_buildings
       
-      D_DestDam <- D_DestDam_calc(Damage, Omega, first_haz, Model$DestDam_modifiers) #First row of D_DestDam is D_Dest, second row is D_Dam
-      D_Rem <- pmax(0, 1 - D_DestDam[1,] - D_DestDam[2,]) #probability of neither damaged nor destroyed. Use pmax to avoid errors caused by numerical accuracy.
-      
-      if (h_i != 1){
-        n_DamtoDest <- fBD(nBuild[2,], D_DestDam[1,] ^ (Model$DestDam_modifiers[3]/Model$DestDam_modifiers[2]))
-        nBuild[1,] <- nBuild[1, ] + n_DamtoDest
-        nBuild[2,] <- nBuild[2, ] - n_DamtoDest
-      }
+      D_Dam <- D_Dam_calc(Damage, Omega) #First row of D_DestDam is D_Dest, second row is D_Dam
+      D_Dam_mean <- D_Dam_calc(Damage_mean, Omega)
       
       # Accumulate the number of buildings damaged/destroyed, but not the number of buildings remaining
-      nRem <- nBuild[3,]
-      nBuild[3,] <- 0 
-      nBuild <- nBuild + Fbdam(nRem, D_DestDam[2,], D_DestDam[1,], D_Rem) 
+      nDam_new <- rbinom(Method$Np, nUnaff, D_Dam)
+      nUnaff <- nUnaff - nDam_new
+      nDam <- nDam + nDam_new
+      
+      nDam_new_mean = nUnaff_mean * D_Dam_mean
+      nUnaff_mean = nUnaff_mean - nDam_new_mean
+      nDam_mean = nDam_mean + nDam_new_mean
     }
-    return(list(samples = rbind(tPop[1:2,,drop=FALSE], nBuild[1:2,,drop=FALSE]), 
-           means = c(sum(lPopMort_mean), sum(lPopDisp_mean))))
+    return(list(samples = rbind(tPop[1:2,,drop=FALSE], nDam[1:Method$Np]), 
+           means = c(sum(lPopMort_mean), sum(lPopDisp_mean), nDam_mean)))
   }
   
-  Dam<-array(0,c(nrow(ODD),Method$Np,4)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged, Dam[,,4] = Buildings Destroyed
-  Dam_means<-array(0,c(nrow(ODD),2))
+  Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged, Dam[,,4] = Buildings Destroyed
+  Dam_means<-array(0,c(nrow(ODD),3))
   
   #Method$cores is equal to AlgoParams$NestedCores (changed in Model file)
   if(Method$cores>1) { 
@@ -600,35 +600,28 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   
   funcy<-function(i,LLout=T, kernel_sd=Method$kernel_sd, kernel=Method$kernel, cap=Method$cap, polygons_indexes=ODD@polygons) {
     
-    tmp<-data.frame(iso3=ODD$ISO3C, displacement=Dam[,i,1], mortality=Dam[,i,2], buildDam=Dam[,i,3], buildDest=Dam[,i,4], mort_mean=Dam_means[,1], disp_mean=Dam_means[,2])
+    tmp<-data.frame(iso3=ODD$ISO3C, displacement=Dam[,i,1], mortality=Dam[,i,2], buildDam=Dam[,i,3], 
+                                    mort_mean=Dam_means[,1], disp_mean=Dam_means[,2], buildDam_mean=Dam_means[,3])
     impact_sampled<-data.frame(polygon = numeric(), impact = character(), sampled = numeric(), mean=numeric())
     
     for (polygon_id in unique(ODD@impact$polygon)){
       polygon_impacts <- ODD@impact$impact[which(ODD@impact$polygon==polygon_id)]
       for (impact in polygon_impacts){
-        if (impact == 'buildDamDest'){
+        if (impact == 'mortality'){
           impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
-                                                impact=impact,
-                                                sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,c('buildDam', 'buildDest')]  * polygons_indexes[[polygon_id]]$weights, na.rm=T)),
-                                                mean=NA))
-        } else {
-          if (impact == 'mortality'){
-            impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
                                                  impact=impact,
                                                  sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T)),
                                                  mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'mort_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
-          } else if (impact=='displacement'){
-            impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
+        } else if (impact=='displacement'){
+          impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
                                                  impact=impact,
                                                  sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T)),
                                                  mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'disp_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
-          } else {
-            impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
+        } else {
+          impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
                                                  impact=impact,
                                                  sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T)),
-                                                 mean=NA))
-          }
-          
+                                                 mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'buildDam_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
         }
       }
     }

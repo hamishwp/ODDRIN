@@ -172,7 +172,7 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
   
   LP_ij <- array(NA, dim=NROW(ODD@data))
   
-  LP_ij[notnans] <- Omega$vuln_coeff$Mag * (max(ODD@hazinfo$magnitudes) - Params$center$Mag$mean) / Params$center$Mag$sd #0 # Omega$vuln_coeff$itc #intercept term
+  LP_ij[notnans] <- 0 #Omega$vuln_coeff$Mag * (max(ODD@hazinfo$magnitudes) - Params$center$Mag$mean) / Params$center$Mag$sd # Omega$vuln_coeff$itc #intercept term
   
   #could perform all centering outside before model fitting? may allow a bit of speedup
   
@@ -206,7 +206,7 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
 # Used in higher-level prior to calculate linear predictor for a given set of vulnerability terms
 GetLP_single <- function(Omega, center, vuln_terms){
   #return(1)
-  LP_ij <- Omega$vuln_coeff$Mag * (vuln_terms[['Mag']] - center$Mag$mean) / center$Mag$sd #0 #Omega$vuln_coeff$itc 
+  LP_ij <- 0 # Omega$vuln_coeff$Mag * (vuln_terms[['Mag']] - center$Mag$mean) / center$Mag$sd #Omega$vuln_coeff$itc 
   
   LP_ij <- LP_ij + Omega$vuln_coeff$PDens * ((log(vuln_terms[['PDens']]+1) - center$PDens$mean)/center$PDens$sd)
   LP_ij <- LP_ij + Omega$vuln_coeff$EQFreq * ((log(vuln_terms[['EQFreq']]+0.1) - center$EQFreq$mean)/center$EQFreq$sd)
@@ -322,21 +322,21 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     # where DispMort is the sum of the probabilities of displacement and mortality
     # and DamDest is the sum of the probabilities of building damage and destruction.
     
-    Upp_bounds_4.6 <- c(0.03, 0.1, 0.03, 0.15)
-    Low_bounds_6 <- c(0, 0.00001, 0, 0.00001)
-    Upp_bounds_6 <- c(0.15, 0.6, 0.3, 0.75)
-    Low_bounds_9 <- c(0.00005,0.01,0.001,0.15)
-    Upp_bounds_9 <- c(0.7,0.995,0.99,0.995)
+    Upp_bounds_4.6 <- c(0.03, 0.1, 0.15)
+    Low_bounds_6 <- c(0, 0.00001, 0.00001)
+    Upp_bounds_6 <- c(0.15, 0.6, 0.75)
+    Low_bounds_9 <- c(0.00005,0.01,0.15)
+    Upp_bounds_9 <- c(0.7,0.995,0.995)
     
-    Upp_bounds_4.6_zero_lp <- c(0.0005, 0.005, 0.001, 0.002)
-    Low_bounds_6_zero_lp <- c(0, 0.001, 0, 0.001)
-    Upp_bounds_6_zero_lp <- c(0.01, 0.1, 0.05, 0.1)
-    Low_bounds_9_zero_lp <- c(0.0001,0.1,0.05,0.2)
-    Upp_bounds_9_zero_lp <- c(0.2,0.9,0.5,0.8)
+    Upp_bounds_4.6_zero_lp <- c(0.0005, 0.005, 0.002)
+    Low_bounds_6_zero_lp <- c(0, 0.001, 0.001)
+    Upp_bounds_6_zero_lp <- c(0.01, 0.1, 0.1)
+    Low_bounds_9_zero_lp <- c(0.0001,0.1,0.2)
+    Upp_bounds_9_zero_lp <- c(0.2,0.9,0.8)
     
     HLP_impacts <- function(I_ij, lp, Omega){
       rbind(apply(D_MortDisp_calc(h_0(I_ij, I0=4.5, Omega=Omega) + lp, Omega),2,cumsum), 
-            apply(D_DestDam_calc(h_0(I_ij, I0=4.5, Omega=Omega) + lp, Omega), 2,cumsum))
+            D_Dam_calc(h_0(I_ij, I0=4.5, Omega=Omega) + lp, Omega))
     }
     
     adder <- 0
@@ -353,7 +353,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     
     #check that at intensity 7, D_disp > D_mort and D_builddam > D_builddest
     impact_intens_7 <- HLP_impacts(7, lp, Omega)
-    adder <- adder + sum(impact_intens_7[1,] > impact_intens_7[2,]) + sum(impact_intens_7[3,] > impact_intens_7[4,])
+    adder <- adder + sum(impact_intens_7[1,] > impact_intens_7[2,])
 
     return(adder) #looseend: need to address when including modifiers
     
@@ -474,7 +474,7 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train'){
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       #ODDy@fIndies<-Model$fIndies
       ODDy@impact%<>%as.data.frame.list()
-      
+      ODDy@impact <- ODDy@impact[!1:NROW(ODDy@impact) %in% which(ODDy@impact$impact == 'buildDam' & ODDy@impact$inferred == T),]
       
       ODDy@impact$event_id = as.numeric(gsub(".*_(\\d+)$", "\\1", filer))
       
@@ -604,9 +604,9 @@ SamplePointImpact <- function(dir,Model,proposed,AlgoParams,expLL=T, dat='Train'
 SampleImpact <- function(dir,Model,proposed,AlgoParams,expLL=T, dat='Train'){
 
   impact_sample_poly<-SamplePolyImpact(dir,Model,proposed,AlgoParams, dat=dat)
-  impact_sample_point<- SamplePointImpact(dir, Model, proposed, AlgoParams, expLL=T, dat=dat)
+  #impact_sample_point<- SamplePointImpact(dir, Model, proposed, AlgoParams, expLL=T, dat=dat)
 
-  return(list(poly=impact_sample_poly, point=impact_sample_point))
+  return(list(poly=impact_sample_poly, point=NULL)) #impact_sample_point))
 }
 
 crps <- function(sample, obs){

@@ -538,8 +538,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     tPop[tPop>ODD@data$Population[ij]] <- floor(ODD@data$Population[ij])
     
     #if no building destruction data:
-    if(!BD_data_present) return(list(samples=rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np), rep(NA, Method$Np)), 
-                                means= c(sum(lPopMort_mean), sum(lPopDisp_mean)))) #return total displacement and mortality, set number of buildings damaged and destroyed to NA
+    if(!BD_data_present) return(list(samples=rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np)), 
+                                means= c(sum(lPopMort_mean), sum(lPopDisp_mean), NA))) #return total displacement and mortality, set number of buildings damaged and destroyed to NA
     
     locallinp_buildings <- LP_buildings[ij]
     

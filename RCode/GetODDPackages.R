@@ -58,6 +58,7 @@ LoadLibraries<-function(packred){
   library(mvtnorm)
   library(abind)
   library(Rmpi)
+  library(rgeos)
   # library(ecochange)
   
   if(!packred) {
@@ -72,7 +73,7 @@ LoadLibraries<-function(packred){
 GetODDPackages<-function(packred){
 
   list.of.packages <- c("dplyr", "ggplot2","sf","tidyverse","openxlsx","pracma",
-                        "geojsonR", "tiff", "gstat", "mvtnorm",
+                        "geojsonR", "tiff", "gstat", "mvtnorm","rgeos",
                         "RColorBrewer", "geosphere","GGally", "wbstats",
                         "countrycode","rworldmap","rworldxtra","chron","ncdf4",
                         "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 

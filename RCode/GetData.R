@@ -78,6 +78,87 @@ ExtractData<-function(haz="EQ",dir="./",extractedData=T){
   
 }
 
+ExtractNewData<-function(isos,sdat,fdat=NULL,haz="EQ",dir="./"){
+  # Make sure the event dates exist and are in the correct format
+  sdat%<>%as.Date()
+  if(is.null(fdat)) if(Sys.Date()-sdat<5) fdat<-Sys.Date() else fdat<-sdat+5
+  fdat%<>%as.Date()
+  # Form the right objects to then extract the hazard data
+  DamageData<-data.frame(iso3=isos,
+                         hazard=haz,
+                         sdate=sdat,
+                         fdate=fdat,
+                         eventid=999)
+  # Extract GDACS database on the event for further validation & alertscore benchmarking
+  dfGDACS<-FilterGDACS(haz=haz,syear=AsYear(DamageData$sdate),fyear=AsYear(DamageData$sdate),red=T)%>%
+    filter(sdate>=sdat-7 & fdate<=fdat & iso3%in%isos)
+  # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
+  path<-data.frame()
+  for (ev in unique(DamageData$eventid)){
+    # Subset displacement and disaster database objects
+    miniDam<-DamageData%>%filter(eventid==ev)
+    # Set some confining dates for the rest of the data to be assigned to this event
+    maxdate<-miniDam$sdate-5
+    if(is.na(miniDam$fdate)) mindate<-miniDam$sdate+3 else mindate<-miniDam$fdate+3
+    # GDACS subset
+    miniDACS<-dfGDACS%>%filter(iso3%in%unique(miniDam$iso3) & 
+                                 sdate<mindate & sdate>maxdate)
+    # Match displacement and hazard data and extract hazard maps
+    # HazSDF includes SpatialPixelDataFrame object of hazmean & hazsd per date 
+    # (list of each, bbox-cropped to remove M < minmag)
+    #lhazSDF<-tryCatch(GetDisaster(miniDam,miniDACS),error=function(e) NULL)
+    lhazSDF<-tryCatch(GetDisaster(miniDam),error=function(e) NULL)
+    if(is.null(lhazSDF)) {
+      print(paste0("Warning: no hazard data found for event ", unique(miniDam$iso3),
+                   " ",unique(miniDam$hazard), " ", min(miniDam$sdate) ))
+      next
+    }
+    
+    # Create the ODD object:
+    ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDam),error=function(e) NULL)
+    if(is.null(ODDy)) {print(paste0("ODD FAIL: ",ev, " ",unique(miniDam$iso3)[1]," ", unique(miniDam$sdate)[1])) ;next}
+    
+    # Create a unique hazard event name
+    namer<-paste0(ODDy@hazard,
+                  str_remove_all(as.character.Date(min(ODDy@hazdates)),"-"),
+                  unique(miniDam$iso3)[1],
+                  "_",ODDy@eventid)
+    # Save out objects to save on RAM
+    ODDpath<-paste0(dir,"IIDIPUS_Input/ODDobjects/",namer)
+    saveRDS(ODDy,ODDpath)
+    
+    HAZARDpath<-paste0(dir,"IIDIPUS_Input/HAZARDobjects/",namer)
+    saveRDS(lhazSDF,HAZARDpath)
+    rm(lhazSDF)
+    
+    ggsave(paste0(namer,".png"), plot=plotODDyBG(ODDy),path = paste0(directory,'Plots/IIDIPUS_BG/'),width = 8,height = 5)
+    
+    # Building damage subset
+    miniDam<-Damage%>%filter(iso3%in%unique(miniDam$iso3) & 
+                               sdate<mindate & sdate>maxdate)
+    # Get building damage data and filter to matched hazard events
+    BDpath=NA_character_
+    if(nrow(miniDam)>0) {
+      # Make building damage object BD
+      BDy<- tryCatch(new("BD",Damage=miniDam,ODD=ODDy),error=function(e) NULL)
+      if(is.null(BDy)) {print(paste0("BD FAIL: ",ev, " ",unique(miniDam$iso3)[1]," ", unique(miniDam$sdate)[1])) ;next}
+      BDpath <-paste0(dir,"IIDIPUS_Input/BDobjects/",namer)
+      # Save it out!
+      saveRDS(BDy, BDpath)
+    }
+    
+    # Path to file and ID
+    path%<>%rbind(data.frame(ODDpath=ODDpath,
+                             BDpath=BDpath,
+                             eventid=ODDy@eventid))
+    # Save some RAM
+    rm(ODDy,BDy,miniDam)
+  }
+  
+  return(path)
+  
+}
+
 # Calculate the predicted displaced populations per gridpoint and save out to a file
 FormODDyOmega<-function(dir,Model,proposed,AlgoParams){
   

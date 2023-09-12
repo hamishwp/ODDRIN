@@ -1,7 +1,7 @@
 #install.packages(c('data.table', 'jsonlite', 'geojsonio'))
-library(data.table)
-library(jsonlite)
-library(geojsonio)
+# library(data.table)
+# library(jsonlite)
+# library(geojsonio)
 
 merge_rastered_spdf <- function(raster1_spdf, raster2_spdf, added_var_name){
   data <- raster1_spdf@data

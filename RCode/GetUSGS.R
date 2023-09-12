@@ -1,15 +1,15 @@
-library(ggplot2)
-library(sf)
-library("ggmap")
-library(OpenStreetMap)
-library(osmdata)
-library(tidyverse)
-library(geojsonR)
-library(raster)
-library(dplyr)
-library(magrittr)
+# library(ggplot2)
+# library(sf)
+# library("ggmap")
+# library(OpenStreetMap)
+# library(osmdata)
+# library(tidyverse)
+# library(geojsonR)
+# library(raster)
+# library(dplyr)
+# library(magrittr)
 
-source('RCode/HAZARDobj.R')
+# source('RCode/HAZARDobj.R')
 
 # Create an object of the required form from the USGS data
 formUSGSobject<-function(meanhaz,sdhaz,I0=NULL){

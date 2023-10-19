@@ -53,11 +53,40 @@ SearchUSGSbbox<-function(bbox,sdate,fdate=NULL,minmag=5){
   
   debut<-"https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson"
   geojsonR::FROM_GeoJson(paste0(debut,"&starttime=",as.Date(sdate)-1,"&endtime=",as.Date(fdate),
-                      "&minlongitude=",bbox[1],"&minlatitude=",bbox[2],
-                      "&maxlongitude=",bbox[3],"&maxlatitude=",bbox[4],
-                      "&minmagnitude=",minmag,"&orderby=magnitude",
-                      "&producttype=shakemap"))%>%return
+                                "&minlongitude=",bbox[1],"&minlatitude=",bbox[2],
+                                "&maxlongitude=",bbox[3],"&maxlatitude=",bbox[4],
+                                "&minmagnitude=",minmag,"&orderby=magnitude",
+                                "&producttype=shakemap"))%>%return
   
+}
+
+check_preceding_hazards <- function(HAZobj){
+  sdate <- HAZobj$hazard_info$sdate
+  fdate <- HAZobj$hazard_info$fdate
+  bbox <- HAZobj$hazard_info$bbox
+  minmag=4
+  debut<-"https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson"
+  haz_alls <- geojsonR::FROM_GeoJson(paste0(debut,"&starttime=",as.Date(sdate)-3,"&endtime=",as.Date(fdate)+2,
+                                            "&minlongitude=",bbox[1],"&minlatitude=",bbox[2],
+                                            "&maxlongitude=",bbox[3],"&maxlatitude=",bbox[4],
+                                            "&minmagnitude=",minmag, "&producttype=shakemap"))
+  
+  getDateTimes <- function(x){
+    coords <- x$geometry$coordinates
+    timezone <- suppressWarnings(tz_lookup_coords(lat = coords[2], lon = coords[1], method = "fast"))
+    eventtime <- as.POSIXct(x$properties$time / 1000, origin = "1970-01-01", tz = timezone)
+    return( format(eventtime,  format = "%Y-%m-%d %H:%M:%S"))
+  }
+  
+  eventtimes_all <- tryCatch(sort(unlist(lapply(haz_alls$features, function(x) GetUSGSdatetime(x$id)))),
+                             error=function(e) NULL)
+  
+  if (is.null(eventtimes_all)){
+    eventtimes_all <- sort(unlist(lapply(haz_alls$features, getDateTimes)))
+  }
+  
+  eventtimes_modelled <- paste(HAZobj$hazard_info$eventdates, HAZobj$hazard_info$eventtimes)
+  return(eventtimes_modelled==eventtimes_all[1])
 }
 
 # Make sure the USGS data wasn't empty or entirely outside of the specified boundary box
@@ -116,30 +145,66 @@ GetUSGS_id<-function(USGSid,titlz="tmp",I0=4.5,minmag=5){
 GetUSGSdatetime<-function(USGSid){
   url<-paste0("https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=",USGSid,"&format=geojson")
   tmp<-FROM_GeoJson(url)
-  eventtime <- tmp$properties$products$dyfi[[1]]$properties$eventtime
-  if(is.null(eventtime)){
-    eventtime <- tmp$properties$products$shakemap[[1]]$properties$eventtime
+  
+  eventdatetime <- tmp$properties$products$dyfi[[1]]$properties$eventtime
+  magnitude<- tmp$properties$products$dyfi[[1]]$properties$magnitude
+  max_mmi <- tmp$properties$products$dyfi[[1]]$properties$maxmmi
+  depth <- tmp$properties$products$dyfi[[1]]$properties$depth
+  lat <- as.numeric(tmp$properties$products$dyfi[[1]]$properties$latitude)
+  long <- as.numeric(tmp$properties$products$dyfi[[1]]$properties$longitude)
+  
+  if(is.null(eventdatetime)){
+    eventdatetime <- tmp$properties$products$shakemap[[1]]$properties$eventtime
+    magnitude<- tmp$properties$products$shakemap[[1]]$properties$magnitude
+    max_mmi <- tmp$properties$products$shakemap[[1]]$properties$maxmmi
+    depth <- tmp$properties$products$shakemap[[1]]$properties$depth
+    lat <- as.numeric(tmp$properties$products$shakemap[[1]]$properties$latitude)
+    long <- as.numeric(tmp$properties$products$shakemap[[1]]$properties$longitude)
   }
-  return(as.Date(eventtime))
+  
+  
+  # Latitude and longitude coordinates
+  timezone <- suppressWarnings(tz_lookup_coords(lat = lat, lon = long, method = "fast"))
+  
+  # Get the timezone
+  datetime_local <- as.POSIXct(with_tz(time = as_datetime(eventdatetime), tzone = timezone))
+  
+  datetime_reformatted <- format(datetime_local,  format = "%Y-%m-%d %H:%M:%S")
+  return(datetime_reformatted)
 }
 
 GetUSGSfeatures<-function(USGSid){
   url<-paste0("https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=",USGSid,"&format=geojson")
   tmp<-FROM_GeoJson(url)
   
-  #have swapped here from using dyfi as default to shakemap as default as the dyfi seems a bit dodgy at times (e.g. with maxmmi)
-  eventtime <- tmp$properties$products$shakemap[[1]]$properties$eventtime
-  magnitude<- tmp$properties$products$shakemap[[1]]$properties$magnitude
-  max_mmi <- tmp$properties$products$shakemap[[1]]$properties$maxmmi
-  depth <- tmp$properties$products$shakemap[[1]]$properties$depth
+  eventdatetime <- tmp$properties$products$dyfi[[1]]$properties$eventtime
+  magnitude<- tmp$properties$products$dyfi[[1]]$properties$magnitude
+  max_mmi <- tmp$properties$products$dyfi[[1]]$properties$maxmmi
+  depth <- tmp$properties$products$dyfi[[1]]$properties$depth
+  lat <- as.numeric(tmp$properties$products$dyfi[[1]]$properties$latitude)
+  long <- as.numeric(tmp$properties$products$dyfi[[1]]$properties$longitude)
   
-  if(is.null(eventtime)){
-    eventtime <- tmp$properties$products$dyfi[[1]]$properties$eventtime
-    magnitude<- tmp$properties$products$dyfi[[1]]$properties$magnitude
-    max_mmi <- tmp$properties$products$dyfi[[1]]$properties$maxmmi
-    depth <- tmp$properties$products$dyfi[[1]]$properties$depth
+  if(is.null(eventdatetime)){
+    eventdatetime <- tmp$properties$products$shakemap[[1]]$properties$eventtime
+    magnitude<- tmp$properties$products$shakemap[[1]]$properties$magnitude
+    max_mmi <- tmp$properties$products$shakemap[[1]]$properties$maxmmi
+    depth <- tmp$properties$products$shakemap[[1]]$properties$depth
+    lat <- as.numeric(tmp$properties$products$shakemap[[1]]$properties$latitude)
+    long <- as.numeric(tmp$properties$products$shakemap[[1]]$properties$longitude)
   }
-  return(list(eventtime=as.Date(eventtime), magnitude=as.numeric(magnitude), max_mmi=as.numeric(max_mmi), depth=as.numeric(depth)))
+  
+  
+  # Latitude and longitude coordinates
+  timezone <- suppressWarnings(tz_lookup_coords(lat = lat, lon = long, method = "fast"))
+  
+  # Get the timezone
+  datetime_local <- as.POSIXct(with_tz(time = as_datetime(eventdatetime), tzone = timezone))
+  
+  eventtime <- format(datetime_local,  format = "%H:%M:%S")
+  eventdate <- as.Date(format(datetime_local,  format = "%Y-%m-%d"))
+  
+  return(list(eventdate=eventdate, magnitude=as.numeric(magnitude), max_mmi=as.numeric(max_mmi), depth=as.numeric(depth),
+              eventtime=eventtime))
 }
 
 # Extract EQ data from USGS for a specified event
@@ -184,7 +249,7 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
   
   # lhazdat<-c(list(bbox=bbox,sdate=sdate,fdate=fdate,NumEvents=lenny,hazard="EQ",I0=I0,eventdates=NULL))
   lhazdat<-list(hazard_info=list(bbox=bbox,sdate=sdate,fdate=fdate,NumEvents=lenny,hazard="EQ",I0=I0,eventdates=c(), 
-                                 depths=c(), magnitudes=c(), max_mmi=c()))
+                                 depths=c(), magnitudes=c(), max_mmi=c(), eventtimes=c(), usgs_ids=c()))
   tbbox<-rep(NA,4)
   for (i in 1:lenny){
     # Find the details of the raster file for the EQ in the USGS database
@@ -216,15 +281,17 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     hazsdf<-new("HAZARD",
                 obj=hazsdf,
                 hazard="EQ",
-                dater=event_features$eventtime,
+                dater=event_features$eventdate,
                 I0=I0,
                 alertlevel=ifelse(is.null(tmp$properties$alert),"green",tmp$properties$alert),
                 #alertscore=ifelse(i<=length(alertscores),alertscores[i],0))
                 alertscore=0, 
                 depth=event_features$depth, 
                 magnitude=event_features$magnitude, 
-                max_mmi=event_features$max_mmi 
-                )
+                max_mmi=event_features$max_mmi,
+                eventtime=event_features$eventtime,
+                USGS_id=USGS$features[[i]]$id
+    )
     # Add to the list of hazards
     lhazdat[[length(lhazdat)+1]]<-hazsdf
     # Extend the bounding box to account for this earthquake
@@ -235,6 +302,8 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     lhazdat$hazard_info$depths%<>%c(hazsdf@depth)
     lhazdat$hazard_info$magnitudes%<>%c(hazsdf@magnitude)
     lhazdat$hazard_info$max_mmi%<>%c(hazsdf@max_mmi)
+    lhazdat$hazard_info$eventtimes%<>%c(hazsdf@eventtime)
+    lhazdat$hazard_info$usgs_ids%<>%c(hazsdf@USGS_id)
   }
   if(any(is.na(tbbox))) return(NULL)
   # Modify the bounding box to fit around all hazards extracted

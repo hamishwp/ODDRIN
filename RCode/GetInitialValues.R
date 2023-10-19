@@ -28,6 +28,8 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   LifeExp_sd <- 9.607136 #sd(GDLdata$LifeExp);
   GNIc_mean <- 8.913694 #mean(log(GDLdata$GNIc)); 
   GNIc_sd <- 1.18729 #sd(log(GDLdata$GNIc));
+  SHDI_mean <- 0.6453444#mean(GDLdata$SHDI, na.rm=T);
+  SHDI_sd <- 0.1712748#sd(GDLdata$SHDI, na.rm=T);
   
   
   # # Read in Stiff data and calculate the mean and standard deviation, again using all regions in the dataset:
@@ -60,6 +62,16 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   #mean and sd of magnitudes in data (max magnitude taken from each event)
   Mag_mean <- 6.187425
   Mag_sd <- 0.7543592
+  
+  FirstHaz_mean <- 0.5
+  FirstHaz_sd <- 0.5
+  
+  Night_mean <- 1/3
+  Night_sd <- sqrt(2/9)
+  
+  FirstHaz.Night_mean <- 1/6
+  FirstHaz.Night_sd <- sqrt(434/3125)
+  
     
   center<-list(PDens=list(mean=PDens_mean, sd=PDens_sd), #LOOSEEND: CAME UP WITH THIS SD. CHECK
                AveSchYrs=list(mean=AveSchYrs_mean, sd=AveSchYrs_sd),
@@ -67,7 +79,11 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
                GNIc=list(mean=GNIc_mean, sd=GNIc_sd),
                Vs30=list(mean=Vs30_mean, sd=Vs30_sd),
                EQFreq=list(mean=EQFreq_mean, sd=EQFreq_sd),
-               Mag=list(mean=Mag_mean, sd=Mag_sd))
+               Mag=list(mean=Mag_mean, sd=Mag_sd), 
+               SHDI=list(mean=SHDI_mean, sd=SHDI_sd),
+               FirstHaz = list(mean=FirstHaz_mean, sd=FirstHaz_sd), 
+               Night = list(mean = Night_mean, sd=Night_sd),
+               FirstHaz.Night = list(mean=FirstHaz.Night_mean, sd=FirstHaz.Night_sd))
   
   # center<-list(Gov=98.7,Vuln=51,CC=44,MPI=53.7,Pinf=103,Pexp=112,Sinc=0.2152956,Ik=0.4,A=3.6,H=1.65)
   print(unlist(center))

@@ -1,4 +1,5 @@
 
+
 GetSourceFiles<-function(packred){
   
   #@@@@@ SOURCE FILES @@@@@#
@@ -71,14 +72,14 @@ LoadLibraries<-function(packred){
 }
 
 GetODDPackages<-function(packred){
-
+  
   list.of.packages <- c("dplyr", "ggplot2","sf","tidyverse","openxlsx","pracma",
-                        "geojsonR", "tiff", "gstat", "mvtnorm","rgeos",
+                        "geojsonR", "tiff", "gstat", "mvtnorm", 'rgeos',
                         "RColorBrewer", "geosphere","GGally", "wbstats",
                         "countrycode","rworldmap","rworldxtra","chron","ncdf4",
                         "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 
                         'EnvStats', 'posterior', 'doParallel', 'VGAM', 'abind',
-                        'Rmpi', 'openxlsx', 'ecochange')
+                        'Rmpi', 'openxlsx', 'ecochange', 'lutz')
   
   if(!packred) list.of.packages<-c(list.of.packages,
                                    "codetools","latex2exp",
@@ -93,7 +94,7 @@ GetODDPackages<-function(packred){
   if(length(new.packages)>0) install.packages(new.packages, repos='http://cran.us.r-project.org')
   
   # This package makes sure you're uptodate on all packages, including things like tidyverse 
-  if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+  if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager", repos='http://cran.us.r-project.org')
   BiocManager::install("Biobase", version = "3.16")
   
   # devtools::install_github('daroczig/fbRads')

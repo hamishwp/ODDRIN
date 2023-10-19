@@ -432,10 +432,14 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   LP_buildings <- GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=F)
   
   finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetLP = finish_time-start_time); start_time <- Sys.time()
-  
-  # Speed things up a little
-  BD_data_present <- !is.null(ODD$nBuildings)
+
+  BD_data_present <- F #!is.null(ODD$nBuildings) #just for now
   hrange<-grep("hazMean",names(ODD),value = T)
+  hrange_order <- order(paste(ODD@hazinfo$eventdates, ODD@hazinfo$eventtimes))
+  
+  
+  event_lp <- getLP_event(ODD@hazinfo, Omega, Params)
+  
   
   eps_event <- array(0, dim=c(length(hrange), Method$Np))
   for (h in 1:length(hrange)){
@@ -458,13 +462,13 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     tPop[3,]=colSums(lPopS)
     
     #for mean dam:
-    p_mort_mean <- rep(0, length(hrange))
-    p_disp_mean <- rep(0, length(hrange))
-    lPopDisp_mean <- array(0, dim=c(length(locallinp), Method$Np))
-    lPopMort_mean <- array(0, dim=c(length(locallinp), Method$Np))
-    lPopRem_mean <- rep(ODD@data$Population[ij]/8, 8)
+    # p_mort_mean <- rep(0, length(hrange))
+    # p_disp_mean <- rep(0, length(hrange))
+    # lPopDisp_mean <- array(0, dim=c(length(locallinp), 1))
+    # lPopMort_mean <- array(0, dim=c(length(locallinp), 1))
+    # lPopRem_mean <- rep(ODD@data$Population[ij]/8, 8)
     
-    for(h_i in 1:length(hrange)){
+    for(h_i in hrange_order){
       h <- hrange[h_i]
 
       if(is.na(ODD@data[ij,h])) next
@@ -492,7 +496,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       
       I_ij<-ODD@data[ij,h]
 
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]] + eps_event[h_i,nonzero_pop[,2]], error=function(e) NA)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]] + event_lp[h_i] + eps_event[h_i,nonzero_pop[,2]], error=function(e) NA)
       
       if(any(is.na(Damage))) print(ij)
       
@@ -501,13 +505,13 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       Dam <- Fbdam(lPopS[nonzero_pop], D_MortDisp[2,], D_MortDisp[1,], D_Rem)
       
       #for mean dam:
-      if (Method$kernel == 'crps_with_mean'){
-        Damage_Mean <- h_0(I_ij,Params$I0,Omega) + locallinp
-        D_MortDisp_Mean <- D_MortDisp_calc(Damage_Mean, Omega) 
-        lPopMort_mean <- lPopMort_mean + D_MortDisp_Mean[1,] * lPopRem_mean
-        lPopDisp_mean <- lPopDisp_mean + D_MortDisp_Mean[2,] * lPopRem_mean
-        lPopRem_mean <- lPopRem_mean * (1-D_MortDisp_Mean[1,]) * (1-D_MortDisp_Mean[2,])
-      }
+      # if (Method$kernel == 'crps_with_mean'){
+      #   Damage_Mean <- h_0(I_ij,Params$I0,Omega) + locallinp
+      #   D_MortDisp_Mean <- D_MortDisp_calc(Damage_Mean, Omega) 
+      #   lPopMort_mean <- lPopMort_mean + D_MortDisp_Mean[1,] * lPopRem_mean
+      #   lPopDisp_mean <- lPopDisp_mean + D_MortDisp_Mean[2,] * lPopRem_mean
+      #   lPopRem_mean <- lPopRem_mean * (1-D_MortDisp_Mean[1,]) * (1-D_MortDisp_Mean[2,])
+      # }
       
       lPopS[nonzero_pop] <- Dam[3,]
       lPopDisp[nonzero_pop] <- lPopDisp[nonzero_pop] + Dam[1,]
@@ -538,8 +542,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     tPop[tPop>ODD@data$Population[ij]] <- floor(ODD@data$Population[ij])
     
     #if no building destruction data:
-    if(!BD_data_present) return(list(samples=rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np)), 
-                                means= c(sum(lPopMort_mean), sum(lPopDisp_mean), NA))) #return total displacement and mortality, set number of buildings damaged and destroyed to NA
+    if(!BD_data_present) return(list(samples=rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np))))#, 
+                                #means= c(sum(lPopMort_mean), sum(lPopDisp_mean), NA))) #return total displacement and mortality, set number of buildings damaged and destroyed to NA
     
     locallinp_buildings <- LP_buildings[ij]
     
@@ -547,20 +551,20 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     nUnaff = rep(ODD@data$nBuildings[ij], Method$Np)
     nDam = rep(0, Method$Np)
     
-    nUnaff_mean = ODD@data$nBuildings[ij]
-    nDam_mean = 0
+    #nUnaff_mean = ODD@data$nBuildings[ij]
+    #nDam_mean = 0
     
-    for (h_i in 1:length(hrange)){
+    for (h_i in hrange_order){
       h <- hrange[h_i]
       if(is.na(ODD@data[ij,h])) next
       if(all(nUnaff==0)) break #if no remaining buildings, skip modelling
 
       I_ij<-ODD@data[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + eps_event[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
-      Damage_mean <- h_0(I_ij,Params$I0,Omega) + locallinp_buildings
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + event_lp[h_i] + eps_event[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      #Damage_mean <- h_0(I_ij,Params$I0,Omega) + locallinp_buildings
       
       D_Dam <- D_Dam_calc(Damage, Omega) #First row of D_DestDam is D_Dest, second row is D_Dam
-      D_Dam_mean <- D_Dam_calc(Damage_mean, Omega)
+      #D_Dam_mean <- D_Dam_calc(Damage_mean, Omega)
       
       # Accumulate the number of buildings damaged/destroyed, but not the number of buildings remaining
       nDam_new <- rbinom(Method$Np, nUnaff, D_Dam)
@@ -571,8 +575,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       nUnaff_mean = nUnaff_mean - nDam_new_mean
       nDam_mean = nDam_mean + nDam_new_mean
     }
-    return(list(samples = rbind(tPop[1:2,,drop=FALSE], nDam[1:Method$Np]), 
-           means = c(sum(lPopMort_mean), sum(lPopDisp_mean), nDam_mean)))
+    return(list(samples = rbind(tPop[1:2,,drop=FALSE], nDam[1:Method$Np])))#, 
+           #means = c(sum(lPopMort_mean), sum(lPopDisp_mean), nDam_mean)))
   }
   
   Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged, Dam[,,4] = Buildings Destroyed
@@ -584,7 +588,11 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   } else  {CalcDam_out <- lapply(X = notnans,FUN = CalcDam)}
   
   Dam[notnans,,]<-aperm(simplify2array(lapply(CalcDam_out, function(x) x$samples)), perm=c(3,2,1))
-  Dam_means[notnans,]<- aperm(simplify2array(lapply(CalcDam_out, function(x) x$means)), perm=c(2,1))
+  #Dam_means[notnans,]<- aperm(simplify2array(lapply(CalcDam_out, function(x) x$means)), perm=c(2,1))
+  
+  if (sim){
+    return(Dam)
+  }
   
   
   finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, dam_sample = finish_time-start_time); start_time <- Sys.time()
@@ -781,7 +789,9 @@ GetVarName<-function(varname){
                "FBPop" = "HRSL Population",
                "RWI" = "FB Relative Wealth Index",
                "DamBDosm" = "Damaged Buildings (OSM)",
-               "DamBDFB" = "Damaged Buildings (HRSL)")
+               "DamBDFB" = "Damaged Buildings (HRSL)",
+               "MedianDisp" = "Median", 
+               "RangeDisp" = "Range")
   
   as.character(lookup[varname])
   

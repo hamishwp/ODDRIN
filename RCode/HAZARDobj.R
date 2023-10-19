@@ -28,12 +28,15 @@ setClass("HAZARD",
                    eventdate="Date", 
                    depth="numeric", 
                    magnitude="numeric", 
-                   max_mmi="numeric"),
+                   max_mmi="numeric",
+                   USGS_id="character",
+                   eventtime="character"),
          contains = "SpatialPixelsDataFrame")
 
 setMethod(f="initialize", signature="HAZARD",
           # definition=function(.Object,bbox,hazSDF,dater=NULL,dir=directory,
-          definition=function(.Object,obj=NULL,hazard=NULL,dater=NULL,I0=NULL,alertscore=NULL,alertlevel=NULL, depth=NULL, magnitude=NULL, max_mmi=NULL) {
+          definition=function(.Object,obj=NULL,hazard=NULL,dater=NULL,I0=NULL,alertscore=NULL,alertlevel=NULL, 
+                              depth=NULL, magnitude=NULL, max_mmi=NULL, eventtime=NULL, USGS_id=NULL) {
             
             if(is.null(hazard)) {
               print("WARNING: no hazard type provided in HAZARD object initialisation, returning empty")
@@ -47,7 +50,9 @@ setMethod(f="initialize", signature="HAZARD",
             .Object@I0<-        ifelse(is.null(I0),ExtractParams(hazard),I0)
             .Object@depth<-     ifelse(is.null(depth),NA, depth)
             .Object@magnitude<- ifelse(is.null(magnitude),NA, magnitude)
-            .Object@max_mmi<-   ifelse(is.null(magnitude),NA, max_mmi)
+            .Object@max_mmi<-   ifelse(is.null(max_mmi),NA, max_mmi)
+            .Object@eventtime<- ifelse(is.null(eventtime),NA, eventtime)
+            .Object@USGS_id<-   ifelse(is.null(USGS_id),NA, USGS_id)
             if(!is.null(dater)) .Object@eventdate<-dater
             
             if(!is.null(obj)){

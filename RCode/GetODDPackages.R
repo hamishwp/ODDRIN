@@ -60,6 +60,7 @@ LoadLibraries<-function(packred){
   library(abind)
   library(Rmpi)
   library(rgeos)
+  library(DescTools)
   # library(ecochange)
   
   if(!packred) {
@@ -67,6 +68,7 @@ LoadLibraries<-function(packred){
     library(osmdata)
     library(OpenStreetMap)
     library(osmdata)
+    library(lutz)
   }
   
 }
@@ -74,7 +76,7 @@ LoadLibraries<-function(packred){
 GetODDPackages<-function(packred){
   
   list.of.packages <- c("dplyr", "ggplot2","sf","tidyverse","openxlsx","pracma",
-                        "geojsonR", "tiff", "gstat", "mvtnorm", 'rgeos',
+                        "geojsonR", "tiff", "gstat", "mvtnorm", 'rgeos', 'DescTools',
                         "RColorBrewer", "geosphere","GGally", "wbstats",
                         "countrycode","rworldmap","rworldxtra","chron","ncdf4",
                         "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 
@@ -87,7 +89,7 @@ GetODDPackages<-function(packred){
                                    "tidyRSS","geojsonR", "tiff", "gstat",
                                    "FactoMineR","factoextra","xtable",
                                    "gsubfn","mapsapi","leaflet", "ssh","RPostgres",
-                                   "GADMTools", "pscl","multiColl")
+                                   "GADMTools", "pscl","multiColl", 'lutz')
   
   
   new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]

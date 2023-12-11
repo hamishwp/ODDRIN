@@ -39,6 +39,7 @@ AlgoParams<-list(Np=2, # Number of Monte Carlo particles
                  smc_alpha = 0.9,
                  n_nodes=1,
                  m_CRPS = 2, # number of draws to estimate CRPS for each particle. Number of samples from model therefore becomes Np * m_CRPS
+                 BD_weight = 0, #scales from 0 to 1: 0 means point data has no weighting, 1 means point data ... 
                  tol0 = 12000)
 		 
 if(is.null(AlgoParams$AllParallel)){
@@ -108,8 +109,33 @@ modifyAcc <- function(xNew, xPrev, Model){
   Model$acceptTrans%<>%unlist()
   index<-1:length(unlist(Model$unlinks))
   product <- 1
+  #Transformed Parameters:
   for (i in index){
     product <- product * match.fun(Model$acceptTrans[[names(xNew)[i]]])(xNew[i], xPrev[i], Model$par_lb[i],Model$par_ub[i])
+  }
+  
+  #Priors:
+  index = 1
+  for (i in 1:length(Model$Priors)){
+    if (is.list(Model$Priors[[i]])){
+      for (j in 1:length(Model$Priors[[i]])){ # probably a more efficient way of doing this
+        if(Model$Priors[[i]][[j]]$dist == 'norm'){
+          product = product * (dnorm(xNew[index], Model$Priors[[i]][[j]]$mean, Model$Priors[[i]][[j]]$sd)/ dnorm(xPrev[index], Model$Priors[[i]][[j]]$mean, Model$Priors[[i]][[j]]$sd))
+        }
+        if(Model$Priors[[i]][[j]]$dist == 'laplace'){
+          product = product * (dnorm(xNew[index], Model$Priors[[i]][[j]]$location, Model$Priors[[i]][[j]]$scale)/ dnorm(xPrev[index], Model$Priors[[i]][[j]]$location, Model$Priors[[i]][[j]]$scale))
+        }
+        index = index + 1
+      }
+    } else {
+      if(Model$Priors[[i]]$dist == 'norm'){
+        product = product * (dnorm(xNew[index], Model$Priors[[i]]$mean, Model$Priors[[i]]$sd)/ dnorm(xPrev[index], Model$Priors[[i]]$mean, Model$Priors[[i]]$sd))
+      }
+      if(Model$Priors[[i]]$dist=='laplace'){
+        product = product * (dLaplace(xNew[index], Model$Priors[[i]]$location, Model$Priors[[i]]$scale)/ dnorm(xPrev[index], Model$Priors[[i]]$location, Model$Priors[[i]]$scale))
+      }
+      index = index + 1
+    }
   }
   return(product)
 }
@@ -146,6 +172,7 @@ bcast_ODDRIN <- function(dir, Model, AlgoParams, nslaves){
   mpi.bcast.Robj2slave(directory)
   mpi.bcast.Robj2slave(Model)
   mpi.bcast.Robj2slave(AlgoParams)
+  mpi.bcast.Robj2slave(HLPrior_sample)
   
   #Run GetODDPackages and Simulate.R on the nodes
   mpi.remote.exec(GetODDPackages, FALSE)
@@ -173,14 +200,14 @@ initialise_particles <- function(dir, Model, AlgoParams, AlgoResults){
       min.d.part <- which.min(AlgoResults$d[n,,1])
       
       if (n == 1){
-        AlgoResults$d_full = array(NA, dim=c(AlgoParams$smc_Npart, NCOL(d_prop), AlgoParams$smc_steps))
+        AlgoResults$d_full = array(NA, dim=c(AlgoParams$smc_Npart, AlgoParams$Np, NCOL(d_prop), AlgoParams$smc_steps))
       }
-      AlgoResults$d_full[n,,1] <- d_prop[min.d.part,]
+      AlgoResults$d_full[n,,,1] <- d_prop
     
       if (n == 1){
         AlgoResults$sampled_full = array(NA, dim=c(AlgoParams$smc_Npart, NROW(impact_sample$poly[[1]]), AlgoParams$m_CRPS, AlgoParams$smc_steps))
       }
-      AlgoResults$sampled_full[n,,,1] = matrix(unlist(lapply(impact_sample$poly[((min.d.part-1)*AlgoParams$m_CRPS+1):(min.d.part*AlgoParams$m_CRPS)], function(x) x$sampled)), nrow=NROW(impact_sample$poly[[1]])) #take sampled values for the sample with the smallest distance
+      #AlgoResults$sampled_full[n,,,1] = matrix(unlist(lapply(impact_sample$poly[((min.d.part-1)*AlgoParams$m_CRPS+1):(min.d.part*AlgoParams$m_CRPS)], function(x) x$sampled)), nrow=NROW(impact_sample$poly[[1]])) #take sampled values for the sample with the smallest distance
       
       end_time <- Sys.time()
     }
@@ -213,35 +240,26 @@ initialise_particles_Rmpi <- function(dir, Npart, n_nodes){
   d_node <- array(Inf, dim=c(n_allocated, AlgoParams$Np))
   
   iter_times <- c()
-  
   for (n in 1:n_allocated){
-    HLP <- Inf
     #Sample from the parameter ranges until the higher level prior is satisfied:
-    while (HLP > AlgoParams$ABC){
-      Omega_sample_i <- runif(n_x, min=Model$par_lb, max=Model$par_ub) %>% relist(skeleton=Model$skeleton) %>% Physical2Proposed(Model) %>% unlist()
-      Omega_sample_phys_i <-  Omega_sample_i %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
-      HLP = Model$HighLevelPriors(Omega_sample_phys_i %>% relist(skeleton=Model$skeleton) %>% addTransfParams(),Model)
-    }
-    
+    Omega_sample_node[n,] <- HLPrior_sample(Model, AlgoParams)
+    Omega_sample_phys_node[n,] <-  Omega_sample_node[n,] %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model) %>% unlist()
     start_time <- Sys.time()
     
     #calculate distance
     impact_sample <- SampleImpact(dir = dir, Model = Model,
-                      proposed = Omega_sample_phys_i %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
+                      proposed = Omega_sample_phys_node[n,] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                       AlgoParams = AlgoParams)
     d_prop = CalcDist(impact_sample, AlgoParams) 
     d_node[n,] = rowSums(d_prop)
     
     min.d.part <- which.min(d_node[n,])
-    
-    Omega_sample_node[n,] = Omega_sample_i 
-    Omega_sample_phys_node[n,] = Omega_sample_phys_i
   
     if (n == 1){
-      d_full = array(NA, dim=c(n_allocated, NCOL(d_prop)))
+      d_full = array(NA, dim=c(n_allocated, AlgoParams$Np, NCOL(d_prop)))
       sampled_full = array(NA, dim=c(n_allocated, NROW(impact_sample$poly[[1]]), AlgoParams$m_CRPS))
     }
-    d_full[n,] <- d_prop[min.d.part,]
+    d_full[n,,] <- d_prop
     sampled_full[n,,] = matrix(unlist(lapply(impact_sample$poly[((min.d.part-1)*AlgoParams$m_CRPS+1):(min.d.part*AlgoParams$m_CRPS)], function(x) x$sampled)), nrow=NROW(impact_sample$poly[[1]])) #take sampled values for the sample with the smallest distance
     
     end_time <- Sys.time()
@@ -264,13 +282,13 @@ AlgoStep1 <- function(dir, AlgoParams, AlgoResults){
     node_return <- mpi.remote.exec(initialise_particles_Rmpi, dir, AlgoParams$smc_Npart, AlgoParams$n_nodes)
     print(node_return)
     particle_divisions <- split(1:AlgoParams$smc_Npart, sort(1:AlgoParams$smc_Npart%%AlgoParams$n_nodes))
-    AlgoResults$d_full = array(Inf, dim=c(AlgoParams$smc_Npart, length(node_return[[1]]$d_full_node[1,]), AlgoParams$smc_steps))
+    AlgoResults$d_full = array(Inf, dim=c(AlgoParams$smc_Npart, length(node_return[[1]]$d_full_node[1,,1]), length(node_return[[1]]$d_full_node[1,1,]), AlgoParams$smc_steps))
     AlgoResults$sampled_full = array(NA, dim=c(AlgoParams$smc_Npart, length(node_return[[1]]$sampled_full_node[1,,1]), length(node_return[[1]]$sampled_full_node[1,1,]), AlgoParams$smc_steps))
     for (j in 1:length(node_return)){
       AlgoResults$Omega_sample[particle_divisions[[j]],,1] <- node_return[[j]]$Omega_sample_node
       AlgoResults$Omega_sample_phys[particle_divisions[[j]],,1] <- node_return[[j]]$Omega_sample_phys_node
       AlgoResults$d[particle_divisions[[j]],,1] <- node_return[[j]]$d_node
-      AlgoResults$d_full[particle_divisions[[j]],,1] <- node_return[[j]]$d_full_node
+      AlgoResults$d_full[particle_divisions[[j]],,,1] <- node_return[[j]]$d_full_node
       AlgoResults$sampled_full[particle_divisions[[j]],,,1] <- node_return[[j]]$sampled_full_node
     }
   } else { #no parallelisation
@@ -279,11 +297,20 @@ AlgoStep1 <- function(dir, AlgoParams, AlgoResults){
   }
   AlgoResults$tolerancestore[1] <- max(AlgoResults$d[,,1]) + 1 #set tolerance to larger than maximum distance
   end_time <- Sys.time()
+  
+  #weight distances by inverse MAD at first step
+  rel_weights <- 1/apply(AlgoResults$d_full[,1,,1], 2, stats::mad)
+  rel_weights <- ifelse(is.finite(rel_weights), rel_weights, 0)
+  AlgoResults$rel_weights <- rel_weights
+  d_full_weighted <- sweep(AlgoResults$d_full[,,,1], 3, AlgoResults$rel_weights, FUN = "*")
+  AlgoResults$d[,,1] <- apply(d_full_weighted, c(1,2), sum)
+  print('Distance Weightings:')
+  print(rel_weights)
   return(AlgoResults)
 }
 
 perturb_particles <- function(s, propCOV, AlgoParams, tolerance_s, W_s, Omega_sample_s, Omega_sample_phys_s,
-                              d_s, d_full_s, sampled_full_s){
+                              d_s, d_full_s, sampled_full_s, rel_weights){
   for(n in 1:AlgoParams$smc_Npart){
     print(paste(' Step:', s, ', Particle:', n))
     if(W_s[n]>0){
@@ -300,7 +327,8 @@ perturb_particles <- function(s, propCOV, AlgoParams, tolerance_s, W_s, Omega_sa
                                 proposed = Omega_prop_phys %>% addTransfParams(), 
                                 AlgoParams = AlgoParams)
       d_prop <- CalcDist(impact_sample, AlgoParams)
-      d_prop_tot <- rowSums(d_prop)
+      d_prop_tot <- rowSums(sweep(d_prop, 2, rel_weights, FUN = "*"))
+      print(d_prop_tot)
       
       if(d_prop[1]==Inf){#if (d_full_prop[1]==Inf){
         d_prop <- Inf
@@ -316,8 +344,8 @@ perturb_particles <- function(s, propCOV, AlgoParams, tolerance_s, W_s, Omega_sa
         min.d.part <- which.min(d_prop_tot)
         Omega_sample_s[n,] <- Omega_prop
         Omega_sample_phys_s[n,] <- Omega_sample_s[n,] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
-        sampled_full_s[n,,] <- matrix(unlist(lapply(impact_sample$poly[((min.d.part-1)*AlgoParams$m_CRPS+1):(min.d.part*AlgoParams$m_CRPS)], function(x) x$sampled)), nrow=NROW(impact_sample$poly[[1]])) #take sampled values for the sample with the smallest distance
-        d_full_s[n,] <- d_prop[min.d.part,]
+        #sampled_full_s[n,,] <- matrix(unlist(lapply(impact_sample$poly[((min.d.part-1)*AlgoParams$m_CRPS+1):(min.d.part*AlgoParams$m_CRPS)], function(x) x$sampled)), nrow=NROW(impact_sample$poly[[1]])) #take sampled values for the sample with the smallest distance
+        d_full_s[n,,] <- d_prop
         d_s[n,] <- d_prop_tot
       }
       #saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
@@ -331,20 +359,21 @@ perturb_particles <- function(s, propCOV, AlgoParams, tolerance_s, W_s, Omega_sa
 }
 
 
-perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omega_phys_curr, d_curr, d_full_curr, sampled_full_curr, propCOV, tolerance_s){
+perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omega_phys_curr, d_curr, d_full_curr, sampled_full_curr, propCOV, tolerance_s, rel_weights){
   particle_divisions <- split(1:Npart, sort(1:Npart%%n_nodes))
   allocated_particles <- particle_divisions[[mpi.comm.rank()]]
   n_allocated <- length(allocated_particles)
   n_x <- length(Model$par_lb)
   
-  Omega_sample_node <- Omega_curr[allocated_particles,]
-  Omega_sample_phys_node <- Omega_phys_curr[allocated_particles,]
-  d_node <- d_curr[allocated_particles,]
-  d_full_node <- d_full_curr[allocated_particles,]
-  sampled_full_node <- sampled_full_curr[allocated_particles,,]
+  W_node <- W_curr[allocated_particles]
+  Omega_sample_node <- Omega_curr[allocated_particles,, drop=F]
+  Omega_sample_phys_node <- Omega_phys_curr[allocated_particles,, drop=F]
+  d_node <- d_curr[allocated_particles,, drop=F]
+  d_full_node <- d_full_curr[allocated_particles,,, drop=F]
+  sampled_full_node <- sampled_full_curr[allocated_particles,,,drop=F]
   
   for(n in 1:n_allocated){
-    if(W_curr[n]>0){
+    if(W_node[n]>0){
       Omega_prop <- multvarNormProp(xt=Omega_sample_node[n,], propPars=propCOV) #perturb the proposal
       Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
       
@@ -358,22 +387,23 @@ perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omeg
                             AlgoParams = AlgoParams) 
       d_prop <- CalcDist(impact_sample, AlgoParams)
       
-      d_prop_tot <- rowSums(d_prop)
+      d_prop_tot <- rowSums(sweep(d_prop, 2, rel_weights, FUN = "*"))
       if(d_prop[1]==Inf){
         d_prop <- Inf
       } 
       d_curr <- d_node[n,which(is.finite(d_node[n,]))]
       
       acc <- (sum(d_prop_tot<tolerance_s)/length(d_prop_tot))/(sum(d_curr<tolerance_s)/length(d_curr)) * modifyAcc(Omega_prop, Omega_sample_node[n,], Model)
-      
       u <- runif(1)
+      err_test <- tryCatch(u < acc, error=function(e) NA)
+      if(is.na(err_test)){return(list(u=u, acc=acc, d_curr=d_curr, d_prop_tot=d_prop_tot, Omega_samp_node=Omega_sample_node[n,], Omega_prop=Omega_prop))}
       if(u < acc){
         min.d.part <- which.min(d_prop_tot)
         Omega_sample_node[n,] <- Omega_prop
         Omega_sample_phys_node[n,] <- Omega_sample_node[n,] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
         d_node[n,] <- d_prop_tot
         sampled_full_node[n,,] <- matrix(unlist(lapply(impact_sample$poly[((min.d.part-1)*AlgoParams$m_CRPS+1):(min.d.part*AlgoParams$m_CRPS)], function(x) x$sampled)), nrow=NROW(impact_sample$poly[[1]])) #take sampled values for the sample with the smallest distance
-        d_full_node[n,] <- d_prop[min.d.part,]
+        d_full_node[n,,] <- d_prop
       }
     }
   }
@@ -385,21 +415,29 @@ perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omeg
 }
 
 retrieve_UnfinishedAlgoResults <- function(dir, oldtag, Npart, AlgoResults){
-  AlgoResults_unfinished <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",oldtag))
-  s_finish = max(which(colSums(is.na(AlgoResults_unfinished$Omega_sample[,1,]))==0)) #find last completed step
-  #n_finish = max(which(!is.na(AlgoResults_unfinished$Omega_sample[,1,s_finish]))) #find last completed particle
+  #new AlgoResults must have same same M_CRPS, Np, smc_npart and smc_steps as old one
+  AlgoResults <- readRDS(paste0(dir,"IIDIPUS_Results/",oldtag))
+  s_finish = max(which(colSums(is.na(AlgoResults$Omega_sample[,1,]))==0)) #find last completed step
+  s_start <- s_finish
   
-  # carry out these steps in case s differs between the unfinished and current runs
-  AlgoResults$W[,1:s_finish] <- AlgoResults_unfinished$W[,1:s_finish]
-  AlgoResults$d[,,1:s_finish] <- AlgoResults_unfinished$d[,,1:s_finish]
-  AlgoResults$d_full[,,1:s_finish] <- AlgoResults_unfinished$d_full[,,1:s_finish]
-  AlgoResults$Omega_sample[,,1:s_finish] <- AlgoResults_unfinished$Omega_sample[,,1:s_finish]
-  AlgoResults$Omega_sample_phys[,,1:s_finish] <- AlgoResults_unfinished$Omega_sample_phys[,,1:s_finish]
-  AlgoResults$tolerancestore[1:s_finish] <- AlgoResults_unfinished$tolerancestore[1:s_finish]
-  AlgoResults$essstore[1:s_finish] <- AlgoResults_unfinished$essstore[1:s_finish]
-  s_start = s_finish + 1 #ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
-  #n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
-  
+  # AlgoResults_unfinished <- readRDS(paste0(dir,"IIDIPUS_Results/",oldtag))
+  # s_finish = max(which(colSums(is.na(AlgoResults_unfinished$Omega_sample[,1,]))==0))-1 #find last completed step
+  # #n_finish = max(which(!is.na(AlgoResults_unfinished$Omega_sample[,1,s_finish]))) #find last completed particle
+  # 
+  # # carry out these steps in case s differs between the unfinished and current runs
+  # AlgoResults$W[,1:s_finish] <- AlgoResults_unfinished$W[,1:s_finish]
+  # AlgoResults$d[,,1:s_finish] <- AlgoResults_unfinished$d[,,1:s_finish]
+  # AlgoResults$d_full <- array(NA, dim=c(dim(AlgoResults_unfinished$d_full)[1:2], dim(AlgoResults$W)[2]))
+  # AlgoResults$sampled_full <- array(NA, dim=c(dim(AlgoResults_unfinished$sampled_full)[1:3], dim(AlgoResults$W)[2]))
+  # AlgoResults$d_full[,,1:s_finish] <- AlgoResults_unfinished$d_full[,,1:s_finish]
+  # AlgoResults$sampled_full[,,,1:s_finish] <- AlgoResults_unfinished$sampled_full[,,,1:s_finish]
+  # AlgoResults$Omega_sample[,,1:s_finish] <- AlgoResults_unfinished$Omega_sample[,,1:s_finish]
+  # AlgoResults$Omega_sample_phys[,,1:s_finish] <- AlgoResults_unfinished$Omega_sample_phys[,,1:s_finish]
+  # AlgoResults$tolerancestore[1:s_finish] <- AlgoResults_unfinished$tolerancestore[1:s_finish]
+  # AlgoResults$essstore[1:s_finish] <- AlgoResults_unfinished$essstore[1:s_finish]
+  # s_start = s_finish + 1 #ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
+  # #n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
+  # 
   return(list(
     AlgoResults=AlgoResults,
     s_start=s_start
@@ -439,14 +477,14 @@ resample_particles <- function(s, N_T, Npart, AlgoResults){
     AlgoResults$Omega_sample[,,s] <- AlgoResults$Omega_sample[choice,,s-1] 
     AlgoResults$Omega_sample_phys[,,s] <- AlgoResults$Omega_sample_phys[choice,,s-1] 
     AlgoResults$d[,,s] <- adrop(AlgoResults$d[choice,,s-1, drop=F], drop=3)
-    AlgoResults$d_full[,,s] <- adrop(AlgoResults$d_full[choice,,s-1, drop=F], drop=3)
+    AlgoResults$d_full[,,,s] <- adrop(AlgoResults$d_full[choice,,,s-1, drop=F], drop=4)
     AlgoResults$sampled_full[,,,s] <- adrop(AlgoResults$sampled_full[choice,,,s-1, drop=F], drop=4)
     AlgoResults$W[,s] <-rep(1/Npart,Npart) 
   } else { #otherwise do not resample (the particles will be perturbed later via a MCMC step) 
     AlgoResults$Omega_sample[,,s] <- AlgoResults$Omega_sample[,,s-1] 
     AlgoResults$Omega_sample_phys[,,s] <- AlgoResults$Omega_sample_phys[,,s-1] 
     AlgoResults$d[,,s] <- adrop(AlgoResults$d[,,s-1, drop=F], drop=3)
-    AlgoResults$d_full[,,s] <- adrop(AlgoResults$d_full[,,s-1, drop=F], drop=3)
+    AlgoResults$d_full[,,,s] <- adrop(AlgoResults$d_full[,,,s-1, drop=F], drop=4)
     AlgoResults$sampled_full[,,,s] <- adrop(AlgoResults$sampled_full[,,,s-1, drop=F], drop=4)
   }
   return(AlgoResults)
@@ -479,7 +517,7 @@ calc_propCOV <- function(s, n_x, Npart, AlgoResults){
 
 plot_abcsmc <- function(s, n_x, Npart, Omega_sample_phys, Omega){
   par(mfrow=c(5,4))
-  for (i in 1:n_x){
+  for (i in 1:20){
     plot(Omega_sample_phys[,i,s], main=names(unlist(Omega))[i])
     #plot(rep(1:s,each=Npart),Omega_sample_phys[,i,1:s], ylim=c(min(Omega_sample_phys[,i,1:s], unlist(Omega)[i]), max(Omega_sample_phys[,i,1:s], unlist(Omega)[i])),
     #     main=names(unlist(Omega))[i], xlab='step', ylab='')
@@ -518,9 +556,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
   )
   
   #AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/1000Part_Step1')
-  
   if (AlgoParams$n_nodes > 1) bcast_ODDRIN(dir, Model, AlgoParams, nslaves=AlgoParams$n_nodes)
-  
   start_time <- Sys.time()
   
   if(unfinished==F){ 
@@ -562,6 +598,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     print(paste('Time:', end_time-start_time))
     start_time <- Sys.time()
     
+
     AlgoResults <- update_tolerance_and_weights(s, AlgoParams$smc_alpha, AlgoResults)
     AlgoResults <- resample_particles(s, N_T, AlgoParams$smc_Npart, AlgoResults)
     propCOV <- calc_propCOV(s, n_x, AlgoParams$smc_Npart, AlgoResults)
@@ -571,38 +608,40 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
       Omega_sample_s = AlgoResults$Omega_sample[,,s],
       Omega_sample_phys_s = AlgoResults$Omega_sample_phys[,,s],
       d_s = adrop(AlgoResults$d[,,s, drop=F], drop=3),
-      d_full_s = adrop(AlgoResults$d_full[,,s, drop=F], drop=3),
+      d_full_s = adrop(AlgoResults$d_full[,,,s, drop=F], drop=4),
       sampled_full_s = adrop(AlgoResults$sampled_full[,,,s, drop=F], drop=4),
-      W_s = AlgoResults$W[,s]
+      W_s = AlgoResults$W[,s], 
+      rel_weights = AlgoResults$rel_weights
     )
-    
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
     rm(AlgoResults) #free up some space while doing the heavy lifting
     
     if(AlgoParams$n_nodes>1){
       node_return <- mpi.remote.exec(perturb_particles_Rmpi, dir, AlgoParams$smc_Npart, AlgoParams$n_nodes, 
                                      AlgoResults_small$W_s, AlgoResults_small$Omega_sample_s, AlgoResults_small$Omega_sample_phys_s, 
-                                     AlgoResults_small$d_s, AlgoResults_small$d_full_s, AlgoResults_small$sampled_full_s, propCOV, AlgoResults_small$tolerance_s)
-      
+                                     AlgoResults_small$d_s, AlgoResults_small$d_full_s, AlgoResults_small$sampled_full_s, propCOV, AlgoResults_small$tolerance_s, 
+                                     rel_weights = AlgoResults_small$rel_weights)
+      print(node_return)
       particle_divisions <- split(1:AlgoParams$smc_Npart, sort(1:AlgoParams$smc_Npart%%AlgoParams$n_nodes))
       
       AlgoResults <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
       for (j in 1:length(node_return)){
+        print(node_return[[j]])
         AlgoResults$Omega_sample[particle_divisions[[j]],,s] <- node_return[[j]]$Omega_sample_node
         AlgoResults$Omega_sample_phys[particle_divisions[[j]],,s] <- node_return[[j]]$Omega_sample_phys_node
         AlgoResults$d[particle_divisions[[j]],,s] <- node_return[[j]]$d_node
-        AlgoResults$d_full[particle_divisions[[j]],,s] <- node_return[[j]]$d_full_node
+        AlgoResults$d_full[particle_divisions[[j]],,,s] <- node_return[[j]]$d_full_node
         AlgoResults$sampled_full[particle_divisions[[j]],,,s] <- node_return[[j]]$sampled_full_node
       }
       saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
     } else {
       step_s_results <- perturb_particles(s, propCOV, AlgoParams, AlgoResults_small$tolerance_s, AlgoResults_small$W_s, AlgoResults_small$Omega_sample_s, AlgoResults_small$Omega_sample_phys_s,
-                        AlgoResults_small$d_s, AlgoResults_small$d_full_s, AlgoResults_small$sampled_full_s)
+                        AlgoResults_small$d_s, AlgoResults_small$d_full_s, AlgoResults_small$sampled_full_s, rel_weights = AlgoResults_small$rel_weights)
       AlgoResults <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
       AlgoResults$Omega_sample[,,s] <- step_s_results$Omega_sample_s
       AlgoResults$Omega_sample_phys[,,s] <- step_s_results$Omega_sample_phys_s
       AlgoResults$d[,,s] <- step_s_results$d_s
-      AlgoResults$d_full[,,s] <- step_s_results$d_full_s
+      AlgoResults$d_full[,,,s] <- step_s_results$d_full_s
       AlgoResults$sampled_full[,,,s] <- step_s_results$sampled_full_s
       saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
     }
@@ -629,7 +668,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     
     print(s)
     
-    #plot_abcsmc(s, n_x, AlgoParams$smc_Npart, AlgoResults$Omega_sample_phys, Omega)
+    plot_abcsmc(s, n_x, AlgoParams$smc_Npart, AlgoResults$Omega_sample_phys, Omega)
     
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))  
   }

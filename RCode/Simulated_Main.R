@@ -17,31 +17,73 @@ source('RCode/Simulate.R')
 
 AlgoParams$Np = 2
 AlgoParams$m_CRPS = 2
-AlgoParams$smc_Npart = 4
+AlgoParams$smc_Npart = 10
 AlgoParams$cores = 4
-AlgoParams$n_nodes = 2
+AlgoParams$n_nodes = 1
 out <- delmoral_parallel(AlgoParams, Model, unfinished=F, oldtag='')
 
 #Parameterise the model and simulate the data:
-Omega <- list(Lambda1 = list(mu=9, sigma=1.1),
-               Lambda2 = list(mu=10.8, sigma=0.88),
-               Lambda3 = list(mu=8.5, sigma=1.1),
-               Lambda4 = list(mu=9.8, sigma=0.85),
-               eps = list(local=0.05, hazard=0.1),
-               vuln_coeff = list(PDens=0, SHDI=0, GNIc=0.03, Vs30=0, EQFreq=0, Mag=0, FirstHaz=0, Night=0, FirstHaz.Night=0),
-               check = list(check=0.5))
 
- ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects/Train/EQ20220701IRN_166')
- DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
+Omega <- list(Lambda1 = list(nu=9.6, kappa=1.9049508),
+              Lambda2 = list(nu=9.8626452, kappa=1.9049508),
+              Lambda3 = list(nu=9.3, kappa=0.9),
+              Lambda4 = list(nu=9.9, kappa=1.9),
+              theta= list(theta1=0.6),
+              eps = list(local=2.2292053, hazard_mort=0.8383464, hazard_disp=0.9, hazard_bd=0.9, hazard_cor=0.55),
+              vuln_coeff = list(PDens=0, SHDI=-0.5, GNIc=-0.1, Vs30=0.1, EQFreq=-0.1, FirstHaz=0.05, Night=0.05, FirstHaz.Night=0.1),
+              check = list(check=0.5))
 
+Model$HighLevelPriors(Omega %>% addTransfParams(),Model)
+
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects_SubNat/Train/EQ20191118PHL_130')
+
+xx <- DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, Method = AlgoParams, output='SampledAgg')
+
+for(var in c('PDens', 'EQFreq', 'GNIc', 'Vs30', 'SHDI', 'hazMean1')){
+  print(range(ODDyOld[[var]], na.rm=T))
+  print(range(ODDyAgg[[var]], na.rm=T))
+}
+
+ 
+ Omega %<>% addTransfParams()
+ Intensity <- seq(4.5, 10, 0.01)
+ Dfun<-function(I_ij, Omega) h_0(I = I_ij,I0 = 4.3,Omega=Omega)
+ Damage <- Dfun(Intensity, Omega)
+ D_MortDisp <-  D_MortDisp_calc(Damage, Omega)
+ D_MortDisp <-  D_MortDisp_calc(Damage, Omega)
+ D_BD <- D_Dam_calc(Damage, Omega)
+ # D_BD <-  plnorm(Damage, Omega$Lambda3$nu, Omega$Lambda3$omega)
+ #plot(Intensity, D_MortDisp[1,], col='red', type='l', ylab='Proportion', lwd=3);
+ plot(Intensity, D_MortDisp[2,], col='blue', type='l', ylab='Proportion', lwd=3);
+ #lines(Intensity, log(D_BD), col='green', type='l', ylab='Proportion', lwd=3);
+ for (i in 1:NROW(params_store)){
+   Omega <- params_store[i,] %>% relist(skeleton=Model$skeleton) %>% unlist() %>% Proposed2Physical(Model)
+   Omega %<>% addTransfParams()
+   Intensity <- seq(4.5, 10, 0.01)
+   Dfun<-function(I_ij, Omega) h_0(I = I_ij,I0 = 4.3,Omega=Omega)
+   Damage <- Dfun(Intensity, Omega)
+   D_MortDisp <-  D_MortDisp_calc(Damage, Omega)
+   D_MortDisp <-  D_MortDisp_calc(Damage, Omega)
+   D_BD <- D_Dam_calc(Damage, Omega)
+   # D_BD <-  plnorm(Damage, Omega$Lambda3$nu, Omega$Lambda3$omega)
+   #lines(Intensity, D_MortDisp[1,], col='red', type='l', ylab='Proportion', lwd=3);
+   lines(Intensity, D_MortDisp[2,], col='blue', type='l', ylab='Proportion', lwd=3);
+   #lines(Intensity, log(D_BD), col='green', type='l', ylab='Proportion', lwd=3);
+ }
+#  
+ 
+ 
  AlgoParams$cores <- 1
  AlgoParams$NestedCores <- 6
  AlgoParams$Np <- 2
- AlgoParams$m_CRPS <- 3
+ AlgoParams$m_CRPS <- 2
  start_time <- Sys.time()
  impact_sample <- SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams)
  finish_time <- Sys.time()
  finish_time-start_time
+ 
+ dist_samp <- CalcDist(impact_sample, AlgoParams)
+ 
 # 
 # AlgoParams$cores <- 1
 # AlgoParams$NestedCores <- 6

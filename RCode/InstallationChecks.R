@@ -12,7 +12,7 @@ ODDy<-readRDS(paste0(dir,"IIDIPUS_Input/ODDobjects/EQ20210814HTI_10919_example")
 # This is the model parameterisation, currently trained only on earthquakes on a global level
 Omega<-readRDS(paste0(dir,"IIDIPUS_Results/Omega_v2_20210828.Rdata"))
 # Test to see if the displacement prediction calculations are working
-ODDy%<>%DispX(Omega = Omega,center = Model$center, BD_params = Model$BD_params, LL=F,Method = AlgoParams)
+ODDy%<>%DispX(Omega = Omega,center = Model$center, Method = AlgoParams, output='SampledAgg')
 
 #@@@@@@@@@@@@@@@ TEST 1: DISPLACEMENT PREDICTIONS @@@@@@@@@@@@@@@#
 if(!(sum(ODDy$Disp)>1e5 & sum(ODDy$Disp)<4e5)) { stop("Test 1 failed - displacement predictions with the example ODD object for HTI EQ 14-08-2021 is erroneous")

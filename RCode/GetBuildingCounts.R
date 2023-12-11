@@ -399,7 +399,7 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   # This could be addressed by determining the polygons of the missing quadkeys and assigning the intersecting pixels to NA, but haven't had time to implement this yet. 
   
   bbox <- ODD@bbox
-  zoom <- 8
+  zoom <- 9
   
   tiles <- getMercantileTiles(bbox[1], bbox[2], bbox[3], bbox[4], 9)
   quad_keys <- list()

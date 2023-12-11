@@ -7,9 +7,82 @@
 # results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2023-08-28_192239'
 # results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2023-08-29_170442'
 #results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2023-09-03_171706'
-results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2023-09-13_182006'
+#results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2023-09-13_182006'
+#results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2023-11-02_170925'
+#results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2023-11-04_225255'
+results_file <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2023-12-08_091753'
+
 
 AlgoResults <- readRDS(results_file)
+AlgoResults$sampled_full <- NULL
+
+compare_sampled_full_observed <- function(){
+  Omega_min.d <- AlgoResults$Omega_sample_phys[1,,1] %>% relist(skeleton=Model$skeleton)
+  impact_sample <- SampleImpact(dir, Model, Omega_min.d  %>% addTransfParams(), AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% replace(which(names(AlgoParams)==c('Np')), 1))
+  #observed <- impact_sample$poly[[1]]$observed
+  #impact_type <- impact_sample$poly[[1]]$impact
+  
+  p <- 346
+  sampled <- AlgoResults$sampled_full[p,,,AlgoResults$s_finish]
+  plot_df <- data.frame(sampled)
+  names(plot_df) <- paste0('sampled', 1:NCOL(plot_df))
+  plot_df$impact_type=impact_sample$poly[[1]]$impact
+  plot_df$observed=impact_sample$poly[[1]]$observed
+  plot_df$event_id=impact_sample$poly[[1]]$event_id
+  
+  ggplot(plot_df %>% filter(impact_type=='buildDam' & event_id==135), aes(x=log(observed+1), y=log(sampled3+1))) + 
+    geom_point() + geom_abline(slope=1, intercept=0)
+  
+}
+
+check_changes_1_event <- function(){
+  ODD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/EQ20191016PHL_124')
+  Omega <- list(Lambda1 = list(nu=9.6, kappa=1.9049508),
+       Lambda2 = list(nu=9.8626452, kappa=1.9049508),
+       Lambda3 = list(nu=7.8, kappa=3),
+       Lambda4 = list(nu=9.9, kappa=1),
+       theta= list(theta1=0.6),
+       eps = list(local=0.001, hazard_mort=0.8383464, hazard_disp=0.9, hazard_bd=0.001, hazard_cor=0.55),
+       vuln_coeff = list(PDens=0, SHDI=0, GNIc=0, Vs30=0, EQFreq=0, FirstHaz=0, Night=0, FirstHaz.Night=0),
+       check = list(check=0.5))
+  impact <- DispX(ODD, Omega %>% addTransfParams(), Model$center, Model$BD_params, AlgoParams %>% replace(which(names(AlgoParams)==c('Np')), 5), output='SampledAgg')
+  plot_df <- impact[[1]][, c('observed', 'impact')]
+  for (i in 1:length(impact)){
+    plot_df[,paste0('sampled', i)] <- impact[[i]]$sampled
+  }
+  plot_df$sampled_min <- apply(plot_df[,grep("sampled", names(plot_df))], 1, min)
+  plot_df$sampled_max <- apply(plot_df[,grep("sampled", names(plot_df))], 1, max)
+  plot_df$sampled_median <- apply(plot_df[,grep("sampled", names(plot_df))], 1, median)
+  ggplot(plot_df %>% filter(impact=='buildDam'), aes(x=log(observed+1), y=log(sampled_median+1), ymin=log(sampled_min+1), ymax=log(sampled_max+1))) + 
+    geom_point() + geom_abline(slope=1, intercept=0) #+ geom_errorbar()
+  
+  ints <- seq(6,8, 0.05)
+  plot(ints, D_Dam_calc(h_0(ints,Model$I0,Omega %>% addTransfParams()), Omega %>% addTransfParams()))
+  
+  bd_impacts <- data.frame(buildings=numeric(), intensity=numeric(), observed=numeric())
+  for (i in 1:NROW(ODD@impact)){
+    if(ODD@impact$impact[i] != 'buildDam') next
+    buildings <- sum(ODD$nBuildings[ODD@polygons[[ODD@impact$polygon[i]]]$indexes])
+    intensity <- max(ODD$hazMean1[ODD@polygons[[ODD@impact$polygon[i]]]$indexes], na.rm=T)
+    observed <- ODD@impact$observed[i]
+    bd_impacts %<>% add_row(buildings=buildings, intensity=intensity, observed=observed)
+  }
+  plot(bd_impacts$intensity, jitter(bd_impacts$observed/bd_impacts$buildings))
+  which(bd_impacts$intensity > 7 & bd_impacts$observed==0)
+}
+
+# plot(ints, h_0(ints,Model$I0,Omega %>% addTransfParams()))
+# h_0<-function(I,I0, Omega){
+#   I0 <- 7
+#   ind<-I>I0
+#   h<-rep(0,length(I))
+#   #h[ind]<- I[ind]-I0
+#   h[ind] <- exp(Omega$theta$theta1*I[ind])
+#   return(h)
+# }
+# points(ints, h_0(ints,Model$I0,Omega %>% addTransfParams()), col='red')
+
+
 
 addAlgoParams <- function(AlgoResults){
   AlgoResults$s_finish <- which(is.na(AlgoResults$Omega_sample_phys[1,1,]))[1]-1
@@ -205,14 +278,62 @@ plot_predictive <- function(AlgoResults, dat='Train'){
 
 plot_predictive_train_vs_test <- function(AlgoResults){
   
-  M <- 1
+  M <- 10
+  start_time <- Sys.time()
   AlgoResults %<>% addAlgoParams()
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
+  Omega_min.d <- AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
   df_poly_train <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat='Train', single_particle=T, particle=particle_min.d[1])
   df_poly_test <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat='Test', single_particle=T, particle=particle_min.d[1])
+  #df_poly_jitter <- SampleImpact(dir, Model, Omega_min.d %>% addTransfParams(), AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), M) %>% replace(which(names(AlgoParams)==c('Np')), 1))
+    
+  finish_time <- Sys.time()
+  finish_time-start_time
   
-  impact_type <- 'buildDest'
-  k <- 10
+  if (M > 1){
+    df_poly_jitter <- rbind(df_poly_train, df_poly_test)
+    jitter_val <- function(x){
+      return_arr <- c()
+      for (x_i in x){
+        if(x_i==0){return_arr <- c(return_arr, runif(1,0.2, 0.3))}
+        else {return_arr <- c(return_arr, runif(1, x_i-0.5, x+0.5))}
+      }
+      return(return_arr)
+    }
+    #df_poly_jitter[which(df_poly_jitter==0, arr.ind=T)] = 0.1
+    df_poly_jitter$observed <- sapply(df_poly_jitter$observed, jitter_val)
+    df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1:2,jitter_val)
+    df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- t(apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1,sort))
+    
+    M_lower <- round(quantile(1:M, 0.05))
+    M_lower <- ifelse(M_lower==0, 1, M_lower)
+    M_median <- round(quantile(1:M, 0.5))
+    M_upper <- round(quantile(1:M, 0.95))
+    
+    ggplot(df_poly_jitter %>% filter(impact=='mortality'), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+      geom_errorbar() + geom_point(aes(col=train_flag)) + 
+      scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+      scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+      #geom_pointrange(aes(col=train_flag)) + 
+      geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
+      ylab('Sampled Mortality') + xlab('Observed Mortality') + scale_color_manual(values = c('red', 'blue'))
+    
+    ggplot(df_poly_jitter %>% filter(impact=='buildDam'), mapping=aes(x=log(observed_jitter+1), y=log(get(paste0('sampled.', M_median))+1), ymin=log(get(paste0('sampled.', M_lower))+1), ymax=log(get(paste0('sampled.', M_upper))+1))) + 
+      geom_errorbar(position = position_dodge(width = 0.1)) +
+      geom_point(aes(col=inferred), position = position_dodge(width = 0.1)) + geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
+      ylab('log(Sampled Impact+1)') + xlab('log(Observed Impact+1)')+ scale_color_manual(values = c('red', 'blue'))
+    
+    ggplot(df_poly_jitter %>% filter(impact=='displacement'), mapping=aes(x=log(observed_jitter+1), y=log(get(paste0('sampled.', M_median))+1), ymin=log(get(paste0('sampled.', M_lower))+1), ymax=log(get(paste0('sampled.', M_upper))+1))) + 
+      geom_errorbar(position = position_dodge(width = 0.1)) +
+      geom_point(aes(col=train_flag), position = position_dodge(width = 0.1)) + geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
+      ylab('log(Sampled Impact+1)') + xlab('log(Observed Impact+1)')+ scale_color_manual(values = c('red', 'blue'))
+  
+    quants <- (apply(df_poly_jitter[,c(grep('observed', names(df_poly_jitter)),grep('sampled', names(df_poly_jitter)))], 1, sample_quant)-runif(NROW(df_poly_jitter),0,1))/(length(grep('sampled', names(df_poly_jitter)))+1)
+    hist(quants[impact_type=='mortality'])
+  }
+  
+  impact_type <- 'mortality'
+  k <- 1
   ix_train <- which(df_poly_train$impact==impact_type)
   df_poly <- rbind(df_poly_train, df_poly_test)
   ix <- which(df_poly$impact==impact_type)
@@ -223,6 +344,47 @@ plot_predictive_train_vs_test <- function(AlgoResults){
   #large_discrepancies
   df_poly[which(abs(log(df_poly$sampled.1+1)-log(df_poly$observed+1)) >7),] %>% filter(impact==impact_type)
 }
+
+check_quants <- function(AlgoResults){
+  
+  M <- 10
+  start_time <- Sys.time()
+  AlgoResults %<>% addAlgoParams()
+  particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
+  Omega_min.d <- AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  impact_sample <- SampleImpact(dir, Model, Omega_min.d  %>% addTransfParams(), AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), M) %>% replace(which(names(AlgoParams)==c('Np')), 1))
+  
+  observed <- impact_sample$poly[[1]]$observed
+  impact_type <- impact_sample$poly[[1]]$impact
+  samples_allocated <- 1:length(impact_sample$poly)
+  samples_combined <- sapply(impact_sample$poly[samples_allocated], function(x){x$sampled}) #doesn't work if samples_allocated is length 1
+  medians <- apply(samples_combined, 1, median)
+  sum((log(medians[which(impact_type=='mortality')]+10)-log(observed[which(impact_type=='mortality')]+10))^2 * unlist(AlgoParams$kernel_sd['mortality']))
+  sum((log(medians[which(impact_type=='displacement')]+10)-log(observed[which(impact_type=='displacement')]+10))^2 * unlist(AlgoParams$kernel_sd['displacement']))
+  sum((log(medians[which(impact_type=='buildDam')]+10)-log(observed[which(impact_type=='buildDam')]+10))^2 * unlist(AlgoParams$kernel_sd['buildDam']))
+  
+  quants <- (apply(cbind(observed,samples_combined), 1, sample_quant)-runif(length(observed),0,1))/(NCOL(samples_combined)+1)
+  hist(quants[impact_type=='mortality'])
+  hist(quants[impact_type=='displacement'])
+  hist(quants[impact_type=='buildDam' & !impact_sample$poly[[1]]$inferred])
+  10*AndersonDarlingTest(quants[impact_type=='mortality'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['mortality'])
+  10*AndersonDarlingTest(quants[impact_type=='displacement'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['displacement'])
+  10*AndersonDarlingTest(quants[impact_type=='buildDam'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['buildDam'])
+
+  finish_time <- Sys.time()
+  finish_time-start_time
+}
+
+check_outliers <- function(){
+  start_time <- Sys.time()
+  AlgoResults %<>% addAlgoParams()
+  particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
+  Omega_min.d <- AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  impact_sample <- SampleImpact(dir, Model, Omega_min.d  %>% addTransfParams(), AlgoParams)
+  
+  impact_sample$poly[[1]] %>% filter(impact=='buildDam' & log(sampled+1)>(log(observed+1)+3))
+}
+
 
 add_covar <- function(df_poly, covars='EQFreq', dat='all'){
 
@@ -366,7 +528,7 @@ add_landslide_flag <- function(poly_df){
 }
 
 add_hazard_info <- function(df_poly){
-  folderin <- paste0(dir,"IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_additionalInfo3/")
+  folderin <- paste0(dir,"IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_wMaxMMIDiff/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
   
   df_poly$depth <- NA
@@ -474,11 +636,11 @@ manual_modify_params = function(AlgoResults){
 plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all'){
   #plot covariates against discrepancy between sampled and observed
   
-  M <- 40
+  M <- 10
   AlgoResults %<>% addAlgoParams()
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
   proposed <- relist(AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish], skeleton=Model$skeleton)
-  proposed$vuln_coeff$Vs30=0
+  #proposed$vuln_coeff$Vs30=0
   # proposed$vuln_coeff$Night=0
   # proposed$vuln_coeff$FirstHaz.Night=0
   # proposed$check$check = 0.5
@@ -490,7 +652,7 @@ plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all'){
   df_poly$sampled_mean <- apply(df_poly[grep("sampled", names(df_poly))], 1, mean)
   
   
-  impact_type <- 'displacement'
+  impact_type <- 'buildDam'
   k <- 10
   
   df_poly %>% filter(impact=='mortality' & log(df_poly$sampled_median+10) < 3 & log(df_poly$observed+10)>5)
@@ -858,23 +1020,30 @@ plot_vuln_corr = function(AlgoResults, dat='all'){
 
 plot_fitted_vuln_coefficients = function(AlgoResults){
   AlgoResults %<>% addAlgoParams()
-  var_posts <- data.frame(AlgoResults$Omega_sample_phys[,11:19,AlgoResults$s_finish])
-  names(var_posts) <-  sub("^[^.]*\\.\\s*", "", names(unlist(Omega))[11:19])
+  var_posts <- data.frame(AlgoResults$Omega_sample_phys[,15:22,AlgoResults$s_finish])
+  names(var_posts) <-  sub("^[^.]*\\.\\s*", "", names(unlist(Omega))[15:22])
   par(mfrow=c(2,4))
   for (var in c('PDens', 'SHDI', 'GNIc', 'Vs30', 'EQFreq', 'FirstHaz', 'Night', 'FirstHaz.Night')){
     hist(var_posts[[var]], main=var, xlab='')
     abline(v=0, col='red')
   }
   
-  for (i in 11:19){
+  for (i in 15:22){
     p_H_given_y = sum(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish]>0)/length(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish])
     p_H = sum(AlgoResults$Omega_sample_phys[,i,1]>0)/length(AlgoResults$Omega_sample_phys[,i,1])
     print(paste('Bayes factor for', names(unlist(Omega))[i], ':', round(p_H_given_y * (1-p_H)/((1-p_H_given_y)*p_H), 3)))
     print(paste('Post. prob of greater than 0:', sum(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish]>0)/length(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish])))
   }
-  plot(AlgoResults$Omega_sample_phys[,12,39], AlgoResults$Omega_sample_phys[,13,39], xlab='AveSchYrs', ylab='LifeExp')
   
-  
+}
+
+MAD_investigation = function(AlgoResults){
+  for (i in 1:6){
+    d <- AlgoResults$d_full[,i,1]
+    d_mad <- sum(abs(d-mean(d)))/length(d) 
+    if (i > 3){d_mad <- d_mad / 10}
+    print(d_mad)
+  }
 }
 
 plot_post_predictive = function(AlgoResults, M){
@@ -1113,4 +1282,66 @@ for (i in c(5,6,7,8,16,20)){
   lines(density(AlgoResults$Omega_sample_phys[,i,45]), col='red')
 }
 
+
+compare2Pager <- function(AlgoResults){
+  M <- 10
+  start_time <- Sys.time()
+  AlgoResults %<>% addAlgoParams()
+  particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
+  Omega_min.d <- AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  impact_sample <- SampleImpact(dir, Model, Omega_min.d  %>% addTransfParams(), 
+                                AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), M) 
+                                           %>% replace(which(names(AlgoParams)==c('Np')), 1) 
+                                           %>% replace(which(names(AlgoParams)==c('SubNat')), F), 
+                                output='SampledAgg')
+  
+  folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+  ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
+  
+  plot_df <- impact_sample$poly[[1]][, c('observed', 'impact', 'alertlevel_fatalities', 'alertnull_fatalities', 'event_id')]
+  for (i in 1:length(impact_sample$poly)){
+    plot_df[,paste0('sampled', i)] <- impact_sample$poly[[i]]$sampled
+  }
+  
+  plot_df$max_mmi <- NA
+  
+  folderin_haz <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_wMaxMMIDiff/'
+  ufiles_haz <- na.omit(list.files(path=folderin_haz,pattern=Model$haz,recursive = T,ignore.case = T))
+  for(i in 1:NROW(plot_df)){
+    file_match <- grep(paste0("_", plot_df$event_id[i], "\\b"),  ufiles_haz, value = TRUE)
+    HAZy <- readRDS(paste0(folderin_haz, file_match ))
+    which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(x$mean)))
+    print(which.max.mmi)
+    plot_df$max_mmi[i] <- HAZy$hazard_info$max_mmi[which.max.mmi]
+  }
+  
+  plot_df$sampled_min <- apply(plot_df[,grep("sampled", names(plot_df))], 1, min)
+  plot_df$sampled_max <- apply(plot_df[,grep("sampled", names(plot_df))], 1, max)
+  plot_df$sampled_median <- apply(plot_df[,grep("sampled", names(plot_df))], 1, median)
+  plot_df$sampled_mean <- apply(plot_df[,grep("sampled", names(plot_df))], 1, mean)
+  plot_df$alertlevel_ODDRIN <- ifelse(plot_df$sampled_median > 1000, 'red', ifelse(plot_df$sampled_median>100, 'orange', ifelse(plot_df$sampled_median>1, 'yellow', 'green')))
+  
+  ggplot(plot_df %>% filter(impact=='mortality' & alertnull==F), aes(x=max_mmi, y= log(observed+1)-log(sampled_median+1))) + geom_point() + xlab('max_mmi_diff')
+  
+  ggplot(plot_df %>% filter(impact=='mortality' & alertnull==F), aes(x=observed, y=sampled_median, col=max_mmi, ymin=sampled_min, ymax=sampled_max+1)) + 
+    scale_x_continuous(trans=scales::pseudo_log_trans(base = 10), breaks=c(0, 10^seq(0,5,1)), labels = scales::comma) + 
+    scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks=c(0, 10^seq(0,5,1)), labels = scales::comma) +
+    geom_point() + geom_abline(slope=1, intercept=0) + geom_errorbar() 
+  
+  ggplot(plot_df %>% filter(impact=='mortality' & alertnull==F), aes(x=observed, y=sampled_median, col=alertlevel_fatalities, ymin=sampled_min, ymax=sampled_max+1)) + 
+    scale_x_continuous(trans=scales::pseudo_log_trans(base = 10), breaks=c(0, 10^seq(0,5,1)), labels = scales::comma) + 
+    scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks=c(0, 10^seq(0,5,1)), labels = scales::comma) +
+    geom_point() + geom_abline(slope=1, intercept=0) + geom_errorbar() + scale_color_manual(values=list('red'='red', 'orange'='orange', 'yellow'='yellow', 'green'='green', 'null'='white'))
+  
+  ggplot(plot_df %>% filter(impact=='mortality' & alertnull_fatalities==F), aes(x=1:112, y=log(observed+1), col=alertlevel_fatalities, ymin=log(sampled_min+1), ymax=log(sampled_max+1))) + 
+    geom_point() + scale_color_manual(values=list('red'='red', 'orange'='orange', 'yellow'='yellow', 'green'='green', 'null'='white'))# + geom_errorbar() 
+  
+  ggplot(plot_df %>% filter(impact=='mortality' & alertnull==F), aes(x=1:101, y=log(observed+1), col=alertlevel_fatalities, ymin=log(sampled_min+1), ymax=log(sampled_max+1))) + 
+    geom_point() + scale_color_manual(values=list('red'='red', 'orange'='orange', 'yellow'='yellow', 'green'='green', 'null'='white'))# + geom_errorbar() 
+  
+  ggplot(plot_df %>% filter(impact=='mortality' & alertnull_fatalities==F), aes(x=event_id, y=log(observed+1), col=alertlevel_ODDRIN, ymin=log(sampled_min+1), ymax=log(sampled_max+1))) + 
+    geom_point(size=2.5) + scale_color_manual(values=list('red'='red', 'orange'='orange', 'yellow'='yellow', 'green'='green', 'null'='white')) + # + geom_errorbar() 
+    geom_abline(intercept=log(1000+1), slope=0, col='red') + geom_abline(intercept=log(100+1), slope=0, col='orange') + geom_abline(intercept=log(1+1), slope=0, col='yellow')
+  
+}
 

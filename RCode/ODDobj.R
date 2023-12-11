@@ -402,13 +402,13 @@ FormParams<-function(ODD,listy){
   # return(Params)
 }
 
-setGeneric("DispX", function(ODD,Omega,center, BD_params, LL, sim=F, Method)
+setGeneric("DispX", function(ODD,Omega,center, Method, output)
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
-setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F, 
+setMethod("DispX", "ODD", function(ODD,Omega,center,
                                    Method=list(Np=20,cores=8,cap=-300, 
                                                kernel_sd=list(displacement=1,mortality=16,buildDam=1.2,buildDest=0.9, buildDamDest=1), 
-                                               kernel='crps_with_mean')
+                                               kernel='crps_with_mean'), output='SampledAgg'
 ){
   # ... Function description ...
   # LL: Returns 'likelihood' if true or data simulated from model if false
@@ -424,7 +424,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
   Sinc<-ExtractCIndy(ODD,var = SincN)
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
-  if(!LL) {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$AveSchYrs)))
+  if(output != 'LL') {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$AveSchYrs)))
   } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) ))#!ODD$ISO3C%in%ODD@impact$iso3))
   
   # Calculate non-local linear predictor values
@@ -433,17 +433,26 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   
   finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetLP = finish_time-start_time); start_time <- Sys.time()
 
-  BD_data_present <- F #!is.null(ODD$nBuildings) #just for now
+  BD_data_present <- !is.null(ODD$nBuildings)
   hrange<-grep("hazMean",names(ODD),value = T)
   hrange_order <- order(paste(ODD@hazinfo$eventdates, ODD@hazinfo$eventtimes))
   
   
   event_lp <- getLP_event(ODD@hazinfo, Omega, Params)
   
+  cov_mort_disp = Omega$eps$hazard_cor * Omega$eps_adj$hazard_mort * Omega$eps_adj$hazard_disp
+  cov_mort_bd = Omega$eps$hazard_cor * Omega$eps_adj$hazard_mort * Omega$eps_adj$hazard_bd
+  cov_disp_bd = Omega$eps$hazard_cor * Omega$eps_adj$hazard_disp * Omega$eps_adj$hazard_bd
+  covar_matrix = cbind(c(Omega$eps_adj$hazard_mort^2, cov_mort_disp, cov_mort_bd), c(0, Omega$eps_adj$hazard_disp^2, cov_disp_bd), c(0, 0, Omega$eps_adj$hazard_bd^2))
+  covar_matrix[upper.tri(covar_matrix)] = covar_matrix[lower.tri(covar_matrix)]
   
-  eps_event <- array(0, dim=c(length(hrange), Method$Np))
-  for (h in 1:length(hrange)){
-    eps_event[h,] <- stochastic(Method$Np,Omega$eps$hazard)
+  eps_event <- array(0, dim=c(length(hrange), 3, Method$Np))
+  for (i in 1:Method$Np){
+    eps_event[,,i] <- rmvnorm(length(hrange), rep(0, 3), sigma=covar_matrix)
+    #eps_event[,,i] <- rmvt(length(hrange), sigma=covar_matrix, df=5)
+    #eps_event <- stochastic(Method$Np,Omega$eps_adj$hazard)
+    #eps_disp[h,] <- stochastic(Method$Np,Omega$eps_adj$disp)
+    #eps_bd[h,] <- stochastic(Method$Np,Omega$eps_adj$bd)
   }
   
   finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
@@ -496,11 +505,11 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       
       I_ij<-ODD@data[ij,h]
 
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]] + event_lp[h_i] + eps_event[h_i,nonzero_pop[,2]], error=function(e) NA)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]], error=function(e) NA)
       
       if(any(is.na(Damage))) print(ij)
       
-      D_MortDisp <- D_MortDisp_calc(Damage, Omega) #First row of D_MortDisp is D_Mort, second row is D_Disp
+      D_MortDisp <- D_MortDisp_calc(Damage, Omega, adrop(eps_event[h_i,1:2,nonzero_pop[,2], drop=F], drop = 1)) #First row of D_MortDisp is D_Mort, second row is D_Disp
       D_Rem <- pmax(0, 1 - D_MortDisp[2,] - D_MortDisp[1,]) #probability of neither death nor displacement. Use pmax to avoid errors caused by numerical accuracy.
       Dam <- Fbdam(lPopS[nonzero_pop], D_MortDisp[2,], D_MortDisp[1,], D_Rem)
       
@@ -560,10 +569,10 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       if(all(nUnaff==0)) break #if no remaining buildings, skip modelling
 
       I_ij<-ODD@data[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + event_lp[h_i] + eps_event[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + event_lp[h_i], error=function(e) NA) #calculate unscaled damage (excluding GDP)
       #Damage_mean <- h_0(I_ij,Params$I0,Omega) + locallinp_buildings
       
-      D_Dam <- D_Dam_calc(Damage, Omega) #First row of D_DestDam is D_Dest, second row is D_Dam
+      D_Dam <- D_Dam_calc(Damage, Omega, eps_event[h_i,3,]) #First row of D_DestDam is D_Dest, second row is D_Dam
       #D_Dam_mean <- D_Dam_calc(Damage_mean, Omega)
       
       # Accumulate the number of buildings damaged/destroyed, but not the number of buildings remaining
@@ -571,9 +580,9 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
       nUnaff <- nUnaff - nDam_new
       nDam <- nDam + nDam_new
       
-      nDam_new_mean = nUnaff_mean * D_Dam_mean
-      nUnaff_mean = nUnaff_mean - nDam_new_mean
-      nDam_mean = nDam_mean + nDam_new_mean
+      #nDam_new_mean = nUnaff_mean * D_Dam_mean
+      #nUnaff_mean = nUnaff_mean - nDam_new_mean
+      #nDam_mean = nDam_mean + nDam_new_mean
     }
     return(list(samples = rbind(tPop[1:2,,drop=FALSE], nDam[1:Method$Np])))#, 
            #means = c(sum(lPopMort_mean), sum(lPopDisp_mean), nDam_mean)))
@@ -584,13 +593,13 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   
   #Method$cores is equal to AlgoParams$NestedCores (changed in Model file)
   if(Method$cores>1) { 
-    CalcDam_out <- mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$cores)
+    CalcDam_out <- mclapply(X = notnans,FUN = CalcDam,mc.cores = 4)
   } else  {CalcDam_out <- lapply(X = notnans,FUN = CalcDam)}
   
   Dam[notnans,,]<-aperm(simplify2array(lapply(CalcDam_out, function(x) x$samples)), perm=c(3,2,1))
   #Dam_means[notnans,]<- aperm(simplify2array(lapply(CalcDam_out, function(x) x$means)), perm=c(2,1))
   
-  if (sim){
+  if (output=='SampledFull'){
     return(Dam)
   }
   
@@ -608,8 +617,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   
   funcy<-function(i,LLout=T, kernel_sd=Method$kernel_sd, kernel=Method$kernel, cap=Method$cap, polygons_indexes=ODD@polygons) {
     
-    tmp<-data.frame(iso3=ODD$ISO3C, displacement=Dam[,i,1], mortality=Dam[,i,2], buildDam=Dam[,i,3], 
-                                    mort_mean=Dam_means[,1], disp_mean=Dam_means[,2], buildDam_mean=Dam_means[,3])
+    tmp<-data.frame(iso3=ODD$ISO3C, displacement=Dam[,i,1], mortality=Dam[,i,2], buildDam=Dam[,i,3])#, 
+                                    #mort_mean=Dam_means[,1], disp_mean=Dam_means[,2], buildDam_mean=Dam_means[,3])
     impact_sampled<-data.frame(polygon = numeric(), impact = character(), sampled = numeric(), mean=numeric())
     
     for (polygon_id in unique(ODD@impact$polygon)){
@@ -618,18 +627,18 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
         if (impact == 'mortality'){
           impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
                                                  impact=impact,
-                                                 sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T)),
-                                                 mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'mort_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
+                                                 sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
+                                                 #mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'mort_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
         } else if (impact=='displacement'){
           impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
                                                  impact=impact,
-                                                 sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T)),
-                                                 mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'disp_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
+                                                 sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
+                                                 #mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'disp_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
         } else {
           impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
                                                  impact=impact,
-                                                 sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T)),
-                                                 mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'buildDam_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
+                                                 sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
+                                                 #mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'buildDam_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
         }
       }
     }
@@ -639,7 +648,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   
   }
   
-  if (sim == T){ 
+  if (output == 'ODDwithSampled'){ 
     ODD@data$Disp<-Dam[,1,1]  #should this be named data$DispPred or something instead?
     ODD@data$Mort<-Dam[,1,2]
     ODD@data$BuildDam<-Dam[,1,3]
@@ -665,7 +674,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
     ODD@impact <- ODD@impact[!ODD@impact$impact %in% c('buildDam', 'buildDest', 'buildDamDest'),]
   }
   
-  if(LL == F){
+  if(output == 'SampledAgg'){
     return(lapply(1:Method$Np, funcy, LLout=F))
   }
   
@@ -683,7 +692,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center, BD_params, LL=F, sim=F,
   #   MLE<-which.max(log(exp(outer)))
   # }
   
-  if(LL) return(outer)
+  if(output=='LL') return(outer)
   
   if(Method$Np == 1){
     MLE=1
@@ -794,6 +803,68 @@ GetVarName<-function(varname){
                "RangeDisp" = "Range")
   
   as.character(lookup[varname])
+}
+
+
+plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7,map="terrain"){
+  
+  if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
+  
+  
+  bbox <- ODDy@bbox
+  gadm_iso <- getData("GADM", country="PHL", level=2)
+  gadm_iso <- gadm_iso#gSimplify(gadm_iso, 0.01)
+  gadm_iso <- intersect(gadm_iso, bbox)
+  gadm_map <- fortify(gadm_iso)
+
+  gg <- ggplot()
+  gg <- gg + geom_map(map=gadm_map, data=gadm_map, aes(x=long, y=lat, map_id=id, group=id)) + xlim(bbox[1,1],bbox[1,2]) + ylim(bbox[2,1], bbox[2,2])
+  gg <- gg + coord_map() + geom_polygon(data=gadm_map, aes(x=long, y=lat, group=group), fill='white', color='black')
+  p <- gg + xlab("Longitude") + ylab("Latitude")#+ theme(legend.position = "none")
+
+  p
+  
+  hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
+  for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+    tmp<-ODDy[variable]
+    tmp$hazard<-hazard
+    hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+  }
+  ODDy@data$hazard<-hazard
+  brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
+  
+  if(var!="hazard")  {
+    ODDy@data[is.na(ODDy@data$ISO3C),var]<-NA
+    
+    p<-p+geom_contour_filled(data = as.data.frame(ODDy),
+                             mapping = aes(Longitude,Latitude,z=ODDy@data[[var]]),
+                             breaks=breakings,alpha=alpha)+ 
+      labs(fill = GetVarName(var))
+    p<-p+geom_contour(data = as.data.frame(ODDy),
+                      mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
+                      alpha=1.0,breaks = brks, lwd=1.2) +
+      scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent") + 
+      labs(colour = "Hazard Intensity")
+    
+    # p+geom_contour_filled(data = as.data.frame(ODDy),
+    #                       mapping = aes(Longitude,Latitude,z=1-ODDy@data$tmp),
+    #                       fill="green",alpha=alpha)+ 
+    #   labs(fill = "Hazard>5")
+    
+    return(p)
+  }
+  
+  ODDy@data$hazard[ODDy@data$hazard==0]<-NA
+  
+  p<-p+geom_contour_filled(data = as.data.frame(ODDy),
+                           mapping = aes(Longitude,Latitude,z=hazard),
+                           alpha=alpha,breaks = brks) +
+    # scale_fill_discrete(low = "transparent",high = "red",na.value = "transparent") + 
+    labs(fill = "Hazard Intensity")
+  p<-p+geom_contour(data = as.data.frame(ODDy),
+                    mapping = aes(Longitude,Latitude,z=hazard),
+                    alpha=0.8,breaks = c(6.0),colour="red")
+  
   
 }
 
@@ -803,7 +874,7 @@ plotODDy<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=
   
   if(is.null(bbox)) bbox<-ODDy@bbox
   
-  mad_map <- get_stamenmap(bbox,source = "stamen",maptype = map,zoom=zoomy)
+  mad_map <- get_stamenmap(bbox,source = "terrain",maptype = map,zoom=zoomy)
   p<-ggmap(mad_map) + xlab("Longitude") + ylab("Latitude")
   
   hazard<-rep(NA_real_,length(ODDy@data$hazMean1))

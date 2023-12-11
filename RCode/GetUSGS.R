@@ -8,7 +8,7 @@
 # library(raster)
 # library(dplyr)
 # library(magrittr)
-
+library(xml2)
 # source('RCode/HAZARDobj.R')
 
 # Create an object of the required form from the USGS data
@@ -104,7 +104,7 @@ check_hazsdf<-function(hazsdf=NULL,minmag,bbox=NULL){
   return(T)
 }
 
-GetUSGS_id<-function(USGSid,titlz="tmp",I0=4.5,minmag=5){
+  GetUSGS_id<-function(USGSid,titlz="tmp",I0=4.5,minmag=5){
   
   url<-paste0("https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=",USGSid,"&format=geojson")
   tmp<-FROM_GeoJson(url)
@@ -183,6 +183,7 @@ GetUSGSfeatures<-function(USGSid){
   depth <- tmp$properties$products$dyfi[[1]]$properties$depth
   lat <- as.numeric(tmp$properties$products$dyfi[[1]]$properties$latitude)
   long <- as.numeric(tmp$properties$products$dyfi[[1]]$properties$longitude)
+  alertlevel <- as.numeric(tmp$properties$alert)
   
   if(is.null(eventdatetime)){
     eventdatetime <- tmp$properties$products$shakemap[[1]]$properties$eventtime
@@ -192,7 +193,8 @@ GetUSGSfeatures<-function(USGSid){
     lat <- as.numeric(tmp$properties$products$shakemap[[1]]$properties$latitude)
     long <- as.numeric(tmp$properties$products$shakemap[[1]]$properties$longitude)
   }
-  
+  shakemap_max_mmis <- as.numeric(unlist(sapply(tmp$properties$products$shakemap, function(x) x$properties$maxmmi)))
+  max_mmi_diff <- max(shakemap_max_mmis)-shakemap_max_mmis[1]
   
   # Latitude and longitude coordinates
   timezone <- suppressWarnings(tz_lookup_coords(lat = lat, lon = long, method = "fast"))
@@ -203,8 +205,8 @@ GetUSGSfeatures<-function(USGSid){
   eventtime <- format(datetime_local,  format = "%H:%M:%S")
   eventdate <- as.Date(format(datetime_local,  format = "%Y-%m-%d"))
   
-  return(list(eventdate=eventdate, magnitude=as.numeric(magnitude), max_mmi=as.numeric(max_mmi), depth=as.numeric(depth),
-              eventtime=eventtime))
+  return(list(eventdate=eventdate, magnitude=as.numeric(magnitude), max_mmi=as.numeric(max_mmi_diff), depth=as.numeric(depth),
+              eventtime=eventtime, alertlevel=alertlevel))
 }
 
 # Extract EQ data from USGS for a specified event
@@ -249,16 +251,22 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
   
   # lhazdat<-c(list(bbox=bbox,sdate=sdate,fdate=fdate,NumEvents=lenny,hazard="EQ",I0=I0,eventdates=NULL))
   lhazdat<-list(hazard_info=list(bbox=bbox,sdate=sdate,fdate=fdate,NumEvents=lenny,hazard="EQ",I0=I0,eventdates=c(), 
-                                 depths=c(), magnitudes=c(), max_mmi=c(), eventtimes=c(), usgs_ids=c()))
+                                 depths=c(), magnitudes=c(), max_mmi=c(), eventtimes=c(), usgs_ids=c(), alertfull=list()))
   tbbox<-rep(NA,4)
   for (i in 1:lenny){
-    # Find the details of the raster file for the EQ in the USGS database
+    #FOR ITALY i=43 only
     tmp<-FROM_GeoJson(USGS$features[[i]]$properties$detail)
+    grid_mmi <- get_intensities_raw(tmp$properties$products$shakemap[[3]]$contents$`download/grid.xml`$url)
+    
+    # Find the details of the raster file for the EQ in the USGS database
+    hazsdf <- ExtractUSGS_xml(grid_mmi, I0=I0)
     # Extract EQ raster of hazard intensity
-    hazsdf<-tryCatch(ExtractUSGS(url = tmp$properties$products$shakemap[[1]]$contents$`download/raster.zip`$url,
-                                 namer = paste0(directory,"Disaster_Data/USGS/",titlz,i),
-                                 I0=I0),
-                     error=function(e) NULL)
+    
+    #hazsdf<-tryCatch(ExtractUSGS(url = tmp$properties$products$shakemap[[1]]$contents$`download/raster.zip`$url,
+    #                             namer = paste0(directory,"Disaster_Data/USGS/",titlz,i),
+    #                             I0=I0),
+    #                 error=function(e) NULL)
+  
     # Check that this extracted event is in the correct form
     if(!check_hazsdf(hazsdf,minmag,bbox)){
       lhazdat$hazard_info$NumEvents<-lhazdat$hazard_info$NumEvents-1
@@ -276,6 +284,8 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
       if (duplicate) next
     }
     
+    PAGER_alert <- GetPagerFatality(tmp$properties$products$losspager[[1]]$contents$pager.xml$url)
+    
     # Create HAZARD object
     event_features <- GetUSGSfeatures(USGS$features[[i]]$id)
     hazsdf<-new("HAZARD",
@@ -283,14 +293,15 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
                 hazard="EQ",
                 dater=event_features$eventdate,
                 I0=I0,
-                alertlevel=ifelse(is.null(tmp$properties$alert),"green",tmp$properties$alert),
+                alertlevel=tmp$properties$alert, # ifelse(is.null(tmp$properties$alert),"green",tmp$properties$alert),
                 #alertscore=ifelse(i<=length(alertscores),alertscores[i],0))
                 alertscore=0, 
                 depth=event_features$depth, 
                 magnitude=event_features$magnitude, 
                 max_mmi=event_features$max_mmi,
                 eventtime=event_features$eventtime,
-                USGS_id=USGS$features[[i]]$id
+                USGS_id=USGS$features[[i]]$id, 
+                alertfull=PAGER_alert
     )
     # Add to the list of hazards
     lhazdat[[length(lhazdat)+1]]<-hazsdf
@@ -298,12 +309,14 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     tbbox[c(1,2)]<-apply(cbind(tbbox[c(1,2)],hazsdf@bbox[c(1,2)]),1,min,na.rm=T)
     tbbox[c(3,4)]<-apply(cbind(tbbox[c(3,4)],hazsdf@bbox[c(3,4)]),1,max,na.rm=T)
     # Extract dates for each hazard event
+    lhazdat$hazard_info$alertlevel%<>%c(hazsdf@alertlevel)
     lhazdat$hazard_info$eventdates%<>%c(as.character(hazsdf@eventdate))
     lhazdat$hazard_info$depths%<>%c(hazsdf@depth)
     lhazdat$hazard_info$magnitudes%<>%c(hazsdf@magnitude)
     lhazdat$hazard_info$max_mmi%<>%c(hazsdf@max_mmi)
     lhazdat$hazard_info$eventtimes%<>%c(hazsdf@eventtime)
     lhazdat$hazard_info$usgs_ids%<>%c(hazsdf@USGS_id)
+    lhazdat$hazard_info$alertfull[[length(lhazdat$hazard_info$alertfull)+1]] <- hazsdf@alertfull
   }
   if(any(is.na(tbbox))) return(NULL)
   # Modify the bounding box to fit around all hazards extracted
@@ -313,4 +326,83 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
   return(lhazdat)
   
 }
+
+GetPagerFatality <- function(url){
+  if (is.null(url)) return(list())
+  # Read the XML file from the URL
+  xml_data <- read_xml(url)
+  
+  # Extract information from the XML
+  alert_type <- xml_text(xml_find_first(xml_data, "//alert[@type='fatality']/@type"))
+  alert_level <- xml_text(xml_find_first(xml_data, "//alert[@type='fatality']/@level"))
+  summary <- xml_text(xml_find_first(xml_data, "//alert[@type='fatality']/@summary"))
+  units <- xml_text(xml_find_first(xml_data, "//alert[@type='fatality']/@units"))
+  
+  # Extract bin information
+  bins <- xml_find_all(xml_data, "//alert[@type='fatality']/bin")
+  bin_list <- lapply(bins, function(bin) {
+    min_val <- as.numeric(xml_attr(bin, "min"))
+    max_val <- as.numeric(xml_attr(bin, "max"))
+    probability <- as.numeric(xml_attr(bin, "probability"))
+    color <- xml_attr(bin, "color")
+    
+    return(list(min = min_val, max = max_val, probability = probability, color = color))
+  })
+  
+  # Create the list
+  pager_alert_fatalities <- list(
+    alert_type = alert_type,
+    alert_level = alert_level,
+    summary = summary,
+    units = units,
+    bins = bin_list
+  )
+  
+  # Print the result list
+  print(pager_alert_fatalities)
+}
+
+library(xml2)
+get_intensities_raw <- function(url){
+  # Read the XML data from the URL
+  xml_file <- read_xml(url)
+  grid <- xmlParse(xml_file)
+  
+  xml_data <- xmlToList(grid) 
+  lines <- strsplit(xml_data[[20]], "\n")[[1]]
+  
+  intensities <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][5]))
+  longitude <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][1]))
+  latitude <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][2]))
+  plot_df <- data.frame(longitude=longitude, latitude=latitude, intensities=intensities)
+  
+  #ggplot(plot_df, aes(x=longitude, y=latitude, color=intensities)) + geom_point() +
+  #  scale_color_gradient(low = "green", high = "red")
+  
+  return(plot_df[-1,])
+}
+
+ExtractUSGS_xml<-function(url,namer,I0=NULL,plotty=F){
+  
+  wide_df <- spread(grid_mmi, key = longitude, value = intensities)
+  mean_haz <- raster(
+    matrix(as.numeric(grid_mmi$intensities), nrow = length(unique(grid_mmi$latitude)), byrow=T),
+    xmn = min(as.numeric(grid_mmi$longitude)),
+    xmx = max(as.numeric(grid_mmi$longitude)),
+    ymn = min(as.numeric(grid_mmi$latitude)),
+    ymx = max(as.numeric(grid_mmi$latitude)),
+    crs=crs(meanhaz)
+  )
+  names(mean_haz) <- 'mmi_mean'
+  mean_haz <- resample(mean_haz, meanhaz, method='bilinear')
+  sd_haz = mean_haz
+  names(sd_haz) <- 'mmi_std'
+  values(sd_haz) <- 0.1
+  # Form a standard USGS object
+  sgdf<-formUSGSobject(mean_haz,sd_haz,I0)
+  
+  return(sgdf)
+  
+}
+
 

@@ -33,8 +33,8 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   
   
   # # Read in Stiff data and calculate the mean and standard deviation, again using all regions in the dataset:
-  # if(!file.exists(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))) stop("Please download the VS30 dataset (geotiff and auxiliary files) here https://earthquake.usgs.gov/data/vs30/.")
-  # stiff<-raster(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))
+  if(!file.exists(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))) stop("Please download the VS30 dataset (geotiff and auxiliary files) here https://earthquake.usgs.gov/data/vs30/.")
+  #stiff<-raster(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))
   
   Vs30_mean <- 562.4323 #cellStats(stiff,'mean')
   Vs30_sd <- 143.9429 #cellStats(stiff,'sd')
@@ -223,6 +223,12 @@ HLPrior_sample <- function(Model, AlgoParams){
   return(sample %>% relist(Model$skeleton)%>% Physical2Proposed(Model) %>% unlist())
 }
 
+# params_store <- array(0, dim=c(100,24))
+# for (i in 1:100){
+#   print(i)
+#   params_store[i, ] <- HLPrior_sample(Model, AlgoParams)
+# }
+# plot(params_store[,1], params_store[,2])
 # omega_samples <- array(0, dim=c(500, 14))
 # for (i in 1:500){
 #   print(i)

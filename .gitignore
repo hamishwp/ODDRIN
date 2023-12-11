@@ -15,6 +15,10 @@ IIDIPUS_Input/
 
 IIDIPUS_Input_NonFinal/
 
+IIDIPUS_Input_full/
+
+IIDIPUS_Input_Agg/
+
 Hazard_Data/gdpga/
 
 Hazard_Data/global_vs30_tif/
@@ -22,6 +26,8 @@ Hazard_Data/global_vs30_tif/
 IIDIPUS_Results/
 
 Unfinished/
+
+Case_Studies/
 
 >>>>>>> master
 OSM_Buildings_Objects

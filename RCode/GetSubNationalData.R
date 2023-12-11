@@ -1220,6 +1220,7 @@ createODD <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
       next
     }
     
+    
     # Create the ODD object:
     ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified, agg_level=1),error=function(e) NULL)
     if(is.null(ODDy)) {
@@ -1344,7 +1345,7 @@ createHAZARD <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
   
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
-  for (i in 2:170){
+  for (i in 138:170){
     # if (!i %in% c(8, 13, 25, 28, 31, 39, 47, 52, 54, 59, 65, 67, 72, 74, 79, 80, 81, 85, 89, 
     #               109, 111, 116, 118, 123, 124, 125, 128, 131, 132, 133, 135, 137, 144, 145,
     #               151, 157, 164, 166)){
@@ -1406,7 +1407,7 @@ createHAZARD <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
     if(is.null(lhazSDF)) {
       stop(i)
     }
-    
+    print(lhazSDF$hazard_info$max_mmi)
     lhazSDF$hazard_info$first_event <- check_preceding_hazards(lhazSDF)
     lhazSDF$hazard_info$first_event
     
@@ -1415,7 +1416,7 @@ createHAZARD <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
                   str_remove_all(as.character.Date(min(lhazSDF$hazard_info$eventdates)),"-"),
                   unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
                   "_",i)
-    HAZARDpath<-paste0(dir,folder_write, "HAZARDobjects_additionalInfo3/",namer)
+    HAZARDpath<-paste0(dir,folder_write, "HAZARDobjects_PAGERfull/",namer)
     saveRDS(lhazSDF,HAZARDpath)
     rm(lhazSDF)
     
@@ -1424,6 +1425,8 @@ createHAZARD <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
   return(path)
   
 }
+
+
 
 editHAZARDS <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
   
@@ -1436,6 +1439,47 @@ editHAZARDS <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
   }
   return(path)
   
+}
+
+createBDonly <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
+  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
+  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_cIndiesFixed/')
+  BD_folderin<-paste0(dir, folder_in, '/BDobjects/')
+  BD_folderout1<-paste0(dir, folder_in, '/BDobjects_newVuln/')
+  BD_folderout2<-paste0(dir, folder_in, '/BDobjects_newVuln_MARedits/')
+  ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  
+  Damage<-ExtractBDfiles(dir = dir,haz = haz)
+  
+  for (file in ufiles[14:length(ufiles)]){
+    ODDy <- readRDS(paste0(ODD_folderin, file))
+
+    #BDy <- readRDS(paste0(BD_folderin, file))
+    
+    miniDam<-Damage%>%filter(iso3%in%unique(ODDy$ISO3C) & 
+                               sdate>(min(ODDy@hazdates)-1) & sdate<(max(ODDy@hazdates)+1))
+    
+    if (NROW(miniDam)==0) next
+    stop()
+    if(nrow(miniDam)>0) {
+      # Make building damage object BD
+      BDy<- tryCatch(new("BD",Damage=miniDam,ODD=ODDy),error=function(e) NULL)
+      if(is.null(BDy)) {
+        stop('Failed to create BD object')
+      }
+      BDpath1 <-paste0(BD_folderout1,file)
+      saveRDS(BDy, BDpath1)
+      
+      BDy_MissingAdded <- BD_increase_coverage_bing(BDy, ODDy)
+      BDpath2 <-paste0(BD_folderout2,file)
+      # Save it out!
+      saveRDS(BDy_MissingAdded, BDpath2)
+      rm(BDy)
+      rm(BDy_MissingAdded)
+    }
+    
+    saveRDS(BDy, paste0(BD_folderout, file))
+  }
 }
 
 fix_Zero_cIndies <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
@@ -1615,8 +1659,8 @@ for (i in 1:length(ODDyAgg@polygons)){
 }
 
 
-Disps <- DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
-DispsAgg <- DispX(ODD = ODDyAgg,Omega = Omega %>% addTransfParams(),center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams)
+Disps <- DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, Method = AlgoParams)
+DispsAgg <- DispX(ODD = ODDyAgg,Omega = Omega %>% addTransfParams(),center = Model$center, Method = AlgoParams)
 
 samples <- data.frame(impact= Disps[[1]]$impact, observed= Disps[[1]]$observed)
 samples_agg <- data.frame(impact= DispsAgg[[1]]$impact, observed= DispsAgg[[1]]$observed)

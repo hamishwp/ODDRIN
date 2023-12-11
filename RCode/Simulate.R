@@ -416,7 +416,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
     intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
-    ODDSim %<>% DispX(Omega %>% addTransfParams(), Model$center, Model$BD_params, LL=FALSE, sim=T,
+    ODDSim %<>% DispX(Omega %>% addTransfParams(), Model$center, Model$BD_params, output='ODDwithSampled',
                       Method=list(Np=1,cores=1,cap=-300,  kernel_sd=list(displacement=0.15,mortality=0.03,buildDam=0.15,buildDest=0.1), kernel='lognormal'))
     
     #take these simulations as the actual values

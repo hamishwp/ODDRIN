@@ -38,6 +38,7 @@ AsYear<-function(date,red=F,limit=T){
   
   return(year)
 }
+
 AsMonth<-function(date){
   return(as.numeric(format(date,"%m")))
 }
@@ -46,11 +47,11 @@ DateTimeString<-function(){
   return(gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = ""))
 }
 
-# Assumes 10 income distribution percentiles
+# Assumes 8 income distribution percentiles
 SplitSamplePop<-function(Pop,n=1){
   k<-length(Pop)
   return(array(vapply(Pop,function(tPop) rmultinom(n=n,
-                                                   size=(tPop + rbernoulli(n=1,p=tPop%%1)),
+                                                   size=(tPop + rbinom(n=1,p=tPop%%1,size=1)), #LOOSEEND: same size for all Np
                                                    prob=rep(1/8,8)),FUN.VALUE = numeric(8L*n)),dim = c(8,k*n)))
 }
 
@@ -61,6 +62,7 @@ rgammaM<-function(n,mu,sig_percent){
   ssq<-sig_percent*sig_percent
   rgamma(n,shape=1./ssq,scale=mu*ssq)
 }
+
 dgammaM<-function(x,mu,sig_percent,log=T){
   # rgamma(n shape = alpha, scale = theta)
   # Note that the sig_percent is the constant coefficient of variation

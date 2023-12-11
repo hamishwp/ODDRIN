@@ -69,6 +69,7 @@ setMethod(f="initialize", signature="BD",
             .Object@I0<-ODD@I0
             .Object@hazdates<-ODD@hazdates
             .Object@eventid<-ODD@eventid
+            .Object@hazinfo<-ODD@hazinfo
             #.Object@fIndies<-ODD@fIndies
             
             .Object@buildingsfile<-paste0("./IIDIPUS_Input/OSM_Buildings_Objects/",unique(Damage$event)[1])
@@ -468,5 +469,3 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   return(BD)
   
 })
-
-

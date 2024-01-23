@@ -429,7 +429,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   }
   for (i in 1:length(BDpaths)){
     BDSim <- readRDS(paste0("IIDIPUS_SimInput/BDobjects/", BDpaths[i]))
-    BDSim %<>% BDX(Omega %>% addTransfParams(), Model, LL=FALSE, Method=list(Np=1,cores=1), sim=T)
+    BDSim %<>% BDX(Omega %>% addTransfParams(), Model, Method=list(Np=1,cores=1), output=='sim')
     #take these simulations as the actual values
     BDSim@data$grading <- BDSim@data$ClassPred
     #switch those affected to 'Damaged' with probability 0.5

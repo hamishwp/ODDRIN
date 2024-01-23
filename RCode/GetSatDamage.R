@@ -257,7 +257,7 @@ plotSAT<-function(Damage,country=NULL,zoomy=11){
 
 getCopernicusSource <- function(event_i){
  
-  event_i <- 67
+  event_i <- 39
   haz <- 'EQ'
   folderin_BD <- "/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/BDobjects/"
   ufiles_BD <- list.files(path=folderin_BD,pattern=Model$haz,recursive = T,ignore.case = T)
@@ -342,19 +342,47 @@ BD_increase_coverage_bing <- function(BDy, ODDy){
     for (i in 1:length(tmp)) {
       evname%<>%c(tmp[[i]][1])
       cfiles[i]<-paste0(dir,"COPERNICUS_Damage/",cfiles[i])
+    
+      
     }
     shp_dates <- as.Date(gsub("\\D", "", evname), format = "%Y%m%d")
     ev <- evname[which.min(abs(shp_dates-BDy_date))]
-    
+
     subfiles<-unique(grep(ev,cfiles,value = T,fixed = T))
     shapefiles <- subfiles<-unique(grep(ev,cfiles,value = T,fixed = T))
+    
+    contains_dam_data <- rep(T, length(shapefiles))
+    for (j in 1:length(shapefiles)){
+      subdir <- paste0(sub("/[^/]*$", "", shapefiles[j]), '/')
+      files_subdir <- list.files(path=subdir,pattern="areaOfInterest",recursive = T)
+      subdir_dam_files<-list.files(path=subdir,pattern="crisis_information",recursive = T)
+      subdir_dam_files<-c(subdir_dam_files,list.files(path=subdir,pattern="builtUpP",recursive = T))
+      subdir_dam_files<-c(subdir_dam_files,list.files(path=subdir,pattern="built_up_p",recursive = T))
+      subdir_dam_files<-c(subdir_dam_files,list.files(path=subdir,pattern="settlements_po",recursive = T))
+      subdir_dam_files<-subdir_dam_files[grep(".shp",subdir_dam_files)] ; 
+      subdir_dam_files<-subdir_dam_files[grep(".shp.xml",subdir_dam_files,invert = T)]
+      print(subdir_dam_files)
+      if (length(subdir_dam_files) == 0){contains_dam_data[j] <- F}
+    }
+    
+    #filter to only shapefiles that have relevant damage information:
+    
+    
   }
   
+  shapefiles <- shapefiles[contains_dam_data]
+  
   shape_data <- list()
+  treat_as_MAR <- rep(NA, length(shape_data))
   for (i in 1:length(shapefiles)){
     shape_data[[i]] <- st_read(shapefiles[i])
     shape_data[[i]] <- st_transform(shape_data[[i]], crs = 4326)
+    points_in_shape <- st_within(st_as_sf(as.data.frame(BDy@coords), coords = c("Longitude", "Latitude"), crs=st_crs(shape_data[[i]])), shape_data[[i]], sparse = FALSE)
+    treat_as_MAR[i] <- ifelse(length(points_in_shape) < 10 | length(BDy$grading[points_in_shape]=='notaffected')/sum(points_in_shape) < 0.2, F, T)
   }
+  
+  shapefiles <- shapefiles[which(treat_as_MAR)]
+  shape_data <- shape_data[which(treat_as_MAR)]
   
   combined_bbox <- st_bbox(shape_data[[1]])
   
@@ -372,16 +400,38 @@ BD_increase_coverage_bing <- function(BDy, ODDy){
   
   #st_as_sf(data.table(BDy@coords), coords = c("Longitude", "Latitude"))
   
+  col_values <- list('OpenBuildings'='white',
+                     'notaffected'='blue',
+                     'possible'='yellow', 
+                     'moderate'='orange',
+                     'Damaged'='red',
+                     'severe' = 'hotpink',
+                     'destroyed' = 'violetred')
+  
+  
   p <- ggplot() 
   for (i in 1:length(shape_data)){
     p <- p + geom_sf(data = st_as_sf(shape_data[[i]]), color = "red")
   }
   p <- p + #geom_sf(data=st_as_sf(data.table(BDy@coords), coords = c("Longitude", "Latitude"), crs=4326), size=0.5) +#,  #color=BDy$grading) + 
     geom_point(data=data.table(BDy@coords), aes(x=Longitude, y=Latitude, color=BDy$grading),size=0.5) + theme_minimal() +
-    scale_color_manual(values = list('possible'='yellow', 'Damaged'='red', 'notaffected'='blue', 'destroyed'='purple')) + 
+    scale_color_manual(values = col_values) + 
     xlim(combined_bbox[1], combined_bbox[3]) + ylim(combined_bbox[2], combined_bbox[4]) 
     #xlim(85.2, 85.4) + ylim(27.62, 27.75)
   p
+  
+  p <- list()
+  for (i in 1:length(shape_data)){
+    p[[i]] <- ggplot() + geom_sf(data = st_as_sf(shape_data[[i]]), color = "red") + xlim(st_bbox(shape_data[[i]])[c(1,3)])+ylim(st_bbox(shape_data[[i]])[c(2,4)]) +
+      geom_point(data=BDy@data[rev(order(BDy@data$grading)),], aes(x=BDy$Longitude, y=BDy$Latitude, color=BDy$grading), size=1) + 
+      scale_color_manual(values = col_values) +  theme(legend.position = "none",  # Remove legend
+                                                       axis.title.x = element_blank(),  # Remove x-axis title
+                                                       axis.title.y = element_blank(),  # Remove y-axis title
+                                                       axis.text.x = element_blank(),   # Remove x-axis labels
+                                                       axis.text.y = element_blank()) 
+  }
+  do.call(grid.arrange,p)
+  
   
   iso3_unique <- unique(BDy$ISO3C)[!is.na(unique(BDy$ISO3C))]
   lon_min <- combined_bbox[1]; lon_max <- combined_bbox[3]
@@ -465,7 +515,11 @@ BD_increase_coverage_bing <- function(BDy, ODDy){
     #   close(file_conn) 
     # }
     if (length(missing_quadkeys)> 0){
-      stop(paste("Event:", event_i, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, not adding building data."))
+      file_conn <- file(paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/BD_creation_notes'), open = "a")
+      writeLines('Bing/Open Buildings building counts missing', file_conn)
+      close(file_conn) 
+      return(NULL)
+      #stop(paste("Event:", event_i, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, not adding building data."))
     }
     
     missing_quadkeys_flag <- F
@@ -536,18 +590,54 @@ BD_increase_coverage_bing <- function(BDy, ODDy){
   }
   building_locs_miss <- building_locs_miss[which(building_locs_miss$rem), ]
   
+  
+  # polygons_MAR <- 1:11 #c(1,2,4,5,7,8,9,12,13)
+  # building_locs_miss_notMAR <- building_locs_miss
+  # for (j in polygons_MAR){
+  #   bbox_j <- st_bbox(shape_data[[j]])
+  #   building_locs_miss_notMAR <- building_locs_miss_notMAR %>% filter(!(building_locs_miss_notMAR$longitude > bbox_j[1] & building_locs_miss_notMAR$longitude < bbox_j[3] &
+  #                                                                  building_locs_miss_notMAR$latitude > bbox_j[2] & building_locs_miss_notMAR$latitude < bbox_j[4]))
+  # }
+  # building_locs_miss <- building_locs_miss_notMAR
+  
+  miniDam_old <- data.frame(grading=BDy$grading, Longitude=BDy$Longitude, Latitude=BDy$Latitude, event=ev, Confidence=BDy$Confidence, hazard='EQ', sdate=BDy@hazdates[1], iso3=BDy@hazdates[1])
+  
+  building_locs_old <- st_as_sf(miniDam_old, coords = c("Longitude", "Latitude"))
+  building_locs_old$poly_int <- FALSE
+  # Loop through each shape in shape_data
+  for (j in 1:length(shape_data)) {
+    # Check if any points in building_locs_sf are within the current polygon
+    shape_data[[j]] <- st_set_crs(shape_data[[j]], st_crs(building_locs_old))
+    within <- st_within(building_locs_old, shape_data[[j]], sparse = FALSE)
+    # Update poly_int for points within the polygon
+    building_locs_old$poly_int[within] <- TRUE
+  }
+  miniDam_old <- miniDam_old[which(building_locs_old$poly_int==T),]
+  
   p <- ggplot()
   for (i in 1:length(shape_data)){
     p <- p + geom_sf(data = st_as_sf(shape_data[[i]]), color = "red")
   }
   p <- p + geom_point(data=data.frame(building_locs_miss), aes(x=longitude, y=latitude, col='OpenBuildings'), size=0.1) + 
-    geom_point(data=BDy@data, aes(x=BDy$Longitude, y=BDy$Latitude, color=BDy$grading), size=0.5) + 
-    scale_color_manual(values = list('possible'='yellow', 'Damaged'='red', 'notaffected'='blue', 'OpenBuildings'='green'))
+    geom_point(data=miniDam_old, aes(x=miniDam_old$Longitude, y=miniDam_old$Latitude, color=miniDam_old$grading), size=0.5) + 
+    scale_color_manual(values = col_values)
   p
   
-  miniDam <- data.frame(grading=BDy$grading, Longitude=BDy$Longitude, Latitude=BDy$Latitude, event=ev, Confidence=BDy$Confidence, hazard='EQ', sdate=BDy@hazdates[1], iso3=BDy@hazdates[1])
-  miniDam <- rbind(miniDam, data.frame(grading='notaffected', Longitude=building_locs_miss$longitude, Latitude=building_locs_miss$latitude, 
-                                       event=ev, Confidence=NA, hazard='EQ', sdate=BDy@hazdates[1], iso3=BDy@hazdates[1]))
+  i <- 1
+  p <- ggplot() + geom_sf(data = st_as_sf(shape_data[[i]]), color = "red") + xlim(st_bbox(shape_data[[i]])[c(1,3)])+ylim(st_bbox(shape_data[[i]])[c(2,4)]) +
+    geom_point(data=miniDam_old, aes(x=miniDam_old$Longitude, y=miniDam_old$Latitude, color=miniDam_old$grading), size=1) +
+    scale_color_manual(values = col_values)
+  
+  p_after <- p + geom_point(data=data.frame(building_locs_miss), aes(x=longitude, y=latitude, col='OpenBuildings'), size=0.1) + 
+    geom_point(data=BDy@data[rev(order(BDy@data$grading)),], aes(x=BDy$Longitude, y=BDy$Latitude, color=BDy$grading), size=1)
+  
+  grid.arrange(p, p_after, nrow=2)
+  if (NROW(building_locs_miss) > 0){
+    miniDam <- rbind(miniDam_old, data.frame(grading='notaffected', Longitude=building_locs_miss$longitude, Latitude=building_locs_miss$latitude, 
+                                             event=ev, Confidence=NA, hazard='EQ', sdate=BDy@hazdates[1], iso3=BDy@hazdates[1]))
+  } else {
+    miniDam <- miniDam_old
+  }
   
   # folderin_ODD <- "/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/"
   # ufiles_ODD <- list.files(path=folderin_ODD,pattern=Model$haz,recursive = T,ignore.case = T)
@@ -559,24 +649,23 @@ BD_increase_coverage_bing <- function(BDy, ODDy){
   
   return(BD_new)
   
-  plot_bd_df_int <- data.frame(intensity=numeric(), event_i=integer(), bd_new=logical(), obs_prop_bd=numeric(), tot_obs=integer())
+  # poly_3_i <- st_within(st_as_sf(as.data.frame(BD_new@coords), coords = c("Longitude", "Latitude")), shape_data[[3]], sparse = FALSE)
+  # BD_new@data <- BD_new@data[poly_3_i,]
+  # BD_new@coords <- BD_new@coords[poly_3_i,]
+  
+  plot_bd_df_int <- data.frame(intensity=numeric(), bd_new=logical(), obs_prop_bd=numeric(), tot_obs=integer())
   for(int in seq(4.25,9.25, 0.5)){
-    plot_bd_df_int %<>% add_row(intensity=int, event_i=event_i, bd_new=T, 
+    plot_bd_df_int %<>% add_row(intensity=int, bd_new=T, 
                                 obs_prop_bd=1-length(which(BD_new$grading[which(BD_new$hazMean1>int &BD_new$hazMean1<(int+0.2))]=='notaffected'))/length(which(BD_new$hazMean1>int & BD_new$hazMean1<(int+0.2))),
                                 tot_obs=length(which(BD_new$hazMean1>int & BD_new$hazMean1<(int+0.2))))
-    plot_bd_df_int %<>% add_row(intensity=int, event_i=event_i, bd_new=F, 
+    plot_bd_df_int %<>% add_row(intensity=int, bd_new=F, 
                                 obs_prop_bd=1-length(which(BDy$grading[which(BDy$hazMean1>int &BDy$hazMean1<(int+0.2))]=='notaffected'))/length(which(BDy$hazMean1>int & BDy$hazMean1<(int+0.2))),
                                 tot_obs=length(which(BDy$hazMean1>int & BDy$hazMean1<(int+0.2))))
   }
   
-  ggplot(plot_bd_df_int, aes(x=intensity, y=obs_prop_bd, group=bd_new, color=bd_new)) + 
-    geom_line() + ylab('Proportion Buildings Damaged') + 
-    geom_line(aes(x=intensity, y=sqrt(plot_bd_df_int$obs_prop_bd*(1-plot_bd_df_int$obs_prop_bd)/plot_bd_df_int$tot_obs)))
-  
   plot_bd_df_int$std_dev <- sqrt(plot_bd_df_int$obs_prop_bd * (1 - plot_bd_df_int$obs_prop_bd) / plot_bd_df_int$tot_obs)
-  
   # Create a ggplot with shaded region
-  ggplot(plot_bd_df_int, aes(x = intensity, y = obs_prop_bd, group = bd_new, color = bd_new)) +
+  ggplot(plot_bd_df_int %>% filter(!is.na(plot_bd_df_int$obs_prop_bd)), aes(x = intensity, y = obs_prop_bd, group = bd_new, color = bd_new)) +
     geom_line() +
     geom_ribbon(aes(ymin = obs_prop_bd - 3 * std_dev, ymax = obs_prop_bd + 3 * std_dev, fill = bd_new), alpha=0.1,
                 color = NA) +
@@ -599,6 +688,523 @@ BD_increase_coverage_bing <- function(BDy, ODDy){
 #   print(paste(file, 'contains nBuildings:', !is.null(ODDy$nBuildings)))
 # }
 
+plot_sat_damage_shps <- function(BDy, shape_data, ODDy=NULL, single_plot=T, plot_marks=rep(T, length(shape_data))){
+  col_values <- list('OpenBuildings'='white',
+                     'notaffected'='green',
+                     'possible'='yellow', 
+                     'moderate'='orange',
+                     'Damaged'='red',
+                     'severe' = 'purple',
+                     'destroyed' = 'blue')
+  
+  if (single_plot){ # plot the whole region
+    
+    combined_bbox <- st_bbox(shape_data[[1]])
+    
+    # Iterate through each element in shape_data starting from the second element
+    for (i in seq_along(shape_data)[-1]) {
+      
+      # Update the combined bounding box to include the current object's bounding box
+      combined_bbox["xmin"] <- min(combined_bbox["xmin"], st_bbox(shape_data[[i]])["xmin"])
+      combined_bbox["ymin"] <- min(combined_bbox["ymin"], st_bbox(shape_data[[i]])["ymin"])
+      combined_bbox["xmax"] <- max(combined_bbox["xmax"], st_bbox(shape_data[[i]])["xmax"])
+      combined_bbox["ymax"] <- max(combined_bbox["ymax"], st_bbox(shape_data[[i]])["ymax"])
+    }
+    
+    p <- ggplot() 
+    for (i in 1:length(shape_data)){
+      p <- p + geom_sf(data = st_as_sf(shape_data[[i]]), color=ifelse(plot_marks[i],'black', "red") , fill = ifelse(plot_marks[i],'white', "red"), alpha=0.05, lwd=1)
+    }
+    p <- p + #geom_sf(data=st_as_sf(data.table(BDy@coords), coords = c("Longitude", "Latitude"), crs=4326), size=0.5) +#,  #color=BDy$grading) + 
+      geom_point(data=data.table(BDy@coords), aes(x=Longitude, y=Latitude, color=BDy$grading),size=0.5) + theme_minimal() +
+      scale_color_manual(values = col_values) + 
+      xlim(combined_bbox[1], combined_bbox[3]) + ylim(combined_bbox[2], combined_bbox[4]) 
+    #xlim(85.2, 85.4) + ylim(27.62, 27.75)
+    if(!is.null(ODDy)){
+      hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
+      for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+        tmp<-ODDy[variable]
+        tmp$hazard<-hazard
+        hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+      }
+      ODDy@data$hazard<-hazard
+      brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
+      
+      p<-p+geom_contour(data = as.data.frame(ODDy),
+                        mapping = aes(Longitude,Latitude,z=ifelse(is.na(hazard), 0, hazard), alpha=after_stat(level)),
+                        breaks = brks, lwd=0.7, col='black') +  labs(alpha = "Hazard Intensity")
+    }
+    return(p)
+  } else {
+    hazard<-rep(NA_real_,length(BDy@data$hazMean1))
+    for (variable in names(BDy)[grepl("Mean",names(BDy))]){
+      tmp<-BDy[variable]
+      tmp$hazard<-hazard
+      hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+    }
+    
+    p <- list()
+    for (i in 1:length(shape_data)){
+      BDy_in <- which(st_within(st_as_sf(as.data.frame(BDy@coords), coords = c("Longitude", "Latitude"), crs=st_crs(shape_data[[i]])), shape_data[[i]], sparse = FALSE))
+      haz_range <- paste0('Haz Range: ', paste(round(range(hazard[BDy_in], na.rm=T), 1), collapse=' - '))
+      p[[i]] <- ggplot() + geom_sf(data = st_as_sf(shape_data[[i]]), color=ifelse(plot_marks[i],'black', "red") , fill = ifelse(plot_marks[i],'white', "red"), alpha=0.05, lwd=1) + 
+        xlim(st_bbox(shape_data[[i]])[c(1,3)])+ylim(st_bbox(shape_data[[i]])[c(2,4)]) +
+        geom_point(data=BDy@data[rev(order(BDy@data$grading)),], aes(x=BDy$Longitude, y=BDy$Latitude, color=BDy$grading), size=1) + 
+        scale_color_manual(values = col_values) +  theme(legend.position = "none",  # Remove legend
+                                                         axis.title.y = element_blank(),
+                                                         #axis.title.x = element_blank(),  # Remove x-axis title
+                                                         axis.text.x = element_blank(),   # Remove x-axis labels
+                                                         axis.text.y = element_blank()) + xlab(haz_range)
+    }
+    do.call("grid.arrange", c(p, ncol=4))
+    return(do.call(grid.arrange,p))
+  }
+}
+
+select_MAR_polys <- function(BDy, ODDy){
+  
+  #event_i <- 67
+  
+  #folderin_BD <- "/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/BDobjects/"
+  #ufiles_BD <- list.files(path=folderin_BD,pattern=Model$haz,recursive = T,ignore.case = T)
+  #file_match_BD <- ufiles_BD[which(as.numeric(sub(".+_(.+)$", "\\1", ufiles_BD))==event_i)]
+  
+  #BDy <- readRDS(paste0(folderin_BD, file_match_BD))
+  
+  BDy_date <- BDy@hazdates
+  
+  if (as.Date("2013-09-24") %in% BDy_date){ #UNOSAT
+    shapefiles <- '/home/manderso/Documents/GitHub/ODDRIN/UNOSAT_Damage/EQ20130924PAK_UNOSAT/Damage_Sites.shp'
+    ev <- 'EQ20130924PAK'
+    buildings_in_MAR_polys <- which(BDy@coords[,1] > 65 & BDy@coords[,1] < 65.65 & BDy@coords[,2] < 27.2)
+    BDy@data <- BDy@data[buildings_in_MAR_polys,]
+    BDy@coords <- BDy@coords[buildings_in_MAR_polys,]
+    return(BDy)
+  } else {
+    print("WARNING: only point files and not polygons are currently read from COPERNICUS damage assessment")
+    cfiles<-list.files(path=paste0(dir,"COPERNICUS_Damage/"),pattern="areaOfInterest",recursive = T)
+    cfiles<-c(cfiles,list.files(path=paste0(dir,"COPERNICUS_Damage/"),pattern="area_of_interest",recursive = T))
+    cfiles<-cfiles[grep(haz,cfiles)]; cfiles<-cfiles[grep(".shp",cfiles)] ; cfiles<-cfiles[grep(".shp.xml",cfiles,invert = T)]
+    tmp<-strsplit(cfiles,"/",fixed = T) ;
+    evname<-c()
+    for (i in 1:length(tmp)) {
+      evname%<>%c(tmp[[i]][1])
+      cfiles[i]<-paste0(dir,"COPERNICUS_Damage/",cfiles[i])
+    }
+    shp_dates <- as.Date(gsub("\\D", "", evname), format = "%Y%m%d")
+    ev <- evname[which.min(abs(shp_dates-BDy_date))]
+    
+    subfiles<-unique(grep(ev,cfiles,value = T,fixed = T))
+    shapefiles <- subfiles<-unique(grep(ev,cfiles,value = T,fixed = T))
+    
+    contains_dam_data <- rep(T, length(shapefiles))
+    for (j in 1:length(shapefiles)){
+      subdir <- paste0(sub("/[^/]*$", "", shapefiles[j]), '/')
+      files_subdir <- list.files(path=subdir,pattern="areaOfInterest",recursive = T)
+      subdir_dam_files<-list.files(path=subdir,pattern="crisis_information",recursive = T)
+      subdir_dam_files<-c(subdir_dam_files,list.files(path=subdir,pattern="builtUpP",recursive = T))
+      subdir_dam_files<-c(subdir_dam_files,list.files(path=subdir,pattern="built_up_p",recursive = T))
+      subdir_dam_files<-c(subdir_dam_files,list.files(path=subdir,pattern="settlements_po",recursive = T))
+      subdir_dam_files<-subdir_dam_files[grep(".shp",subdir_dam_files)] ; 
+      subdir_dam_files<-subdir_dam_files[grep(".shp.xml",subdir_dam_files,invert = T)]
+      print(subdir_dam_files)
+      if (length(subdir_dam_files) == 0){contains_dam_data[j] <- F}
+    }
+    
+    #filter to only shapefiles that have relevant damage information:
+  }
+  
+  shapefiles <- shapefiles[contains_dam_data]
+  
+  shape_data <- list()
+  treat_as_MAR <- rep(NA, length(shape_data))
+  for (i in 1:length(shapefiles)){
+    shape_data[[i]] <- st_read(shapefiles[i])
+    shape_data[[i]] <- st_transform(shape_data[[i]], crs = 4326)
+    points_in_shape <- st_within(st_as_sf(as.data.frame(BDy@coords), coords = c("Longitude", "Latitude"), crs=st_crs(shape_data[[i]])), shape_data[[i]], sparse = FALSE)
+    treat_as_MAR[i] <- ifelse(sum(points_in_shape) < 10 | sum(BDy$grading[points_in_shape]=='notaffected')/sum(points_in_shape) < 0.2, F, T)
+  }
+  
+  file_conn <- file(paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/BD_creation_notes'), open = "a")
+  writeLines(paste0(c("Regions treated as MAR:", which(treat_as_MAR)), collapse=' '), file_conn)
+  writeLines(paste0(c("Regions removed:", which(!treat_as_MAR)), collapse=' '), file_conn)
+  close(file_conn) 
+  
+  if(sum(treat_as_MAR)==0){
+    return(NULL)
+  }
+  
+  print(plot_sat_damage_shps(BDy, shape_data, ODDy=ODDy, plot_marks=treat_as_MAR))
+  
+  shapefiles <- shapefiles[which(treat_as_MAR)]
+  shape_data <- shape_data[which(treat_as_MAR)]
+  
+  
+  miniDam_old <- data.frame(grading=BDy$grading, Longitude=BDy$Longitude, Latitude=BDy$Latitude, event=ev, Confidence=BDy$Confidence, hazard='EQ', sdate=BDy@hazdates[1], iso3=BDy@hazdates[1])
+  
+  building_locs_old <- st_as_sf(miniDam_old, coords = c("Longitude", "Latitude"))
+  building_locs_old$poly_int <- FALSE
+  # Loop through each shape in shape_data
+  for (j in 1:length(shape_data)){
+    # Check if any points in building_locs_sf are within the current polygon
+    shape_data[[j]] <- st_set_crs(shape_data[[j]], st_crs(building_locs_old))
+    within <- st_within(building_locs_old, shape_data[[j]], sparse = FALSE)
+    # Update poly_int for points within the polygon
+    building_locs_old$poly_int[within] <- TRUE
+    
+  }
+  miniDam_old <- miniDam_old[which(building_locs_old$poly_int==T),]
+  
+  # p <- ggplot()
+  # for (i in 1:length(shape_data)){
+  #   p <- p + geom_sf(data = st_as_sf(shape_data[[i]]), color = "red")
+  # }
+  # p <- p + geom_point(data=data.frame(building_locs_miss), aes(x=longitude, y=latitude, col='OpenBuildings'), size=0.1) + 
+  #   geom_point(data=miniDam_old, aes(x=miniDam_old$Longitude, y=miniDam_old$Latitude, color=miniDam_old$grading), size=0.5) + 
+  #   scale_color_manual(values = col_values)
+  # p
+  # 
+  # i <- 1
+  # p <- ggplot() + geom_sf(data = st_as_sf(shape_data[[i]]), color = "red") + xlim(st_bbox(shape_data[[i]])[c(1,3)])+ylim(st_bbox(shape_data[[i]])[c(2,4)]) +
+  #   geom_point(data=miniDam_old, aes(x=miniDam_old$Longitude, y=miniDam_old$Latitude, color=miniDam_old$grading), size=1) +
+  #   scale_color_manual(values = col_values)
+  # 
+  # p_after <- p + geom_point(data=data.frame(building_locs_miss), aes(x=longitude, y=latitude, col='OpenBuildings'), size=0.1) + 
+  #   geom_point(data=BDy@data[rev(order(BDy@data$grading)),], aes(x=BDy$Longitude, y=BDy$Latitude, color=BDy$grading), size=1)
+  # 
+  # grid.arrange(p, p_after, nrow=2)
+  
+  miniDam <- rbind(miniDam_old, data.frame(grading='notaffected', Longitude=building_locs_miss$longitude, Latitude=building_locs_miss$latitude, 
+                                           event=ev, Confidence=NA, hazard='EQ', sdate=BDy@hazdates[1], iso3=BDy@hazdates[1]))
+  
+  # folderin_ODD <- "/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/"
+  # ufiles_ODD <- list.files(path=folderin_ODD,pattern=Model$haz,recursive = T,ignore.case = T)
+  # file_match_ODD <- ufiles_ODD[which(as.numeric(sub(".+_(.+)$", "\\1", ufiles_ODD))==event_i)]
+  # 
+  # ODDy <- readRDS(paste0(folderin_ODD, file_match_ODD))
+  
+  BD_new <- new("BD",Damage=miniDam,ODD=ODDy)
+
+  return(BD_new)
+}
 
 
+#UNFINISHED:
+select_MAR_polys <- function(BDy, ODDy, bySource=T){
+
+  #event_i <- 67
+  
+  #folderin_BD <- "/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/BDobjects/"
+  #ufiles_BD <- list.files(path=folderin_BD,pattern=Model$haz,recursive = T,ignore.case = T)
+  #file_match_BD <- ufiles_BD[which(as.numeric(sub(".+_(.+)$", "\\1", ufiles_BD))==event_i)]
+  
+  #BDy <- readRDS(paste0(folderin_BD, file_match_BD))
+  
+  BDy_date <- BDy@hazdates
+  
+  if (as.Date("2013-09-24") %in% BDy_date){ #UNOSAT
+    shapefiles <- '/home/manderso/Documents/GitHub/ODDRIN/UNOSAT_Damage/EQ20130924PAK_UNOSAT/Damage_Sites.shp'
+    ev <- 'EQ20130924PAK'
+    buildings_in_MAR_polys <- which(BDy@coords[,1] > 65 & BDy@coords[,1] < 65.65 & BDy@coords[,2] < 27.2)
+    BDy@data <- BDy@data[buildings_in_MAR_polys,]
+    BDy@coords <- BDy@coords[buildings_in_MAR_polys,]
+    return(BDy)
+  } else if (as.Date("2019-09-24") %in% BDy_date){
+    #all buildings in unosat for event are possibly damaged
+    return(NULL)
+  } else {
+    print("WARNING: only point files and not polygons are currently read from COPERNICUS damage assessment")
+    cfiles<-list.files(path=paste0(dir,"COPERNICUS_Damage/"),pattern="areaOfInterest",recursive = T)
+    cfiles<-c(cfiles,list.files(path=paste0(dir,"COPERNICUS_Damage/"),pattern="area_of_interest",recursive = T))
+    cfiles<-cfiles[grep(haz,cfiles)]; cfiles<-cfiles[grep(".shp",cfiles)] ; cfiles<-cfiles[grep(".shp.xml",cfiles,invert = T)]
+    tmp<-strsplit(cfiles,"/",fixed = T) ;
+    evname<-c()
+    for (i in 1:length(tmp)) {
+      evname%<>%c(tmp[[i]][1])
+      cfiles[i]<-paste0(dir,"COPERNICUS_Damage/",cfiles[i])
+    }
+    shp_dates <- as.Date(gsub("\\D", "", evname), format = "%Y%m%d")
+    ev <- evname[which.min(abs(shp_dates-BDy_date))]
+    
+    subfiles<-unique(grep(ev,cfiles,value = T,fixed = T))
+    shapefiles <- subfiles<-unique(grep(ev,cfiles,value = T,fixed = T))
+    
+    contains_dam_data <- rep(T, length(shapefiles))
+    for (j in 1:length(shapefiles)){
+      subdir <- paste0(sub("/[^/]*$", "", shapefiles[j]), '/')
+      files_subdir <- list.files(path=subdir,pattern="areaOfInterest",recursive = T)
+      subdir_dam_files<-list.files(path=subdir,pattern="crisis_information",recursive = T)
+      subdir_dam_files<-c(subdir_dam_files,list.files(path=subdir,pattern="builtUpP",recursive = T))
+      subdir_dam_files<-c(subdir_dam_files,list.files(path=subdir,pattern="built_up_p",recursive = T))
+      subdir_dam_files<-c(subdir_dam_files,list.files(path=subdir,pattern="settlements_po",recursive = T))
+      subdir_dam_files<-subdir_dam_files[grep(".shp",subdir_dam_files)] ; 
+      subdir_dam_files<-subdir_dam_files[grep(".shp.xml",subdir_dam_files,invert = T)]
+      print(subdir_dam_files)
+      if (length(subdir_dam_files) == 0){contains_dam_data[j] <- F}
+    }
+    if (bySource){
+      Damage<-data.frame()
+      cfiles<-list.files(path=paste0(dir,"COPERNICUS_Damage/"),pattern="crisis_information",recursive = T)
+      cfiles<-c(cfiles,list.files(path=paste0(dir,"COPERNICUS_Damage/"),pattern="builtUpP",recursive = T))
+      cfiles<-c(cfiles,list.files(path=paste0(dir,"COPERNICUS_Damage/"),pattern="built_up_p",recursive = T))
+      cfiles<-c(cfiles,list.files(path=paste0(dir,"COPERNICUS_Damage/"),pattern="settlements_po",recursive = T))
+      cfiles<-cfiles[grep(haz,cfiles)]; cfiles<-cfiles[grep(".shp",cfiles)] ; cfiles<-cfiles[grep(".shp.xml",cfiles,invert = T)]
+      tmp<-strsplit(cfiles,"/",fixed = T) ; evname<-c()
+      
+      for (i in 1:length(tmp)) {
+        evname%<>%c(tmp[[i]][1]) 
+        cfiles[i]<-paste0(dir,"COPERNICUS_Damage/",cfiles[i])
+      }
+      
+      subfiles<-unique(grep(ev,cfiles,value = T,fixed = T))
+      # I know that you can load all in at the same time, but let's save some RAM!!!
+      for (f in unique(subfiles)){
+        if(grepl(".shp.xml",f)) next
+        tmp<-st_read(f,quiet = T)
+        if (is.null(tmp$or_src_id)){
+          selected_cols <- c('geometry', 'source_nam', 'src_date', 'src_info')
+        } else {
+          selected_cols <- c('geometry', 'or_src_id', 'dmg_src_id', 'det_method', 'obj_type')
+        }
+        if((is.null(tmp$grading) & is.null(tmp$damage_gra))|is.null(tmp$geometry)) next
+        if(!is.null(tmp$grading)) {
+          tmp%<>%dplyr::select(grading,!!!syms(selected_cols))
+        } else if (!is.null(tmp$damage_gra)) {
+          tmp%<>%dplyr::select(damage_gra,!!!syms(selected_cols))
+          colnames(tmp)[which(colnames(tmp)=='damage_gra')] <- 'grading'
+        }
+        if(!all(class(tmp$geometry)%in%c("sfc_POINT","sfc"))) tmp$geometry%<>%st_centroid
+        tmp$geometry%<>%st_transform(crs="+proj=longlat +datum=WGS84 +ellps=WGS84")
+        # Remove unwanted grading terms
+        tmp%<>%filter(!grading%in%
+                        c("Null","Unknown","Not Applicable"))
+        if(nrow(tmp)==0) next
+        # convert point geometries into Longitude/Latitude
+        ttt<-st_coordinates(tmp$geometry)
+        tmp$Longitude<-ttt[,1]; tmp$Latitude<-ttt[,2]
+        tmp$geometry<-NULL
+        tmp$event<-rep(ev,nrow(tmp))
+        tmp$AOI <- as.numeric(str_extract(f, "(?<=AOI)\\d+"))
+        
+        #get dbs source file
+        src_files <- list.files(path=paste0(sub("/[^/]*$", "", f), '/'),pattern="source",recursive = T)
+        src_files <- src_files[grep(".dbf",src_files)]
+        if (length(src_files) > 0){
+          source_data <- read.dbf(paste0(paste0(sub("/[^/]*$", "", f), '/'), src_files))
+          tmp_with_or_src <- merge(tmp, source_data, by.x='or_src_id', by.y='src_id', all.x=T, sort=F)
+          names(tmp_with_or_src)[(NCOL(tmp)+1):NCOL(tmp_with_or_src)] <- paste0('or_', names(tmp_with_or_src)[(NCOL(tmp)+1):NCOL(tmp_with_or_src)] )
+          tmp_with_src <- merge(tmp_with_or_src, source_data, by.x='dmg_src_id', by.y='src_id', all.x=T, sort=F)
+          names(tmp_with_src)[(NCOL(tmp_with_or_src)+1):NCOL(tmp_with_src)] <- paste0('dmg_', names(tmp_with_src)[(NCOL(tmp_with_or_src)+1):NCOL(tmp_with_src)] )
+        } else {
+          tmp_with_src <- tmp
+        }
+  
+        Damage%<>%rbind(tmp_with_src)
+      }
+    }
+    #filter to only shapefiles that have relevant damage information:
+    
+  }
+  
+  Damage$grading[grepl("Completely Destroyed",Damage$grading,fixed = T) |
+                  grepl("Destroyed",Damage$grading,fixed = T)]       <-"Completely Destroyed"
+  Damage$grading[grepl("Highly Damaged",Damage$grading,fixed = T)]             <-"Highly Damaged"
+  Damage$grading[grepl("Moderately Damaged",Damage$grading,fixed = T)]         <-"Moderately Damaged"
+  Damage$grading[grepl("Negligible to slight damage",Damage$grading,fixed = T)] <-"Slight Damage"
+  Damage$grading[grepl("Possibly damaged",Damage$grading,fixed = T) | grepl("Possible damage",Damage$grading,fixed = T)]<- "Possible damage"
+  Damage$grading[grepl("Not Affected",Damage$grading,fixed = T) |
+                    grepl("No visible damage",Damage$grading,fixed = T) ]               <-"Not Affected"
+  
+  Damage$grading[Damage$grading=="Completely Destroyed"]<-"destroyed"
+  Damage$grading[Damage$grading=="Severe Damage"]<-"severe"
+  Damage$grading[Damage$grading=="Moderate Damage"]<-"moderate"
+  Damage$grading[Damage$grading=="Slight Damage"]<-"slight"
+  Damage$grading[Damage$grading=="Possible damage" ]<-"possible"
+  Damage$grading[Damage$grading=="Not Affected"]<-"notaffected"
+  
+  #group the data based on source information
+  if (is.null(Damage$or_source_nam)){
+    grouping_vars <- c('source_nam', 'src_date')
+  } else {
+    grouping_vars <- c('or_source_nam', 'or_src_date', 'dmg_source_nam', 'dmg_src_date')
+  }
+  groupedDamage <- Damage %>%
+    group_by(!!!syms(grouping_vars)) %>%
+    mutate(group_id = cur_group_id()) 
+  
+  #create BD object to interpolate hazard over the BD data
+  miniDam <- data.frame(grading=groupedDamage$grading, Longitude=groupedDamage$Longitude, Latitude=groupedDamage$Latitude, 
+                        event=ev, source=groupedDamage$group_id, hazard='EQ', sdate=min(BDy_date), iso3=NA)
+  
+  BD <- new("BD",Damage=miniDam,ODD=ODDy)
+  BD_new <- BD
+  
+  # check which groups appear to be missing at random. Criteria:
+  #    - More than 50% of buildings under intensity 7 are unaffected
+  #    - More than 5% of buildings over intensity 7 are unaffected
+  
+  if (length(grep('hazMean', names(BD_new@data)))==1){
+    haz_max = BD_new@data$hazMean1
+  } else {
+    haz_max <- apply(BD_new@data[,grep('hazMean', names(BD_new@data))], 1, max, na.rm=T)
+  }
+  remove_i <- c()
+  for (source_unique in unique(BD_new@data$source)){
+    source_i <- which(BD_new@data$source == source_unique)
+    mean_notaffected_lowI <- mean(BD_new@data$grading[intersect(source_i, which(haz_max < 7))] == 'notaffected')
+    mean_notaffected_highI <- mean(BD_new@data$grading[intersect(source_i, which(haz_max > 7))] == 'notaffected')
+    print(paste(mean_notaffected_lowI, mean_notaffected_highI))
+    if(!is.na(mean_notaffected_lowI)){
+      if (mean_notaffected_lowI < 0.3){
+        remove_i <- c(remove_i, source_i)
+        next
+      }
+    }
+    if (!is.na(mean_notaffected_highI)){
+      if (mean_notaffected_highI < 0.01){
+        remove_i <- c(remove_i, source_i)
+        next
+      }
+    }
+  }
+  remove_i <- union(remove_i, which(is.na(BD_new$grading)))
+  if (length(remove_i) > 0){
+    BD_new@data <- BD_new@data[-remove_i,] 
+    BD_new@coords <- BD_new@coords[-remove_i,] 
+  }
+  
+  col_values <- list('OpenBuildings'='white',
+                     'notaffected'='green',
+                     'possible'='yellow', 
+                     'moderate'='orange',
+                     'Damaged'='red',
+                     'severe' = 'purple',
+                     'destroyed' = 'blue')
+  
+  print(ggplot() + 
+    geom_point(data=data.table(BD@coords), aes(x=Longitude, y=Latitude),color='black', size=0.5) + theme_minimal() +
+    geom_point(data=data.table(BD_new@coords), aes(x=Longitude, y=Latitude, color=BD_new$grading),size=0.5) + theme_minimal() +
+    scale_color_manual(values=col_values))
+    
+  
+  return(BD_new)
+  
+  # BD_new@data %>% group_by(source) %>%  
+  #   group_map(~summarize(.x, prop_notaffected = ifelse(mean(grading == 'notaffected') > 0.5, T, F))) %>% unlist()
+  
+  
+  # plot the grouped data:
+  
+  # # Use confidence as placeholder for source information rather than adding a new slot to BDy:
+  # groupedDamage$Confidence <- apply(groupedDamage[,grouping_vars], 1, paste, collapse=', ')
+  # groupedDamage$iso3 <- NA
+  # BD_new <- new("BD",Damage=groupedDamage,ODD=ODDy)
+  # ggplot(groupedDamage, aes(x = Longitude, y = Latitude, shape=grading, col = as.factor(Confidence))) +
+  #   geom_point() + labs(col = "Origin Source, Date")
+  
+  groupedDamage$source_full <- apply(groupedDamage[,grouping_vars], 1, paste, collapse=', ')
+  unique(groupedDamage[,c('source_full', 'group_id')])
+  BD_plot <- BD@data
+  BD_plot %<>% merge(unique(groupedDamage[,c('source_full', 'group_id')]), by.x='source', by.y='group_id', sort=F, all.x=T)
+  if (length(grep('hazMean', names(BD_new@data)))==1){
+    BD_plot$haz_max = BD_plot$hazMean1
+  } else {
+    BD_plot$haz_max <- apply(BD_plot[,grep('hazMean', names(BD_plot))], 1, max, na.rm=T)
+  }
+  BD_plot$haz_max <- round(BD_plot$haz_max * 2) / 2
+  BD_plot %<>% group_by(source_full, haz_max) %>% summarise(prop_unaff = mean(grading == 'notaffected'),
+                                                            prop_possible = mean(grading == 'possible' | grading == 'notaffected'),
+                                                            n_tot = n())
+  ggplot(BD_plot, aes(x = haz_max, y = 1-prop_unaff, group=source_full, col = as.factor(source_full))) +
+    geom_line() + geom_point(aes(size=n_tot)) + ylab('Proportion Damaged') +
+    geom_ribbon(aes(x = haz_max, ymin = 1-prop_unaff, ymax = 1 - prop_possible,
+                    group=source_full, fill = as.factor(source_full)), alpha=0.1, color = NA) +
+    labs(col = "Origin Source, Date, Damage Source, Date") +
+    guides(fill = FALSE)
+  
+  treat_as_MAR <- function(x, y){
+    if(NROW(x) > 50 & (sum(x$grading==notaffected)/length(x$grading) < 0.8)){
+      return(T)
+    } else {
+      return(F)
+    }
+  }
+  
+  # unlist(groupedDamage %>%
+  #   group_map(~summarize(.x, prop_notaffected = mean(grading == 'notaffected') > 0.5)))
+  
+  plot(Damage$Longitude, Damage$Latitude)
+  points(Damage$Longitude[which(Damage$or_src_id==1 & Damage$dmg_src_id==2 & Damage$det_method=='Photo-interpretation' & Damage$obj_type=='11-Residential Buildings')], Damage$Latitude[which(Damage$or_src_id==1 & Damage$dmg_src_id==2 & Damage$det_method=='Photo-interpretation' & Damage$obj_type=='11-Residential Buildings')], col='red')
+  shapefiles <- shapefiles[contains_dam_data]
+  
+  shape_data <- list()
+  treat_as_MAR <- rep(NA, length(shape_data))
+  for (i in 1:length(shapefiles)){
+    shape_data[[i]] <- st_read(shapefiles[i])
+    shape_data[[i]] <- st_transform(shape_data[[i]], crs = 4326)
+    points_in_shape <- st_within(st_as_sf(as.data.frame(BDy@coords), coords = c("Longitude", "Latitude"), crs=st_crs(shape_data[[i]])), shape_data[[i]], sparse = FALSE)
+    treat_as_MAR[i] <- ifelse(sum(points_in_shape) < 10 | sum(BDy$grading[points_in_shape]=='notaffected')/sum(points_in_shape) < 0.2, F, T)
+  }
+  
+  file_conn <- file(paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/BD_creation_notes'), open = "a")
+  writeLines(paste0(c("Regions treated as MAR:", which(treat_as_MAR)), collapse=' '), file_conn)
+  writeLines(paste0(c("Regions removed:", which(!treat_as_MAR)), collapse=' '), file_conn)
+  close(file_conn) 
+  
+  if(sum(treat_as_MAR)==0){
+    return(NULL)
+  }
+  
+  print(plot_sat_damage_shps(BDy, shape_data, ODDy=ODDy, plot_marks=treat_as_MAR))
+  
+  shapefiles <- shapefiles[which(treat_as_MAR)]
+  shape_data <- shape_data[which(treat_as_MAR)]
+  
+  
+  miniDam_old <- data.frame(grading=BDy$grading, Longitude=BDy$Longitude, Latitude=BDy$Latitude, event=ev, Confidence=BDy$Confidence, hazard='EQ', sdate=BDy@hazdates[1], iso3=BDy@hazdates[1])
+  
+  building_locs_old <- st_as_sf(miniDam_old, coords = c("Longitude", "Latitude"))
+  building_locs_old$poly_int <- FALSE
+  # Loop through each shape in shape_data
+  for (j in 1:length(shape_data)){
+    # Check if any points in building_locs_sf are within the current polygon
+    shape_data[[j]] <- st_set_crs(shape_data[[j]], st_crs(building_locs_old))
+    within <- st_within(building_locs_old, shape_data[[j]], sparse = FALSE)
+    # Update poly_int for points within the polygon
+    building_locs_old$poly_int[within] <- TRUE
+    
+  }
+  miniDam_old <- miniDam_old[which(building_locs_old$poly_int==T),]
+  
+  # p <- ggplot()
+  # for (i in 1:length(shape_data)){
+  #   p <- p + geom_sf(data = st_as_sf(shape_data[[i]]), color = "red")
+  # }
+  # p <- p + geom_point(data=data.frame(building_locs_miss), aes(x=longitude, y=latitude, col='OpenBuildings'), size=0.1) + 
+  #   geom_point(data=miniDam_old, aes(x=miniDam_old$Longitude, y=miniDam_old$Latitude, color=miniDam_old$grading), size=0.5) + 
+  #   scale_color_manual(values = col_values)
+  # p
+  # 
+  # i <- 1
+  # p <- ggplot() + geom_sf(data = st_as_sf(shape_data[[i]]), color = "red") + xlim(st_bbox(shape_data[[i]])[c(1,3)])+ylim(st_bbox(shape_data[[i]])[c(2,4)]) +
+  #   geom_point(data=miniDam_old, aes(x=miniDam_old$Longitude, y=miniDam_old$Latitude, color=miniDam_old$grading), size=1) +
+  #   scale_color_manual(values = col_values)
+  # 
+  # p_after <- p + geom_point(data=data.frame(building_locs_miss), aes(x=longitude, y=latitude, col='OpenBuildings'), size=0.1) + 
+  #   geom_point(data=BDy@data[rev(order(BDy@data$grading)),], aes(x=BDy$Longitude, y=BDy$Latitude, color=BDy$grading), size=1)
+  # 
+  # grid.arrange(p, p_after, nrow=2)
+  
+  miniDam <- miniDam_old
+  
+  # folderin_ODD <- "/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/"
+  # ufiles_ODD <- list.files(path=folderin_ODD,pattern=Model$haz,recursive = T,ignore.case = T)
+  # file_match_ODD <- ufiles_ODD[which(as.numeric(sub(".+_(.+)$", "\\1", ufiles_ODD))==event_i)]
+  # 
+  # ODDy <- readRDS(paste0(folderin_ODD, file_match_ODD))
+  
+  BD_new <- new("BD",Damage=miniDam,ODD=ODDy)
+  
+  return(BD_new)
+}  
 

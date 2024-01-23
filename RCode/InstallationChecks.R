@@ -22,7 +22,7 @@ if(!(sum(ODDy$Disp)>1e5 & sum(ODDy$Disp)<4e5)) { stop("Test 1 failed - displacem
 # Building damage assessment data from satellite image data (UNOSAT & Copernicus), in the 'BD' class format
 BDy<-readRDS(paste0(dir,"IIDIPUS_Input/BDobjects/EQ20210814HTI_10919_example"))
 # Test to see if the building damage prediction calculations are working
-BDy%<>%BDX(Omega = Omega,Model = Model,LL=F,Method = AlgoParams)
+BDy%<>%BDX(Omega = Omega,Model = Model, Method = AlgoParams, output='LL')
 
 #@@@@@@@@@@@@@@@ TEST 2: BUILDING DAMAGE PREDICTIONS @@@@@@@@@@@@@@@#
 if(!(sum(BDy$ClassPred=="moderate")>800 & sum(BDy$ClassPred=="severe")>100)) { stop("Test 2 failed - building damage predictions with the example ODD object for HTI EQ 14-08-2021 is erroneous")

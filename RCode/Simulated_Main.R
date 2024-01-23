@@ -69,14 +69,14 @@ for(var in c('PDens', 'EQFreq', 'GNIc', 'Vs30', 'SHDI', 'hazMean1')){
    #lines(Intensity, D_MortDisp[1,], col='red', type='l', ylab='Proportion', lwd=3);
    lines(Intensity, D_MortDisp[2,], col='blue', type='l', ylab='Proportion', lwd=3);
    #lines(Intensity, log(D_BD), col='green', type='l', ylab='Proportion', lwd=3);
- }
+}
 #  
  
  
  AlgoParams$cores <- 1
  AlgoParams$NestedCores <- 6
  AlgoParams$Np <- 2
- AlgoParams$m_CRPS <- 2
+ AlgoParams$m_CRPS <- 5
  start_time <- Sys.time()
  impact_sample <- SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams)
  finish_time <- Sys.time()

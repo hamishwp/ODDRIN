@@ -256,16 +256,16 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
   for (i in 1:lenny){
     #FOR ITALY i=43 only
     tmp<-FROM_GeoJson(USGS$features[[i]]$properties$detail)
-    grid_mmi <- get_intensities_raw(tmp$properties$products$shakemap[[3]]$contents$`download/grid.xml`$url)
     
     # Find the details of the raster file for the EQ in the USGS database
-    hazsdf <- ExtractUSGS_xml(grid_mmi, I0=I0)
-    # Extract EQ raster of hazard intensity
+    #grid_mmi <- get_intensities_raw(tmp$properties$products$shakemap[[1]]$contents$`download/grid.xml`$url)
+    #hazsdf <- ExtractUSGS_xml(grid_mmi, I0=I0)
     
-    #hazsdf<-tryCatch(ExtractUSGS(url = tmp$properties$products$shakemap[[1]]$contents$`download/raster.zip`$url,
-    #                             namer = paste0(directory,"Disaster_Data/USGS/",titlz,i),
-    #                             I0=I0),
-    #                 error=function(e) NULL)
+    # Extract EQ raster of hazard intensity
+    hazsdf<-tryCatch(ExtractUSGS(url = tmp$properties$products$shakemap[[1]]$contents$`download/raster.zip`$url,
+                                 namer = paste0(directory,"Disaster_Data/USGS/",titlz,i),
+                                 I0=I0),
+                     error=function(e) NULL)
   
     # Check that this extracted event is in the correct form
     if(!check_hazsdf(hazsdf,minmag,bbox)){

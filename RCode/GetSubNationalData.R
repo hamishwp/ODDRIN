@@ -1443,15 +1443,17 @@ editHAZARDS <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
 
 createBDonly <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_cIndiesFixed/')
   BD_folderin<-paste0(dir, folder_in, '/BDobjects/')
   BD_folderout1<-paste0(dir, folder_in, '/BDobjects_newVuln/')
-  BD_folderout2<-paste0(dir, folder_in, '/BDobjects_newVuln_MARedits/')
+  BD_folderout2<-paste0(dir, folder_in, '/BDobjects_newVuln_MARbySource/')
   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
   
+  options(timeout=100)
   Damage<-ExtractBDfiles(dir = dir,haz = haz)
   
-  for (file in ufiles[14:length(ufiles)]){
+  for (jj in 1:length(ufiles)){
+    #issues with 69
+    file <- ufiles[jj]
     ODDy <- readRDS(paste0(ODD_folderin, file))
 
     #BDy <- readRDS(paste0(BD_folderin, file))
@@ -1460,25 +1462,34 @@ createBDonly <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'
                                sdate>(min(ODDy@hazdates)-1) & sdate<(max(ODDy@hazdates)+1))
     
     if (NROW(miniDam)==0) next
-    stop()
     if(nrow(miniDam)>0) {
       # Make building damage object BD
       BDy<- tryCatch(new("BD",Damage=miniDam,ODD=ODDy),error=function(e) NULL)
       if(is.null(BDy)) {
         stop('Failed to create BD object')
       }
-      BDpath1 <-paste0(BD_folderout1,file)
-      saveRDS(BDy, BDpath1)
       
-      BDy_MissingAdded <- BD_increase_coverage_bing(BDy, ODDy)
+      #BDpath1 <-paste0(BD_folderout1,file)
+      #saveRDS(BDy, BDpath1)
+      
+      file_conn <- file(paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/BD_creation_notes'), open = "a")
+      writeLines(paste0("Event: ", file), file_conn)
+      close(file_conn) 
+      
+      #BD_new <- tryCatch(BD_increase_coverage_bing(BDy, ODDy),error=function(e) NULL)
+      BD_new <- select_MAR_polys(BDy, ODDy)
+      if (is.null(BD_new)){
+        file_conn <- file(paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/BD_creation_notes'), open = "a")
+        writeLines('Error in creation', file_conn)
+        close(file_conn) 
+      }
       BDpath2 <-paste0(BD_folderout2,file)
       # Save it out!
-      saveRDS(BDy_MissingAdded, BDpath2)
+      saveRDS(BD_new, BDpath2)
+      
       rm(BDy)
-      rm(BDy_MissingAdded)
+      rm(BD_new)
     }
-    
-    saveRDS(BDy, paste0(BD_folderout, file))
   }
 }
 

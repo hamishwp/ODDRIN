@@ -218,7 +218,7 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
   if(lhazSDF$hazard_info$hazard=="TC") { 
     ind<-unname(apply(ODD@data,2, function(x) sum(!is.na(x))))
     ODD@data<-ODD@data[,ind>0]
-  }else ODD$Population[rowSums(polysave)==0]<-NA
+  }#else ODD$Population[rowSums(polysave)==0]<-NA
   
   # ODD@hazdates<-dates
   ODD@alerts<-data.frame(alertscores=alertscores,alertlevels=alertlevels)
@@ -241,7 +241,7 @@ setMethod(f="initialize", signature="ODD",
                           "p70p80", # Income share held by 70th - 80th percentiles
                           "p80p90", # Income share held by 80th - 90th percentiles
                           "p90p100") # top 10% share of Income Distribution
-            ), agg_level=2) {
+            ), agg_level=1) {
             
             if(is.null(lhazSDF)) return(.Object)
             if(!class(lhazSDF[[length(lhazSDF)]])[1]=="HAZARD") return(.Object)
@@ -402,7 +402,7 @@ FormParams<-function(ODD,listy){
   # return(Params)
 }
 
-setGeneric("DispX", function(ODD,Omega,center, Method, output)
+setGeneric("DispX", function(ODD,Omega,center, Method, output='SampledAgg')
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center,

@@ -48,14 +48,14 @@ Genx0y0<-function(ODDobj){
 
 setClass("BD", 
          slots = c(hazard="character",
-                   cIndies="data.frame",
+                   #cIndies="data.frame",
                    #fIndies="list",
                    I0="numeric",
                    hazdates="Date",
                    eventid="numeric",
-                   coefs="numeric",
+                   #coefs="numeric",
                    buildingsfile="character",
-                   modifier="list", 
+                   #modifier="list", 
                    hazinfo="list"),
          contains = "SpatialPointsDataFrame")
 
@@ -65,7 +65,7 @@ setMethod(f="initialize", signature="BD",
             if(is.null(Damage)|is.null(ODD)) return(.Object)            
             
             .Object@hazard<-ODD@hazard
-            .Object@cIndies<-ODD@cIndies[ODD@cIndies$iso3%in%unique(Damage$iso3),]
+            #.Object@cIndies<-ODD@cIndies[ODD@cIndies$iso3%in%unique(Damage$iso3),]
             .Object@I0<-ODD@I0
             .Object@hazdates<-ODD@hazdates
             .Object@eventid<-ODD@eventid
@@ -75,8 +75,11 @@ setMethod(f="initialize", signature="BD",
             .Object@buildingsfile<-paste0("./IIDIPUS_Input/OSM_Buildings_Objects/",unique(Damage$event)[1])
             
             print("Forming SpatialPointsDataFrame from building damage data")
+            data_var <- c('grading')
+            if (!is.null(Damage$Confidence)) data_var %<>% c('Confidence')
+            if (!is.null(Damage$source)) data_var %<>% c('source')
             Damage<-SpatialPointsDataFrame(coords = Damage[,c("Longitude","Latitude")],
-                                        data = Damage[,c("grading","Confidence")],
+                                        data = Damage[,data_var],
                                         proj4string = ODD@proj4string) #crs("+proj=longlat +datum=WGS84 +ellps=WGS84"))
             
             .Object@data <- Damage@data
@@ -96,9 +99,9 @@ setMethod(f="initialize", signature="BD",
             print("Accessing OSM to sample building height & area")
             # ExtractOSMbuildVol(.Object,ODD)
             
-            linp<-rep(list(1.),length(unique(ODD@cIndies$iso3)))
-            names(linp)<-unique(ODD@cIndies$iso3)
-            .Object@modifier<-linp
+            #linp<-rep(list(1.),length(unique(ODD@cIndies$iso3)))
+            #names(linp)<-unique(ODD@cIndies$iso3)
+            #.Object@modifier<-linp
             
             print("Checking BD values")
             #checkBD(.Object)
@@ -332,21 +335,30 @@ setMethod("ExtractOSMbuildVol", "BD", function(BD,ODD){
 
 
 # Code that calculates/predicts the total human displacement 
-setGeneric("BDX", function(BD,Omega,Model,Method,LL,sim=F)
+setGeneric("BDX", function(BD,Omega,Model,Method, output='LL')
   standardGeneric("BDX") )
-setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, sim=F){
+setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8), output='LL'){
   # Only calculate buildings with all key parameters
+  
+  LL_cap <- -40
   hrange<-grep("hazMean",names(BD),value = T)
   
   elapsed_time <- c()
   start_time <- Sys.time()
   
-  if(!LL) {notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | all(is.na(BD@data[,hrange]))))
+  if(output != 'LL') {notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | all(is.na(BD@data[,hrange]))))
   } else notnans<-which(!(is.na(BD@data$Population) | is.na(BD@data$ISO3C) | is.na(BD@data$grading) | all(is.na(BD@data[,hrange]))))
+  
+  #LOOSEEND: This would be faster if moved outside of BDX and have the BD objects resaved without possibly the damaged buildings
+  #also can replace 'Minor', 'Moderate' and 'Severe' with just 'Damaged' outside and resave BD objects
+  possiblyDamaged_ij <- which(BD@data$grading=='possible') 
+  notnans <- notnans[!notnans %in% possiblyDamaged_ij]
+  
   BD<-BD[notnans,] ; notnans<-1:nrow(BD)
+  
   if(nrow(BD) ==0){
-    if(LL){return(0)}
-    else return(BD)
+    if(output=='LL'){return(0)}
+    else return(array(0, dim=c(4, Method$Np)))
   }
   # Get parameters for model
   
@@ -356,20 +368,20 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   Params$I0 <- Model$I0 #some objects have different I0 but don't want this to affect the model
   
   # Income distribution percentiles & extract income percentile  
-  SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
-  Sinc<-ExtractCIndy(BD,var = SincN)
+  #SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
+  #Sinc<-ExtractCIndy(BD,var = SincN)
   # Load buildings file
   # buildings<-readRDS(BD@buildingsfile)
   # Sample income distribution by area*building height?
   # BD%<>%SampleBuildings(buildings,F)
   # Calculate non-local linear predictor values
-  LP<-GetLP(BD,Omega,Params,Sinc,notnans, split_GNI=F)
+  LP<-GetLP(BD,Omega,Params,Sinc=NULL, notnans, split_GNI=F)
   
   # finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetLP = finish_time-start_time); start_time <- Sys.time()
   
   eps_event <- array(0, dim=c(length(hrange), Method$Np))
   for (h in 1:length(hrange)){
-    eps_event[h,] <- stochastic(Method$Np,Omega$eps$hazard)
+    eps_event[h,] <- stochastic(Method$Np,Omega$eps$hazard_bd)
   }
   
   # finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetEpsEvent = finish_time-start_time); start_time <- Sys.time()
@@ -388,7 +400,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
     bDamage<-0
     bDamage<-rep(0, Method$Np) #0 = notaffected, 1 = damaged
     ind <- rep(T, Method$Np)
-    
+    p_notaff <- rep(1, Method$Np)
     for(h_i in 1:length(hrange)){
       h <- hrange[h_i]
       #if(length(BD@data[ij,h])==0) next
@@ -400,49 +412,62 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
       #             sd = BD@data[ij,paste0("hazSD",h)]/10)
       
       I_ij <- BD@data[ij,h]
-      Damage <-fDamUnscaled(I_ij,list(I0=Params$I0, Np=sum(ind)),Omega) + locallinp + eps_event[h_i,ind]
+      Damage <-fDamUnscaled_BD(I_ij,list(I0=Params$I0, Np=sum(ind)),Omega) + locallinp + eps_event[h_i,ind]
       D_Dam <- D_Dam_calc(Damage, Omega)
       
-      bDamage[ind] <- rbinom(sum(ind), rep(1, sum(ind)), D_Dam) #vapply(1:sum(ind), sampleDamDest, numeric(1))
+      if (output=='LL' | output == 'results_analysis'){
+        p_notaff <- p_notaff * (1-D_Dam)
+      } else {
+        bDamage[ind] <- rbinom(sum(ind), rep(1, sum(ind)), D_Dam) #vapply(1:sum(ind), sampleDamDest, numeric(1))
+        ind <- bDamage != 1
+        if(all(!ind)) break
+        #bDamage[ind] <- apply(D_DestDamUnaf, 2, function(p){3- which(rmultinom(1, 1, p)==1)}) #slower
+        #bDamage[ind] <- apply(D_DestDamUnaf, 2, sample, x=2:0, size=1, replace=F) #even slower: note that positional matching of arguments to sample
+        #is overridden by matching names
+        # if (h_i == 3){
+        #   finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, pmaxbDam = finish_time-start_time); start_time <- Sys.time()
+        # }
+      }
       
-      #bDamage[ind] <- apply(D_DestDamUnaf, 2, function(p){3- which(rmultinom(1, 1, p)==1)}) #slower
-      #bDamage[ind] <- apply(D_DestDamUnaf, 2, sample, x=2:0, size=1, replace=F) #even slower: note that positional matching of arguments to sample
-                                                                                                                  #is overridden by matching names
-      # if (h_i == 3){
-      #   finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, pmaxbDam = finish_time-start_time); start_time <- Sys.time()
-      # }
-      
-      ind <- bDamage != 1
-      if(all(!ind)) break
     }
+    
+    if(output=='LL'){
+      if (BD@data$grading[ij] == 'notaffected'){
+        log_L <- log(p_notaff)
+        return(ifelse(is.finite(log_L), log_L, LL_cap))
+      } else {
+        log_L <- log(1-p_notaff)
+        return(ifelse(is.finite(log_L),log_L, LL_cap))
+      }
+    } else if (output=='results_analysis'){
+      #return Long, Lat, Grading, Max Intensity, Simulated Probability of Damage
+      return(c(BD@coords[ij,1], BD@coords[ij,2], BD@data$grading[ij], max(BD@data[ij,hrange], na.rm=T), p_notaff))
+    }
+    #if(LL) return(bPred!=BD@data$grading[ij]) #return 1 if incorrectly classified
     
     bPred <- ifelse(bDamage == 1, 'Damaged','notaffected')
     
-    if(LL) return(bPred!=BD@data$grading[ij]) #return 1 if incorrectly classified
-    
-    if(sim == F){
+    if(output != 'sim'){
       if(BD@data$grading[ij] == 'notaffected'){ # S: refers to simulated value, O: refers to observed value
         return(ifelse(bPred == 'Damaged', 'S:Dam,O:NAff','S:Naff,O:NAff'))
       } else {
         return(ifelse(bPred == 'Damaged', 'S:Dam,O:Dam', 'S:Naff,O:Dam'))
       }
     }
-    if(sim == T) return(bPred)
+    if(output == 'sim') return(bPred)
   }
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, DefCalcBD = finish_time-start_time); start_time <- Sys.time()
-  
-  #LOOSEEND: This should be moved outside of BDX and have the BD objects resaved without possibly the damaged buildings
-  #also need to replace 'Minor', 'Moderate' and 'Severe' with just 'Damaged'
-  possiblyDamaged_ij <- which(BD@data$grading=='possible') 
-  notnans <- notnans[!notnans %in% possiblyDamaged_ij]
-  if (length(notnans) == 0) return(array(0, dim=c(4, Method$Np)))
-  
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, findPossiblyDam = finish_time-start_time); start_time <- Sys.time()
   
-  if(LL) { #return the proportion of buildings correctly classified
+  if(output == 'LL') { # return the log likelihood
     if(Method$cores>1) {return(colSums(t(matrix(unlist(mclapply(X = notnans,FUN = CalcBD,mc.cores = Method$cores)),ncol=length(notnans)))))
     } else return(colSums(t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans)))))
+  } 
+  
+  if(output == 'results_analysis') { #return the proportion of buildings correctly classified
+    if(Method$cores>1) {return(t(matrix(unlist(mclapply(X = notnans,FUN = CalcBD,mc.cores = Method$cores)),ncol=length(notnans))))
+    } else return(t(matrix(unlist(lapply(X = notnans,FUN = CalcBD)),ncol=length(notnans))))
   }
   
   # classified<-t(matrix(unlist(mclapply(X = notnans,FUN = predBD,mc.cores = Method$cores)),ncol=length(notnans)))
@@ -460,7 +485,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8),LL=T, 
   
   #return(elapsed_time)
   
-  if(sim == F){ return(rbind(N11, N12, N21, N22))}
+  if(output != 'sim'){ return(rbind(N11, N12, N21, N22))}
   
   # Therefore, sim==F and LL==F
   # Save into the file

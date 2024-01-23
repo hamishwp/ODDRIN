@@ -39,7 +39,7 @@ AlgoParams<-list(Np=2, # Number of Monte Carlo particles
                  smc_alpha = 0.9,
                  n_nodes=1,
                  m_CRPS = 2, # number of draws to estimate CRPS for each particle. Number of samples from model therefore becomes Np * m_CRPS
-                 BD_weight = 0, #scales from 0 to 1: 0 means point data has no weighting, 1 means point data ... 
+                 BD_weight = 0, #scales from 0 to 1: 0 means point data has no weighting, 1 means point data is included to same weighting (by inverse MAD) as mortality
                  tol0 = 12000)
 		 
 if(is.null(AlgoParams$AllParallel)){
@@ -280,7 +280,7 @@ AlgoStep1 <- function(dir, AlgoParams, AlgoResults){
   start_time <- Sys.time()
   if(AlgoParams$n_nodes > 1){ #parallelise across nodes
     node_return <- mpi.remote.exec(initialise_particles_Rmpi, dir, AlgoParams$smc_Npart, AlgoParams$n_nodes)
-    print(node_return)
+    #print(node_return)
     particle_divisions <- split(1:AlgoParams$smc_Npart, sort(1:AlgoParams$smc_Npart%%AlgoParams$n_nodes))
     AlgoResults$d_full = array(Inf, dim=c(AlgoParams$smc_Npart, length(node_return[[1]]$d_full_node[1,,1]), length(node_return[[1]]$d_full_node[1,1,]), AlgoParams$smc_steps))
     AlgoResults$sampled_full = array(NA, dim=c(AlgoParams$smc_Npart, length(node_return[[1]]$sampled_full_node[1,,1]), length(node_return[[1]]$sampled_full_node[1,1,]), AlgoParams$smc_steps))
@@ -299,13 +299,30 @@ AlgoStep1 <- function(dir, AlgoParams, AlgoResults){
   end_time <- Sys.time()
   
   #weight distances by inverse MAD at first step
-  rel_weights <- 1/apply(AlgoResults$d_full[,1,,1], 2, stats::mad)
-  rel_weights <- ifelse(is.finite(rel_weights), rel_weights, 0)
+  #option 1: weight all relative to each other:
+  # rel_weights <- 1/apply(AlgoResults$d_full[,1,,1], 2, stats::mad)
+  # rel_weights <- ifelse(is.finite(rel_weights), rel_weights, 0)
+  
+  #option 2: weight relative within each impact type 
+  #(i.e. still define the relative weightings of each impact type, but use inverse MAD to weight within these)
+  rel_weight_groupings = list(c(1,4,7), c(2,5), c(3,6))
+  if(AlgoParams$BD_weight>0){rel_weight_groupings[[1]] %<>% c(8)}
+  rel_weights <- rep(0, length(AlgoResults$d_full[1,1,,1]))
+  for (group in rel_weight_groupings){
+    rel_weights_group <- 1/apply(AlgoResults$d_full[,1,unlist(group),1], 2, stats::mad)
+    rel_weights_group <- ifelse(is.finite(rel_weights_group), rel_weights_group, 0)
+    rel_weights_group_norm <- rel_weights_group/rel_weights_group[1]
+    rel_weights[unlist(group)] <- rel_weights_group_norm
+  }
+  if(AlgoParams$BD_weight>0){rel_weights[8] <- rel_weights[8] * AlgoParams$BD_weight}
+  
+  print('Distance Weightings:')
+  print(rel_weights)
+  
   AlgoResults$rel_weights <- rel_weights
   d_full_weighted <- sweep(AlgoResults$d_full[,,,1], 3, AlgoResults$rel_weights, FUN = "*")
   AlgoResults$d[,,1] <- apply(d_full_weighted, c(1,2), sum)
-  print('Distance Weightings:')
-  print(rel_weights)
+  
   return(AlgoResults)
 }
 
@@ -446,7 +463,7 @@ retrieve_UnfinishedAlgoResults <- function(dir, oldtag, Npart, AlgoResults){
 
 update_tolerance_and_weights <- function(s, alpha, AlgoResults){
   #Find the new tolerance such that alpha proportion of the current alive particles stay alive
-  toleranceold <- AlgoResults$tolerance[s-1]
+  toleranceold <- AlgoResults$tolerancestore[s-1]
   d_old <- adrop(AlgoResults$d[,,s-1,drop=FALSE], drop = 3)
   reflevel <- alpha * tpa(toleranceold, d_old)
   # if ((s+1)%%5 == 0){
@@ -492,7 +509,7 @@ resample_particles <- function(s, N_T, Npart, AlgoResults){
 
 calc_propCOV <- function(s, n_x, Npart, AlgoResults){
   #calculate perturbation covariance based on Filippi et al., 2012
-  tilda_i <- which(rowSums(adrop(AlgoResults$d[,,s-1, drop=F], drop=3)<AlgoResults$tolerance[s])>0) #identify old particles that fall within the new tolerance
+  tilda_i <- which(rowSums(adrop(AlgoResults$d[,,s-1, drop=F], drop=3)<AlgoResults$tolerancestore[s])>0) #identify old particles that fall within the new tolerance
   Omega_tilda <- AlgoResults$Omega_sample[tilda_i,,s-1] 
   W_tilda <- AlgoResults$W[tilda_i,s-1]
   W_tilda <- W_tilda/sum(W_tilda) #normalise weights
@@ -604,7 +621,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     propCOV <- calc_propCOV(s, n_x, AlgoParams$smc_Npart, AlgoResults)
     
     AlgoResults_small <- list(
-      tolerance_s = AlgoResults$tolerance[s],
+      tolerance_s = AlgoResults$tolerancestore[s],
       Omega_sample_s = AlgoResults$Omega_sample[,,s],
       Omega_sample_phys_s = AlgoResults$Omega_sample_phys[,,s],
       d_s = adrop(AlgoResults$d[,,s, drop=F], drop=3),
@@ -613,7 +630,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
       W_s = AlgoResults$W[,s], 
       rel_weights = AlgoResults$rel_weights
     )
-    saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
+    saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_start_step_",tag))
     rm(AlgoResults) #free up some space while doing the heavy lifting
     
     if(AlgoParams$n_nodes>1){
@@ -621,12 +638,12 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
                                      AlgoResults_small$W_s, AlgoResults_small$Omega_sample_s, AlgoResults_small$Omega_sample_phys_s, 
                                      AlgoResults_small$d_s, AlgoResults_small$d_full_s, AlgoResults_small$sampled_full_s, propCOV, AlgoResults_small$tolerance_s, 
                                      rel_weights = AlgoResults_small$rel_weights)
-      print(node_return)
+      #print(node_return)
       particle_divisions <- split(1:AlgoParams$smc_Npart, sort(1:AlgoParams$smc_Npart%%AlgoParams$n_nodes))
       
-      AlgoResults <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
+      AlgoResults <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_start_step_",tag))
       for (j in 1:length(node_return)){
-        print(node_return[[j]])
+        #print(node_return[[j]])
         AlgoResults$Omega_sample[particle_divisions[[j]],,s] <- node_return[[j]]$Omega_sample_node
         AlgoResults$Omega_sample_phys[particle_divisions[[j]],,s] <- node_return[[j]]$Omega_sample_phys_node
         AlgoResults$d[particle_divisions[[j]],,s] <- node_return[[j]]$d_node
@@ -637,7 +654,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=''){
     } else {
       step_s_results <- perturb_particles(s, propCOV, AlgoParams, AlgoResults_small$tolerance_s, AlgoResults_small$W_s, AlgoResults_small$Omega_sample_s, AlgoResults_small$Omega_sample_phys_s,
                         AlgoResults_small$d_s, AlgoResults_small$d_full_s, AlgoResults_small$sampled_full_s, rel_weights = AlgoResults_small$rel_weights)
-      AlgoResults <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
+      AlgoResults <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_start_step_",tag))
       AlgoResults$Omega_sample[,,s] <- step_s_results$Omega_sample_s
       AlgoResults$Omega_sample_phys[,,s] <- step_s_results$Omega_sample_phys_s
       AlgoResults$d[,,s] <- step_s_results$d_s

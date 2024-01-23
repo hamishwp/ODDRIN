@@ -286,6 +286,12 @@ fDamUnscaled<-function(I,Params,Omega){
   #   stochastic(Params$Np,Omega$eps_adj$local)) %>%return()
 }
 
+fDamUnscaled_BD<-function(I,Params,Omega){ 
+  return(h_0(I,Params$I0,Omega))
+  #(h_0(I,Params$I0,Omega$theta) + 
+  #   stochastic(Params$Np,Omega$eps_adj$local)) %>%return()
+}
+
 addTransfParams <- function(Omega, I0=Model$I0){
   Omega$Lambda1$loc <- h_0(Omega$Lambda1$nu, I0, Omega)
   Omega$Lambda2$loc <- h_0(Omega$Lambda2$nu, I0, Omega)
@@ -582,7 +588,7 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
   # }
 }
 
-SamplePointImpact <- function(dir,Model,proposed,AlgoParams,expLL=T, dat='Train'){
+SamplePointImpact <- function(dir,Model,proposed,AlgoParams, dat='Train', output='LL'){
   # Load BD files
   folderin<-paste0(dir,"IIDIPUS_Input/BDobjects/")
   
@@ -612,27 +618,27 @@ SamplePointImpact <- function(dir,Model,proposed,AlgoParams,expLL=T, dat='Train'
       # Extract the BD object
       BDy<-readRDS(paste0(folderin,filer))
       
-      if(nrow(BDy@data)==0){return()}
+      if(is.null(BDy)){return(rep(0, AlgoParams$Np))}
+      if(nrow(BDy@data)==0){return(rep(0, AlgoParams$Np))}
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       #BDy@fIndies<-Model$fIndies
       # Apply BDX
-      tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,Model = Model,Method=AlgoParams, LL=F),
+      tLL<-tryCatch(BDX(BD = BDy,Omega = proposed,Model = Model,Method=AlgoParams, output=output),
                     error=function(e) NA)
-      
       # If all is good, add the LL to the total LL
       if(any(is.infinite(tLL)) | all(is.na(tLL))) {print(paste0("Failed to calculate BD LL of ",filer));return(-Inf)}
       if (length(tLL > 1)){ return(tLL)}
-      return(tLL) #SMC-CHANGE
-      # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
-      maxLL<-max(tLL,na.rm = T)
-      # Return the average log-likelihood
-      cWeight<-Model$IsoWeights$weights[Model$IsoWeights$iso3==BDy$ISO3C[which(!is.na(BDy$ISO3C))[1]]] #looseend
-      if(is.na(cWeight)){return(-Inf)}                               
-      if(expLL) return(cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL)) 
-      else return(cWeight*mean(tLL,na.rm=T))
+      return(tLL) 
+      # # We need the max to ensure that exp(Likelihood)!=0 as Likelihood can be very small
+      # maxLL<-max(tLL,na.rm = T)
+      # # Return the average log-likelihood
+      # cWeight<-Model$IsoWeights$weights[Model$IsoWeights$iso3==BDy$ISO3C[which(!is.na(BDy$ISO3C))[1]]] #looseend
+      # if(is.na(cWeight)){return(-Inf)}                               
+      # if(expLL) return(cWeight*(log(mean(exp(tLL-maxLL),na.rm=T))+maxLL)) 
+      # else return(cWeight*mean(tLL,na.rm=T))
       
     }
-    return(do.call(abind, list(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores), along=1))) #SMC-CHANGE #d-change
+    return(do.call(rbind, mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))) #SMC-CHANGE #d-change
     #return(LL + sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
   }  
   # } else {
@@ -777,7 +783,7 @@ sample_quant <- function(x){
 
 mean_sd_dist <- function(impact_sample, AlgoParams){
   observed <- impact_sample$poly[[1]]$observed
-  dist_poly <- array(NA, dim=c(AlgoParams$Np,6))
+  dist_poly <- array(NA, dim=c(AlgoParams$Np,7))
   impact_type <- impact_sample$poly[[1]]$impact
   for(n in 1:AlgoParams$Np){
     samples_allocated <- ((n-1)*AlgoParams$m_CRPS+1):(n*AlgoParams$m_CRPS)
@@ -791,6 +797,8 @@ mean_sd_dist <- function(impact_sample, AlgoParams){
     dist_poly[n,4] <- AndersonDarlingTest(quants[impact_type=='mortality'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['mortality'])
     dist_poly[n,5] <- AndersonDarlingTest(quants[impact_type=='displacement'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['displacement'])
     dist_poly[n,6] <- AndersonDarlingTest(quants[impact_type=='buildDam'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['buildDam'])
+    dist_poly[n,7] <- AndersonDarlingTest(quants[impact_type=='mortality' & medians != 0], null='punif')$statistic * unlist(AlgoParams$kernel_sd['mortality'])
+    dist_poly[n,7] <- ifelse(is.na(dist_poly[n,7]), 50 * unlist(AlgoParams$kernel_sd['mortality']), dist_poly[n,7])
   }
   
   #is there a way to do this using a scoring rule as well? : 
@@ -801,17 +809,18 @@ mean_sd_dist <- function(impact_sample, AlgoParams){
   # }
   
   #F1 score
-  sumPointDat_dists <- function(PointDat_p){
-    F1 = c()
-    for (i in 1:(NROW(PointDat_p)/4)){
-      event_dat <- PointDat_p[((i-1)*4+1):(i*4)]
-      F1 = c(F1, (2 * event_dat[which(names(event_dat)=='N22')]) / (2 * event_dat[which(names(event_dat)=='N22')] + 2 * event_dat[which(names(event_dat)=='N12')] + 2 * event_dat[which(names(event_dat)=='N21')]))
-    }
-    return(sum(1-F1)*100) # LOOSEEND: don't have solid justification for this choice. 
-  }
+  # sumPointDat_dists <- function(PointDat_p){
+  #   F1 = c()
+  #   for (i in 1:(NROW(PointDat_p)/4)){
+  #     event_dat <- PointDat_p[((i-1)*4+1):(i*4)]
+  #     F1 = c(F1, (2 * event_dat[which(names(event_dat)=='N22')]) / (2 * event_dat[which(names(event_dat)=='N22')] + 2 * event_dat[which(names(event_dat)=='N12')] + 2 * event_dat[which(names(event_dat)=='N21')]))
+  #   }
+  #   return(sum(1-F1)*100) # LOOSEEND: don't have solid justification for this choice. 
+  # }
   
   if (length(impact_sample$point) > 0){
-    dist_point <- apply(impact_sample$point, 2, sumPointDat_dists)
+    #dist_point <- apply(impact_sample$point, 2, sumPointDat_dists)
+    dist_point <- -colSums(impact_sample$point)
   } else {
     dist_point <- 0
   }
@@ -819,7 +828,7 @@ mean_sd_dist <- function(impact_sample, AlgoParams){
   print(paste0('Dist_agg: ',rowSums(dist_poly), ' Dist_sat: ', dist_point))
   #dist_tot <- dist_poly + dist_poly_means + dist_point
   
-  dist_tot = cbind(dist_poly, AlgoParams$BD_weight * dist_point)
+  dist_tot = cbind(dist_poly, dist_point)
   
   return(dist_tot)
   #return(dist_tot)

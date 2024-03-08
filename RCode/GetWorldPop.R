@@ -134,6 +134,10 @@ mode_non_na <- function(arr,...){
 
 getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demography_Data/Population/WorldPop/'){
   
+  if(!dir.exists(file.path(paste0(dir, folder)))){
+    dir.create(file.path(paste0(dir, folder)))
+  }
+  
   bbox <- rbind(c(bbox_vect[1], bbox_vect[3]), c(bbox_vect[2],bbox_vect[4]))
   
   nations <- GetNationsBbox(dir, bbox)

@@ -2,8 +2,6 @@
 ### ODDpolys ###
 ################
 
-
-
 library(openxlsx)
 library(tidyxl)
 library(rgeos)
@@ -1444,14 +1442,26 @@ editHAZARDS <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
 createBDonly <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
   BD_folderin<-paste0(dir, folder_in, '/BDobjects/')
-  BD_folderout1<-paste0(dir, folder_in, '/BDobjects_newVuln/')
-  BD_folderout2<-paste0(dir, folder_in, '/BDobjects_newVuln_MARbySource/')
+  BD_folderout1<-paste0(dir, folder_in, '/BD_objects_withODDPixels_notMAR/')
+  BD_folderout2<-paste0(dir, folder_in, '/BD_objects_MAR_damless0.9/')
   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
   
   options(timeout=100)
   Damage<-ExtractBDfiles(dir = dir,haz = haz)
   
-  for (jj in 1:length(ufiles)){
+  # Damage<- haiti2021 %>% filter(!is.na(X_longitude) & !is.na(X_latitude)) %>% 
+  #                     transmute(grading=ifelse(overall_damage_rating=='Partial or Total Collapse', 'destroyed', 
+  #                                               ifelse(overall_damage_rating=='No Visible Damage', 'notaffected', 
+  #                                               ifelse(overall_damage_rating=='Minor', 'slight', tolower(overall_damage_rating)))), 
+  #                                       Longitude=X_longitude,
+  #                                       Latitude=X_latitude,
+  #                                       event='EQ20210814',
+  #                                       Confidence=NA,
+  #                                       hazard='EQ',
+  #                                       sdate=as.Date('2021-08-14'),
+  #                                       iso3='HTI')
+  
+  for (jj in 69:length(ufiles)){
     #issues with 69
     file <- ufiles[jj]
     ODDy <- readRDS(paste0(ODD_folderin, file))
@@ -1469,8 +1479,8 @@ createBDonly <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'
         stop('Failed to create BD object')
       }
       
-      #BDpath1 <-paste0(BD_folderout1,file)
-      #saveRDS(BDy, BDpath1)
+      BDpath1 <-paste0(BD_folderout1,file)
+      saveRDS(BDy, BDpath1)
       
       file_conn <- file(paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/BD_creation_notes'), open = "a")
       writeLines(paste0("Event: ", file), file_conn)

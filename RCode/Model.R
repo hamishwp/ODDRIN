@@ -788,17 +788,38 @@ mean_sd_dist <- function(impact_sample, AlgoParams){
   for(n in 1:AlgoParams$Np){
     samples_allocated <- ((n-1)*AlgoParams$m_CRPS+1):(n*AlgoParams$m_CRPS)
     samples_combined <- sapply(impact_sample$poly[samples_allocated], function(x){x$sampled}) #doesn't work if samples_allocated is length 1
-    medians <- apply(samples_combined, 1, median)
-    dist_poly[n,1] <- sum((log(medians[which(impact_type=='mortality')]+10)-log(observed[which(impact_type=='mortality')]+10))^2 * unlist(AlgoParams$kernel_sd['mortality']))
-    dist_poly[n,2] <- sum((log(medians[which(impact_type=='displacement')]+10)-log(observed[which(impact_type=='displacement')]+10))^2 * unlist(AlgoParams$kernel_sd['displacement']))
-    dist_poly[n,3] <- sum((log(medians[which(impact_type=='buildDam')]+10)-log(observed[which(impact_type=='buildDam')]+10))^2 * unlist(AlgoParams$kernel_sd['buildDam']))
+    medians <- apply(samples_combined, 1, mean)
+    dist_poly[n,1] <- mean((log(medians[which(impact_type=='mortality')]+10)-log(observed[which(impact_type=='mortality')]+10))^2) * unlist(AlgoParams$kernel_sd['mortality'])
+    dist_poly[n,2] <- mean((log(medians[which(impact_type=='displacement')]+10)-log(observed[which(impact_type=='displacement')]+10))^2) * unlist(AlgoParams$kernel_sd['displacement'])
+    dist_poly[n,3] <- mean((log(medians[which(impact_type=='buildDam')]+10)-log(observed[which(impact_type=='buildDam')]+10))^2) * unlist(AlgoParams$kernel_sd['buildDam'])
     
     quants <- (apply(cbind(observed,samples_combined), 1, sample_quant)-runif(length(observed),0,1))/(NCOL(samples_combined)+1)
-    dist_poly[n,4] <- AndersonDarlingTest(quants[impact_type=='mortality'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['mortality'])
-    dist_poly[n,5] <- AndersonDarlingTest(quants[impact_type=='displacement'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['displacement'])
-    dist_poly[n,6] <- AndersonDarlingTest(quants[impact_type=='buildDam'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['buildDam'])
-    dist_poly[n,7] <- AndersonDarlingTest(quants[impact_type=='mortality' & medians != 0], null='punif')$statistic * unlist(AlgoParams$kernel_sd['mortality'])
-    dist_poly[n,7] <- ifelse(is.na(dist_poly[n,7]), 50 * unlist(AlgoParams$kernel_sd['mortality']), dist_poly[n,7])
+    AD_mort <- AndersonDarlingTest(quants[impact_type=='mortality'],null='punif')$statistic
+    #dist_poly[n,4] <- AD_mort * unlist(AlgoParams$kernel_sd['mortality'])
+    crps_store <- c()
+    for (i in 1:length(observed)){
+      crps_store <- c(crps_store, crps_sample(log(observed[i]), log(samples_combined[i,])))
+    }
+    #logscores <- ifelse(is.finite(logscores), logscores, 600)
+    dist_poly[n,4] <- mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$kernel_sd['mortality'])
+    dist_poly[n,5] <- mean(crps_store[which(impact_type=='displacement')]) * unlist(AlgoParams$kernel_sd['displacement'])
+    dist_poly[n,6] <- mean(crps_store[which(impact_type=='buildDam')]) * unlist(AlgoParams$kernel_sd['buildDam'])
+    dist_poly[n,7] <- 0
+    #logscores  %>% mean()
+    #dist_poly[n,4] <- log(ifelse(AD_mort < 2, 2, AD_mort)+1) * unlist(AlgoParams$kernel_sd['mortality'])
+    #AD_disp <- AndersonDarlingTest(quants[impact_type=='displacement'], null='punif')$statistic
+    #dist_poly[n,5] <- AD_disp * unlist(AlgoParams$kernel_sd['displacement'])
+    
+    #AD_bd <- AndersonDarlingTest(quants[impact_type=='buildDam'], null='punif')$statistic
+    #dist_poly[n,6] <- AD_bd * unlist(AlgoParams$kernel_sd['buildDam'])
+    
+    #AD_mort_nonzero <- AndersonDarlingTest(quants[impact_type=='mortality' & medians != 0], null='punif')$statistic
+    #dist_poly[n,7] <- AD_mort_nonzero * unlist(AlgoParams$kernel_sd['mortality']) #ifelse(rbinom(1, 1, P_unif_test(AD_mort_nonzero))==1, 0, AD_mort_nonzero)
+    #dist_poly[n,7] <- log(ifelse(AD_mort_nonzero < 2, 2, AD_mort_nonzero)+1) * unlist(AlgoParams$kernel_sd['mortality'])
+    #dist_poly[n,7] <- 0#ifelse(is.na(dist_poly[n,7]), 50 * unlist(AlgoParams$kernel_sd['mortality']), dist_poly[n,7])
+    #for (j in 1:7){
+    #  dist_poly[n,j] <- ifelse(is.na(dist_poly[n,j]), 0, dist_poly[n,j])
+    #}
   }
   
   #is there a way to do this using a scoring rule as well? : 
@@ -1257,7 +1278,7 @@ CalcDist <- function(impact_sample, AlgoParams, dist_poly_means=NULL){
 #                   EQFreq='ab_bounded_inv'))
 # 
 # Model$acceptTrans <- list(
-#   Lambda1=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
+#   Lambda1=list(nu='ab_bounded_acc', omega='v'),
 #   Lambda2=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
 #   Lambda3=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),
 #   Lambda4=list(nu='ab_bounded_acc', omega='ab_bounded_acc'),

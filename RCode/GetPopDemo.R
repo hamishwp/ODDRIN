@@ -288,7 +288,6 @@ GetNationsBbox<-function(directory,bbox){
   # bbox is bounding box in the form 'min lon, max lat, max lon, min lat'
   # DATA: NASA - SEDAC
   
-  
   if(abs(bbox[2])>90 | abs(bbox[4])>90 | abs(bbox[1])>180 | abs(bbox[3])>180) {stop("Error: non-physical bounding box values in GetPopulationBbox")}
   
   # if(!is.null(date)) {

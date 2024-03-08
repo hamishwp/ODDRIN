@@ -33,9 +33,18 @@ Omega <- list(Lambda1 = list(nu=9.6, kappa=1.9049508),
               vuln_coeff = list(PDens=0, SHDI=-0.5, GNIc=-0.1, Vs30=0.1, EQFreq=-0.1, FirstHaz=0.05, Night=0.05, FirstHaz.Night=0.1),
               check = list(check=0.5))
 
+AlgoParams$cores <- 1
+AlgoParams$NestedCores <- 6
+AlgoParams$Np <- 2
+AlgoParams$m_CRPS <- 20
+start_time <- Sys.time()
+impact_sample <- SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams)
+finish_time <- Sys.time()
+finish_time-start_time
+
 Model$HighLevelPriors(Omega %>% addTransfParams(),Model)
 
-ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects_SubNat/Train/EQ20191118PHL_130')
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects/Test/EQ20130827CHN_13')
 
 xx <- DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, Method = AlgoParams, output='SampledAgg')
 

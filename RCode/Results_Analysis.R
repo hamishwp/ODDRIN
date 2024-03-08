@@ -269,35 +269,42 @@ sample_post_predictive_BDam <- function(AlgoResults, M, s, dat='Train', single_p
       # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
       #BDy@fIndies<-Model$fIndies
       # Apply BDX
+      AlgoParams$Np <- 1
       BD_with_p <- BDX(BD = BDy,Omega = proposed,Model = Model,Method=AlgoParams, output='results_analysis')
+      
       BD_with_p %<>% as.data.frame()
       names(BD_with_p) <- c('Longitude', 'Latitude', 'grading', 'Intensity','pDam')
       for (var_nam in c('Longitude', 'Latitude', 'Intensity', 'pDam')){
         BD_with_p[,var_nam] <- as.numeric(BD_with_p[,var_nam])
       } 
       BD_with_p$pDam <- 1-BD_with_p$pDam
+      BD_with_p$order <- 1:NROW(BD_with_p)
       
       BD_with_p$roundedLongitude = round(BD_with_p$Longitude, 1)
       BD_with_p$roundedLatitude = round(BD_with_p$Latitude, 1)
       BD_with_p$roundedIntensity = round(BD_with_p$Intensity, 1)
       
       BD_with_p <- arrange(BD_with_p, Latitude)
-      breaks_condition <- c(TRUE, diff(sort(BD_with_p$Latitude)) > 0.1)
+      breaks_condition <- c(TRUE, diff(sort(BD_with_p$Latitude)) > 0.01)
       BD_with_p$groupLat <- cumsum(breaks_condition)
       
       BD_with_p <- arrange(BD_with_p, Longitude)
-      breaks_condition <- c(TRUE, diff(sort(BD_with_p$Longitude)) > 0.1)
+      breaks_condition <- c(TRUE, diff(sort(BD_with_p$Longitude)) > 0.01)
       BD_with_p$groupLon <- cumsum(breaks_condition)
       
       #BD_with_p <- arrange(BD_with_p, Intensity)
       #breaks_condition <- c(TRUE, diff(sort(BD_with_p$Intensity)) > 0.1)
       BD_with_p$groupp <- round(BD_with_p$Intensity / 0.1) * 0.1
       
-      BD_with_p_grouped <- BD_with_p %>% group_by(groupLon, groupLat, groupp) %>% 
+      BD_with_p_grouped <- BD_with_p %>% group_by(groupLon, groupLat) %>% 
         summarise(obs_p_dam = mean(grading!='notaffected'), 
                   mean_p_mod = mean(pDam), 
                   mean_p_modDam = mean(pDam[which(grading!='notaffected')]),
                   mean_p_modUnaff = mean(pDam[which(grading=='notaffected')]))
+      
+      BD_with_group <- BD_with_p %>% group_by(groupLon, groupLat) %>% mutate(group = cur_group_id())
+      BD_with_group <- arrange(BD_with_group, order)
+      
       
       plot_dat <- plot_dat %>% add_row(BD_with_p_grouped[,-c(1,2,3)] %>% add_column(event_name=filer))
       

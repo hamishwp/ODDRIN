@@ -90,6 +90,7 @@ setMethod(f="initialize", signature="BD",
             rm(Damage)
             
             print("Interpolating population density, hazard & GDP-PPP data")
+            ODD$spatial_pixel <- 1:NROW(ODD)
             .Object%<>%BDinterpODD(ODD=ODD)
             
             print("Filter spatial data per country")
@@ -381,8 +382,15 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8), outpu
   
   eps_event <- array(0, dim=c(length(hrange), Method$Np))
   for (h in 1:length(hrange)){
-    eps_event[h,] <- stochastic(Method$Np,Omega$eps$hazard_bd)
+    eps_event[h,] <- stochastic(Method$Np,Omega$eps_adj$hazard_bd)
   }
+  
+  n_groups <- length(unique(BD$spatial_pixel))
+  eps_local <- array(0, dim=c(n_groups, Method$Np))
+  for (g in 1:n_groups){
+    eps_local[g,] <- stochastic(Method$Np, Omega$eps_adj$local)
+  }
+  
   
   # finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetEpsEvent = finish_time-start_time); start_time <- Sys.time()
   
@@ -412,7 +420,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8), outpu
       #             sd = BD@data[ij,paste0("hazSD",h)]/10)
       
       I_ij <- BD@data[ij,h]
-      Damage <-fDamUnscaled_BD(I_ij,list(I0=Params$I0, Np=sum(ind)),Omega) + locallinp + eps_event[h_i,ind]
+      Damage <-fDamUnscaled_BD(I_ij,list(I0=Params$I0, Np=sum(ind)),Omega) + locallinp + eps_event[h_i,ind] + eps_local[BD@data$spatial_pixel[ij], ind]
       D_Dam <- D_Dam_calc(Damage, Omega)
       
       if (output=='LL' | output == 'results_analysis'){

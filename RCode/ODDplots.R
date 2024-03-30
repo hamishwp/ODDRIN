@@ -1,5 +1,7 @@
 bbox=c(166.32,-18.5,169.2,-14)
 
+bbox<-c(ODDy@bbox)
+
 mad_map <- get_stamenmap(bbox,source = "stamen",maptype = "terrain",zoom=8)
 
 p<-ggmap(mad_map) + xlab("Longitude") + ylab("Latitude")

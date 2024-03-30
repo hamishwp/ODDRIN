@@ -367,7 +367,7 @@ convODD<-function(out,ODDy,Event){
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EXTRACT DATA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-folder<-"./IIDIPUS_Input/IIDIPUS_Input_NMAR/ODDobjects/"
+folder<-"./IIDIPUS_Input/IIDIPUS_Input_All_2023May19/ODDobjects/"
 filez<-list.files(folder)
 
 out<-data.frame()
@@ -1640,20 +1640,57 @@ p<-ODD_all%>%ggplot()+geom_boxplot(aes(impact,MADL,fill=impact))+
   theme(plot.title = element_text(hjust = 0.5));p
 ggsave("agg_RF_Predictions.eps",p,path="./Plots/IIDIPUS_Results/",width=8,height=5,device = grDevices::cairo_ps)  
 
-# Then do multivariate model for displacement and mortality for CNNs
 
-# Then do multivariate model for displacement and mortality for CNNs
+MMIlevels<-5000:9500/1000
 
+# Proof that Turkiye EQ event is an outlier
+expPop_MMI<-function(ODDy,Event){
+  # Make MaxHaz function over all EQ fore and aftershocks:
+  if(length(names(ODDy)[grepl("hazMean",names(ODDy))])==1){
+    ODDy@data$hazMax<-ODDy@data$hazMean1
+  } else {
+    hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
+    for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+      tmp<-ODDy[variable]
+      tmp$hazard<-hazard
+      hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+    }
+    ODDy@data$hazMax<-hazard
+  }
+  
+  # Calculate the population exposed per MMI level
+  return(do.call(rbind,parallel::mclapply(MMIlevels,function(mmi){
+    return(data.frame(Event=Event, MMI=mmi,
+                      PopExp=sum(ODDy@data$Population[ODDy@data$hazMax>=mmi],
+                                 na.rm = T)))
+  },mc.cores = ncores)))
 
+}
 
+# Run it across all events
+expop<-data.frame()
+for(fff in filez){
+  # Exceptions... sigh
+  if(fff=="EQ20170529IDN_136") next
+  # Read in the hazard & impact object
+  ODDy<-readRDS(paste0(folder,fff))
+  # Convert it into the necessary form
+  expop%<>%rbind(expPop_MMI(ODDy,fff))
+  
+  print(paste0("Finished EQ: ",fff))
+}
+ODDy<-readRDS(paste0(folder,"EQ20230206TUR_169"))
+expop%<>%rbind(expPop_MMI(ODDy,"EQ20230206TUR_169"))
 
+p <- expop %>% ggplot() + geom_line(aes(MMI, PopExp, colour=Event),alpha=0.5,size=0.5) + 
+  theme(legend.position = "none") + 
+  scale_y_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
+                labels = scales::trans_format("log10", scales::math_format(10^.x)),
+                limits=c(1e3,1e8)) + annotation_logticks(sides="l") +
+  xlab("USGS Shakemap Intensity [MMI]") + ylab("Exposed Population [Cumulative]") +
+  geom_point(data = expop%>%filter(Event=="EQ20230206TUR_169"),mapping = aes(MMI,PopExp), colour="black", size=2)
 
-
-
-
-
-
-
+ggsave("TUR_outlier_ExpPop-MMI.eps",p,path="./Plots/IIDIPUS_Results/",width=6,height=5,device = grDevices::cairo_ps)  
 
 
 

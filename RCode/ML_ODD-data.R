@@ -1690,7 +1690,7 @@ p <- expop %>% ggplot() + geom_line(aes(MMI, PopExp, colour=Event),alpha=0.5,siz
   xlab("USGS Shakemap Intensity [MMI]") + ylab("Exposed Population [Cumulative]") +
   geom_point(data = expop%>%filter(Event=="EQ20230206TUR_169"),mapping = aes(MMI,PopExp), colour="black", size=2)
 
-ggsave("TUR_outlier_ExpPop-MMI.eps",p,path="./Plots/IIDIPUS_Results/",width=6,height=5,device = grDevices::cairo_ps)  
+ggsave("TUR_outlier_ExpPop-MMI.eps",p,path="./Plots/IIDIPUS_Results/",width=8,height=5,device = grDevices::cairo_ps)  
 
 
 

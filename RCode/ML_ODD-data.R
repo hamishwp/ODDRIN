@@ -1693,14 +1693,89 @@ p <- expop %>% ggplot() + geom_line(aes(MMI, PopExp, colour=Event),alpha=0.5,siz
 ggsave("TUR_outlier_ExpPop-MMI.eps",p,path="./Plots/IIDIPUS_Results/",width=8,height=5,device = grDevices::cairo_ps)  
 
 
+# MADL example with random forest algorithm, by plotting the observed vs predicted impacts
+rfres<-do.call(rbind,lapply(allimps,function(impact){
+  
+  outFrame<-dplyr::select(outred,-allimps[impact!=allimps])
+  names(outFrame)[1]<-"Y"
+  outFrame$Y<-log(outFrame$Y+10)
+  outFrame%<>%na.omit()
+  # Make weights from the different events to make sure that no single event dominates the model parameterisation
+  weights<-outFrame%>%group_by(Event)%>%summarise(www=1/length(time))%>%merge(outFrame)%>%pull(www)
+  # Remove the variable Event after weighting is calculated
+  outFrame%<>%dplyr::select(-Event)
+  # Train the model!
+  modeler<-caret::train(Y~., data = outFrame, method = algo, metric="RelativeAbs",
+                        tuneLength = 12, trControl = train_control,linout = TRUE,
+                        weights = weights, preProcess = c("center","scale"))
+  # Get the predictions
+  ybar=unname(predict(modeler,outFrame))
+  
+  data.frame(y=exp(outFrame$Y)-10, 
+             ybar=exp(ybar)-10,
+             MADL=abs(outFrame$Y-ybar),
+             impact=impact)
+}))
 
+# Due to messing around with log(x+10) we need to round the observed values
+rfres$y%<>%round()
 
+# Function to print out the numbers how we want them
+scinote <- function(x) {
+  # Get the exponent of the number
+  exponent <- floor(log10(abs(x)))
+  # Round the number to 2 significant figures
+  rounded_value <- round(x / 10^exponent, 2)
+  # Format the number in scientific notation with 1 significant figures
+  formatted_value <- sprintf("%.1f", rounded_value)
+  # Construct the string in scientific notation
+  scientific_notation <- paste0(formatted_value, "e", exponent)
+  
+  return(scientific_notation)
+}
 
+# Create the text to go onto the plot, showing the adj-R^2 and the L1 + L2 norms
+texty<-do.call(rbind,lapply(allimps,function(imp){
+  # Filter the specificimpact type
+  tmp<-rfres%>%filter(impact==imp)
+  # Extract the metrics of interest
+  adjR2<-summary(lm(y ~ ybar , data=tmp))$adj.r.squared
+  L1<-mean(abs(tmp$y-tmp$ybar))
+  L2<-mean((tmp$y-tmp$ybar)^2)
+  # Find a nice way to calculate the y-value of the text location
+  yv<-quantile(tmp$ybar,probs=0.99); yv<-c(yv,yv*(0.7-0.05*log10(yv[1])))
+  y_diff <- (log10(yv[2]) - log10(yv[1]))  # Difference between the first two entries in log space
+  yv <- c(yv, 10^(log10(yv[2]) + y_diff)) 
+  
+  data.frame(impact=imp,
+    text=c(
+      paste0("adj-R^2 = ",signif(adjR2,2)),
+      paste0("L1 / N = ",scinote(L1)),
+      paste0("L2 / N = ",scinote(L2))
+    ),
+    variable=c("adj-R^2","L1","L2"),
+    x_pos=1, y_pos=yv)
+}))
 
+# Plot it!
+p<-rfres%>%ggplot()+geom_point(aes(y,ybar,size=MADL,colour=impact))+
+  scale_x_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
+                labels = scales::trans_format("log10", scales::math_format(10^.x)),
+                limits=c(1,NA))+
+  scale_y_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
+                labels = scales::trans_format("log10", scales::math_format(10^.x)),
+                limits=c(1,NA))+
+  geom_abline(slope = 1,intercept = 0,colour="black")+
+  scale_size_continuous(breaks = c(0.05,0.1,0.5,1,5)) +
+  annotation_logticks() +
+  labs(colour="Impact")+xlab("Observed Impact")+ylab("Predicted Impact")+
+  ggtitle("Top Model: Random Forest")+theme(plot.title = element_text(hjust = 0.5))+
+  facet_wrap(~impact,nrow=2,scales = "free")+
+  geom_text(data = texty,
+            aes(label = text, x = 1, y = y_pos),
+            hjust = 0, vjust = 0, size = 3);p
 
-
-
-
+ggsave("RF_Perf_wMADL.eps",p,path="./Plots/IIDIPUS_Results/",width=10,height=8,device = grDevices::cairo_ps)  
 
 # Melt the dataframe to plot
 # resultsUV%<>%reshape2::melt(id.vars=1:4)

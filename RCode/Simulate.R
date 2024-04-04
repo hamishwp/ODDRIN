@@ -42,7 +42,8 @@ setMethod(f="initialize", signature="ODDSim",
             # This bounding box is taken as the minimum region that encompasses all hazard events in HAZARD object:
             bbox<-lhazSDF$hazard_info$bbox
             dater<-min(lhazSDF$hazard_info$sdate)
-            .Object@hazdates<-lhazSDF$hazard_info$eventdates
+            .Object@hazdates<-as.Date(lhazSDF$hazard_info$eventdates)
+            .Object@hazinfo <-lhazSDF$hazard_info
             
             year<-AsYear(dater)
             
@@ -76,7 +77,7 @@ setMethod(f="initialize", signature="ODDSim",
             if(.Object@hazard%in%c("EQ","TC")){
               .Object@impact <- data.frame(iso3=character(), polygon=numeric(), impact=character(),
                                            observed=numeric(), qualifier = character())
-              for (j in 1:length(Model$impacts$labels)){
+              for (j in 1:length(Model$impacts$labels[1:3])){ #remove buildDest and buildDamDest
                 n_poly_observed <- runif(1, 1, n_polygons)
                 for (i in 1:n_poly_observed){
                   .Object@impact %<>% add_row(
@@ -138,7 +139,10 @@ setMethod(f="initialize", signature="ODDSim",
             polygons_list <- list()
             polygons_list[[1]] <- list(name='Polygon 1', indexes = 1:length(.Object@data$ISO3C))
             for (i in 2:n_polygons){
-              polygons_list[[i]] <- list(name=paste('Polygon',i), indexes = sample(1:length(.Object@data$ISO3C), runif(1, 1, length(.Object@data$ISO3C)), replace=F))
+              nPixels_in_poly <-  runif(1, 1, length(.Object@data$ISO3C))
+              polygons_list[[i]] <- list(name=paste('Polygon',i), 
+                                         indexes = sample(1:length(.Object@data$ISO3C),nPixels_in_poly, replace=F),
+                                         weights = rep(1, length(nPixels_in_poly)))
             }
               
             .Object@polygons <- polygons_list
@@ -146,18 +150,21 @@ setMethod(f="initialize", signature="ODDSim",
             #Add linear predictor data
             #need to tidy this up, not very reflective of real data to have this much variation within such a small region!
             ulist <- unique(GDPSim)
-            ExpSchYrs_vals <- runif(length(ulist), 3, 18)
+            AveSchYrs_vals <- runif(length(ulist), 3, 18)
             LifeExp_vals <- runif(length(ulist), 30, 85)
             GNIc_vals <- exp(runif(length(ulist), 6, 12))
             Vs30_vals <- runif(length(ulist), 98, 2197)
             EQFreq_vals <- runif(length(ulist), 1, 10)
+            SHDI_vals <- runif(length(ulist), 0.1, 0.9)
             for(i in 1:length(ulist)){
-              .Object@data$ExpSchYrs[GDPSim %in% ulist[i]] <- ExpSchYrs_vals[i]
+              .Object@data$AveSchYrs[GDPSim %in% ulist[i]] <- AveSchYrs_vals[i]
               .Object@data$LifeExp[GDPSim %in% ulist[i]] <- LifeExp_vals[i]
               .Object@data$GNIc[GDPSim %in% ulist[i]] <- GNIc_vals[i]
               .Object@data$Vs30[GDPSim %in% ulist[i]] <- Vs30_vals[i]
               .Object@data$EQFreq[GDPSim %in% ulist[i]] <- EQFreq_vals[i]
+              .Object@data$SHDI[GDPSim %in% ulist[i]] <- SHDI_vals[i]
             }
+            .Object@data$PDens <- .Object@data$Population
             
             print("Checking ODDSim values")
             checkODD(.Object)
@@ -173,7 +180,7 @@ setMethod(f="initialize", signature="BDSim",
             if(is.null(ODD)) return(.Object)            
             
             .Object@hazard<-ODD@hazard
-            .Object@cIndies<-ODD@cIndies
+            #.Object@cIndies<-ODD@cIndies
             .Object@I0<-ODD@I0
             .Object@hazdates<-ODD@hazdates
             .Object@eventid<-ODD@eventid
@@ -216,6 +223,7 @@ setMethod(f="initialize", signature="BDSim",
             rm(Damage)
             
             print("Interpolating population density, hazard & GDP-PPP data")
+            ODD$spatial_pixel <- 1:NROW(ODD)
             .Object%<>%BDinterpODD(ODD=ODD)
             
             print("Filter spatial data per country")
@@ -246,7 +254,7 @@ simulateEvent <- function(r, I0 = 4.5){
   # - The maximum magnitude varies randomly in [5, 9.3] and the spread in [15, 25]
   # - The earthquake standard deviation in each cell is random uniform in [0.8,1.1]
   
-  maxMag = runif(1, 6, 10)
+  maxMag = rnorm(1, 7, 1)
   sigma = runif(1, 8, 15)
   r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, s=r@nrows)) 
   r <- r * (maxMag/r@data@max)
@@ -269,7 +277,7 @@ simulatePopulation <- function(r){
   # - The population is simulated according to a Gaussian process with a spherical semi-variogram,
   #   and is then scaled onto [0, maxPopDens] using the cumulative weibull distribution.
   
-  maxPopDens = runif(1, 100, 1000)
+  maxPopDens = runif(1, 500, 10000)
   Field = as.data.frame(rasterToPoints(r))
   names(Field)=c('Longitude','Latitude')
   Pop_modelling=gstat(formula=Population~1, 
@@ -337,20 +345,50 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   lenny = rgeom(1, 0.8) + 1 #generate number of events according to a geometric distribution
   bbox = c(xmn,ymn,xmn+0.5,ymn+0.5) 
   lhazdat<-list(hazard_info=list(bbox=bbox,sdate=min(miniDam$sdate),fdate=max(miniDam$fdate),
-                                 NumEvents=lenny,hazard="EQ", I0=I0, eventdates=rep(miniDam$sdate, lenny)))
+                                 NumEvents=lenny,hazard="EQ", I0=I0, eventdates=c(), depths=c(), 
+                                magnitudes=c(), max_mmi=c(), eventtimes=c(), usgs_ids=c(), alertfull=list()))
   for(i in 1:lenny){
     hazsdf <- simulateEvent(r, I0)
+    while(NROW(hazsdf)==0){
+      hazsdf <- simulateEvent(r, I0)
+    }
+    
     if(is.null(hazsdf@data$mmi_mean)){
       next
     }
-    lhazdat <- append(lhazdat, new("HAZARD",
-        obj=hazsdf,
-        hazard="EQ",
-        dater=min(miniDam$sdate),
-        I0=I0,
-        alertlevel=ifelse(max(hazsdf$mmi_mean)>7.5, 'red', ifelse(max(hazsdf$mmi_mean)>6, 'orange', 'green')), #assign pretty arbitrarily, don't think this is used in the model
-        alertscore=0))
+    
+    haz <- new("HAZARD",
+                  obj=hazsdf,
+                  hazard="EQ",
+                  dater= min(miniDam$sdate),
+                  I0=I0,
+                  alertlevel=ifelse(max(hazsdf$mmi_mean)>7.5, 'red', ifelse(max(hazsdf$mmi_mean)>6, 'orange', 'green')), #assign pretty arbitrarily, don't think this is used in the model, 
+                  alertscore=0,
+                  depth= runif(1,0,50), #doesn't matter as not currently included in model
+                  magnitude=runif(1,4,10),  
+                  max_mmi=max(hazsdf@data$mmi_mean, na.rm=T),
+                  USGS_id=paste0('USGS', '_',miniDam$eventid[1], '_', round(runif(1,1000,9000))), #doesn't matter as not included in model
+                  eventtime=format(as.POSIXct(sample(as.numeric(as.POSIXct("00:00:00", format = "%H:%M:%S")):as.numeric(as.POSIXct("23:59:59", format = "%H:%M:%S")), 1), origin = "1970-01-01", tz = "UTC"), "%H:%M:%S"),
+                  alertfull=list()
+    )
+    lhazdat <- append(lhazdat, haz)
+    
+    lhazdat$hazard_info$alertlevel%<>%c(haz@alertlevel)
+    lhazdat$hazard_info$eventdates%<>%c(as.character(haz@eventdate))
+    lhazdat$hazard_info$depths%<>%c(haz@depth)
+    lhazdat$hazard_info$magnitudes%<>%c(haz@magnitude)
+    lhazdat$hazard_info$max_mmi%<>%c(haz@max_mmi)
+    lhazdat$hazard_info$eventtimes%<>%c(haz@eventtime)
+    lhazdat$hazard_info$usgs_ids%<>%c(haz@USGS_id)
+    lhazdat$hazard_info$alertfull[[length(lhazdat$hazard_info$alertfull)+1]] <- haz@alertfull
   }
+  #make the first event in the set the 'first event' with probability 0.8
+  #this somewhat mimics the real dataset in which there may be preceding events not included in the ODD object
+  first_event <- order(paste(lhazdat$hazard_info$eventdates, lhazdat$hazard_info$eventtimes))[1]
+  lhazdat$hazard_info$first_event <- rep(F, length(lhazdat$hazard_info$eventdates))
+  lhazdat$hazard_info$first_event[first_event] = as.logical(rbinom(1, 1, 0.8)) 
+
+  
   if (length(lhazdat)== 1){
     print('Simulation failed: affected region under simulated event is too small')
     return(NULL)
@@ -358,17 +396,16 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   PopSim <- simulatePopulation(r)
   GDPSim <- simulateGDP(r)
   
-  ODDSim <- tryCatch(new('ODDSim', lhazSDF=lhazdat,DamageData=miniDam, PopSim=PopSim, GDPSim=GDPSim, Model=Model), error=function(e) NULL)
-  
+  ODDSim <- tryCatch(new('ODDSim', lhazSDF=lhazdat,DamageData=miniDam, PopSim=PopSim, GDPSim=GDPSim, # no longer use GDP but use the spatial groupings of GDPSim for grouping vulnerability covariates
+                         Model=Model), error=function(e) NULL)
   return(ODDSim)
 }
-
 
 simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5, cap=-300){
   # Input:
   # - nEvents: The number of ODDSim objects to generate
   # - Omega: The model parameterisation
-  # - outliers: If true, includes an outlier at a high intensity with higher impact than simulated by the model
+  # - outliers: If true, includes an outlier at a high intensity with higher impact than simulated by the model (to check robustness of algorithm)
   # Output: 
   # - center: the center values of PDens and GDP under the simulated data
   # Details:
@@ -416,9 +453,8 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
     intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
-    ODDSim %<>% DispX(Omega %>% addTransfParams(), Model$center, Model$BD_params, output='ODDwithSampled',
-                      Method=list(Np=1,cores=1,cap=-300,  kernel_sd=list(displacement=0.15,mortality=0.03,buildDam=0.15,buildDest=0.1), kernel='lognormal'))
-    
+    ODDSim %<>% DispX(Omega %>% addTransfParams(), Model$center, output='ODDwithSampled',
+                      Method=list(Np=1,cores=1))
     #take these simulations as the actual values
     ODDSim@impact <- data.frame(impact=character(), iso3=character(), qualifier=character(), value=numeric())
     ODDSim@impact <- ODDSim@predictDisp %>% mutate(observed=sampled, qualifier = ifelse(is.na(sampled), NA, 'total'))
@@ -429,7 +465,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   }
   for (i in 1:length(BDpaths)){
     BDSim <- readRDS(paste0("IIDIPUS_SimInput/BDobjects/", BDpaths[i]))
-    BDSim %<>% BDX(Omega %>% addTransfParams(), Model, Method=list(Np=1,cores=1), output=='sim')
+    BDSim %<>% BDX(Omega %>% addTransfParams(), Model, Method=list(Np=1,cores=1), output='sim')
     #take these simulations as the actual values
     BDSim@data$grading <- BDSim@data$ClassPred
     #switch those affected to 'Damaged' with probability 0.5

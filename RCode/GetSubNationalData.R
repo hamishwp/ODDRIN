@@ -1406,8 +1406,6 @@ createHAZARD <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx'){
       stop(i)
     }
     print(lhazSDF$hazard_info$max_mmi)
-    lhazSDF$hazard_info$first_event <- check_preceding_hazards(lhazSDF)
-    lhazSDF$hazard_info$first_event
     
     # Create a unique hazard event name
     namer<-paste0('EQ',

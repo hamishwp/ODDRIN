@@ -279,6 +279,7 @@ setMethod(f="initialize", signature="ODD",
             bbox<-lhazSDF$hazard_info$bbox
             dater<-min(lhazSDF$hazard_info$sdate)
 	          .Object@hazdates<-lhazSDF$hazard_info$eventdates
+	          .Object@hazinfo <-lhazSDF$hazinfo
 
             year<-AsYear(dater)
             
@@ -425,7 +426,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   Sinc<-ExtractCIndy(ODD,var = SincN)
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
   if(output != 'LL') {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$AveSchYrs)))
-  } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) ))#!ODD$ISO3C%in%ODD@impact$iso3))
+  } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) )) #!ODD$ISO3C%in%ODD@impact$iso3))
   
   # Calculate non-local linear predictor values
   LP<-GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=T)
@@ -505,7 +506,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       
       I_ij<-ODD@data[ij,h]
 
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]], error=function(e) NA)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]] + event_lp[h_i], error=function(e) NA)
       
       if(any(is.na(Damage))) print(ij)
       
@@ -652,7 +653,6 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     ODD@data$Disp<-Dam[,1,1]  #should this be named data$DispPred or something instead?
     ODD@data$Mort<-Dam[,1,2]
     ODD@data$BuildDam<-Dam[,1,3]
-    ODD@data$BuildDest<-Dam[,1,4]
     ODD@predictDisp<-funcy(1,LLout=F) 
     return(ODD)
   }

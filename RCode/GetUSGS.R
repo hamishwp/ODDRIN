@@ -323,8 +323,8 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
   lhazdat$hazard_info$bbox<-tbbox
   lhazdat$hazard_info$eventdates%<>%as.Date()
   lhazdat$hazard_info$fdate<-max(lhazdat$hazard_info$eventdates)
+  lhazdat$hazard_info$first_event <- check_preceding_hazards(lhazdat)
   return(lhazdat)
-  
 }
 
 GetPagerFatality <- function(url){

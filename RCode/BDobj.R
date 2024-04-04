@@ -359,7 +359,11 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8), outpu
   
   if(nrow(BD) ==0){
     if(output=='LL'){return(0)}
-    else return(array(0, dim=c(4, Method$Np)))
+    else if (output=='sim'){
+      return(BD)
+    } else {
+      return(array(0, dim=c(4, Method$Np)))
+    }
   }
   # Get parameters for model
   
@@ -386,6 +390,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8), outpu
   }
   
   n_groups <- length(unique(BD$spatial_pixel))
+  BD$spatial_pixel_id <- as.numeric(factor(BD$spatial_pixel, levels = unique(BD$spatial_pixel)))
   eps_local <- array(0, dim=c(n_groups, Method$Np))
   for (g in 1:n_groups){
     eps_local[g,] <- stochastic(Method$Np, Omega$eps_adj$local)
@@ -420,7 +425,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8), outpu
       #             sd = BD@data[ij,paste0("hazSD",h)]/10)
       
       I_ij <- BD@data[ij,h]
-      Damage <-fDamUnscaled_BD(I_ij,list(I0=Params$I0, Np=sum(ind)),Omega) + locallinp + eps_event[h_i,ind] + eps_local[BD@data$spatial_pixel[ij], ind]
+      Damage <-fDamUnscaled_BD(I_ij,list(I0=Params$I0, Np=sum(ind)),Omega) + locallinp + eps_event[h_i,ind] + eps_local[BD@data$spatial_pixel_id[ij], ind]
       D_Dam <- D_Dam_calc(Damage, Omega)
       
       if (output=='LL' | output == 'results_analysis'){
@@ -483,17 +488,20 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8), outpu
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, calcBD = finish_time-start_time); start_time <- Sys.time()
   
-  #find values in contingency table between simulated and observed
-  N11 <- colSums(classified=='S:Naff,O:NAff') #simulated: notaffected, observed: notaffected
-  N12 <- colSums(classified=='S:Dam,O:NAff') #simulated: damaged, observed: notaffected
-  N21 <- colSums(classified=='S:Naff,O:Dam')
-  N22 <- colSums(classified=='S:Dam,O:Dam')
+  if(output != 'sim'){ 
+    #find values in contingency table between simulated and observed
+    N11 <- colSums(classified=='S:Naff,O:NAff') #simulated: notaffected, observed: notaffected
+    N12 <- colSums(classified=='S:Dam,O:NAff') #simulated: damaged, observed: notaffected
+    N21 <- colSums(classified=='S:Naff,O:Dam')
+    N22 <- colSums(classified=='S:Dam,O:Dam')
+    return(rbind(N11, N12, N21, N22))
+  }
+  
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, classifications = finish_time-start_time); start_time <- Sys.time()
   
   #return(elapsed_time)
   
-  if(output != 'sim'){ return(rbind(N11, N12, N21, N22))}
   
   # Therefore, sim==F and LL==F
   # Save into the file

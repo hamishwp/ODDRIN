@@ -74,15 +74,15 @@ Model$skeleton <- list(
 )
 
 Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
-  Lambda1=list(mu=list(dist='unif', min=6.5, max=10.5), 
-               sigma=list(dist='unif', min=0.25, max=2) #, alpha=list(dist='unif', min=-0.1, max=0.5)
-               ), 
-  Lambda2=list(mu=list(dist='unif', min=9, max=12.5), 
-               sigma=list(dist='unif', min=0.25, max=2)),
-  Lambda3=list(mu=list(dist='unif', min=6.5, max=10), 
-               sigma=list(dist='unif', min=0.25, max=2)),
-  Lambda4=list(mu=list(dist='unif', min=8, max=12.5), 
-               sigma=list(dist='unif', min=0.25, max=2.5)),
+  Lambda1=list(nu=list(dist='unif', min=6.5, max=10.5), 
+               kappa=list(dist='unif', min=0.25, max=2) #, alpha=list(dist='unif', min=-0.1, max=0.5)
+  ), 
+  Lambda2=list(nu=list(dist='unif', min=9, max=12.5), 
+               kappa=list(dist='unif', min=0.25, max=2)),
+  Lambda3=list(nu=list(dist='unif', min=6.5, max=10), 
+               kappa=list(dist='unif', min=0.25, max=2)),
+  Lambda4=list(nu=list(dist='unif', min=8, max=12.5), 
+               kappa=list(dist='unif', min=0.25, max=2.5)),
   theta=list(theta1=list(dist='unif', min=0, max=1)),
   eps=list(local=list(dist='unif', min=0, max=1.5),
            hazard_mort=list(dist='unif', min=0, max=1.5),
@@ -90,16 +90,46 @@ Model$Priors <- list( #All uniform so currently not included in the acceptance p
            hazard_bd=list(dist='unif', min=0, max=1.5),
            hazard_cor=list(dist='unif', min=0, max=1)),
   vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.25),
-                  EQFreq=list(dist='laplace', location=0, scale=0.25),
                   SHDI=list(dist='laplace', location=0, scale=0.25),
                   GNIc=list(dist='laplace', location=0, scale=0.25),
                   Vs30=list(dist='laplace', location=0, scale=0.25),
+                  EQFreq=list(dist='laplace', location=0, scale=0.25),
                   Mag=list(dist='laplace', location=0, scale=0.25),
                   FirstHaz=list(dist='laplace', location=0, scale=0.25),
                   Night=list(dist='laplace', location=0, scale=0.25),
                   FirstHaz.Night=list(dist='laplace', location=0, scale=0.25)),
   check=list(check=list(dist='unif', min=0, max=1))
 )
+
+#Priors real:
+
+# Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
+#   Lambda1=list(mu=list(dist='unif', min=6.5, max=10.5), 
+#                sigma=list(dist='unif', min=0.25, max=2) #, alpha=list(dist='unif', min=-0.1, max=0.5)
+#   ), 
+#   Lambda2=list(mu=list(dist='unif', min=9, max=12.5), 
+#                sigma=list(dist='unif', min=0.25, max=2)),
+#   Lambda3=list(mu=list(dist='unif', min=6.5, max=10), 
+#                sigma=list(dist='unif', min=0.25, max=2)),
+#   Lambda4=list(mu=list(dist='unif', min=8, max=12.5), 
+#                sigma=list(dist='unif', min=0.25, max=2.5)),
+#   theta=list(theta1=list(dist='unif', min=0, max=1)),
+#   eps=list(local=list(dist='unif', min=0, max=1.5),
+#            hazard_mort=list(dist='unif', min=0, max=1.5),
+#            hazard_disp=list(dist='unif', min=0, max=1.5),
+#            hazard_bd=list(dist='unif', min=0, max=1.5),
+#            hazard_cor=list(dist='unif', min=0, max=1)),
+#   vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.25),
+#                   EQFreq=list(dist='laplace', location=0, scale=0.25),
+#                   SHDI=list(dist='laplace', location=0, scale=0.25),
+#                   GNIc=list(dist='laplace', location=0, scale=0.25),
+#                   Vs30=list(dist='laplace', location=0, scale=0.25),
+#                   Mag=list(dist='laplace', location=0, scale=0.25),
+#                   FirstHaz=list(dist='laplace', location=0, scale=0.25),
+#                   Night=list(dist='laplace', location=0, scale=0.25),
+#                   FirstHaz.Night=list(dist='laplace', location=0, scale=0.25)),
+#   check=list(check=list(dist='unif', min=0, max=1))
+# )
 
 #Set up the same structure to links, unlinks and acceptance transformations as Model$skeleton
 # Links: transforms the parameters onto a more convenient domain (e.g. for MCMC proposals)
@@ -784,26 +814,39 @@ sample_quant <- function(x){
 mean_sd_dist <- function(impact_sample, AlgoParams){
   observed <- impact_sample$poly[[1]]$observed
   dist_poly <- array(NA, dim=c(AlgoParams$Np,7))
+  
   impact_type <- impact_sample$poly[[1]]$impact
+  impact_weightings <- unlist(AlgoParams$kernel_sd[impact_type])
+  
+  event_id <- impact_sample$poly[[1]]$event_id
+  grouped_events <- split(seq_along(event_id), event_id)
+  
+
   for(n in 1:AlgoParams$Np){
     samples_allocated <- ((n-1)*AlgoParams$m_CRPS+1):(n*AlgoParams$m_CRPS)
     samples_combined <- sapply(impact_sample$poly[samples_allocated], function(x){x$sampled}) #doesn't work if samples_allocated is length 1
-    medians <- apply(samples_combined, 1, mean)
-    dist_poly[n,1] <- mean((log(medians[which(impact_type=='mortality')]+10)-log(observed[which(impact_type=='mortality')]+10))^2) * unlist(AlgoParams$kernel_sd['mortality'])
-    dist_poly[n,2] <- mean((log(medians[which(impact_type=='displacement')]+10)-log(observed[which(impact_type=='displacement')]+10))^2) * unlist(AlgoParams$kernel_sd['displacement'])
-    dist_poly[n,3] <- mean((log(medians[which(impact_type=='buildDam')]+10)-log(observed[which(impact_type=='buildDam')]+10))^2) * unlist(AlgoParams$kernel_sd['buildDam'])
+    #medians <- apply(samples_combined, 1, mean)
+    dist_poly[n,1] <- 0#mean((log(medians[which(impact_type=='mortality')]+10)-log(observed[which(impact_type=='mortality')]+10))^2) * unlist(AlgoParams$kernel_sd['mortality'])
+    dist_poly[n,2] <- 0#mean((log(medians[which(impact_type=='displacement')]+10)-log(observed[which(impact_type=='displacement')]+10))^2) * unlist(AlgoParams$kernel_sd['displacement'])
+    dist_poly[n,3] <- 0#mean((log(medians[which(impact_type=='buildDam')]+10)-log(observed[which(impact_type=='buildDam')]+10))^2) * unlist(AlgoParams$kernel_sd['buildDam'])
     
-    quants <- (apply(cbind(observed,samples_combined), 1, sample_quant)-runif(length(observed),0,1))/(NCOL(samples_combined)+1)
-    AD_mort <- AndersonDarlingTest(quants[impact_type=='mortality'],null='punif')$statistic
+    #quants <- (apply(cbind(observed,samples_combined), 1, sample_quant)-runif(length(observed),0,1))/(NCOL(samples_combined)+1)
+    #AD_mort <- AndersonDarlingTest(quants[impact_type=='mortality'],null='punif')$statistic
     #dist_poly[n,4] <- AD_mort * unlist(AlgoParams$kernel_sd['mortality'])
-    crps_store <- c()
-    for (i in 1:length(observed)){
-      crps_store <- c(crps_store, crps_sample(log(observed[i]), log(samples_combined[i,])))
+    es_store <- c()
+    for (i in 1:length(grouped_events)){
+      #For each event, compute the energy score of the observed data vs the 'prediction' (simulated data)
+      #Each impact type is weighted differently, simply multiplying the observation and the simulations by this weight performs the weighting
+      es_store<- c(es_store, es_sample(log(observed[grouped_events[[i]]]+AlgoParams$log_offset)*impact_weightings[grouped_events[[i]]], 
+                                       sweep(log(samples_combined[grouped_events[[i]],]+AlgoParams$log_offset), 1, impact_weightings[grouped_events[[i]]], "*")))
+      #crps_store <- c(crps_store, crps_sample(log(observed[i]), log(samples_combined[i,])))
+      #crps_store <- c(crps_store, es_sample(c(log(observed[i]), log(observed[i+200]),log(observed[i+400])), log(samples_combined[c(i, i+200, i+400),])))
+      #crps_store <- c(crps_store, crps_sample(log(observed[i]), log(samples_combined[i,])))
     }
     #logscores <- ifelse(is.finite(logscores), logscores, 600)
-    dist_poly[n,4] <- mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$kernel_sd['mortality'])
-    dist_poly[n,5] <- mean(crps_store[which(impact_type=='displacement')]) * unlist(AlgoParams$kernel_sd['displacement'])
-    dist_poly[n,6] <- mean(crps_store[which(impact_type=='buildDam')]) * unlist(AlgoParams$kernel_sd['buildDam'])
+    dist_poly[n,4] <- mean(es_store) #mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$kernel_sd['mortality'])
+    dist_poly[n,5] <- 0#mean(crps_store[which(impact_type=='displacement')]) * unlist(AlgoParams$kernel_sd['displacement'])
+    dist_poly[n,6] <- 0#mean(crps_store[which(impact_type=='buildDam')]) * unlist(AlgoParams$kernel_sd['buildDam'])
     dist_poly[n,7] <- 0
     #logscores  %>% mean()
     #dist_poly[n,4] <- log(ifelse(AD_mort < 2, 2, AD_mort)+1) * unlist(AlgoParams$kernel_sd['mortality'])

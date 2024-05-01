@@ -35,7 +35,7 @@ setMethod(f="initialize", signature="ODDSim",
             .Object@dir<-dir
             .Object@hazard<-lhazSDF$hazard_info$hazard
             
-            n_polygons <- runif(1, 2, 10)
+            
             
             if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
         
@@ -56,10 +56,6 @@ setMethod(f="initialize", signature="ODDSim",
             .Object@bbox <-obj@bbox 
             .Object@proj4string <- PopSim@proj4string # crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
-            
-            .Object@data$nBuildings <- round(runif(1,0.2,1) * PopSim$Population + rnorm(length(PopSim$Population),0,20))
-            .Object@data$nBuildings[.Object@data$nBuildings < 0] <- 0
-            
             # Including minshake polygon per hazard event using getcontour from adehabitatMA package
             # LOOSEEND
             .Object%<>%AddHazSDF(lhazSDF)
@@ -72,24 +68,86 @@ setMethod(f="initialize", signature="ODDSim",
             .Object@data$ISO3C[inds]<-coords2country(obj@coords)[inds]
             iso3c<-unique(.Object@data$ISO3C) ; iso3c<-iso3c[!is.na(iso3c)]
             
+            
+            if (runif(1) < 0.075){ # with probability 0.05, allocate all pixels to polygons and have a lot of subnational data
+              subnat_complete <- T
+              n_col_groups <- round(runif(1,3, 15))
+              n_row_groups <- round(runif(1,3, 15))
+              while (((n_col_groups * n_row_groups) < 30) | ((n_col_groups*n_row_groups) > 200)){
+                n_col_groups <- round(runif(1,3, 15))
+                n_row_groups <- round(runif(1,3, 15))
+              }
+              n_polygons <- n_col_groups * n_row_groups
+              
+            } else { # with probability 0.95, allocate less pixels and have minimal subnational data
+              subnat_complete <- F
+              n_polygons <- ifelse(runif(1)>0.7, 1, round(rexp(1,0.5))+1)
+            }
+            
+            polygons_list <- list()
+            if (subnat_complete){ 
+              ncol = sqrt(NROW(.Object))
+              indexes_matrix <- t(matrix(1:NROW(.Object), ncol=ncol))
+              indexes_matrix <- indexes_matrix[NROW(indexes_matrix):1,]
+              nrow = ncol
+              break.pts_col <- sort(sample(1:ncol, n_col_groups - 1, replace = FALSE))
+              break.len_col <- diff(c(0, break.pts_col, ncol))
+              groups_col <- rep(1:n_col_groups, times = break.len_col)
+              
+              break.pts_row <- sort(sample(1:nrow, n_row_groups - 1, replace = FALSE))
+              break.len_row <- diff(c(0, break.pts_row, nrow))
+              groups_row <- rep(1:n_row_groups, times = break.len_row)
+              for (i in 1:n_polygons){
+                col_group <- (i-1) %% n_col_groups + 1
+                col_group <- ifelse(col_group==0, n_col_groups, col_group)
+                row_group <- (i-1) %/% n_col_groups +1
+                indexes <- indexes_matrix[groups_row==row_group,groups_col==col_group]
+                polygons_list[[i]] <- list(name=paste('Polygon',i), 
+                                           indexes = indexes,
+                                           weights = rep(1, length(indexes)))
+              }
+              
+            } else {
+              polygons_list[[1]] <- list(name='Polygon 1', indexes = 1:length(.Object@data$ISO3C), weights=rep(1, length(.Object@data$ISO3C)))
+              if (n_polygons > 1){
+                for (i in 2:n_polygons){ 
+                  nPixels_in_poly <-  runif(1, 1, length(.Object@data$ISO3C))
+                  polygons_list[[i]] <- list(name=paste('Polygon',i), 
+                                             indexes = sample(1:length(.Object@data$ISO3C),nPixels_in_poly, replace=F),
+                                             weights = rep(1, nPixels_in_poly))
+                }
+              }
+            }
+            
+            
+            .Object@data$nBuildings <- round(runif(1,0.2,1) * PopSim$Population + rnorm(length(PopSim$Population),0,20))
+            .Object@data$nBuildings[.Object@data$nBuildings < 0] <- 0
+            
             if(length(iso3c)==0){return(NULL)}
             
             if(.Object@hazard%in%c("EQ","TC")){
               .Object@impact <- data.frame(iso3=character(), polygon=numeric(), impact=character(),
-                                           observed=numeric(), qualifier = character())
+                                           observed=numeric(), qualifier = character(), inferred=logical(), sdate=as.Date(character()))
               for (j in 1:length(Model$impacts$labels[1:3])){ #remove buildDest and buildDamDest
-                n_poly_observed <- runif(1, 1, n_polygons)
+                n_poly_observed <- n_polygons
+                if (subnat_complete & (Model$impacts$labels[j] == 'displacement')){ # less likely to have full coverage
+                  n_poly_observed <- min(ifelse(runif(1)>0.7, 1, round(rexp(1,0.5))+1), n_polygons)
+                }
                 for (i in 1:n_poly_observed){
                   .Object@impact %<>% add_row(
                     iso3=sample(na.omit(.Object@data$ISO3C),1),
                     polygon=i,
                     impact=Model$impacts$labels[j],
                     observed= 0,
-                    qualifier=ifelse(rbinom(1,1,0.8), 'Total', NA_character_))
+                    qualifier=ifelse(rbinom(1,1,0.8), 'Total', NA_character_), 
+                    inferred=F,
+                    sdate=dater)
                 }
               }
-              #remove about half as currently simulated data is very populated compared to real data
-              .Object@impact <- .Object@impact[sample(1:NROW(.Object@impact),round(NROW(.Object@impact)/2), replace=F), ]
+              #remove about third as currently simulated data is very populated compared to real data
+              if (!subnat_complete){
+                .Object@impact <- .Object@impact[sample(1:NROW(.Object@impact),round(NROW(.Object@impact)*2/3), replace=F), ]
+              }
               
               .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
                 transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
@@ -136,15 +194,9 @@ setMethod(f="initialize", signature="ODDSim",
             # names(linp)<-unique(.Object@cIndies$iso3)
             # .Object@modifier<-linp
             # 
-            polygons_list <- list()
-            polygons_list[[1]] <- list(name='Polygon 1', indexes = 1:length(.Object@data$ISO3C))
-            for (i in 2:n_polygons){
-              nPixels_in_poly <-  runif(1, 1, length(.Object@data$ISO3C))
-              polygons_list[[i]] <- list(name=paste('Polygon',i), 
-                                         indexes = sample(1:length(.Object@data$ISO3C),nPixels_in_poly, replace=F),
-                                         weights = rep(1, length(nPixels_in_poly)))
-            }
-              
+            
+            
+            
             .Object@polygons <- polygons_list
             
             #Add linear predictor data
@@ -254,11 +306,12 @@ simulateEvent <- function(r, I0 = 4.5){
   # - The maximum magnitude varies randomly in [5, 9.3] and the spread in [15, 25]
   # - The earthquake standard deviation in each cell is random uniform in [0.8,1.1]
   
-  maxMag = rnorm(1, 7, 1)
-  sigma = runif(1, 8, 15)
+  max_mmi = rnorm(1, 1, 0.25)
+  sigma = runif(1, 1.5,6.5)
   r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, s=r@nrows)) 
-  r <- r * (maxMag/r@data@max)
-  sd <- setValues(r, runif(r@ncols*r@nrows, 0.8,1.1))
+  r <- r * (max_mmi/r@data@max)
+  sd <- setValues(r, runif(r@ncols*r@nrows, 0.8, 1.1))
+  r <- 4.51 + exp(r)
   names(r) <- 'mmi_mean'
   r$mmi_sd <- sd
   hazsdf <- as(r, 'SpatialPixelsDataFrame')
@@ -277,7 +330,7 @@ simulatePopulation <- function(r){
   # - The population is simulated according to a Gaussian process with a spherical semi-variogram,
   #   and is then scaled onto [0, maxPopDens] using the cumulative weibull distribution.
   
-  maxPopDens = runif(1, 500, 10000)
+  maxPopDens = runif(1, 400, 100000)
   Field = as.data.frame(rasterToPoints(r))
   names(Field)=c('Longitude','Latitude')
   Pop_modelling=gstat(formula=Population~1, 
@@ -334,12 +387,12 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   
   xmn <- round(runif(1, -180, 179.5)/0.05)*0.05
   ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
-  r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  r <- raster(ncol=15, nrow=15, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   
   while(all(is.na(coords2country(as(r, 'SpatialPixelsDataFrame')@coords)))){ #repeat until over a country
     xmn <- round(runif(1, -180, 179.5)/0.05)*0.05
     ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
-    r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+    r <- raster(ncol=15, nrow=15, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   }
   
   lenny = rgeom(1, 0.8) + 1 #generate number of events according to a geometric distribution
@@ -349,13 +402,10 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
                                 magnitudes=c(), max_mmi=c(), eventtimes=c(), usgs_ids=c(), alertfull=list()))
   for(i in 1:lenny){
     hazsdf <- simulateEvent(r, I0)
-    while(NROW(hazsdf)==0){
+    while(NROW(hazsdf)==0 | length(which(hazsdf@data$mmi_mean > I0))<=1 | is.null(hazsdf@data$mmi_mean)){
       hazsdf <- simulateEvent(r, I0)
     }
-    
-    if(is.null(hazsdf@data$mmi_mean)){
-      next
-    }
+  
     
     haz <- new("HAZARD",
                   obj=hazsdf,
@@ -410,7 +460,6 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   # - center: the center values of PDens and GDP under the simulated data
   # Details:
   # - Saves each ODDSim object to IIDIPUS_SimInput/ODDobjects/
-  set.seed(round(runif(1,0,1000)))
   
   haz='EQ'
   
@@ -424,7 +473,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   for(ev in unique(DamageData$eventid)){
     miniDam<-DamageData%>%filter(eventid==ev)
     ODDSim <- simulateODDSim(miniDam, Model, I0=I0)
-    if (is.null(ODDSim)){
+    if (is.null(ODDSim) | is.null(ODDSim$hazMean1)){
       next
     }
     BDSim <- new('BDSim', ODDSim)
@@ -538,13 +587,10 @@ plot_S_curves <- function(Omega, Omega_curr=NULL){
   D_MortDisp <- D_MortDisp_calc(h_0(Intensity, I0, Omega), Omega %>% addTransfParams())
   D_Mort <- D_MortDisp[1,]
   D_Disp <- D_MortDisp[2,]
-  D_DestDam <- D_DestDam_calc(h_0(Intensity, I0, Omega), Omega %>% addTransfParams())
-  D_Dest <- D_DestDam[1,]
-  D_Dam <- D_DestDam[2,]
-  D_DestDamTot <- colSums(D_DestDam)
+  D_Dam <- D_Dam_calc(h_0(Intensity, I0, Omega), Omega %>% addTransfParams())
   
   plot(Intensity, D_Mort, col='red', type='l', ylim=c(0,1)); lines(Intensity, D_Disp, col='orange');
-  lines(Intensity, D_Dest, col='blue', type='l', ylim=c(0,1)); lines(Intensity, D_Dam, col='dark green', type='l');
+  lines(Intensity, D_Dam, col='blue', type='l', ylim=c(0,1)); #lines(Intensity, D_Dam, col='dark green', type='l');
   
   if(!is.null(Omega_curr)){
     

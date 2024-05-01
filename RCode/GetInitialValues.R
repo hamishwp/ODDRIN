@@ -4,19 +4,29 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   if(saver & file.exists(paste0(dir, input_folder, "centerings"))) 
         return(readRDS(paste0(dir, input_folder, "centerings")))
   
-  # path<-paste0("/home/manderso/Documents/GitHub/IIDIPUS_InputRealwithMort/ODDobjects/")
+  # path<-paste0("/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/")
   # ufiles<-list.files(path=path,pattern=haz,recursive = T,ignore.case = T)
   # ufiles<-ufiles[grepl(ufiles,pattern = haz)]
   # PDens<-c()
-  # 
+  # Vs30 <- c()
   # for(fff in ufiles){
   #   ODDy<-readRDS(paste0(path,fff))
-  # 
   #   PDens<-append(PDens, ODDy@data$Population[!is.na(ODDy@data$Population)])
+  #   Vs30<-append(Vs30, ODDy@data$Vs30[!is.na(ODDy@data$Vs30)])
   # }
+  # mean(log(PDens+0.1)); sd(log(PDens+0.1))
+  # mean(log(Vs30)); sd(log(Vs30))
   
-  PDens_mean <- 2.874305 #mean(log(PDens+1))
-  PDens_sd <- 1.851233 #sd(log(PDens+1))
+  PDens_mean <- 2.197932 #mean(log(PDens+0.1))
+  PDens_sd <- 2.349322 #sd(log(PDens+0.1))
+  
+  Vs30_mean <- 6.23811 #old: cellStats(stiff,'mean')
+  Vs30_sd <- 0.4035713 #old: cellStats(stiff,'sd')
+  
+  # # Read in Stiff data and calculate the mean and standard deviation, again using all regions in the dataset:
+  # if(!file.exists(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))) stop("Please download the VS30 dataset (geotiff and auxiliary files) here https://earthquake.usgs.gov/data/vs30/.")
+  #stiff<-raster(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))
+  
   
   # # Read in Global Data Lab data and calculate the mean and standard deviation of each variable
   # # Note that we calculate the mean and sd using all regions (not just those in the training set)
@@ -32,12 +42,7 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   SHDI_sd <- 0.1712748#sd(GDLdata$SHDI, na.rm=T);
   
   
-  # # Read in Stiff data and calculate the mean and standard deviation, again using all regions in the dataset:
-  if(!file.exists(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))) stop("Please download the VS30 dataset (geotiff and auxiliary files) here https://earthquake.usgs.gov/data/vs30/.")
-  #stiff<-raster(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))
-  
-  Vs30_mean <- 562.4323 #cellStats(stiff,'mean')
-  Vs30_sd <- 143.9429 #cellStats(stiff,'sd')
+ 
   
   # # Read in GDPA data and calculate the mean and standard deviation, again using all regions in the dataset:
   # 
@@ -53,11 +58,13 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   # for (file in ufiles){
   #   ODDy <- readRDS(paste0(folderin, file))
   #   EQfreqs <- c(EQfreqs, log(median(ODDy$EQFreq)+0.1))
-  #   Mags <- c(Mags, max(ODDy@hazinfo$magnitudes))
+  #   #Mags <- c(Mags, max(ODDy@hazinfo$magnitudes))
   # }
+  # mean(EQfreqs)
+  # sd(EQfreqs)
   
-  EQFreq_mean <- 5.124551 # mean(EQfreqs) #2.568421 #mean(log(pga_vals+0.1)[which(pga_vals > 0.01)]) 5.411167 # mean(pga$PGA, na.rm=T) 
-  EQFreq_sd <- 0.5032984 # sd(EQfreqs) #1.860136 #sd(log(pga_vals+0.1)[which(pga_vals > 0.01)]) 2.918439 # sd(pga$PGA, na.rm=T)
+  EQFreq_mean <- 2.787371 # mean(EQfreqs) #2.568421 #mean(log(pga_vals+1)[which(pga_vals > 0.01)]) 5.411167 # mean(pga$PGA, na.rm=T) 
+  EQFreq_sd <- 1.573848 # sd(EQfreqs) #1.860136 #sd(log(pga_vals+1)[which(pga_vals > 0.01)]) 2.918439 # sd(pga$PGA, na.rm=T)
   
   #mean and sd of magnitudes in data (max magnitude taken from each event)
   Mag_mean <- 6.187425

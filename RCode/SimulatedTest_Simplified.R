@@ -494,6 +494,8 @@ d1 <- runif(1000)
 d2 <- runif(1000)
 cor(d1,d2)
 
+
+
 #------------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------------
 #----------------------------------COMPARE DIFFERENT NPART---------------------------------------
@@ -525,7 +527,7 @@ ggplot() +
   #geom_histogram(data=data.frame(v=AR_Np1000_alpha0.99$Omega_sample_phys[,1,AR_Np1000_alpha0.99$s_finish], w=AR_Np1000_alpha0.99$W[,AR_Np1000_alpha0.99$s_finish]), aes(x=v,y=..density.., weight = w), alpha=0.3, col='green', lwd=0.2, fill='green') +
   geom_histogram(data=data.frame(v=AR10000$Omega_sample_phys[,15,AR10000$s_finish], w=AR10000$W[,AR10000$s_finish]), aes(x=v,y=..density.., weight = w), alpha=0.3, col='yellow', lwd=0.2, fill='yellow') +
   geom_histogram(data=data.frame(v=AR2500_smallcov$Omega_sample_phys[,15,AR2500_smallcov$s_finish], w=AR2500_smallcov$W[,AR2500_smallcov$s_finish]), aes(x=v,y=..density.., weight = w), alpha=0.3, col='red', lwd=0.2, fill='red') #+
-  #geom_vline(xintercept=1, col='red')
+#geom_vline(xintercept=1, col='red')
 
 ggplot() + 
   geom_histogram(data=data.frame(v=AR2500$Omega_sample_phys[,2,AR2500$s_finish], w=AR2500$W[,AR2500$s_finish]), aes(x=v,y=..density.., weight = w), alpha=0.3, col='blue', lwd=0.2, fill='blue') +
@@ -590,7 +592,7 @@ fit_samples <- as.matrix(fit_stan)
 glm_out <- log(data_y$observed[which(data_y$impact=='mortality')[1:200*3]])-mean(means_mort)
 glm_in <- means_mort[1:200*3]-mean(means_mort)
 fit_stan200_ev <- stan_glm(glm_out ~ glm_in - 1,
-                     prior=NULL)
+                           prior=NULL)
 fit_samples_200ev <- as.matrix(fit_stan200_ev)
 hist(fit_samples_200ev[,1], freq=F)
 lines(density(fit_samples[,1])) # a bit different but not thaaaat different
@@ -665,6 +667,207 @@ ggplot() +
 
 
 
+
+# -------------------------------------------------------------------------------------------------------------
+# ------------------------------------- SIMPLE MODEL BUT HIGH DIMENSIONALITY ----------------------------------
+# -------------------------------------------------------------------------------------------------------------
+Omega <- Omega_true <- list(Lambda1 = list(nu=9, kappa=1.4),
+                            Lambda2 = list(nu=10.5, kappa=1.7), #list(nu=10.65, kappa=1.5), #
+                            Lambda3 = list(nu=9, kappa=1.2),
+                            Lambda4 = list(nu=9.9, kappa=1.6),
+                            theta= list(theta1=0.6),
+                            eps=list(local=0.6, hazard_mort=0.3, hazard_disp=0.5, hazard_bd=0.4, hazard_cor=0.55),
+                            #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                            vuln_coeff = list(PDens=0.05, SHDI=-0.1, GNIc=-0.05, Vs30=0.1, EQFreq=-0.15, FirstHaz=0.05, Night=0.05, FirstHaz.Night=0.1),
+                            check = list(check=0.5))
+
+Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
+  Lambda1=list(nu=list(dist='unif', min=6.5, max=10.5), 
+               kappa=list(dist='unif', min=0.25, max=2) #, alpha=list(dist='unif', min=-0.1, max=0.5)
+  ), 
+  Lambda2=list(nu=list(dist='unif', min=9, max=12.5), 
+               kappa=list(dist='unif', min=0.25, max=2)),
+  Lambda3=list(nu=list(dist='unif', min=6.5, max=10), 
+               kappa=list(dist='unif', min=0.25, max=2)),
+  Lambda4=list(nu=list(dist='unif', min=8, max=12.5), 
+               kappa=list(dist='unif', min=0.25, max=2.5)),
+  theta=list(theta1=list(dist='unif', min=0, max=1)),
+  eps=list(local=list(dist='unif', min=0, max=1.5),
+           hazard_mort=list(dist='unif', min=0, max=1.5),
+           hazard_disp=list(dist='unif', min=0, max=1.5),
+           hazard_bd=list(dist='unif', min=0, max=1.5),
+           hazard_cor=list(dist='unif', min=0, max=1)),
+  vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.25),
+                  SHDI=list(dist='laplace', location=0, scale=0.25),
+                  GNIc=list(dist='laplace', location=0, scale=0.25),
+                  Vs30=list(dist='laplace', location=0, scale=0.25),
+                  EQFreq=list(dist='laplace', location=0, scale=0.25),
+                  #Mag=list(dist='laplace', location=0, scale=0.25),
+                  FirstHaz=list(dist='laplace', location=0, scale=0.25),
+                  Night=list(dist='laplace', location=0, scale=0.25),
+                  FirstHaz.Night=list(dist='laplace', location=0, scale=0.25)),
+  check=list(check=list(dist='unif', min=0, max=1))
+)
+
+
+#Set lower and upper bounds for the parameters
+Model$par_lb <- c()
+Model$par_ub <- c()
+
+for (i in 1:length(Model$Priors)){
+  if (is.list(Model$Priors[[i]])){
+    for (j in 1:length(Model$Priors[[i]])){
+      if(Model$Priors[[i]][[j]]$dist == 'unif'){
+        Model$par_lb = c(Model$par_lb, Model$Priors[[i]][[j]]$min)
+        Model$par_ub = c(Model$par_ub, Model$Priors[[i]][[j]]$max)
+      } else if (Model$Priors[[i]][[j]]$dist == 'norm'){
+        Model$par_lb = c(Model$par_lb, Model$Priors[[i]][[j]]$mean - 6 * Model$Priors[[i]][[j]]$sd)
+        Model$par_ub = c(Model$par_ub, Model$Priors[[i]][[j]]$mean + 6 * Model$Priors[[i]][[j]]$sd)
+      } else if (Model$Priors[[i]][[j]]$dist == 'laplace'){
+        Model$par_lb = c(Model$par_lb, Model$Priors[[i]][[j]]$location - 15 * Model$Priors[[i]][[j]]$scale)
+        Model$par_ub = c(Model$par_ub, Model$Priors[[i]][[j]]$location + 15 * Model$Priors[[i]][[j]]$scale)
+      } else {
+        stop('Please update Method.R to adjust acceptance probability to account for other priors before continuing.')
+      }
+    }
+  } else {
+    if(Model$Priors[[i]]$dist == 'unif'){
+      Model$par_lb = c(Model$par_lb, Model$Priors[[i]]$min)
+      Model$par_ub = c(Model$par_ub, Model$Priors[[i]]$max)
+    } else if (Model$Priors[[i]]$dist == 'norm'){
+      Model$par_lb = c(Model$par_lb, Model$Priors[[i]]$mean - 6 * Model$Priors[[i]]$sd)
+      Model$par_ub = c(Model$par_ub, Model$Priors[[i]]$mean + 6 * Model$Priors[[i]]$sd)
+    } else if (Model$Priors[[i]]$dist == 'laplace'){
+      Model$par_lb = c(Model$par_lb, Model$Priors[[i]]$location - 15 * Model$Priors[[i]]$scale)
+      Model$par_ub = c(Model$par_ub, Model$Priors[[i]]$location + 15 * Model$Priors[[i]]$scale)
+    } else {
+      stop('Please update Method.R to adjust acceptance probability to account for other priors before continuing.')
+    }
+  }
+}
+
+Model$HighLevelPriors <- function(Omega, Model, modifier=NULL){
+  return(0)
+}
+
+
+n_events <- 200
+set.seed(1)
+
+cov_mort_disp = Omega_true$eps$hazard_cor * Omega_true$eps$hazard_mort * Omega_true$eps$hazard_disp
+cov_mort_bd = Omega_true$eps$hazard_cor * Omega_true$eps$hazard_mort * Omega_true$eps$hazard_bd
+cov_disp_bd = Omega_true$eps$hazard_cor * Omega_true$eps$hazard_disp * Omega_true$eps$hazard_bd
+covar_matrix = cbind(c((Omega_true$eps$hazard_mort)^2, cov_mort_disp, cov_mort_bd), c(0, (Omega_true$eps$hazard_disp)^2, cov_disp_bd), c(0, 0, (Omega_true$eps$hazard_bd)^2))
+covar_matrix[upper.tri(covar_matrix)] = covar_matrix[lower.tri(covar_matrix)]
+
+eps_ev <- rmvnorm(n_events, rep(0,3), covar_matrix) * 3
+vuln <- rmvnorm(n_events, rep(0, 8), diag(100, nrow=8))
+vuln_adj <- vuln %*% unlist(Omega_true$vuln_coeff)
+
+mort_impacts <- data.frame(polygon=1, impact='mortality', sampled=NA,
+                           iso3='ABC', sdate=as.Date('16-03-1999'), qualifier=NA,
+                           build_type=NA, inferred=F, event_id = 1:n_events,
+                           observed = rlnorm(n_events, Omega_true$Lambda1$nu + vuln_adj + eps_ev[,1], Omega_true$Lambda1$kappa))
+
+disp_impacts <- data.frame(polygon=1, impact='displacement', sampled=NA,
+                           iso3='ABC', sdate=as.Date('16-03-1999'), qualifier=NA,
+                           build_type=NA, inferred=F, event_id = 1:n_events,
+                           observed = rlnorm(n_events, Omega_true$Lambda2$nu + vuln_adj + eps_ev[,2], Omega_true$Lambda2$kappa))
+
+bd_impacts <- data.frame(polygon=1, impact='buildDam', sampled=NA,
+                         iso3='ABC', sdate=as.Date('16-03-1999'), qualifier=NA,
+                         build_type=NA, inferred=F, event_id = 1:n_events,
+                         observed = rlnorm(n_events, Omega_true$Lambda3$nu + vuln_adj + eps_ev[,3], Omega_true$Lambda3$kappa))
+
+data_y <- rbind(mort_impacts, disp_impacts, bd_impacts)
+plot(data_y$observed[which(data_y$impact=='buildDam')])
+
+#prior_tightening <- 0.1
+SampleImpact <- function(dir, Model, proposed, AlgoParams){
+  impact_sample <- list()
+  for (i in 1:(AlgoParams$Np*AlgoParams$m_CRPS)){
+    impact_sample[[i]] <- data_y
+    #impact_sample[[i]]$sampled <-  abs(rnorm(length(means), 100*proposed$vuln_coeff$Vs30 * (means-mean(means))+1500, proposed$Lambda3$kappa*500)) #rt(NROW(data_y), proposed$Lambda1$nu, 3) * proposed$Lambda1$kappa #round(rt(NROW(data_y), proposed$Lambda1$nu, 5) * proposed$Lambda1$kappa)
+    cov_mort_disp = proposed$eps$hazard_cor * proposed$eps$hazard_mort * proposed$eps$hazard_disp
+    cov_mort_bd = proposed$eps$hazard_cor * proposed$eps$hazard_mort * proposed$eps$hazard_bd
+    cov_disp_bd = proposed$eps$hazard_cor * proposed$eps$hazard_disp * proposed$eps$hazard_bd
+    covar_matrix = cbind(c((proposed$eps$hazard_mort)^2, cov_mort_disp, cov_mort_bd), c(0, (proposed$eps$hazard_disp)^2, cov_disp_bd), c(0, 0, (proposed$eps$hazard_bd)^2))
+    covar_matrix[upper.tri(covar_matrix)] = covar_matrix[lower.tri(covar_matrix)]
+    
+    eps_ev <- rmvnorm(n_events, rep(0,3), covar_matrix)
+    
+    vuln_adj <- vuln %*% unlist(proposed$vuln_coeff)
+
+    impact_sample[[i]]$sampled[1:n_events] <- rlnorm(n_events, proposed$Lambda1$nu + vuln_adj, proposed$Lambda1$kappa) + eps_ev[,1] #rlnorm(length(means_mort),  mean_coeffs[1]*(prior_tightening*(proposed$vuln_coeff$Vs30-Omega_true$vuln_coeff$Vs30)+Omega_true$vuln_coeff$Vs30) * (means_mort-mean(means_mort)) + mean(means_mort), var_coeffs[1]*proposed$Lambda3$kappa) #rt(NROW(data_y), proposed$Lambda1$nu, 3) * proposed$Lambda1$kappa #round(rt(NROW(data_y), proposed$Lambda1$nu, 5) * proposed$Lambda1$kappa)
+    impact_sample[[i]]$sampled[(n_events+1): (2*n_events)] <-  rlnorm(n_events, proposed$Lambda2$nu  + vuln_adj, proposed$Lambda2$kappa) + eps_ev[,2] #rlnorm(length(means_disp),  mean_coeffs[2]*(prior_tightening*(proposed$vuln_coeff$SHDI-Omega_true$vuln_coeff$SHDI)+Omega_true$vuln_coeff$SHDI) * (means_disp-mean(means_disp)) + mean(means_disp), var_coeffs[2]*proposed$Lambda2$kappa) #rt(NROW(data_y), proposed$Lambda1$nu, 3) * proposed$Lambda1$kappa #round(rt(NROW(data_y), proposed$Lambda1$nu, 5) * proposed$Lambda1$kappa)
+    impact_sample[[i]]$sampled[(2*n_events+1):(3*n_events)] <- rlnorm(n_events, proposed$Lambda3$nu + vuln_adj, proposed$Lambda3$kappa) + eps_ev[,3] #rlnorm(length(means_bd), mean_coeffs[3]*(prior_tightening*(proposed$vuln_coeff$PDens-Omega_true$vuln_coeff$PDens)+Omega_true$vuln_coeff$PDens) * (means_bd-mean(means_bd)) + mean(means_bd), var_coeffs[3]*proposed$Lambda4$kappa) #rt(NROW(data_y), proposed$Lambda1$nu, 3) * proposed$Lambda1$kappa #round(rt(NROW(data_y), proposed$Lambda1$nu, 5) * proposed$Lambda1$kappa)
+    impact_sample[[i]]$sampled[which(impact_sample[[i]]$sampled < 0)] <- 0
+  }
+  return(list(poly=impact_sample))
+}
+
+impact_sample <- SampleImpact(dir, Model, Omega_true, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 60))
+CalcDist(impact_sample, AlgoParams)
+#plot_impact_sample(impact_sample, impact_filter='buildDam')
+
+#impact_sample <- SampleImpact(dir, Model, AlgoResults$Omega_sample_phys[1,,70] %>% relist(skeleton=Model$skeleton), AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 60))
+#plot_impact_sample(impact_sample, impact_filter='buildDam')
+#CalcDist(impact_sample, AlgoParams)
+
+
+AlgoParams$smc_steps <- 250
+AlgoParams$smc_Npart <- 1000
+AlgoParams$m_CRPS <- 60
+AlgoParams$smc_alpha <- 0.9
+AlgoParams$rel_weightings <- c(0,1)
+AlgoParams$kernel_sd$mortality <- 5
+AlgoParams$kernel_sd$buildDam <- 0.1
+AlgoParams$log_offset <- 10
+tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '_Npart', AlgoParams$smc_Npart,'_M', AlgoParams$m_CRPS,'_', 'SimpleHighDimensionalTestingLargerPropCOV')
+AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F,tag_notes=tag_notes, oldtag='')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2024-04-30_174026_alpha0.9_Npart1000_M60_SimpleHighDimensionalTestingLargerPropCOV')
+
+plot_correlated_posteriors(AlgoResults, Omega=Omega)
+plot_correlated_posteriors(AlgoResults, Omega=Omega, pairings=rbind(c(13,14), c(15,16), c(17,18), c(19,20), c(21,22)))
+
+plot_corr_posterior_vs_d(AlgoResults, Omega=Omega, pairing=c(19,20))
+
+plot_corr_transf_posterior_vs_d(AlgoResults, Omega=Omega, pairing=c(5,6))
+
+plot(AlgoResults$Omega_sample_phys[,2,30], AlgoResults$Omega_sample_phys[,3,30])
+
+plot_acc_prob(AlgoResults); abline(h=0.05)
+plot_d_vs_step(AlgoResults, 30); abline(h=5.1, col='red')
+plot(AlgoResults$essstore)
+
+
+# -------------------------------------------------------------------------------------------------------------
+# ------------------------------------- COMPARE DIFFERENT PROPCOV MULT ----------------------------------------
+# -------------------------------------------------------------------------------------------------------------
+
+AlgoResults_smallMult <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2024-04-29_220522_alpha0.9_Npart1000_M60_SimpleHighDimensionalTesting')
+
+AlgoResults_largeMult <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2024-04-30_174026_alpha0.9_Npart1000_M60_SimpleHighDimensionalTestingLargerPropCOV')
+
+par(mfrow=c(2,1))
+plot_d_vs_step(AlgoResults_smallMult, 15); abline(h=5.1, col='red')
+plot_d_vs_step(AlgoResults_largeMult, 15); abline(h=5.1, col='red')
+
+plot_acc_prob(AlgoResults_smallMult); abline(h=0.05)
+plot_acc_prob(AlgoResults_largeMult); abline(h=0.05)
+par(mfrow=c(1,1))
+
+n_unique_large <- c()
+n_unique_small <- c()
+for (i in 1:200){
+  n_unique_large <- c(n_unique_large, length(unique(AlgoResults_largeMult$Omega_sample_phys[,1,i])))
+  n_unique_small <- c(n_unique_small, length(unique(AlgoResults_smallMult$Omega_sample_phys[,1,i])))
+}
+plot(n_unique_small)
+points(n_unique_large, col='blue')
+
+#smaller seems to do better - larger doesn't seem to be any faster but less particles from pretty much the outset
 
 #------------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------------

@@ -32,6 +32,7 @@ GetSourceFiles<-function(packred){
     source('RCode/GetOSM.R')
     source('RCode/GetSatDamage.R')  
     source('RCode/GetBuildingCounts.R')
+    source('RCode/Results_Analysis.R')
     
   }
   
@@ -61,6 +62,7 @@ LoadLibraries<-function(packred){
   library(Rmpi)
   library(rgeos)
   library(DescTools)
+  library(scoringRules)
   # library(ecochange)
   
   if(!packred) {
@@ -81,7 +83,7 @@ GetODDPackages<-function(packred){
                         "countrycode","rworldmap","rworldxtra","chron","ncdf4",
                         "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 
                         'EnvStats', 'posterior', 'doParallel', 'VGAM', 'abind',
-                        'Rmpi', 'openxlsx', 'ecochange', 'lutz')
+                        'Rmpi', 'openxlsx', 'ecochange', 'lutz', 'scoringRules')
   
   if(!packred) list.of.packages<-c(list.of.packages,
                                    "codetools","latex2exp",

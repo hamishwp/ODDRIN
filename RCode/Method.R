@@ -194,9 +194,8 @@ initialise_particles <- function(dir, Model, AlgoParams, AlgoResults){
                                     proposed = AlgoResults$Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
                                     AlgoParams = AlgoParams)
       
-      
       d_prop <- CalcDist(impact_sample, AlgoParams)
-      
+     
       AlgoResults$d[n,,1] <- rowSums(d_prop)
       min.d.part <- which.min(AlgoResults$d[n,,1])
       
@@ -254,11 +253,11 @@ initialise_particles_Rmpi <- function(dir, Npart, n_nodes){
     d_prop = CalcDist(impact_sample, AlgoParams) 
     d_node[n,] = rowSums(d_prop)
     
-    min.d.part <- which.min(d_node[n,])
-  
+    # min.d.part <- which.min(d_node[n,])
+    # 
     if (n == 1){
-      d_full = array(NA, dim=c(n_allocated, AlgoParams$Np, NCOL(d_prop)))
-      sampled_full = array(NA, dim=c(n_allocated, NROW(impact_sample$poly[[1]]), AlgoParams$m_CRPS))
+       d_full = array(NA, dim=c(n_allocated, AlgoParams$Np, NCOL(d_prop)))
+    #   sampled_full = array(NA, dim=c(n_allocated, NROW(impact_sample$poly[[1]]), AlgoParams$m_CRPS))
     }
     d_full[n,,] <- d_prop
     #sampled_full[n,,] = matrix(unlist(lapply(impact_sample$poly[((min.d.part-1)*AlgoParams$m_CRPS+1):(min.d.part*AlgoParams$m_CRPS)], function(x) x$sampled)), nrow=NROW(impact_sample$poly[[1]])) #take sampled values for the sample with the smallest distance
@@ -298,7 +297,7 @@ AlgoStep1 <- function(dir, AlgoParams, AlgoResults){
   }
   AlgoResults$tolerancestore[1] <- max(AlgoResults$d[,,1]) + 1 #set tolerance to larger than maximum distance
   AlgoResults$accrate_store[1] <- 1
-  AlgoResults$propCOV_multiplier[1] <- 0.1
+  AlgoResults$propCOV_multiplier[1] <- 0.25
   end_time <- Sys.time()
   
   #weight distances by inverse MAD at first step
@@ -407,7 +406,7 @@ perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omeg
   Omega_sample_phys_node <- Omega_phys_curr[allocated_particles,, drop=F]
   d_node <- d_curr[allocated_particles,, drop=F]
   d_full_node <- d_full_curr[allocated_particles,,, drop=F]
-  sampled_full_node <- sampled_full_curr[allocated_particles,,,drop=F]
+  #sampled_full_node <- sampled_full_curr[allocated_particles,,,drop=F]
   
   for(n in 1:n_allocated){
     if(W_node[n]>0){
@@ -437,14 +436,14 @@ perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omeg
       
       acc <- (sum(d_prop_tot<tolerance_s)/length(d_prop_tot))/(sum(d_curr<tolerance_s)/length(d_curr)) * modifyAcc(Omega_prop, Omega_sample_node[n,], Model)
       u <- runif(1)
-      err_test <- tryCatch(u < acc, error=function(e) NA)
-      if(is.na(err_test)){return(list(u=u, acc=acc, d_curr=d_curr, d_prop_tot=d_prop_tot, Omega_samp_node=Omega_sample_node[n,], Omega_prop=Omega_prop))}
+      #err_test <- tryCatch(u < acc, error=function(e) NA)
+      #if(is.na(err_test)){return(list(u=u, acc=acc, d_curr=d_curr, d_prop_tot=d_prop_tot, Omega_samp_node=Omega_sample_node[n,], Omega_prop=Omega_prop))}
       if(u < acc){
         min.d.part <- which.min(d_prop_tot)
         Omega_sample_node[n,] <- Omega_prop
         Omega_sample_phys_node[n,] <- Omega_sample_node[n,] %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model) %>% unlist()
         d_node[n,] <- d_prop_tot
-        sampled_full_node[n,,] <- matrix(unlist(lapply(impact_sample$poly[((min.d.part-1)*AlgoParams$m_CRPS+1):(min.d.part*AlgoParams$m_CRPS)], function(x) x$sampled)), nrow=NROW(impact_sample$poly[[1]])) #take sampled values for the sample with the smallest distance
+        #sampled_full_node[n,,] <- matrix(unlist(lapply(impact_sample$poly[((min.d.part-1)*AlgoParams$m_CRPS+1):(min.d.part*AlgoParams$m_CRPS)], function(x) x$sampled)), nrow=NROW(impact_sample$poly[[1]])) #take sampled values for the sample with the smallest distance
         d_full_node[n,,] <- d_prop
       }
     }
@@ -453,7 +452,7 @@ perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omeg
               Omega_sample_phys_node=Omega_sample_phys_node,
               d_node=d_node, 
               d_full_node=d_full_node,
-              sampled_full_node=sampled_full_node))
+              sampled_full_node=NULL))#sampled_full_node))
 }
 
 retrieve_UnfinishedAlgoResults <- function(dir, oldtag, Npart, AlgoResults){
@@ -715,7 +714,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=NULL, tag_
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
     
     if (AlgoResults$accrate_store[s] < 0.2){
-      propCOV_multiplier <- max(propCOV_multiplier / 2, 0.1)
+      propCOV_multiplier <- max(propCOV_multiplier / 2, 0.25)
     } else if (AlgoResults$accrate_store[s] > 0.4){
       propCOV_multiplier <- propCOV_multiplier * 2
     }

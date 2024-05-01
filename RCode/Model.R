@@ -68,7 +68,7 @@ Model$skeleton <- list(
   Lambda4=list(nu=NA,kappa=NA),
   theta=list(theta1=NA),
   eps=list(local=NA,hazard_mort=NA, hazard_disp=NA, hazard_bd=NA, hazard_cor=NA),
-  vuln_coeff=list(PDens=NA, SHDI=NA, GNIc=NA, Vs30=NA, EQFreq=NA, Mag=NA,
+  vuln_coeff=list(PDens=NA, SHDI=NA, GNIc=NA, Vs30=NA, EQFreq=NA, #Mag=NA,
                   FirstHaz=NA, Night=NA, FirstHaz.Night=NA),
   check=list(check=NA)
 )
@@ -94,7 +94,7 @@ Model$Priors <- list( #All uniform so currently not included in the acceptance p
                   GNIc=list(dist='laplace', location=0, scale=0.25),
                   Vs30=list(dist='laplace', location=0, scale=0.25),
                   EQFreq=list(dist='laplace', location=0, scale=0.25),
-                  Mag=list(dist='laplace', location=0, scale=0.25),
+                  #Mag=list(dist='laplace', location=0, scale=0.25),
                   FirstHaz=list(dist='laplace', location=0, scale=0.25),
                   Night=list(dist='laplace', location=0, scale=0.25),
                   FirstHaz.Night=list(dist='laplace', location=0, scale=0.25)),
@@ -229,9 +229,11 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
   #could perform all centering outside before model fitting? may allow a bit of speedup
   
   #Population density term:
-  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$PDens * ((log(ODD@data$PDens[notnans]+1) - Params$center$PDens$mean)/Params$center$PDens$sd)
-  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$EQFreq * ((log(ODD@data$EQFreq[notnans]+0.1) - Params$center$EQFreq$mean)/Params$center$EQFreq$sd)
-  for (vuln_term in names(Omega$vuln_coeff_adj)[!(names(Omega$vuln_coeff_adj) %in%  c('itc', 'PDens', 'GNIc', 'EQFreq', 'Mag', 'FirstHaz', 'Night', 'FirstHaz.Night'))]){
+  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$PDens * ((log(ODD@data$PDens[notnans]+0.1) - Params$center$PDens$mean)/Params$center$PDens$sd)
+  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$EQFreq * ((log(ODD@data$EQFreq[notnans]+1) - Params$center$EQFreq$mean)/Params$center$EQFreq$sd)
+  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$Vs30 * ((log(ODD@data$Vs30[notnans]) - Params$center$Vs30$mean)/Params$center$Vs30$sd)
+  
+  for (vuln_term in names(Omega$vuln_coeff_adj)[!(names(Omega$vuln_coeff_adj) %in%  c('itc', 'PDens', 'GNIc', 'EQFreq', 'Mag', 'Vs30', 'FirstHaz', 'Night', 'FirstHaz.Night'))]){
     #All remaining terms except GNIc:
     LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj[[vuln_term]] * ((ODD@data[notnans, vuln_term] - Params$center[[vuln_term]]$mean)/Params$center[[vuln_term]]$sd)
   }
@@ -270,10 +272,11 @@ GetLP_single <- function(Omega, center, vuln_terms){
   #return(1)
   LP_ij <- 0 # Omega$vuln_coeff_adj$Mag * (vuln_terms[['Mag']] - center$Mag$mean) / center$Mag$sd #Omega$vuln_coeff_adj$itc 
   
-  LP_ij <- LP_ij + Omega$vuln_coeff_adj$PDens * ((log(vuln_terms[['PDens']]+1) - center$PDens$mean)/center$PDens$sd)
-  LP_ij <- LP_ij + Omega$vuln_coeff_adj$EQFreq * ((log(vuln_terms[['EQFreq']]+0.1) - center$EQFreq$mean)/center$EQFreq$sd)
+  LP_ij <- LP_ij + Omega$vuln_coeff_adj$PDens * ((log(vuln_terms[['PDens']]+0.1) - center$PDens$mean)/center$PDens$sd)
+  LP_ij <- LP_ij + Omega$vuln_coeff_adj$EQFreq * ((log(vuln_terms[['EQFreq']]+1) - center$EQFreq$mean)/center$EQFreq$sd)
+  LP_ij <- LP_ij + Omega$vuln_coeff_adj$Vs30 * ((log(vuln_terms[['Vs30']]) - center$Vs30$mean)/center$Vs30$sd)
   
-  for (vuln_term in names(Omega$vuln_coeff_adj)[!(names(Omega$vuln_coeff_adj) %in%  c('itc', 'PDens', 'GNIc', 'EQFreq', 'Mag'))]){
+  for (vuln_term in names(Omega$vuln_coeff_adj)[!(names(Omega$vuln_coeff_adj) %in%  c('itc', 'PDens', 'GNIc', 'EQFreq', 'Mag', 'Vs30'))]){
     #All remaining terms except GNIc: (this includes the event vulnerabilities e.g. night and first event terms)
     LP_ij <- LP_ij + Omega$vuln_coeff_adj[[vuln_term]] * ((vuln_terms[[vuln_term]] - center[[vuln_term]]$mean)/center[[vuln_term]]$sd)
   }
@@ -297,8 +300,8 @@ stochastic<-function(n,eps){
 h_0<-function(I,I0, Omega){
   ind<-I>I0
   h<-rep(0,length(I))
-  #h[ind]<- I[ind]-I0
-  h[ind] <- exp(Omega$theta$theta1*I[ind])
+  h[ind]<- I[ind]-I0
+  #h[ind] <- exp(Omega$theta$theta1*I[ind])
   return(h)
 }
 
@@ -364,17 +367,67 @@ Fbdam<-function(PopRem, D_Disp, D_Mort, D_Rem) mapply(rmultinomy, PopRem, D_Disp
 # model calculations, not in the individual parameters themselves (for this, see priors)
 Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
   
-  min_PDens <- 0; max_PDens <- 109043.5 #minimum and maximum population density from the training dataset
+  # path<-paste0("/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/")
+  # ufiles<-list.files(path=path,pattern=haz,recursive = T,ignore.case = T)
+  # ufiles<-ufiles[grepl(ufiles,pattern = haz)]
+  # PDens<-c()
+  # Vs30 <- c()
+  # for(fff in ufiles){
+  #   ODDy<-readRDS(paste0(path,fff))
+  #   PDens<-append(PDens, ODDy@data$Population[!is.na(ODDy@data$Population)])
+  #   Vs30<-append(Vs30, ODDy@data$Vs30[!is.na(ODDy@data$Vs30)])
+  # }
+  #range(PDens)
+  #range(Vs30)
+  min_PDens <- 0; max_PDens <- 102250.5 #minimum and maximum population density from the dataset of events
+  min_Vs30 <- 137.1401; max_Vs30 <- 2197 #minimum and maximum soil stiffness from the dataset of events
+  #print((log(c(min_PDens,max_PDens)+0.1) - Model$center$PDens$mean)/Model$center$PDens$sd)
+  #print((c(log(min_Vs30),log(max_Vs30)) - Model$center$Vs30$mean)/Model$center$Vs30$sd)
+  
+  #GDLdata <- readGlobalDataLab()
+  #range(GDLdata$SHDI, na.rm=T)
   min_SHDI <- 0.172; max_SHDI <- 0.989
-  #min_AveSchYrs <- 0.342; max_AveSchYrs <- 18 #minimum and maximum from all regions in GDL dataset
-  #min_LifeExp <- 24.511; max_LifeExp <- 85.413 #minimum and maximum from all regions in GDL dataset
-  min_GNIc <- exp(5.887395); max_GNIc <- exp(12.23771) #minimum and maximum from all regions in GDL dataset
-  min_Vs30 <- 98; max_Vs30 <- 950 #minimum and 99th (ish) quantile from all regions in soil stiffness dataset
+  #print((c(min_SHDI,max_SHDI) - Model$center$SHDI$mean)/Model$center$SHDI$sd)
+  #log(range(GDLdata$GNIc, na.rm=T))
+  min_GNIc <- exp(5.873416); max_GNIc <- exp(12.253871) #minimum and maximum from all regions in GDL dataset
+  #print((log(c(min_GNIc,max_GNIc)) - Model$center$GNIc$mean)/Model$center$GNIc$sd)
+  
+  #pga <- raster(paste0(dir,"Hazard_Data/gdpga/pga_475y.tif"))
+  #pga_vals <- values(pga)
+  #range(pga_vals)
   min_EQFreq <- 0; max_EQFreq <- 949.4231 #minimum and maximum from all regions in PGA dataset
-  min_Mag <- 4.5; max_Mag <- 8.2
+  #print((log(c(min_EQFreq,max_EQFreq)+1) - Model$center$EQFreq$mean)/Model$center$EQFreq$sd)
+  
+  # min_AveSchYrs <- 0.342; max_AveSchYrs <- 18 #minimum and maximum from all regions in GDL dataset
+  # min_LifeExp <- 24.511; max_LifeExp <- 85.413 #minimum and maximum from all regions in GDL dataset
+  # min_Mag <- 4.5; max_Mag <- 8.2
+  
   min_FirstHaz <- 0; max_FirstHaz <- 1
   min_Night <- 0; max_Night <- 1
   min_FirstHaz.Night <- 0; max_FirstHaz.Night <- 1
+  
+  
+  
+  min_PDens <- 0; max_PDens <- 10520.95 #1st and 99th quantiles of the population density from the training dataset
+  #print((log(c(min_PDens,max_PDens)+1) - Model$center$PDens$mean)/Model$center$PDens$sd)
+  
+  #GDLdata <- readGlobalDataLab()
+  #quantile(GDLdata$SHDI, c(0.01,0.99), na.rm=T)
+  min_SHDI <- 0.275; max_SHDI <- 0.941 #1st and 99th quantiles of SHDI from all regions in GDL dataset
+  #quantile(log(GDLdata$GNIc), c(0.01,0.99), na.rm=T)
+  min_GNIc <- exp(6.598482); max_GNIc <- exp(11.114198) #1st and 99th quantiles of the GNIc from all regions in GDL dataset
+  
+  
+  min_Vs30 <- 98; max_Vs30 <- 950 #10th and 90th quantile from all regions in soil stiffness dataset
+  
+  #pga <- raster(paste0(dir,"Hazard_Data/gdpga/pga_475y.tif"))
+  #pga_vals <- values(pga)
+  #quantile(pga_vals, c(0.01, 0.99))
+  min_EQFreq <- 0; max_EQFreq <- 270.9737 #1st and 99th quantile from all regions in pga dataset
+  
+  min_FirstHaz <- 0; max_FirstHaz <- 1 #two possible values
+  min_Night <- 0; max_Night <- 1 #two possible values
+  min_FirstHaz.Night <- 0; max_FirstHaz.Night <- 1 #two possible values
   
   linp_min <- GetLP_single(Omega, Model$center, vuln_terms=list(PDens=ifelse(Omega$vuln_coeff_adj$PDens>0, min_PDens, max_PDens), 
                                                                 SHDI=ifelse(Omega$vuln_coeff_adj$SHDI>0, min_SHDI, max_SHDI),
@@ -412,7 +465,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     Upp_bounds_4.6 <- c(0.03, 0.1, 0.15)
     Low_bounds_7 <- c(0, 0, 0.00001)
     Upp_bounds_7 <- c(0.15, 0.6, 0.75)
-    Low_bounds_9.5 <- c(10^(-5),0.2,0.5)
+    Low_bounds_9.5 <- c(10^(-5),0.2,0.3)
     #Upp_bounds_9.5 <- c(0.8,0.999,0.999)
     
     # Upp_bounds_4.6_zero_lp <- c(0.0005, 0.005, 0.002)
@@ -433,6 +486,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
       #apply(HLP_impacts(4.6, 0, Omega), 2, function (x) sum(x > Upp_bounds_4.6_zero_lp))
     #print('Intensity 7 too high:')
     #print(HLP_impacts(7, lp[2], Omega)>Upp_bounds_7)
+    
     #print('Intensity 7 too low:')
     #print(HLP_impacts(7, lp[1], Omega)<Low_bounds_7)
     adder <- adder + sum(apply(HLP_impacts(7, lp, Omega), 2, 
@@ -569,7 +623,7 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
       ODDy@impact <- ODDy@impact[!1:NROW(ODDy@impact) %in% which(ODDy@impact$impact %in% c('buildDam', 'displacement') & ODDy@impact$inferred == T),]
       #ODDy@impact <- ODDy@impact[which(ODDy@impact$impact != 'buildDam'),]
       
-      ODDy@impact$event_id = as.numeric(gsub(".*_(\\d+)$", "\\1", filer))
+      ODDy@impact$event_id = as.numeric(gsub(".*_(-?\\d+)$", "\\1", filer))
       
       
       # Apply DispX
@@ -589,6 +643,7 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
       else return(cWeight*mean(tLL,na.rm=T))
     }
     return(pmap(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores), rbind)) # SMC-CHANGE
+    # options(warn=2); for (file in ufiles){tmpFn(file)}
     #return(sum(unlist(mclapply(X = ufiles,FUN = tmpFn,mc.cores = cores))))
   } 
   # } else {
@@ -837,6 +892,13 @@ mean_sd_dist <- function(impact_sample, AlgoParams){
     for (i in 1:length(grouped_events)){
       #For each event, compute the energy score of the observed data vs the 'prediction' (simulated data)
       #Each impact type is weighted differently, simply multiplying the observation and the simulations by this weight performs the weighting
+      
+      if (length(grouped_events[[i]])==1){
+        #LOOSEEND: Double check that crps_sample is in fact the same as 
+        es_store<- c(es_store, crps_sample(log(observed[grouped_events[[i]]]+AlgoParams$log_offset)*impact_weightings[grouped_events[[i]]], 
+                                         log(samples_combined[grouped_events[[i]],]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]))
+        next
+      }
       es_store<- c(es_store, es_sample(log(observed[grouped_events[[i]]]+AlgoParams$log_offset)*impact_weightings[grouped_events[[i]]], 
                                        sweep(log(samples_combined[grouped_events[[i]],]+AlgoParams$log_offset), 1, impact_weightings[grouped_events[[i]]], "*")))
       #crps_store <- c(crps_store, crps_sample(log(observed[i]), log(samples_combined[i,])))

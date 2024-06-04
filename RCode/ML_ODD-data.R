@@ -18,6 +18,7 @@ library(sp)
 library(tensorflow)
 # tf$config$list_physical_devices("GPU")
 library(keras)
+library(pdp)
 
 source('RCode/ODDobj.R')
 source('RCode/Functions.R')
@@ -438,7 +439,7 @@ scaleIMPs<-function(out){
 
 outred<-scaleIMPs(out); rm(out)
 covariates<-colnames(outred)[-c(1:5)]
-allimps<-c("mortality","displacement","buildDam","buildDest")
+allimps<-c("buildDam","buildDest","displacement","mortality")
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% UNIVARIATE MODELS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -799,7 +800,7 @@ fuller%>%group_by(impact,algo)%>%filter(RelativeAbsDiff==min(RelativeAbsDiff))%>
   ungroup()%>%group_by(algo)%>%summarise(Cost=prod(RelativeAbsDiff))%>%
   ungroup()%>%mutate(Cost=Cost/min(Cost))%>%arrange(Cost)
 
-
+saveRDS(fuller,"./IIDIPUS_Results/SpatialPolygons_ML-GLM/fuller.RData")
 
 View(fuller)     
 
@@ -828,7 +829,8 @@ topOeach%<>%group_by(impact)%>%mutate(minSD=RelativeAbsDiffSD[which.min(Relative
   mutate(df=(nn-1)*(thisSD+minSD)^2/(thisSD^2+minSD^2))
 
 topOeach%<>%group_by(impact)%>%mutate(tval=sqrt(nn)*(RelativeAbsDiff-min(RelativeAbsDiff))/
-                                        sqrt(RelativeAbsDiffSD^2+RelativeAbsDiffSD[which.min(RelativeAbsDiffSD)]^2))
+                                        sqrt(RelativeAbsDiffSD^2+RelativeAbsDiffSD[which.min(RelativeAbsDiffSD)]^2),
+                                      equation=equation)
 topOeach%<>%mutate(pval=dt(tval,df))
 
 topOeach%<>%dplyr::select(-c(nn,minSD,thisSD,df,tval))
@@ -887,12 +889,12 @@ GLMvarImp<-function(GLMmods,tester=NULL,predictionsML=NULL){
   if(!is.null(tester)) return(resultsUV)
   # Reorder the dataframe
   resultsUV%<>%dplyr::select(algo,impact,StandErr,StandErrSD,everything())%>%dplyr::select(-c(AIC,BIC,pval,eqn))
-  colnames(resultsUV)[1:4]<-colnames(predictionsML)[1:4]
+  if(!is.null(predictionsML)) colnames(resultsUV)[1:4]<-colnames(predictionsML)[1:4]
   rownames(resultsUV)<-NULL
   # Scale to percentage the feature importance
   resultsUV[,covariates]<-100*resultsUV[,covariates]/rowSums(resultsUV[,covariates])
   # Potentially add the ML results as well
-  if(!is.null(predictionsML)) resultsUV%<>%rbind(predictionsML)
+  if(!is.null(predictionsML)) resultsUV%<>%dplyr::select(all_of(colnames(predictionsML)))%>%rbind(predictionsML)
   # Check for statistical significance.
   # Sample size
   resultsUV%<>%group_by(impact)%>%mutate(nn=sum(!is.na(outred[,unique(impact)])))
@@ -909,7 +911,7 @@ GLMvarImp<-function(GLMmods,tester=NULL,predictionsML=NULL){
   return(resultsUV)
 }
 
-resultsUV<-GLMvarImp(GLMmods)
+resultsUV<-GLMvarImp(GLMmods,predictionsML)
 
 resultsUV%<>%filter(pval>0.05)
 
@@ -935,10 +937,10 @@ varimport%<>%reshape2::melt("impact")
 varimport$variable%<>%factor(levels=ordy)
 
 pal <- c(
-  "mortality" = scales::hue_pal()(4)[1],
-  "displacement" = scales::hue_pal()(4)[2], 
   "buildDam" = scales::hue_pal()(4)[3], 
   "buildDest" = scales::hue_pal()(4)[4],
+  "displacement" = scales::hue_pal()(4)[2], 
+  "mortality" = scales::hue_pal()(4)[1],
   "average" = "black"
 )
 
@@ -1115,10 +1117,10 @@ outer%<>%reshape2::melt("impacts")
 outer$variable%<>%factor(levels=ordy)
 
 pal <- c(
-  "mortality" = scales::hue_pal()(4)[1],
-  "displacement" = scales::hue_pal()(4)[2], 
   "buildDam" = scales::hue_pal()(4)[3], 
-  "buildDest" = scales::hue_pal()(4)[4]
+  "buildDest" = scales::hue_pal()(4)[4],
+  "displacement" = scales::hue_pal()(4)[2], 
+  "mortality" = scales::hue_pal()(4)[1]
 )
 
 p<-outer%>%

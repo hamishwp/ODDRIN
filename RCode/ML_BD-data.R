@@ -256,7 +256,7 @@ p<-outer%>%
   geom_point(size=3)+
   # scale_shape_manual(values=15:19,breaks=allimps)+
   # scale_colour_manual(values = pal,limits = names(pal))+
-  xlab("Model Covariate") + ylab("Feature Importance [%]")+
+  xlab("Model Covariate") + ylab("Feature Importance (%)")+
   # ylim(c(0,25))+
   # scale_x_discrete(labels=namerz)+
   # labs(colour="Impact Type",shape="Impact Type")+

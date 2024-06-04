@@ -417,13 +417,13 @@ scaleIMPs<-function(out){
   outred<-dplyr::select(out,-c("iso3","date")); rm(out)
   outred[,-(1:5)]<-scale(outred[,-(1:5)])
   # This reveals 95% of variance is contained within 4 dimensions of the PCA
-  ExpPCA<-outred%>%dplyr::select(colnames(outred)[str_starts(colnames(outred),"Exp") & colnames(outred)!="ExpSchYrs"])%>%PCA(ncp = 5,graph = F)
+  ExpPCA<-outred%>%dplyr::select(colnames(outred)[str_starts(colnames(outred),"Exp") & colnames(outred)!="ExpSchYrs"])%>%FactoMineR::PCA(ncp = 5,graph = F)
   iExp<-sum(ExpPCA$eig[,3]<95); iExp<-2
   tmpExp<-as.data.frame(ExpPCA$ind$coord[,1:iExp]); colnames(tmpExp)<-paste0("ExpDim",1:iExp)
   outred%<>%cbind(tmpExp)%>%dplyr::select(-colnames(outred)[str_starts(colnames(outred),"Exp") & colnames(outred)!="ExpSchYrs"])
   rm(ExpPCA,iExp,tmpExp)
   # This reveals 95% of variance is contained within 2 dimensions of the PCA
-  WIDPCA<-outred%>%dplyr::select(colnames(outred)[str_starts(colnames(outred),"p")])%>%PCA(ncp = 5,graph = F)
+  WIDPCA<-outred%>%dplyr::select(colnames(outred)[str_starts(colnames(outred),"p")])%>%FactoMineR::PCA(ncp = 5,graph = F)
   iWID<-sum(WIDPCA$eig[,3]<95)
   tmpWID<-as.data.frame(WIDPCA$ind$coord[,1:iWID]); colnames(tmpWID)<-paste0("WIDDim",1:iWID)
   outred%<>%cbind(tmpWID)%>%dplyr::select(-colnames(outred)[str_starts(colnames(outred),"p")])
@@ -950,7 +950,7 @@ p<-varimport%>%
   geom_line(aes(colour=impact),linewidth=0.7, alpha=0.5,linetype="dotdash")+
   scale_shape_manual(values=c(15:18,1),breaks=c(allimps,"average"))+
   scale_colour_manual(values = pal,limits = names(pal))+
-  xlab("Model Covariate") + ylab("Feature Importance [%]")+
+  xlab("Model Covariate") + ylab("Feature Importance (%)")+
   labs(colour="Impact Type",shape="Impact Type")+
   theme(axis.text.x = element_text(angle = 45, hjust=1));p
 
@@ -1508,10 +1508,10 @@ colnames(outout)[3:4]<-c("RelativeAbsDiff","RelativeAbsDiffSD")
 allUV%<>%rbind(outout)
 
 pal <- c(
-  "mortality" = scales::hue_pal()(4)[1],
-  "displacement" = scales::hue_pal()(4)[2], 
   "buildDam" = scales::hue_pal()(4)[3], 
-  "buildDest" = scales::hue_pal()(4)[4]
+  "buildDest" = scales::hue_pal()(4)[4],
+  "displacement" = scales::hue_pal()(4)[2], 
+  "mortality" = scales::hue_pal()(4)[1]
 )
 
 p<-allUV%>%ggplot(aes(algo,RelativeAbsDiff,group=impact))+
@@ -1693,6 +1693,15 @@ p <- expop %>% ggplot() + geom_line(aes(MMI, PopExp, colour=Event),alpha=0.5,siz
 ggsave("TUR_outlier_ExpPop-MMI.eps",p,path="./Plots/IIDIPUS_Results/",width=8,height=5,device = grDevices::cairo_ps)  
 
 
+costie<-function(data, lev = NULL, model = NULL) {
+  out<-mean(abs(data$obs-data$pred)*data$weights/sum(data$weights),na.rm = T)
+  names(out)<-"RelativeAbs"
+  return(out)
+}
+
+train_control <- caret::trainControl(method="repeatedcv", number=10, repeats=3,
+                                     search = "random",
+                                     summaryFunction=costie)
 # MADL example with random forest algorithm, by plotting the observed vs predicted impacts
 rfres<-do.call(rbind,lapply(allimps,function(impact){
   
@@ -1705,7 +1714,7 @@ rfres<-do.call(rbind,lapply(allimps,function(impact){
   # Remove the variable Event after weighting is calculated
   outFrame%<>%dplyr::select(-Event)
   # Train the model!
-  modeler<-caret::train(Y~., data = outFrame, method = algo, metric="RelativeAbs",
+  modeler<-caret::train(Y~., data = outFrame, method = "rf", metric="RelativeAbs",
                         tuneLength = 12, trControl = train_control,linout = TRUE,
                         weights = weights, preProcess = c("center","scale"))
   # Get the predictions
@@ -1757,6 +1766,7 @@ texty<-do.call(rbind,lapply(allimps,function(imp){
     x_pos=1, y_pos=yv)
 }))
 
+rfres%<>%mutate(impact=factor(impact,levels(),ordered=T))
 # Plot it!
 p<-rfres%>%ggplot()+geom_point(aes(y,ybar,size=MADL,colour=impact))+
   scale_x_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),

@@ -820,8 +820,8 @@ AlgoParams$smc_Npart <- 1000
 AlgoParams$m_CRPS <- 60
 AlgoParams$smc_alpha <- 0.9
 AlgoParams$rel_weightings <- c(0,1)
-AlgoParams$kernel_sd$mortality <- 5
-AlgoParams$kernel_sd$buildDam <- 0.1
+AlgoParams$kernel_sd$mortality <- 7
+AlgoParams$kernel_sd$buildDam <- 0.6
 AlgoParams$log_offset <- 10
 tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '_Npart', AlgoParams$smc_Npart,'_M', AlgoParams$m_CRPS,'_', 'SimpleHighDimensionalTestingLargerPropCOV')
 AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F,tag_notes=tag_notes, oldtag='')
@@ -963,6 +963,144 @@ fit1 <- stan(
   cores = 1,              # number of cores (could use one per chain)
   refresh = 0             # no progress shown
 )
+
+# -------------------------------------------------------------------------------------------------------------
+# --------------- SEE IF DIFFERENT PARAMETER TRANSFORMATIONS REDUCE SMC VARIANCE ------------------------------
+# -------------------------------------------------------------------------------------------------------------
+
+Model$HighLevelPriors <- function(Omega, Model, modifier=NULL){
+  return(0)
+}
+Omega_true <- list(Lambda1 = list(nu=1, kappa=0.6),
+                   Lambda2 = list(nu=1.2, kappa=0.9),
+                   Lambda3 = list(nu=-0.5, kappa=0.2),
+                   Lambda4 = list(nu=9.9, kappa=1.6),
+                   theta= list(theta1=0.6),
+                   eps = list(local=2.2292053, hazard_mort=0.8383464, hazard_disp=0.9, hazard_bd=0.9, hazard_cor=0.55),
+                   vuln_coeff = list(PDens=0.05, SHDI=-0.5, GNIc=-0.1, Vs30=0.1, EQFreq=-0.1, FirstHaz=0.05, Night=0.05, FirstHaz.Night=0.1),
+                   check = list(check=0.5))
+
+Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
+  Lambda1=list(nu=list(dist='unif', min=0, max=2), 
+               kappa=list(dist='unif', min=0.25, max=2) #, alpha=list(dist='unif', min=-0.1, max=0.5)
+  ), 
+  Lambda2=list(nu=list(dist='unif', min=0, max=2), 
+               kappa=list(dist='unif', min=0.25, max=2)),
+  Lambda3=list(nu=list(dist='unif', min=-1, max=1), 
+               kappa=list(dist='unif', min=0, max=2)),
+  Lambda4=list(nu=list(dist='unif', min=8, max=12.5), 
+               kappa=list(dist='unif', min=0.25, max=2.5)),
+  theta=list(theta1=list(dist='unif', min=0, max=1)),
+  eps=list(local=list(dist='unif', min=0.1, max=2.5),
+           hazard_mort=list(dist='unif', min=0, max=1.5),
+           hazard_disp=list(dist='unif', min=0, max=1.5),
+           hazard_bd=list(dist='unif', min=0, max=1.5),
+           hazard_cor=list(dist='unif', min=0, max=1)),
+  vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.25),
+                  SHDI=list(dist='laplace', location=0, scale=0.25),
+                  GNIc=list(dist='laplace', location=0, scale=0.25),
+                  Vs30=list(dist='laplace', location=0, scale=0.25),
+                  EQFreq=list(dist='laplace', location=0, scale=0.25),
+                  #Mag=list(dist='laplace', location=0, scale=0.25),
+                  FirstHaz=list(dist='laplace', location=0, scale=0.25),
+                  Night=list(dist='laplace', location=0, scale=0.25),
+                  FirstHaz.Night=list(dist='laplace', location=0, scale=0.25)),
+  check=list(check=list(dist='unif', min=0, max=1)))
+
+#Set lower and upper bounds for the parameters
+Model$par_lb <- c()
+Model$par_ub <- c()
+
+for (i in 1:length(Model$Priors)){
+  if (is.list(Model$Priors[[i]])){
+    for (j in 1:length(Model$Priors[[i]])){
+      if(Model$Priors[[i]][[j]]$dist == 'unif'){
+        Model$par_lb = c(Model$par_lb, Model$Priors[[i]][[j]]$min)
+        Model$par_ub = c(Model$par_ub, Model$Priors[[i]][[j]]$max)
+      } else if (Model$Priors[[i]][[j]]$dist == 'norm'){
+        Model$par_lb = c(Model$par_lb, Model$Priors[[i]][[j]]$mean - 6 * Model$Priors[[i]][[j]]$sd)
+        Model$par_ub = c(Model$par_ub, Model$Priors[[i]][[j]]$mean + 6 * Model$Priors[[i]][[j]]$sd)
+      } else if (Model$Priors[[i]][[j]]$dist == 'laplace'){
+        Model$par_lb = c(Model$par_lb, Model$Priors[[i]][[j]]$location - 15 * Model$Priors[[i]][[j]]$scale)
+        Model$par_ub = c(Model$par_ub, Model$Priors[[i]][[j]]$location + 15 * Model$Priors[[i]][[j]]$scale)
+      } else {
+        stop('Please update Method.R to adjust acceptance probability to account for other priors before continuing.')
+      }
+    }
+  } else {
+    if(Model$Priors[[i]]$dist == 'unif'){
+      Model$par_lb = c(Model$par_lb, Model$Priors[[i]]$min)
+      Model$par_ub = c(Model$par_ub, Model$Priors[[i]]$max)
+    } else if (Model$Priors[[i]]$dist == 'norm'){
+      Model$par_lb = c(Model$par_lb, Model$Priors[[i]]$mean - 6 * Model$Priors[[i]]$sd)
+      Model$par_ub = c(Model$par_ub, Model$Priors[[i]]$mean + 6 * Model$Priors[[i]]$sd)
+    } else if (Model$Priors[[i]]$dist == 'laplace'){
+      Model$par_lb = c(Model$par_lb, Model$Priors[[i]]$location - 15 * Model$Priors[[i]]$scale)
+      Model$par_ub = c(Model$par_ub, Model$Priors[[i]]$location + 15 * Model$Priors[[i]]$scale)
+    } else {
+      stop('Please update Method.R to adjust acceptance probability to account for other priors before continuing.')
+    }
+  }
+}
+
+Model$links <-Model$unlinks <- Model$acceptTrans <- Model$skeleton
+
+#Currently, all parameters use a lower and upper bound
+for (i in 1:length(Model$links)){
+  if (is.list(Model$links[[i]])){
+    for (j in 1:length(Model$links[[i]])){
+      Model$links[[i]][[j]] <- 'returnX'
+      Model$unlinks[[i]][[j]] <- 'returnX'
+      Model$acceptTrans[[i]][[j]] <- 'returnX'
+    }
+  } else {
+    Model$links[[i]] <- 'returnX'
+    Model$unlinks[[i]] <- 'returnX'
+    Model$acceptTrans[[i]] <- 'returnX'
+  }
+}
+
+n_events <- 100
+set.seed(1)
+
+data_y <- data.frame(polygon=j, impact='mortality', sampled=NA,
+                     iso3='ABC', sdate=as.Date('16-03-1999'), qualifier=NA,
+                     build_type=NA, inferred=F, event_id = i,
+                     observed = rlnorm(n_events, Omega_true$Lambda1$nu, Omega_true$Lambda1$kappa))
+
+#plot(mort_impacts$observed)
+
+#prior_tightening <- 0.1
+SampleImpact <- function(dir, Model, proposed, AlgoParams){
+  impact_sample <- list()
+  for (i in 1:(AlgoParams$Np*AlgoParams$m_CRPS)){
+    impact_sample[[i]] <- data_y
+    #impact_sample[[i]]$sampled <-  abs(rnorm(length(means), 100*proposed$vuln_coeff$Vs30 * (means-mean(means))+1500, proposed$Lambda3$kappa*500)) #rt(NROW(data_y), proposed$Lambda1$nu, 3) * proposed$Lambda1$kappa #round(rt(NROW(data_y), proposed$Lambda1$nu, 5) * proposed$Lambda1$kappa)
+    
+    impact_sample[[i]]$sampled <-  rlnorm(n_events, proposed$Lambda1$nu, proposed$Lambda1$kappa)
+  }
+  return(list(poly=impact_sample))
+}
+
+# impact_sample <- SampleImpact(dir, Model, Omega_true, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 100))
+# plot_impact_sample(impact_sample, impact_filter='mortality')
+
+AlgoParams$smc_steps <- 100
+AlgoParams$smc_Npart <- 1000
+AlgoParams$m_CRPS <- 60
+AlgoParams$smc_alpha <- 0.9
+AlgoParams$rel_weightings <- c(1,0)
+AlgoParams$kernel_sd$mortality <- 1
+AlgoParams$kernel_sd$buildDam <- 1
+AlgoParams$kernel_sd$buildDest <- 1
+tag_notes <- paste0('Npart', AlgoParams$smc_Npart,'_alpha', AlgoParams$smc_alpha, '_Np', AlgoParams$Np, '_M',AlgoParams$m_CRPS, '_AllParamsSpeedy_PropCOVmult0.1')
+AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F,tag_notes=tag_notes, oldtag='abcsmc_2024-06-17_111820.209558_Npart1000_alpha0.9_Np2_M60_AllParamsSpeedy_PropCOVmult0.1')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_2024-06-17_141729.448294_Npart1000_alpha0.9_Np2_M60_AllParamsSpeedy_PropCOVmult0.1')
+plot(density(AlgoResults$Omega_sample_phys[,7,1], bw=0.05))
+lines(density(AlgoResults$Omega_sample_phys[,7,44], bw=0.05), col='blue')
+plot(AlgoResults$Omega_sample_phys[,17,1], AlgoResults$Omega_sample_phys[,8,1])
+points(AlgoResults$Omega_sample_phys[,17,44], AlgoResults$Omega_sample_phys[,8,44], col='blue')
 
 # -------------------------------------------------------------------------------------------------------------
 # -------------------------------------------------------------------------------------------------------------

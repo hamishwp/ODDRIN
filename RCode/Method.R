@@ -42,7 +42,9 @@ AlgoParams<-list(Np=2, # Number of Monte Carlo particles
                  BD_weight = 0, #scales from 0 to 1: 0 means point data has no weighting, 1 means point data is included to same weighting (by inverse MAD) as mortality
                  rel_weightings = c(1,1), #weightings of the mean vs the variance components of the distance function
                  log_offset = 10,
-                 tol0 = 12000)
+                 tol0 = 12000,
+                 input_folder = 'IIDIPUS_Input/' #Allows you to vary between simulated input, aggregated input, etc.
+                 )
 		 
 if(is.null(AlgoParams$AllParallel)){
   if(AlgoParams$cores>4) { AlgoParams$AllParallel<-T
@@ -105,13 +107,15 @@ checkLTargs<-function(Model,iVals,AlgoParams){
   if(length(unlist(iVals$x0))!=nrow(iVals$COV) | length(unlist(iVals$x0))!=ncol(iVals$COV)) stop("Mismatching initial values and initial covariance matrix")
 }
 
-modifyAcc <- function(xNew, xPrev, Model){
+modifyAcc <- function(xNew, xPrev, Model, propCOV){
   xNew %<>% relist(Model$skeleton) %>% unlist() %>% Proposed2Physical(Model) %>% unlist()
   xPrev %<>% relist(Model$skeleton) %>% unlist() %>% Proposed2Physical(Model) %>% unlist()
   Model$acceptTrans%<>%unlist()
   index<-1:length(unlist(Model$unlinks))
   product <- 1
   #Transformed Parameters:
+  #product <- product * (dmvnorm(xNew, xPrev, propCOV) / pmvnorm(lower=Model$par_lb, upper=Model$par_ub, xPrev, sigma=propCOV)) / 
+  #                        (dmvnorm(xPrev, xNew, propCOV) / pmvnorm(lower=Model$par_lb, upper=Model$par_ub, xNew, sigma=propCOV))
   for (i in index){
     product <- product * match.fun(Model$acceptTrans[[names(xNew)[i]]])(xNew[i], xPrev[i], Model$par_lb[i],Model$par_ub[i])
   }
@@ -176,7 +180,7 @@ bcast_ODDRIN <- function(dir, Model, AlgoParams, nslaves){
   mpi.bcast.Robj2slave(HLPrior_sample)
   
   #Run GetODDPackages and Simulate.R on the nodes
-  mpi.remote.exec(GetODDPackages, FALSE)
+  mpi.remote.exec(GetODDPackages, TRUE)
   mpi.remote.exec(source('RCode/Simulate.R'))
 }
 
@@ -297,7 +301,7 @@ AlgoStep1 <- function(dir, AlgoParams, AlgoResults){
   }
   AlgoResults$tolerancestore[1] <- max(AlgoResults$d[,,1]) + 1 #set tolerance to larger than maximum distance
   AlgoResults$accrate_store[1] <- 1
-  AlgoResults$propCOV_multiplier[1] <- 0.25
+  AlgoResults$propCOV_multiplier[1] <- 0.1
   end_time <- Sys.time()
   
   #weight distances by inverse MAD at first step
@@ -344,10 +348,16 @@ perturb_particles <- function(s, propCOV, AlgoParams, tolerance_s, W_s, Omega_sa
     print(paste(' Step:', s, ', Particle:', n))
     if(W_s[n]>0){
       #Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[n,,s], propPars=propCOV[[n]]) #perturb the proposal
-      Omega_prop <- multvarNormProp(xt=Omega_sample_s[n,], propPars=propCOV) #perturb the proposal
-      Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
-
-      if (any(unlist(Omega_prop_phys) < Model$par_lb) | any(unlist(Omega_prop_phys) > Model$par_ub)) next
+      repeat {
+        Omega_prop <- multvarNormProp(xt=Omega_sample_s[n,], propPars=propCOV) #perturb the proposal
+        Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
+        # 
+        if (all(unlist(Omega_prop_phys) < Model$par_ub) & all(unlist(Omega_prop_phys) > Model$par_lb)) {break}
+      }
+      # Omega_prop <- multvarNormProp(xt=Omega_sample_s[n,], propPars=propCOV) #perturb the proposal
+      # Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
+      # 
+      # if (any(unlist(Omega_prop_phys) < Model$par_lb) | any(unlist(Omega_prop_phys) > Model$par_ub)) next
       
       HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
       if (HP> AlgoParams$ABC & Model$higherpriors) next
@@ -372,7 +382,7 @@ perturb_particles <- function(s, propCOV, AlgoParams, tolerance_s, W_s, Omega_sa
       
       #calculate the acceptance probability:
       #print(modifyAcc(Omega_prop, Omega_sample_s[n,], Model))
-      acc <- (sum(d_prop_tot<tolerance_s)/length(d_prop_tot))/(sum(d_curr<tolerance_s)/length(d_curr)) * modifyAcc(Omega_prop, Omega_sample_s[n,], Model)
+      acc <- (sum(d_prop_tot<tolerance_s)/length(d_prop_tot))/(sum(d_curr<tolerance_s)/length(d_curr)) * modifyAcc(Omega_prop, Omega_sample_s[n,], Model, propCOV)
       #acc <- runif(1,0,1) * modifyAcc(Omega_prop, Omega_sample_s[n,], Model)
         
       u <- runif(1)
@@ -480,6 +490,7 @@ retrieve_UnfinishedAlgoResults <- function(dir, oldtag, Npart, AlgoResults){
   AlgoResults$propCOV_multiplier[1:s_finish] <- AlgoResults_unfinished$propCOV_multiplier[1:s_finish]
   AlgoResults$accrate_store[1:s_finish] <- AlgoResults_unfinished$accrate_store[1:s_finish]
   AlgoResults$rel_weights <- AlgoResults_unfinished$rel_weights
+  AlgoResults$input_folder <- AlgoResults_unfinished$input_folder
   # s_start = s_finish + 1 #ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
   # #n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
   # 
@@ -608,6 +619,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=NULL, tag_
   
   AlgoResults <- list(
     #Omega_sample = array(NA, dim=c(AlgoParams$smc_Npart, n_x, AlgoParams$smc_steps)), #store sampled parameters on the transformed space
+    input_folder = AlgoParams$input_folder,
     Omega_sample_phys = array(NA, dim=c(AlgoParams$smc_Npart, n_x, AlgoParams$smc_steps)), #store sampled parameters on the untransformed space
     W = array(NA, dim=c(AlgoParams$smc_Npart, AlgoParams$smc_steps)), #Weights
     d = array(Inf, dim=c(AlgoParams$smc_Npart, AlgoParams$Np, AlgoParams$smc_steps)), #Distances
@@ -714,7 +726,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=NULL, tag_
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
     
     if (AlgoResults$accrate_store[s] < 0.2){
-      propCOV_multiplier <- max(propCOV_multiplier / 2, 0.25)
+      propCOV_multiplier <- max(propCOV_multiplier / 2, 0.1)
     } else if (AlgoResults$accrate_store[s] > 0.4){
       propCOV_multiplier <- propCOV_multiplier * 2
     }
@@ -740,7 +752,10 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=NULL, tag_
     
     print(s)
     
-    plot_abcsmc(s, n_x, AlgoParams$smc_Npart, AlgoResults$Omega_sample_phys, Omega)
+    #plot_abcsmc(s, n_x, AlgoParams$smc_Npart, AlgoResults$Omega_sample_phys, Omega)
+    par(mfrow=c(2,1))
+    plot(AlgoResults$tolerancestore)
+    plot(AlgoResults$Omega_sample_phys[,7,s])
     
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))  
   }

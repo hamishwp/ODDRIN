@@ -511,6 +511,12 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     
     #overwrite ODDSim with the updated
     saveRDS(ODDSim, paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
+    # if (i < 100){
+    #   saveRDS(ODDSim, paste0("IIDIPUS_Input/ODDobjects/Train/",ODDpaths[i]))
+    # } else {
+    #   saveRDS(ODDSim, paste0("IIDIPUS_Input/ODDobjects/Test/",ODDpaths[i]))
+    # }
+    
   }
   for (i in 1:length(BDpaths)){
     BDSim <- readRDS(paste0("IIDIPUS_SimInput/BDobjects/", BDpaths[i]))

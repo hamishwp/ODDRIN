@@ -32,7 +32,7 @@ GetSourceFiles<-function(packred){
     source('RCode/GetOSM.R')
     source('RCode/GetSatDamage.R')  
     source('RCode/GetBuildingCounts.R')
-    source('RCode/Results_Analysis.R')
+    source('RCode/ResultsAnalysisFunctions.R')
     
   }
   
@@ -60,9 +60,10 @@ LoadLibraries<-function(packred){
   library(mvtnorm)
   library(abind)
   library(Rmpi)
-  library(rgeos)
+  #library(rgeos)
   library(DescTools)
   library(scoringRules)
+  library(vegan)
   # library(ecochange)
   
   if(!packred) {
@@ -78,15 +79,16 @@ LoadLibraries<-function(packred){
 GetODDPackages<-function(packred){
   
   list.of.packages <- c("dplyr", "ggplot2","sf","tidyverse","openxlsx","pracma",
-                        "geojsonR", "tiff", "gstat", "mvtnorm", 'rgeos', 'DescTools',
+                         "tiff", "gstat", "mvtnorm", 'DescTools', #'rgeos', 
                         "RColorBrewer", "geosphere","GGally", "wbstats",
                         "countrycode","rworldmap","rworldxtra","chron","ncdf4",
                         "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 
                         'EnvStats', 'posterior', 'doParallel', 'VGAM', 'abind',
-                        'Rmpi', 'openxlsx', 'ecochange', 'lutz', 'scoringRules')
+                        'Rmpi', 'openxlsx', 'ecochange', 'lutz', 'scoringRules',
+                        'vegan')
   
   if(!packred) list.of.packages<-c(list.of.packages,
-                                   "codetools","latex2exp",
+                                   "codetools","latex2exp", "geojsonR", 'geojsonio',
                                    "rJava","devtools","OpenStreetMap","osmdata",
                                    "tidyRSS","geojsonR", "tiff", "gstat",
                                    "FactoMineR","factoextra","xtable",
@@ -99,7 +101,7 @@ GetODDPackages<-function(packred){
   
   # This package makes sure you're uptodate on all packages, including things like tidyverse 
   if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager", repos='http://cran.us.r-project.org')
-  BiocManager::install("Biobase", version = "3.16")
+  BiocManager::install("Biobase", version = "3.19")
   
   # devtools::install_github('daroczig/fbRads')
   # if(length(list.of.packages[!("openrouteservice" %in% installed.packages()[,"Package"])])){devtools::install_github("rCarto/osrm")}

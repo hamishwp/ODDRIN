@@ -15,11 +15,26 @@ source('RCode/Method.R')
 #Extract the functions for generating the simulations
 source('RCode/Simulate.R')
 
-AlgoParams$Np = 2
-AlgoParams$m_CRPS = 2
-AlgoParams$smc_Npart = 10
-AlgoParams$cores = 4
-AlgoParams$n_nodes = 1
+AlgoParams$Np = 1
+AlgoParams$m_CRPS = 60
+AlgoParams$smc_Npart = 1000
+AlgoParams$cores <- 1
+AlgoParams$smc_steps <- 100
+AlgoParams$rel_weightings <- c(0,1)
+AlgoParams$kernel_sd <- list(displacement = 1, mortality = 7, buildDam=0.6,
+                             buildDest = 0, buildDamDest = 0)
+
+start_time <- Sys.time()
+impact_sample <- DispX(ODD, Omega %>% addTransfParams, Model$center, AlgoParams)
+finish_time <- Sys.time()
+finish_time-start_time
+
+
+start_time <- Sys.time()
+impact_sample <- SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams)
+finish_time <- Sys.time()
+finish_time-start_time
+
 out <- delmoral_parallel(AlgoParams, Model, unfinished=F, oldtag='')
 
 #Parameterise the model and simulate the data:
@@ -29,7 +44,7 @@ Omega <- list(Lambda1 = list(nu=9.6, kappa=1.9049508),
               Lambda3 = list(nu=9.3, kappa=0.9),
               Lambda4 = list(nu=9.9, kappa=1.9),
               theta= list(theta1=0.6),
-              eps = list(local=2.2292053, hazard_mort=0.8383464, hazard_disp=0.9, hazard_bd=0.9, hazard_cor=0.55),
+              eps = list(local=1.2, hazard_mort=0.8383464, hazard_disp=0.9, hazard_bd=0.9, hazard_cor=0.55),
               vuln_coeff = list(PDens=0, SHDI=-0.5, GNIc=-0.1, Vs30=0.1, EQFreq=-0.1, FirstHaz=0.05, Night=0.05, FirstHaz.Night=0.1),
               check = list(check=0.5))
 

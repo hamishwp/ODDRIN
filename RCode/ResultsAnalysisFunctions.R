@@ -85,25 +85,33 @@ check_changes_1_event <- function(){
 # }
 # points(ints, h_0(ints,Model$I0,Omega %>% addTransfParams()), col='red')
 
-
 library(zoo)
-addAlgoParams <- function(AlgoResults){
-  AlgoResults$s_finish <- which(is.na(AlgoResults$Omega_sample_phys[1,1,]))[1]-1
-  if(is.na(AlgoResults$s_finish)){
-    acc = c()
-    for (s in 2:length(AlgoResults$accrate_store)){
-      W_nonzero <- which(AlgoResults$W[,s-1] != 0)
-      acc <- c(acc, sum(AlgoResults$Omega_sample_phys[W_nonzero,1,s] != AlgoResults$Omega_sample_phys[W_nonzero,1,s-1])/length(W_nonzero))
+
+addAlgoParams <- function(AlgoResults, s_finish=NULL){
+  if(is.null(s_finish)){
+    AlgoResults$s_finish <- which(is.na(AlgoResults$Omega_sample_phys[1,1,]))[1]-1
+    if(is.na(AlgoResults$s_finish)){
+      acc = c()
+      for (s in 2:length(AlgoResults$accrate_store)){
+        W_nonzero <- which(AlgoResults$W[,s-1] != 0)
+        acc <- c(acc, sum(AlgoResults$Omega_sample_phys[W_nonzero,1,s] != AlgoResults$Omega_sample_phys[W_nonzero,1,s-1])/length(W_nonzero))
+      }
+      AlgoResults$s_finish <- which(rollapply(acc<0.05, 5, all))[1]
     }
-    AlgoResults$s_finish <- which(rollapply(acc<0.05, 5, all))[1]
+    if (is.na(AlgoResults$s_finish)){
+      AlgoResults$s_finish <- length(AlgoResults$Omega_sample_phys[1,1,])
+    }
+  } else {
+    AlgoResults$s_finish <- s_finish
   }
+  #AlgoResults$s_finish <- 220
   AlgoResults$n_x <- length(unlist(Model$skeleton))
   AlgoResults$Npart <- NROW(AlgoResults$W)
   return(AlgoResults)
 }
 
-plot_density_vs_step = function(AlgoResults, Omega=NULL){
-  AlgoResults %<>% addAlgoParams()
+plot_density_vs_step = function(AlgoResults, Omega=NULL, s_finish=NULL){
+  AlgoResults %<>% addAlgoParams(s_finish)
   par(mfrow=c(5,4))
   plot_titles <- names(unlist(Model$skeleton))
   plot_titles[1:8] <- paste0(ifelse(1:8 %% 2 == 0, 'sigma_', 'mu_'), rep(1:4,each=2))
@@ -122,8 +130,8 @@ plot_density_vs_step = function(AlgoResults, Omega=NULL){
   par(mfrow=c(1,1)) # 800 x 800
 }
 
-plot_d_vs_step = function(AlgoResults, ymax=NULL){
-  AlgoResults %<>% addAlgoParams()
+plot_d_vs_step = function(AlgoResults, ymax=NULL, s_finish=NULL){
+  AlgoResults %<>% addAlgoParams(s_finish)
   
   ymin=min(AlgoResults$d, na.rm=T)
   ymax=ifelse(is.null(ymax), max(AlgoResults$d[which(is.finite(AlgoResults$d))], na.rm=T), ymax)
@@ -134,8 +142,8 @@ plot_d_vs_step = function(AlgoResults, ymax=NULL){
   }
 }
 
-plot_acc_prob = function(AlgoResults){
-  AlgoResults %<>% addAlgoParams()
+plot_acc_prob = function(AlgoResults, s_finish=NULL){
+  AlgoResults %<>% addAlgoParams(s_finish)
   
   acc = c()
   for (s in 2:AlgoResults$s_finish){
@@ -146,8 +154,8 @@ plot_acc_prob = function(AlgoResults){
 }
 
 plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
-                                      pairings=rbind(c(1,2), c(3,4), c(5,6), c(7,8), c(9,10), c(11,12))){
-  AlgoResults %<>% addAlgoParams()
+                                      pairings=rbind(c(1,2), c(3,4), c(5,6), c(7,8), c(9,10), c(11,12)), s_finish=NULL){
+  AlgoResults %<>% addAlgoParams(s_finish)
   post_samples <- AlgoResults$Omega_sample_phys[,,AlgoResults$s_finish]
   if (include_priors) prior_samples <- AlgoResults$Omega_sample_phys[,,1]
   
@@ -159,10 +167,17 @@ plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
       xmin <- min(xmin, prior_samples[,pairings[p,1]]); xmax <- max(xmax, prior_samples[,pairings[p,1]])
       ymin <- min(ymin, prior_samples[,pairings[p,2]]); ymax <- max(ymax, prior_samples[,pairings[p,2]])
     }
-    plot(post_samples[,pairings[p,1]], post_samples[,pairings[p,2]], 
-         xlab=names(unlist(Model$skeleton))[pairings[p,1]], xlim=c(xmin, xmax),
-         ylab=names(unlist(Model$skeleton))[pairings[p,2]], ylim=c(ymin, ymax))
-    if (include_priors) points(prior_samples[,pairings[p,1]], prior_samples[,pairings[p,2]], col='blue')
+    
+    if (include_priors){
+      plot(prior_samples[,pairings[p,1]], prior_samples[,pairings[p,2]], col='blue', 
+           xlab=names(unlist(Model$skeleton))[pairings[p,1]], xlim=c(xmin, xmax),
+           ylab=names(unlist(Model$skeleton))[pairings[p,2]], ylim=c(ymin, ymax))
+      points(post_samples[,pairings[p,1]], post_samples[,pairings[p,2]])
+    } else {
+      plot(post_samples[,pairings[p,1]], post_samples[,pairings[p,2]], 
+           xlab=names(unlist(Model$skeleton))[pairings[p,1]], xlim=c(xmin, xmax),
+           ylab=names(unlist(Model$skeleton))[pairings[p,2]], ylim=c(ymin, ymax))
+    }
     if (!is.null(Omega)){
       points(unlist(Omega)[pairings[p,1]], unlist(Omega)[pairings[p,2]], col='red', pch=4, cex=2, lwd=4)
     }
@@ -171,8 +186,8 @@ plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
 }
 
 plot_corr_posterior_vs_d = function(AlgoResults, include_priors=F, Omega=NULL,
-                                      pairing=c(1,2)){
-  AlgoResults %<>% addAlgoParams()
+                                      pairing=c(1,2), s_finish=NULL){
+  AlgoResults %<>% addAlgoParams(s_finish)
   post_samples <- AlgoResults$Omega_sample_phys[,,AlgoResults$s_finish]
   if (include_priors) prior_samples <- AlgoResults$Omega_sample_phys[,,1]
   
@@ -205,8 +220,8 @@ plot_corr_posterior_vs_d = function(AlgoResults, include_priors=F, Omega=NULL,
 }
 
 plot_corr_transf_posterior_vs_d = function(AlgoResults, include_priors=F, Omega=NULL,
-                                    pairing=c(1,2)){
-  AlgoResults %<>% addAlgoParams()
+                                    pairing=c(1,2), s_finish=NULL){
+  AlgoResults %<>% addAlgoParams(s_finish)
   relist_transf <- function(Omega_phys){
     unlist(addTransfParams(relist(Omega_phys, skeleton=Model$skeleton)))
   }
@@ -243,13 +258,14 @@ plot_corr_transf_posterior_vs_d = function(AlgoResults, include_priors=F, Omega=
 }
 
 sample_post_predictive <- function(AlgoResults, M, s, dat='Train', single_particle=F, Omega=NULL, particle_i = NULL, 
-                                   return_type='Poly'){
+                                   return_type='Poly', output='SampledAgg'){
+  AlgoParams$input_folder <- AlgoResults$input_folder
   if (is.null(Omega)){
     sampled_part <- sample(1:AlgoResults$Npart, M, prob=AlgoResults$W[, s], replace=T)
     impact_sample <- SampleImpact(dir = dir,Model = Model,
                                   proposed = AlgoResults$Omega_sample_phys[sampled_part[1],,s] %>% relist(Model$skeleton) %>% addTransfParams(), 
                                   AlgoParams = AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% replace(which(names(AlgoParams)==c('Np')), 1),
-                                  dat=dat)
+                                  dat=dat, output=output)
     poly_sampled <- impact_sample$poly[[1]][,c('event_id', 'iso3', 'polygon', 'impact', 'observed', 'sampled')] # 'sdate', 'inferred',
     point_sampled <- impact_sample$point
     
@@ -259,7 +275,7 @@ sample_post_predictive <- function(AlgoResults, M, s, dat='Train', single_partic
         impact_sample <- SampleImpact(dir = dir,Model = Model,
                                       proposed = AlgoResults$Omega_sample_phys[sampled_part[m],,s] %>% relist(Model$skeleton) %>% addTransfParams(), 
                                       AlgoParams = AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% replace(which(names(AlgoParams)==c('Np')), 1),
-                                      dat=dat)
+                                      dat=dat, output=output)
         poly_sampled <- cbind(poly_sampled, impact_sample$poly[[1]]$sampled)
         point_sampled <- cbind(point_sampled, impact_sample$point)
       }
@@ -272,7 +288,7 @@ sample_post_predictive <- function(AlgoResults, M, s, dat='Train', single_partic
     impact_sample <- SampleImpact(dir = dir,Model = Model,
                                   proposed = Omega %>% addTransfParams(), 
                                   AlgoParams = AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), M) %>% replace(which(names(AlgoParams)==c('Np')), 1),
-                                  dat=dat)
+                                  dat=dat, output=output)
     poly_sampled <- impact_sample$poly[[1]][,c('event_id', 'iso3', 'polygon', 'impact', 'observed', 'sampled')] #'sdate', 'inferred'
     point_sampled <- impact_sample$point
     
@@ -289,6 +305,7 @@ sample_post_predictive <- function(AlgoResults, M, s, dat='Train', single_partic
   df_poly$crps <- NA
   
   for (i in 1:NROW(df_poly)){
+    if (is.na(df_poly[i,'sampled.1'])) next 
     df_poly$crps[i] <- crps(log(as.numeric(df_poly[i, grep("sampled", names(df_poly))])+10), log(df_poly$observed[i]+10)) * 
       unlist(AlgoParams$kernel_sd)[df_poly$impact[i]]
   }
@@ -298,7 +315,7 @@ sample_post_predictive <- function(AlgoResults, M, s, dat='Train', single_partic
   } else if (tolower(dat)=='test'){
     df_poly$train_flag = 'TEST'
   } else {
-    folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+    folderin<-paste0(dir, AlgoResults$input_folder, "ODDobjects/")
     ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
     ufiles_train <- grep('^Train/' , ufiles, value = TRUE)
     i_train <- as.numeric(gsub(".*_(\\d+)", "\\1", ufiles_train))
@@ -317,6 +334,33 @@ sample_post_predictive <- function(AlgoResults, M, s, dat='Train', single_partic
   }
 }
 
+plot_posteriors <- function(AlgoResults, pars_i=NULL, s_finish=NULL){
+  AlgoResults %<>% addAlgoParams(s_finish)
+  n_params <- NCOL(AlgoResults$Omega_sample_phys[,,1])
+  #ncol = 4
+  #nrow = n_params %/% ncol+1
+  plots_list <- list()
+  plot_df <- data.frame(AlgoResults$Omega_sample_phys[,, AlgoResults$s_finish])
+  priorplot_df <- data.frame(AlgoResults$Omega_sample_phys[,, 1])
+  colnames(plot_df) <- names(priorplot_df) <- names(Omega %>% unlist())
+  j <- 1
+  if (is.null(pars_i)) pars_i <- 1:n_params
+  for(i in pars_i){
+    var <- colnames(plot_df)[i]
+    plots_list[[j]] <- ggplot(plot_df, aes(x = !!ensym(var)))  +
+      geom_histogram(aes(y= ..density..),color = "black", alpha = 0.7) +
+      ggtitle(var)+
+      #labs(x='', y='') + 
+      #scale_fill_discrete("Legend", values = dd.col) + 
+      #theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+      geom_vline(xintercept = unlist(Omega)[var], col='red') + 
+      geom_density(data=priorplot_df, aes(x=!!ensym(var), y=..density..), col='blue')
+      #scale_x_log10()+
+    j <- j+1
+  }
+  do.call(grid.arrange,plots_list)
+}
+
 sample_post_predictive_BDam <- function(AlgoResults, M, s, dat='Train', single_particle=F, particle_i = NULL, Omega=NULL){
   
   if (!single_particle){
@@ -324,7 +368,7 @@ sample_post_predictive_BDam <- function(AlgoResults, M, s, dat='Train', single_p
     proposed <- AlgoResults$Omega_sample_phys[sampled_part[1],,s] %>% relist(Model$skeleton) %>% addTransfParams()
     AlgoParams %>% replace(which(names(AlgoParams)==c('Np')), 1)
     
-    folderin<-paste0(dir,"IIDIPUS_Input/BDobjects/")
+    folderin<-paste0(dir, AlgoResults$input_folder, "BDobjects/")
     ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
     if (tolower(dat)=='train'){
       ufiles <- grep('^Train/' , ufiles, value = TRUE)
@@ -411,9 +455,9 @@ sample_post_predictive_BDam <- function(AlgoResults, M, s, dat='Train', single_p
   }
 }
 
-compare_CRPS_breakdown_at_different_s <- function(AlgoResults, M){
+compare_CRPS_breakdown_at_different_s <- function(AlgoResults, M, s_finish=NULL){
   M <- 1
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   df_poly1 <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, single_particle=T, particle_i = 1)
   df_poly2 <- sample_post_predictive(AlgoResults, M, 20, single_particle=T, particle_i = 1)
   
@@ -426,10 +470,10 @@ compare_CRPS_breakdown_at_different_s <- function(AlgoResults, M){
   
 }
 
-plot_predictive <- function(AlgoResults, dat='Train'){
+plot_predictive <- function(AlgoResults, dat='Train', s_finish=NULL){
   
   M <- 10
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
   df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat=dat, single_particle=T, particle=particle_min.d[1])
   
@@ -452,15 +496,15 @@ plot_predictive <- function(AlgoResults, dat='Train'){
   abline(0,1)
 }
 
-create_df_postpredictive <- function(AlgoResults, single_particle = F, Omega = NULL, particle_best=T){
+create_df_postpredictive <- function(AlgoResults, single_particle = F, Omega = NULL, particle_best=T, M=50,
+                                     s_finish=NULL, output='SampledAgg'){
   # If single_particle == T:
   #       If Omega = NULL, finds the parameters that produced the smallest distance and samples using only these parameters
   #       If Omega is given, samples uses Omega
   # If single_particle == F, samples from the full posterior
   
-  M <- 50
   start_time <- Sys.time()
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   if (single_particle){
     if(is.null(Omega)){
       if (particle_best){ # best particle at final step
@@ -471,8 +515,8 @@ create_df_postpredictive <- function(AlgoResults, single_particle = F, Omega = N
       Omega <- AlgoResults$Omega_sample_phys[particle_i[1],,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
     }
   } 
-  df_poly_train <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat='Train', single_particle=single_particle, Omega = Omega) #T, particle=particle_min.d[1])
-  df_poly_test <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat='Test', single_particle=single_particle, Omega = Omega) #T, particle=particle_min.d[1])
+  df_poly_train <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat='Train', single_particle=single_particle, Omega = Omega, output=output) #T, particle=particle_min.d[1])
+  df_poly_test <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat='Test', single_particle=single_particle, Omega = Omega, output=output) #T, particle=particle_min.d[1])
   #df_poly_jitter <- SampleImpact(dir, Model, Omega_min.d %>% addTransfParams(), AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), M) %>% replace(which(names(AlgoParams)==c('Np')), 1))
     
   finish_time <- Sys.time()
@@ -480,6 +524,7 @@ create_df_postpredictive <- function(AlgoResults, single_particle = F, Omega = N
   
   if (M > 1){
     df_poly_jitter <- rbind(df_poly_train, df_poly_test)
+    df_poly_jitter <- df_poly_jitter[-which(is.na(df_poly_jitter$sampled.1)),]
     jitter_val <- function(x){
       return_arr <- c()
       for (x_i in x){
@@ -491,7 +536,7 @@ create_df_postpredictive <- function(AlgoResults, single_particle = F, Omega = N
     #df_poly_jitter[which(df_poly_jitter==0, arr.ind=T)] = 0.1
     df_poly_jitter$observed <- sapply(df_poly_jitter$observed, jitter_val)
     df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1:2,jitter_val)
-    df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- t(apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1,sort))
+    #df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- t(apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1,sort))
     
     return(df_poly_jitter)
     
@@ -554,13 +599,16 @@ create_df_postpredictive <- function(AlgoResults, single_particle = F, Omega = N
 }
 
 plot_df_postpredictive <- function(df_poly_jitter, impact_type){
+  df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- t(apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1,sort))
   M <- length(grep('sampled', names(df_poly_jitter)))
   M_lower <- round(quantile(1:M, 0.05))
   M_lower <- ifelse(M_lower==0, 1, M_lower)
   M_median <- round(quantile(1:M, 0.5))
   M_upper <- round(quantile(1:M, 0.95))
+  df_poly_jitter$means_sampled <- apply(df_poly_jitter[,grep("sampled",names(df_poly_jitter),value = T)], 1, mean)
   
-  ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+  #ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+  ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
     geom_errorbar() + geom_point(aes(col=train_flag)) + 
     scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
     scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
@@ -569,11 +617,40 @@ plot_df_postpredictive <- function(df_poly_jitter, impact_type){
     ylab(paste('Sampled', impact_type)) + xlab(paste('Observed', impact_type)) + scale_color_manual(values = c('red', 'blue'))
 }
 
-check_quants <- function(AlgoResults){
+plot_df_postpredictive_PAGER_coloured <- function(df_poly_jitter, impact_type){
+  df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- t(apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1,sort))
+  M <- length(grep('sampled', names(df_poly_jitter)))
+  M_lower <- round(quantile(1:M, 0.05))
+  M_lower <- ifelse(M_lower==0, 1, M_lower)
+  M_median <- round(quantile(1:M, 0.5))
+  M_upper <- round(quantile(1:M, 0.95))
+  df_poly_jitter$means_sampled <- apply(df_poly_jitter[,grep("sampled",names(df_poly_jitter),value = T)], 1, mean)
+  
+  folderin_haz <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_wMaxMMIDiff/'
+  ufiles_haz <- na.omit(list.files(path=folderin_haz,pattern=Model$haz,recursive = T,ignore.case = T))
+  df_poly_jitter$alertlevel <- ''
+  for(i in 1:NROW(df_poly_jitter)){
+    file_match <- grep(paste0("_", df_poly_jitter$event_id[i], "\\b"),  ufiles_haz, value = TRUE)
+    HAZy <- readRDS(paste0(folderin_haz, file_match ))
+    which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(x$mean)))
+    df_poly_jitter$alertlevel[i] <- HAZy$hazard_info$alertlevel[which.max.mmi]
+  }
+  
+  #ggplot(df_poly_jitter %>% filter(impact==impact_type & train_flag=='TEST' & alertlevel !='null'), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+  ggplot(df_poly_jitter %>% filter(impact==impact_type & train_flag=='TEST' & alertlevel !='null'), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+    geom_errorbar() + geom_point(aes(col=alertlevel)) + 
+    scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+    scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+    #geom_pointrange(aes(col=train_flag)) + 
+    geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
+    ylab(paste('Sampled', impact_type)) + xlab(paste('Observed', impact_type)) + scale_color_manual(values = c('green', 'orange', 'red', 'yellow')) + theme_bw() + theme(plot.background = element_rect(fill = rgb(0.95,0.95,0.95)))
+}
+
+check_quants <- function(AlgoResults, s_finish=NULL){
   #check quants over multiple simulations to check for consistency
   sim_n <- 5
   M <- 20
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
   Omega_min.d <- AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
   quants_store <- NULL
@@ -643,9 +720,19 @@ check_quants <- function(AlgoResults){
   
 }
 
-check_outliers <- function(){
+plot_cor_posts_poster <- function(AlgoResults, pars=c(16,17)){
+  AlgoResults %<>% addAlgoParams(s_finish)
+  p1 <- ggplot() + 
+        geom_point(aes(x=AlgoResults$Omega_sample_phys[1:450,pars[1],1], y=AlgoResults$Omega_sample_phys[1:450,pars[2],1]), col='blue') +
+        geom_point(aes(x=AlgoResults$Omega_sample_phys[,pars[1],AlgoResults$s_finish], y=AlgoResults$Omega_sample_phys[,pars[2],AlgoResults$s_finish])) +
+        theme_bw() + theme(plot.background = element_rect(fill = rgb(0.95,0.95,0.95))) + 
+        xlab(names(unlist(Omega))[pars[1]]) + ylab(names(unlist(Omega))[pars[2]])
+  return(p1)
+}
+
+check_outliers <- function(s_finish=NULL){
   start_time <- Sys.time()
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
   Omega_min.d <- AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
   impact_sample <- SampleImpact(dir, Model, Omega_min.d  %>% addTransfParams(), AlgoParams)
@@ -656,7 +743,7 @@ check_outliers <- function(){
 
 add_covar <- function(df_poly, covars='EQFreq', dat='all'){
 
-  folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+  folderin<-paste0(dir,AlgoResults$input_folder, "ODDobjects/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
   
   if (tolower(dat)=='train'){
@@ -847,9 +934,9 @@ addSHDI <- function(df_poly){
 
 # -----------------------------------------------------------------------------------------------
 
-manual_modify_params = function(AlgoResults){
+manual_modify_params = function(AlgoResults, s_finish=NULL){
   M=3
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
   particle_min.d <- 40
   omega1 <- AlgoResults$Omega_sample_phys[particle_min.d, , AlgoResults$s_finish] %>% relist(Model$skeleton)
@@ -901,11 +988,11 @@ manual_modify_params = function(AlgoResults){
 
 
 
-plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all'){
+plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all', s_finish=NULL){
   #plot covariates against discrepancy between sampled and observed
   
   M <- 10
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
   proposed <- relist(AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish], skeleton=Model$skeleton)
   #proposed$vuln_coeff$Vs30=0
@@ -1154,11 +1241,11 @@ plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all'){
 # hist(log(event_dat+k), freq=F, breaks=min(length(unique(event_dat)), 20))
 # lines(seq(0, max(log(event_dat+k)), 0.1), dnorm(seq(0, max(log(event_dat+k)), 0.1),mean(log(event_dat+k)), sd(log(event_dat+k))))
 
-plot_impact_curves = function(AlgoResults){
+plot_impact_curves = function(AlgoResults, s_finish=NULL){
   #plot covariates against discrepancy between sampled and observed
   
   M <- 5
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   
   n_post_samples <- 500
   particle_sample <- sample(1:AlgoResults$Npart, n_post_samples, prob=AlgoResults$W[,AlgoResults$s_finish], replace=T)
@@ -1179,9 +1266,9 @@ plot_impact_curves = function(AlgoResults){
   }
 }
 
-plot_vuln = function(AlgoResults, dat='all'){
+plot_vuln = function(AlgoResults, dat='all', s_finish=NULL){
   
-  folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+  folderin<-paste0(dir,AlgoResults$input_folder, "ODDobjects/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
   
   if (tolower(dat)=='train'){
@@ -1190,7 +1277,7 @@ plot_vuln = function(AlgoResults, dat='all'){
     ufiles <- grep('^Test/' , ufiles, value = TRUE)
   }
   
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   n_post_samples <- 5
   df_vuln <- data.frame(
     post_sample = integer(),
@@ -1247,7 +1334,7 @@ plot_vuln = function(AlgoResults, dat='all'){
 
 plot_vuln_corr = function(AlgoResults, dat='all'){
   
-  folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+  folderin<-paste0(dir,AlgoResults$input_folder, "ODDobjects/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
   
   if (tolower(dat)=='train'){
@@ -1286,8 +1373,8 @@ plot_vuln_corr = function(AlgoResults, dat='all'){
   plot(df_vuln[,c('PDens', 'AveSchYrs', 'LifeExp', 'GNIc', 'Vs30', 'EQFreq')], xlim=c(-4,4), ylim=c(-4,4))
 }
 
-plot_fitted_vuln_coefficients = function(AlgoResults){
-  AlgoResults %<>% addAlgoParams()
+plot_fitted_vuln_coefficients = function(AlgoResults, s_finish=NULL){
+  AlgoResults %<>% addAlgoParams(s_finish)
   var_posts <- data.frame(AlgoResults$Omega_sample_phys[,15:22,AlgoResults$s_finish])
   names(var_posts) <-  sub("^[^.]*\\.\\s*", "", names(unlist(Omega))[15:22])
   par(mfrow=c(2,4))
@@ -1333,9 +1420,9 @@ MAD_investigation = function(AlgoResults){
   }
 }
 
-plot_post_predictive = function(AlgoResults, M){
+plot_post_predictive = function(AlgoResults, M, s_finish=NULL){
   #mapply(crps, df_plot[grep("^sampled\\.", names(df_sampled))], df_plot$observed)
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   
   df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat='all')
   
@@ -1393,9 +1480,9 @@ compare_mort_disp <- function(){
 }
 
 
-model_deepdive = function(AlgoResults, M){
+model_deepdive = function(AlgoResults, M, s_finish=NULL){
   #mapply(crps, df_plot[grep("^sampled\\.", names(df_sampled))], df_plot$observed)
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   
   df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish)
   
@@ -1421,10 +1508,10 @@ model_deepdive = function(AlgoResults, M){
 # plot_density_vs_step(AlgoResults, Omega)
 
 
-plot_satellite_data = function(AlgoResults, dat='all'){
+plot_satellite_data = function(AlgoResults, dat='all', s_finish=NULL){
 
   M <- 5
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
   df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat=dat, single_particle=T, particle_i = particle_min.d[1], return_type='all')
   df_point <- df_poly$point
@@ -1499,8 +1586,8 @@ compare2events = function(){
 
 
 
-checkMeans <- function(AlgoResults){
-  AlgoResults %<>% addAlgoParams()
+checkMeans <- function(AlgoResults, s_finish=NULL){
+  AlgoResults %<>% addAlgoParams(s_finish)
   M <- 30
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
   proposed <- relist(AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish], skeleton=Model$skeleton)
@@ -1570,10 +1657,10 @@ checkMeans <- function(AlgoResults){
 # }
 
 
-compare2Pager <- function(AlgoResults){
+compare2Pager <- function(AlgoResults, s_finish=NULL){
   M <- 10
   start_time <- Sys.time()
-  AlgoResults %<>% addAlgoParams()
+  AlgoResults %<>% addAlgoParams(s_finish)
   particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
   Omega_min.d <- AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
   impact_sample <- SampleImpact(dir, Model, Omega_min.d  %>% addTransfParams(), 
@@ -1582,7 +1669,7 @@ compare2Pager <- function(AlgoResults){
                                            %>% replace(which(names(AlgoParams)==c('SubNat')), F), 
                                 output='SampledAgg')
   
-  folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+  folderin<-paste0(dir,AlgoResults$input_folder, "ODDobjects/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
   
   plot_df <- impact_sample$poly[[1]][, c('observed', 'impact', 'alertlevel_fatalities', 'alertnull_fatalities', 'event_id')]

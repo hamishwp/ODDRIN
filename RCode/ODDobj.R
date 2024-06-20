@@ -408,15 +408,15 @@ setGeneric("DispX", function(ODD,Omega,center, Method, output='SampledAgg')
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center,
                                    Method=list(Np=20,cores=8,cap=-300, 
-                                               kernel_sd=list(displacement=1,mortality=16,buildDam=1.2,buildDest=0.9, buildDamDest=1), 
+                                               kernel_sd=list(displacement=1,mortality=7,buildDam=0.6,buildDest=0.6, buildDamDest=0.6), 
                                                kernel='crps_with_mean'), output='SampledAgg'
 ){
   # ... Function description ...
   # LL: Returns 'likelihood' if true or data simulated from model if false
   # Sim: Set to true when generating data for a simulated ODD object. 
   
-  elapsed_time <- c()
-  start_time <- Sys.time()
+  #elapsed_time <- c()
+  #start_time <- Sys.time()
   
   # Extract 0D parameters & speed up loop
   Params<-FormParams(ODD,list(Np=Method$Np,center=center))
@@ -432,12 +432,11 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   LP<-GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=T)
   LP_buildings <- GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=F)
   
-  finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetLP = finish_time-start_time); start_time <- Sys.time()
+  #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetLP = finish_time-start_time); start_time <- Sys.time()
 
   BD_data_present <- !is.null(ODD$nBuildings)
   hrange<-grep("hazMean",names(ODD),value = T)
   hrange_order <- order(paste(ODD@hazinfo$eventdates, ODD@hazinfo$eventtimes))
-  
   
   event_lp <- getLP_event(ODD@hazinfo, Omega, Params)
   
@@ -447,29 +446,87 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   covar_matrix = cbind(c(Omega$eps_adj$hazard_mort^2, cov_mort_disp, cov_mort_bd), c(0, Omega$eps_adj$hazard_disp^2, cov_disp_bd), c(0, 0, Omega$eps_adj$hazard_bd^2))
   covar_matrix[upper.tri(covar_matrix)] = covar_matrix[lower.tri(covar_matrix)]
   
-  eps_event <- array(0, dim=c(length(hrange), 3, Method$Np))
-  for (i in 1:Method$Np){
-    eps_event[,,i] <- rmvnorm(length(hrange), rep(0, 3), sigma=covar_matrix)
+  
+  covar_matrix_local = covar_matrix * Omega$eps$local
+  # covar_matrix_local[1,2] = covar_matrix_local[2,1]  = 1 * sqrt(covar_matrix_local[1,1] * covar_matrix_local[2,2])
+  # covar_matrix_local[1,3] = covar_matrix_local[3,1]  =  1 * sqrt(covar_matrix_local[1,1] * covar_matrix_local[3,3])
+  # covar_matrix_local[2,3] = covar_matrix_local[3,2]  =  1 * sqrt(covar_matrix_local[2,2] * covar_matrix_local[3,3])
+  # 
+  # eps_local_ij <- array(0, dim=c(length(hrange), 3, Method$Np))
+  # for (i in 1:Method$Np){
+  #   eps_local_ij[,,i] <- rmvnorm(length(hrange), rep(0,3), sigma=covar_matrix_local)
+  # }
+  
+  #eps_event <- array(0, dim=c(3, Method$Np))
+  eps_event <- t(rmvnorm(Method$Np, rep(0, 3), sigma=covar_matrix))
+  
+  #slower:
+  # eps_local <- rmvnorm(length(hrange)*Method$Np*length(notnans), rep(0,3), sigma=covar_matrix_local)
+  # eps_local_transf <- aperm(array(eps_local, dim=c(length(hrange), Method$Np, length(notnans), 3)), c(1, 4, 2, 3))
+  # #eps_event <- array(0, dim=c(length(hrange), 3, Method$Np))
+  # for (i in 1:Method$Np){
+  #   eps_event[,,i] <- rmvnorm(length(hrange), rep(0, 3), sigma=covar_matrix)
     #eps_event[,,i] <- rmvt(length(hrange), sigma=covar_matrix, df=5)
     #eps_event <- stochastic(Method$Np,Omega$eps_adj$hazard)
     #eps_disp[h,] <- stochastic(Method$Np,Omega$eps_adj$disp)
     #eps_bd[h,] <- stochastic(Method$Np,Omega$eps_adj$bd)
-  }
+  # }
+  # eps_local <- array(0, dim=c(length(hrange),Method$Np))
+  # for (h_i in 1:length(hrange)){
+  #   eps_local[h_i,] <- stochastic(Params$Np,Omega$eps_adj$local)
+  # }
+
   
-  finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
-  
+  #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
+
   #Function to predict damage per gridpoint
   CalcDam<-function(ij){
-    # Calculate local linear predictor (NOTE: is a vector due to income distribution)
+    
+    # elapsed_time <- c()
+    # start_time <- Sys.time()
+    # for (i in 1:Method$Np){
+    #   eps_local_ij[,,i] <- rmvnorm(length(hrange), rep(0,3), sigma=covar_matrix_local)
+    # }
+    # notnans_ij <- which(notnans==ij)
+    #eps_local_ij <- adrop(eps_local_transf[,,,notnans_ij, drop=F], drop=4)
+
+    #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochasticregen = finish_time-start_time); start_time <- Sys.time()
+    
+    #eps_local_long <-array(0, dim=c(length(hrange)*Method$Np, 3))
+    
+    eps_local_long <- rmvnorm(length(hrange)*Method$Np, rep(0,3), sigma=covar_matrix_local)
+    eps_local_ij <- aperm(array(eps_local_long, dim=c(length(hrange), Method$Np, 3)), c(1,3,2))
+    
     locallinp<- LP[ij,] # LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] 
+    # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochasticreshape = finish_time-start_time); start_time <- Sys.time()
+    
+    #return(elapsed_time)
+    #eps_local_ij <- rmvnorm(Method$Np, rep(0,3), sigma=covar_matrix_local)
+    #eps_local_ij <- array(0, dim=c(length(hrange), 3, Method$Np))
+    # Calculate local linear predictor (NOTE: is a vector due to income distribution)
+    
     #locallinp<-rep(1,10) #reduces parameter space and removes demographic covariates
+  
+    
     
     # Sample population per income distribution (Assumes 8 percentiles):
-    lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) 
+    # Population is split evenly between the income quantiles, with remainders randomly allocated between
+    #lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) #matrix(round(ODD@data$Population[ij]/length(locallinp)), nrow=length(locallinp), ncol = Method$Np)
+    lPopS <- matrix(ODD@data$Population[ij] %/% 8, nrow=8, ncol=Method$Np) + rmultinom(Method$Np,ODD@data$Population[ij] %% 8,rep(1/8,8)) 
+    #lPopS <- matrix(ODD@data$Population[ij] / 8, nrow=8, ncol=Method$Np) + rmultinom(Method$Np,ODD@data$Population[ij] %% 8,rep(1/8,8)) 
+    #lPopS <- matrix(ODD@data$Population[ij] %/% 8, nrow=8, ncol=Method$Np) + matrix(runif(Method$Np) < ODD@data$Population[ij] %% 8, nrow=8, ncol=Method$Np)
+
+    #lPopS <- matrix(round(ODD@data$Population[ij]/ 8), nrow=8, ncol=Method$Np)
+    
+    # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
+    
+    #lPopS <- matrix(round(ODD@data$Population[ij]/8), nrow=8, ncol=Method$Np)
     lPopDisp <- array(0, dim=c(length(locallinp), Method$Np))
     lPopMort <- array(0, dim=c(length(locallinp), Method$Np))
     tPop <-array(0,c(3, Method$Np)) #row 1 = tDisp, #row 2 = tMort, #row 3 = tRem
     tPop[3,]=colSums(lPopS)
+    
+    # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); 
     
     #for mean dam:
     # p_mort_mean <- rep(0, length(hrange))
@@ -479,6 +536,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     # lPopRem_mean <- rep(ODD@data$Population[ij]/8, 8)
     
     for(h_i in hrange_order){
+      start_time <- Sys.time()
       h <- hrange[h_i]
 
       if(is.na(ODD@data[ij,h])) next
@@ -504,14 +562,26 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       #             mean = ODD@data[ij,paste0("hazMean",h)],
       #             sd = ODD@data[ij,paste0("hazSD",h)]/10)
       
+      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
+      
       I_ij<-ODD@data[ij,h]
-
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]] + event_lp[h_i], error=function(e) NA)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]] + event_lp[h_i], error=function(e) NA) #+ rep(eps_local[h_i,], each=8), error=function(e) NA)
       
-      if(any(is.na(Damage))) print(ij)
+      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, damcalc = finish_time-start_time); start_time <- Sys.time()
       
-      D_MortDisp <- D_MortDisp_calc(Damage, Omega, adrop(eps_event[h_i,1:2,nonzero_pop[,2], drop=F], drop = 1)) #First row of D_MortDisp is D_Mort, second row is D_Disp
+      #if(any(is.na(Damage))) print(ij)
+      
+      D_MortDisp <- D_MortDisp_calc(Damage, Omega, eps_event[1:2, nonzero_pop[,2], drop=F] + adrop(eps_local_ij[h_i,1:2,nonzero_pop[,2], drop=F], drop = 1)) #First row of D_MortDisp is D_Mort, second row is D_Disp
+      #D_MortDisp <- D_MortDisp_calc(Damage, Omega, eps_event[1:2, nonzero_pop[,2], drop=F] + t(eps_local_ij[nonzero_pop[,2], 1:2, drop=F]))
+      
+      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, mortdisp = finish_time-start_time); start_time <- Sys.time()
+      
       D_Rem <- pmax(0, 1 - D_MortDisp[2,] - D_MortDisp[1,]) #probability of neither death nor displacement. Use pmax to avoid errors caused by numerical accuracy.
+
+      
+      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, d_rem = finish_time-start_time); start_time <- Sys.time()
+      
+
       Dam <- Fbdam(lPopS[nonzero_pop], D_MortDisp[2,], D_MortDisp[1,], D_Rem)
       
       #for mean dam:
@@ -523,10 +593,14 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       #   lPopRem_mean <- lPopRem_mean * (1-D_MortDisp_Mean[1,]) * (1-D_MortDisp_Mean[2,])
       # }
       
+      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, fbdam = finish_time-start_time); start_time <- Sys.time()
+      
       lPopS[nonzero_pop] <- Dam[3,]
       lPopDisp[nonzero_pop] <- lPopDisp[nonzero_pop] + Dam[1,]
       lPopMort[nonzero_pop] <- lPopMort[nonzero_pop] + Dam[2,]
       tPop[3,] <- colSums(lPopS)
+      
+      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, sum_pops = finish_time-start_time); 
       
       # # This is a bit clearer than the above but slower:
       # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
@@ -545,11 +619,16 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       # }
     }
     
+    # start_time <- Sys.time()
+    
     tPop[1,] <- colSums(lPopDisp)
     tPop[2,] <- colSums(lPopMort)
     
     #ensure the total displaced, deceased or remaining does not exceed total population
     tPop[tPop>ODD@data$Population[ij]] <- floor(ODD@data$Population[ij])
+    
+    # if (length(elapsed_time)==9) {return(elapsed_time)
+    # } else {(return(rep(0,9)))}
     
     #if no building destruction data:
     if(!BD_data_present) return(list(samples=rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np))))#, 
@@ -564,16 +643,19 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     #nUnaff_mean = ODD@data$nBuildings[ij]
     #nDam_mean = 0
     
+    #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
+    
     for (h_i in hrange_order){
       h <- hrange[h_i]
       if(is.na(ODD@data[ij,h])) next
       if(all(nUnaff==0)) break #if no remaining buildings, skip modelling
 
       I_ij<-ODD@data[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + event_lp[h_i], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + event_lp[h_i], error=function(e) NA) #+ eps_local[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
       #Damage_mean <- h_0(I_ij,Params$I0,Omega) + locallinp_buildings
       
-      D_Dam <- D_Dam_calc(Damage, Omega, eps_event[h_i,3,]) #First row of D_DestDam is D_Dest, second row is D_Dam
+      D_Dam <- D_Dam_calc(Damage, Omega, eps_event[3,] + eps_local_ij[h_i,3,]) #First row of D_DestDam is D_Dest, second row is D_Dam
+      #D_Dam <- D_Dam_calc(Damage, Omega, eps_event[3,] + eps_local_ij[,3]) 
       #D_Dam_mean <- D_Dam_calc(Damage_mean, Omega)
       
       # Accumulate the number of buildings damaged/destroyed, but not the number of buildings remaining
@@ -585,12 +667,19 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       #nUnaff_mean = nUnaff_mean - nDam_new_mean
       #nDam_mean = nDam_mean + nDam_new_mean
     }
+    
+    #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time);
+    
+    #return(elapsed_time)
+    
+    
     return(list(samples = rbind(tPop[1:2,,drop=FALSE], nDam[1:Method$Np])))#, 
            #means = c(sum(lPopMort_mean), sum(lPopDisp_mean), nDam_mean)))
   }
   
   Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged, Dam[,,4] = Buildings Destroyed
   Dam_means<-array(0,c(nrow(ODD),3))
+  
   
   #Method$cores is equal to AlgoParams$NestedCores (changed in Model file)
   if(Method$cores>1) { 
@@ -602,10 +691,47 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   
   if (output=='SampledFull'){
     return(Dam)
+  } else if (output == 'SampledTotal'){
+    SampledTot <- colSums(Dam)
+    df_SampledTot <- list()
+    impact_types <- unique(ODD@impact$impact)
+    observed_total=rep(NA, length(impact_types))
+    get_overlap_coverage <- function(impact_type){
+      indexes_list <- lapply(ODD@polygons[ODD@impact$polygon[which(ODD@impact$impact==impact_type)]], function(x) x$indexes)
+      universal_set <- Reduce(union, indexes_list)
+      overlap <- Reduce(intersect, indexes_list)
+      prop_overlap <- ifelse(length(indexes_list)>1,length(overlap)/length(universal_set),0)
+      prop_coverage <- length(unique(universal_set))/sum(!is.na(ODD$ISO3C))
+      return(c(prop_overlap, prop_coverage))
+    }
+    
+    overlap_coverage <- sapply( impact_types,get_overlap_coverage)
+    
+    for (i in 1:length(observed_total)){
+      observed_total[i] = sum(ODD@impact$observed[which(ODD@impact$impact==impact_types[i])])
+    }
+  
+    
+    for (i in 1:NROW(SampledTot)){
+      df_SampledTot[[i]] <- data.frame(event_id = ODD@impact$event_id[1],
+                                       polygon=0,
+                                       iso3 = paste0(unique(ODD@impact$iso3), collapse=' '),
+                                       impact=impact_types, 
+                                       sampled=SampledTot[i,match(impact_types, c('displacement', 'mortality','buildDam'))], 
+                                       observed=observed_total,
+                                       qualifier='total',
+                                       overlap = overlap_coverage[1,],
+                                       coverage = overlap_coverage[2,],
+                                       inferred=F)
+      df_SampledTot[[i]] %<>% filter(overlap < 0.1 & coverage > 0.9)
+    }
+
+    
+    return(df_SampledTot)
   }
   
   
-  finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, dam_sample = finish_time-start_time); start_time <- Sys.time()
+  #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, dam_sample = finish_time-start_time); start_time <- Sys.time()
   
   # return(Disp)
 
@@ -626,24 +752,24 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       polygon_impacts <- ODD@impact$impact[which(ODD@impact$polygon==polygon_id)]
       for (impact in polygon_impacts){
         if (impact == 'mortality'){
-          impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
+          impact_sampled <- rbind(impact_sampled, data.frame(polygon=polygon_id,
                                                  impact=impact,
                                                  sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
                                                  #mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'mort_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
         } else if (impact=='displacement'){
-          impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
+          impact_sampled <- rbind(impact_sampled, data.frame(polygon=polygon_id,
                                                  impact=impact,
                                                  sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
                                                  #mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'disp_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
         } else {
-          impact_sampled %<>% rbind(data.frame(polygon=polygon_id,
+          impact_sampled <- rbind(impact_sampled, data.frame(polygon=polygon_id,
                                                  impact=impact,
                                                  sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
                                                  #mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'buildDam_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
         }
       }
     }
-    impact_obs_sampled <- merge(impact_sampled, ODD@impact, by=c("polygon", "impact")) %>% arrange(desc(observed)) 
+    impact_obs_sampled <- arrange(merge(impact_sampled, ODD@impact, by=c("polygon", "impact")),desc(observed)) 
     if(LLout) return(CalcPolyDist(impact_obs_sampled, kernel_sd,  kernel, cap))
     return(impact_obs_sampled)
   
@@ -711,6 +837,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   return(ODD)
   
 })
+
 
 GroupODDyBoundaries<-function(ODDy,boundaries){
   

@@ -28,25 +28,31 @@ source('RCode/Simulate.R')
 #Run SMC-ABC algorithm with Simulated Data generated using the full model
 
 #Choose true Omega for Simulated Data
-Omega <- Omega_true <- list(Lambda1 = list(nu=8.85, kappa=1.6),
-                   Lambda2 = list(nu=9.7, kappa=1.8), #list(nu=10.65, kappa=1.5), #
-                   Lambda3 = list(nu=8.9, kappa=1.1),
-                   Lambda4 = list(nu=9.9, kappa=1.6),
-                   theta= list(theta1=0.6),
-                   eps=list(local=0.6, hazard_mort=0.3, hazard_disp=0.5, hazard_bd=0.4, hazard_cor=0.55),
-                   #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                   vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.25, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
-                   check = list(check=0.5))
+
+Omega <- Omega_true <- list(Lambda1 = list(nu=9.05, kappa=1.2),
+                            Lambda2 = list(nu=9.7, kappa=1.25), #list(nu=10.65, kappa=1.5), #
+                            Lambda3 = list(nu=8.9, kappa=1.1),
+                            Lambda4 = list(nu=9.9, kappa=1.6),
+                            theta= list(theta1=0.6),
+                            eps=list(local=0.6, hazard_mort=0.3, hazard_disp=0.5, hazard_bd=0.4, hazard_cor=0.55),
+                            #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                            vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.25, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
+                            check = list(check=0.5))
+
 
 plot_S_curves(Omega_true)
+
+plot(seq(5,10,0.05),log(pnorm(seq(5,10,0.05)-4.5, 4,0.5)), type='l')
+points(seq(5,10,0.05),log(pnorm(exp(0.3*seq(5,10,0.05)), 12.1, 1.3)), col='blue', type='l')
+points(seq(5,10,0.05), log(pnorm(exp(0.5*seq(5,10,0.05)), 65.1, 11)), col='red', type='l')
+points(seq(5,10,0.05), log(pnorm(exp(1*seq(5,10,0.05)), 3565.1, 850)), col='pink', type='l')
+points(seq(5,10,0.05),log(pnorm(exp(0.01*seq(5,10,0.05)), 1.087, 0.005)), col='green', type='l')
+plot(seq(5,10,0.05), exp(0.9*seq(5,10,0.05)))
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 
 set.seed(1)
 simulateDataSet(150, Omega, Model, dir)
-
-#copy into IIDIPUS_Input and create Training + Testing folders
-
 
 
 AlgoParams$smc_steps <- 100
@@ -54,14 +60,33 @@ AlgoParams$smc_Npart <- 50
 AlgoParams$m_CRPS <- 60
 AlgoParams$Np <- 1
 AlgoParams$smc_alpha <- 0.9
-AlgoParams$rel_weightings <- c(0,1)
-AlgoParams$kernel_sd <- list(displacement = 1, mortality = 16, buildDam=1.2,
-                             buildDest = 0.9, buildDamDest = 1)
+AlgoParams$rel_weightings <- c(1,1)
+AlgoParams$kernel_sd <- list(displacement = 1, mortality = 7, buildDam=0.6,
+                             buildDest = 0.6, buildDamDest = 1)
+
+
 
 tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '_simulatedfull_energyscore_150events_Npart50_M60')
 AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F, tag_notes=tag_notes)
 
+
+
 #Speed Test:
+
+AlgoParams$cores <- 1
+AlgoParams$NestedCores <- 4
+AlgoParams$Np <- 1
+AlgoParams$m_CRPS <- 60
+AlgoParams$smc_Npart <- 500
+AlgoParams$n_nodes <- 1
+AlgoParams$smc_steps <- 100
+AlgoParams$rel_weightings <- c(1,1)
+AlgoParams$kernel_sd <- list(displacement = 1, mortality = 7, buildDam=0.6,
+                             buildDest = 0, buildDamDest = 0)
+
+tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '500parttest_0.1propcov')
+AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F,tag_notes=tag_notes)
+
 
 start_time <- Sys.time()
 impact_sample <- SampleImpact(dir, Model, Omega_true %>% addTransfParams(), AlgoParams)
@@ -70,6 +95,14 @@ end_time <- Sys.time()
 execution_time <- end_time - start_time
 print(execution_time)
 
+start_time <- Sys.time()
+AlgoParams$Np <- 60
+#ODD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects/Train/EQ20180114PER_78')
+impactsamp <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams)
+AlgoParams$Np <- 1
+end_time <- Sys.time()
+execution_time <- end_time - start_time
+execution_time
 
 
 #------------------------------------------------------------------------------------------------
@@ -85,9 +118,14 @@ df_SimImpact <- data.frame(observed=numeric(),
                            polygon=integer(),
                            event=integer(),
                            I_max=numeric())
+nHazSim <- c()
 for(i in 1:length(ODDsim_paths)){
   ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDsim_paths[i]))
-  if (length(ODDSim@impact$impact=='mortality')>0){
+  if (length(ODDSim@impact$impact)>0){
+    nHazSim <- c(nHazSim, length(grep('hazMean', names(ODDSim@data))))
+    # if (length(grep('hazMean', names(ODDSim@data))) ==1 & (length(grep('-4', ODDsim_paths[i]))==0)& (length(grep('-5', ODDsim_paths[i]))==0)){
+    #   stop()
+    # }
     for (j in 1:NROW(ODDSim@impact)){
       df_SimImpact %<>% add_row(observed=ODDSim@impact$observed[j], impact=ODDSim@impact$impact[j], polygon=ODDSim@impact$polygon[j],
                                 event=i, I_max=max(ODDSim$hazMean1[ODDSim@polygons[[ODDSim@impact$polygon[j]]]$indexes],  na.rm=T))
@@ -102,9 +140,12 @@ ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPU
 ODDpaths <-na.omit(list.files(path=ODDpath))
 df_Impact <- data.frame(observed=numeric(), impact=character(),
                         polygon=integer(), event=integer(), I_max=numeric())
+
+nHazReal <- c()
 for(i in 1:length(ODDpaths)){
   ODD <- readRDS(paste0(ODDpath,ODDpaths[i]))
-  if (length(ODD@impact$impact=='mortality')>0){
+  if (length(ODD@impact$impact)>0){
+    nHazReal <- c(nHazReal, length(grep('hazMean', names(ODD@data))))
     for (j in 1:NROW(ODD@impact)){
       df_Impact %<>% add_row(observed=ODD@impact$observed[j], impact=ODD@impact$impact[j], polygon=ODD@impact$polygon[j],
                                 event=i, I_max=max(ODD$hazMean1[ODD@polygons[[ODD@impact$polygon[j]]]$indexes],  na.rm=T))
@@ -157,8 +198,9 @@ plot_grid(legend, plot_grid( p_mort_obsvals, p_disp_obsvals, p_bd_obsvals,
 grid.arrange(p_mort_obsvals, p_disp_obsvals, p_bd_obsvals, 
              p_mort_obscount, p_disp_obscount, p_bd_obscount, ncol=3, nrow=2)
 
-#compare the number of observations per event:
-
+#compare the number of hazards per event:
+hist(nHazSim)
+hist(nHazReal)
 
 #compare correlation between impact types for simulated and true data:
 impact_type1 = 'mortality'
@@ -180,9 +222,13 @@ ggplot() +
   geom_histogram(data=df_SimImpact %>% filter(impact==impact_type), aes(x=I_max,y=after_stat(count)), alpha=0.3, col='yellow', lwd=0.2, fill='yellow')  +
   scale_y_continuous(breaks = seq(0, 90, by = 10), limits = c(0, 90))
 
-# POINT DATA COMPARISON:
+xx <- df_Impact %>% group_by(event) %>%
+  summarise(unique_prop = n_distinct(polygon) / n())
+yy <- df_SimImpact %>% group_by(event) %>%
+  summarise(unique_prop = n_distinct(polygon) / n())
 
-
+plot((df_Impact %>% group_by(event) %>% summarise(n_obs = n()))$n_obs)
+points((df_SimImpact %>% group_by(event) %>% summarise(n_obs = n()))$n_obs, col='red')
 #------------------------------------------------------------------------------------------------
 #------------------------------------ CHECK HIGH LEVEL PRIORS -----------------------------------
 #------------------------------------------------------------------------------------------------
@@ -261,18 +307,165 @@ AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/H
 AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-04-30_174728_alpha0.9_M60_Npart1000_150events_simulatedfull_15by15')
 #     - have now reduced to a 15x 15 grid
 
-plot_correlated_posteriors(AlgoResults, Omega=Omega)
-plot_correlated_posteriors(AlgoResults, Omega=Omega, pairings=rbind(c(13,14), c(15,16), c(17,18), c(19,20), c(21,22)))
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-05-03_172241_alpha0.9_M60_Npart1000_150events_simulatedfull_15by15')
 
-plot_corr_posterior_vs_d(AlgoResults, Omega=Omega, pairing=c(21,22))
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-05-05_155223_alpha0.9_M60_Npart1000_150events_simulatedfull_15by15')
 
-plot_corr_transf_posterior_vs_d(AlgoResults, Omega=Omega, pairing=c(21,22))
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-05-16_222830_alpha0.9_M60_Npart1000_150events_simulatedfull_15by15')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-05-17_140645_alpha0.9_M60_Npart1000_150events_simulatedfull_15by15')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2024-05-31_140728_alpha0.9_M60_Npart1000_150events_simulatedfull_15by15_wRankScores')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2024-05-31_162704_alpha0.9_M60_Npart1000_150events_simulatedfull_15by15_wRankScores')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2024-06-05_120111_alpha0.9_M60_Npart990_150events_simulatedfull_15by15_wRankScores')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2024-06-12_163924_alpha0.9_M60_Npart990_150events_simulatedfull_15by15_wBothRankScores')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-12_185056_alpha0.9_M60_Npart990RealAgg3')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-12_163924_alpha0.9_M60_Npart990_150events_simulatedfull_15by15_wBothRankScores')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2024-06-13_124500_alpha0.9_M60_Npart990RealAgg3')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-15_194119_alpha0.95_M60_Npart990_150events_simulatedfull_15by15_wBothRankScores_alphaincreased')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-15_194119_alpha0.95_M60_Npart990_150events_simulatedfull_15by15_wBothRankScores_alphaincreased')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-16_083342_alpha0.9_M60_Npart990RealAgg3')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-16_083342_alpha0.9_M60_Npart990RealAgg3')
+
+plot_correlated_posteriors(AlgoResults, Omega=Omega, pairings=rbind(c(1,2), c(3,4), c(5,6),c(9,10), c(11,12), c(13,14)))
+plot_correlated_posteriors(AlgoResults, Omega=Omega, pairings=rbind(c(15,16), c(17,18), c(19,20), c(21,22), c(7,8), c(22,23)))
+
+plot_corr_posterior_vs_d(AlgoResults, Omega=Omega, pairing=c(3,14))
+
+
+plot_corr_transf_posterior_vs_d(AlgoResults, Omega=Omega, pairing=c(41,44))
+
+plot_posteriors(AlgoResults, 10:15)
 
 plot(AlgoResults$Omega_sample_phys[,2,30], AlgoResults$Omega_sample_phys[,3,30])
 
+unique_part <- c()
+for (s in 1:AlgoResults$s_finish){
+  unique_part <- c(unique_part, length(unique(AlgoResults$Omega_sample_phys[,1,s])))
+}
+plot(unique_part)
+
+plot(AlgoResults$Omega_sample_phys[,3,195], AlgoResults$d_full[,1,3,195])
+
 plot_acc_prob(AlgoResults); abline(h=0.05)
-plot_d_vs_step(AlgoResults, 12)
+plot_d_vs_step(AlgoResults, 5); abline(h=2.25, col='red')
 plot(AlgoResults$essstore)
+
+impact_sample <- SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams)
+CalcDist(impact_sample, AlgoParams)
+
+# compare different particles: 
+cor_seq <- c(0.1, 0.25, 0.4, 0.55, 0.7, 0.95)
+n_repeats <- 4
+results <- array(0, dim=c(n_repeats, length(cor_seq), 2))
+for (i in 1:n_repeats){
+  # Omega_high_cor <- AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,14,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  # Omega_low_cor <- AlgoResults$Omega_sample_phys[which.min(AlgoResults$Omega_sample_phys[,14,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  # Omega_true_cor <- AlgoResults$Omega_sample_phys[which.min(abs(AlgoResults$Omega_sample_phys[,14,AlgoResults$s_finish]-0.55)),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  # 
+  for (j in 1:length(cor_seq)){
+    om_cor <- cor_seq[j]
+    Omega <- Omega_true
+    Omega$eps$hazard_cor <- om_cor
+    impact_sample <- SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams)
+    dist <- CalcDist(impact_sample, AlgoParams)
+    results[i,j,1] <- dist[4]
+    results[i,j,2] <- dist[5]
+  }
+}
+
+AlgoParams$kernel_sd$mortality <- 7
+AlgoParams$kernel_sd$buildDam <-0.6
+cor_seq <- c(0.1, 0.55,0.95)
+n_repeats <- 20
+results2 <- array(0, dim=c(n_repeats, length(cor_seq), 2))
+for (i in 1:n_repeats){
+  # Omega_high_cor <- AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,14,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  # Omega_low_cor <- AlgoResults$Omega_sample_phys[which.min(AlgoResults$Omega_sample_phys[,14,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  # Omega_true_cor <- AlgoResults$Omega_sample_phys[which.min(abs(AlgoResults$Omega_sample_phys[,14,AlgoResults$s_finish]-0.55)),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  # 
+  for (j in 1:length(cor_seq)){
+    om_cor <- cor_seq[j]
+    Omega <- Omega_true
+    Omega$eps$hazard_cor <- om_cor
+    impact_sample <- SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams)
+    dist <- CalcDist(impact_sample, AlgoParams)
+    print(dist)
+    results2[i,j,1] <- dist[4]
+    results2[i,j,2] <- dist[5]
+  }
+}
+plot(rep(cor_seq, each=20), results2[,,1], xlab='Correlation', ylab='VS Distance')
+#========================================
+
+folderin<-paste0(dir,"IIDIPUS_Input/ODDobjects/")
+
+ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
+ufiles <- grep('^Train/' , ufiles, value = TRUE)
+AlgoParams$Np <- AlgoParams$Np * AlgoParams$m_CRPS
+Omega_highcor <- Omega_true
+Omega_highcor$eps$hazard_cor <- 0.99
+for (i in 1:length(ufiles)){
+  ODDy<-readRDS(paste0(folderin,ufiles[i]))
+  tLL_truecor <- DispX(ODD = ODDy,Omega = Omega_true %>% addTransfParams(),center = Model$center, Method = AlgoParams, output='SampledAgg')
+  tLL_highcor <- DispX(ODD = ODDy,Omega = Omega_highcor %>% addTransfParams(),center = Model$center, Method = AlgoParams, output='SampledAgg')
+  obs <- tLL_truecor[[1]]$observed
+  sampled_truecor <- matrix(unlist(lapply(tLL_truecor, function(x){x$sampled})), ncol=NROW(ODDy@impact), byrow=T)
+  sampled_highcor <- matrix(unlist(lapply(tLL_highcor, function(x){x$sampled})), ncol=NROW(ODDy@impact), byrow=T)
+  plot(sampled_truecor[,c(1,2)], xlab='Sampled Displacement', ylab='Sampled Mortality')
+  points(sampled_highcor[,c(1,2)], col='red')
+  points(obs[1], obs[2], col='blue', pch=19)
+  tLL_truecor[[1]]
+  w_vs <- matrix(unlist(AlgoParams$kernel_sd[tLL_truecor[[1]]$impact]) %*% t(unlist(AlgoParams$kernel_sd[tLL_truecor[[1]]$impact])), ncol=NROW(tLL_truecor[[1]]))
+  vs_true <- vs_sample(log(obs+10), log(t(sampled_truecor)+10), w_vs=w_vs)
+  vs_highcor <- vs_sample(log(obs+10), log(t(sampled_highcor)+10), w_vs=w_vs)
+  
+  vs_sample(log(obs+10),t(log(sampled_truecor+10)))
+  vs_sample(log(obs+10), t(log(sampled_highcor+10)))
+  
+  vs_sample(obs,t(sampled_truecor))
+  vs_sample(obs, t(sampled_highcor))
+  
+  print(paste(vs_true, vs_highcor))
+  vs_true_unlog <- vs_sample(obs, t(sampled_truecor))
+  vs_highcor_unlog <- vs_sample(obs, t(sampled_highcor))
+  print(paste(vs_true_unlog, vs_highcor_unlog))
+}
+
+#compare conditional predictions: with vs without correlation term
+AlgoParams$Np <- 1
+preds_omega_corpost <- matrix(NA, nrow=0, ncol=2)
+preds_omega_corprior <- matrix(NA, nrow=0, ncol=2)
+for (i in 1:500){
+  print(i)
+  Omega_i <- sample(1:990, 1)
+  Omega <- AlgoResults$Omega_sample_phys[Omega_i,,220] %>% relist(skeleton=Model$skeleton)
+  
+  #ODDyAgg <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects/Train/EQ20191215PHL_135')
+  #event <- 'EQ20230206TUR_169' #'EQ20191215PHL_135'
+  #ODDyAgg <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects_RealAgg3/Train/', event))
+  ODDyAgg <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects/Train/EQ20130409ABC_-3')
+  AggImpact <- DispX(ODDyAgg, Omega %>% addTransfParams(), Model$center, AlgoParams, output='SampledAgg')
+  impAgg_sampled <- AggImpact[[1]]$sampled[c(1,2)]
+  preds_omega_corpost <- rbind(preds_omega_corpost, impAgg_sampled)
+  
+  Omega$eps$hazard_cor <- runif(1,0,1)
+  AggImpact <- DispX(ODDyAgg, Omega %>% addTransfParams(), Model$center, AlgoParams, output='SampledAgg')
+  impAgg_sampled <- AggImpact[[1]]$sampled[c(1,2)]
+  preds_omega_corprior <- rbind(preds_omega_corprior, impAgg_sampled)
+}
+
+
 
 df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=T, particle_best = F)
 
@@ -307,15 +500,273 @@ CalcDist(impact_sample_trueOmega, AlgoParams)
 min(AlgoResults$d, na.rm=T)
 
 eucldist2truepart <- function(part,Omega_true){
-  sqrt(sum((part[c(10:14)]-Omega_true[c(10:14)])^2))
+  sqrt(sum((part[c(1:6, 9:23)]-Omega_true[c(1:6, 9:23)])^2))
 }
+
+eucl_dists <- array(NA, dim=c(AlgoResults$s_finish, length(AlgoResults$Omega_sample_phys[,1,20])))
+for (s in 1:AlgoResults$s_finish){
+  eucl_dists[s,] <-apply(AlgoResults$Omega_sample_phys[,,s], 1, eucldist2truepart, unlist(Omega_true))
+}
+plot(rep(1:AlgoResults$s_finish, 1000), eucl_dists)
+
+plot(AlgoResults$Omega_sample_phys[,15,150], AlgoResults$Omega_sample_phys[,9,150])
+
+plot(apply(AlgoResults$Omega_sample_phys[,,AlgoResults$s_finish], 1, eucldist2truepart, unlist(Omega_true)))
+points(apply(AlgoResults$Omega_sample_phys[,,1], 1, eucldist2truepart, unlist(Omega_true)), col='blue')
 eucl_dist <- apply(AlgoResults$Omega_sample_phys[,,AlgoResults$s_finish], 1, eucldist2truepart, unlist(Omega_true))
-plot(eucl_dist,AlgoResults$d[,1,AlgoResults$s_finish], ylim=c(6.5, 20))
+plot(eucl_dist,AlgoResults$d[,1,AlgoResults$s_finish])
 eucl_dist10 <- apply(AlgoResults$Omega_sample_phys[,,20], 1, eucldist2truepart, unlist(Omega_true))
 points(eucl_dist10,AlgoResults$d[,1,20], col='blue')
+
+#investigate broad spread of correlation covariate:
+Omega_high_cor <- AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,14,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+Omega_low_cor <- AlgoResults$Omega_sample_phys[which.min(AlgoResults$Omega_sample_phys[,14,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+df_postpredictive_sampled_highcor <- create_df_postpredictive(AlgoResults, Omega=Omega_high_cor, single_particle=T)
+df_postpredictive_sampled_lowcor <- create_df_postpredictive(AlgoResults, Omega=Omega_high_cor, single_particle=T)
+
+
+Omegatrue_high_cor <- Omega_true
+Omegatrue_high_cor$eps$hazard_cor <- 0.95
+Omegatrue_low_cor <- Omega_true
+Omegatrue_low_cor$eps$hazard_cor <- 0.05
+df_postpredictive_true <- create_df_postpredictive(AlgoResults, single_particle=T, Omega = Omega_true, M=60)
+df_postpredictive_truehighcor <- create_df_postpredictive(AlgoResults, single_particle=T, Omega = Omegatrue_high_cor, M=60)
+df_postpredictive_truelowcor <- create_df_postpredictive(AlgoResults, single_particle=T, Omega = Omegatrue_low_cor, M=60)
+
+i_1 <- 1; i_2 <- 4
+plot(as.numeric(df_postpredictive_true[i_1,6:55]), as.numeric(df_postpredictive_true[ i_2,6:55]))
+points(as.numeric(df_postpredictive_sampled_highcor[i_1,6:55]), as.numeric(df_postpredictive_sampled_highcor[ i_2,6:55]), col='green')
+points(as.numeric(df_postpredictive_sampled_lowcor[i_1,6:55]), as.numeric(df_postpredictive_sampled_lowcor[ i_2,6:55]), col='blue')
+points(df_postpredictive_true[i_1,5],df_postpredictive_true[ i_2,5], col='red' ,pch=12, cex=2)
+
+i_1 <- 1; i_2 <- 3
+plot(as.numeric(df_postpredictive_true[i_1,6:55]), as.numeric(df_postpredictive_true[ i_2,6:55]))
+points(as.numeric(df_postpredictive_truehighcor[i_1,6:55]), as.numeric(df_postpredictive_truehighcor[ i_2,6:55]), col='green')
+points(as.numeric(df_postpredictive_truelowcor[i_1,6:55]), as.numeric(df_postpredictive_truelowcor[ i_2,6:55]), col='blue')
+points(df_postpredictive_true[i_1,5],df_postpredictive_true[ i_2,5], col='red' ,pch=12, cex=2)
+
+points(as.numeric(df_postpredictive_truelowcor[i_1,6:155]), as.numeric(df_postpredictive_truelowcor[ i_2,6:155]), col='blue')
+points(as.numeric(df_postpredictive_truehighcor[i_1,6:155]), as.numeric(df_postpredictive_truehighcor[ i_2,6:155]), col='green')
+points(df_postpredictive_true[i_1,5],df_postpredictive_true[ i_2,5], col='red' ,pch=12, cex=2)
 #particle_min.d <- which(min(AlgoResults$d, na.rm=T)==AlgoResults$d, arr.ind=T)
 
+ii <- 2:3
+plot(t(as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]), "*"))))
+points(t(as.matrix(sweep(log(df_postpredictive_truelowcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truelowcor$impact[ii]]), "*"))), col='blue')
+points(t(as.matrix(sweep(log(df_postpredictive_truehighcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truehighcor$impact[ii]]), "*"))), col='green')
+points(t(as.numeric(log(df_postpredictive_true$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]))), col='red', cex=2, pch=12)
 
+
+i_1 <- 1153; i_2 <- 1154
+ii <- c(i_1,i_2)
+
+mean_mort <- c()
+n_impacts <- c()
+es_true <- c()
+es_low <- c()
+es_high <- c()
+for (event_id in unique(df_postpredictive_true$event_id)){
+  ii <- which(df_postpredictive_true$event_id==event_id)
+  
+  es_true <- c(es_true, es_sample(as.numeric(log(df_postpredictive_true$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]])), 
+            as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]), "*"))))
+  
+  es_low <- c(es_low, es_sample(as.numeric(log(df_postpredictive_truelowcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_truelowcor$impact[ii]])), 
+            as.matrix(sweep(log(df_postpredictive_truelowcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truelowcor$impact[ii]]), "*"))))
+  es_high <- c(es_high, es_sample(as.numeric(log(df_postpredictive_truehighcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_truehighcor$impact[ii]])), 
+                                as.matrix(sweep(log(df_postpredictive_truehighcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truehighcor$impact[ii]]), "*"))))
+  
+  n_impacts <- c(n_impacts, length(ii))
+  mean_mort <- c(mean_mort, mean(df_postpredictive_true[ii[which(df_postpredictive_true$impact[ii]=='mortality')], 5]))
+  
+}
+
+df_postpredictive_true[ii,]
+
+i_1 <-241
+i_2 <-248
+plot(as.numeric(df_postpredictive_true[i_1,6:55]), as.numeric(df_postpredictive_true[ i_2,6:55]), 
+     xlim=range(c(as.numeric(df_postpredictive_true[i_1,6:55]),as.numeric(df_postpredictive_truehighcor[i_1,6:55]),as.numeric(df_postpredictive_truelowcor[i_1,6:55]))),
+     ylim=range(c(as.numeric(df_postpredictive_true[ i_2,6:55]),as.numeric(df_postpredictive_truehighcor[ i_2,6:55]),as.numeric(df_postpredictive_truelowcor[ i_2,6:55]))))
+points(as.numeric(df_postpredictive_truehighcor[i_1,6:55]), as.numeric(df_postpredictive_truehighcor[ i_2,6:55]), col='green')
+points(as.numeric(df_postpredictive_truelowcor[i_1,6:55]), as.numeric(df_postpredictive_truelowcor[ i_2,6:55]), col='blue')
+points(df_postpredictive_true[i_1,5],df_postpredictive_true[ i_2,5], col='red' ,pch=12, cex=2)
+
+es_sample(as.numeric(log(df_postpredictive_sampled_highcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]])), 
+          as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]), "*")))
+
+pred_true <- as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]), "*"))
+pred_highcor <- as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]), "*"))
+obs <- as.numeric(log(df_postpredictive_sampled_highcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]))
+
+
+flattenImpactSample <- function(impact_sample){
+  df <- data.frame(event_id = impact_sample$poly[[1]]$event_id,
+                   iso3 = impact_sample$poly[[1]]$iso3,
+                   polygon = impact_sample$poly[[1]]$polygon,
+                   impact = impact_sample$poly[[1]]$impact,
+                   observed = impact_sample$poly[[1]]$observed)
+  for (j in 1:length(impact_sample$poly)){
+    df %<>% cbind(impact_sample$poly[[j]]$sampled)
+  }
+  colnames(df)[6:NCOL(df)] <- paste0('sampled.', 1:length(impact_sample$poly))
+  return(df)
+}
+
+
+for (i in 1:5){
+  Omegatrue_high_cor <- Omega_true
+  Omegatrue_high_cor$eps$hazard_cor <- 0.95
+  Omegatrue_low_cor <- Omega_true
+  Omegatrue_low_cor$eps$hazard_cor <- 0.05
+  impact_sample_high_cor <- SampleImpact(dir, Model, Omegatrue_high_cor %>% addTransfParams(), AlgoParams, dat='all')
+  dist_high <- CalcDist(impact_sample_high_cor, AlgoParams)
+  print(paste('high',dist_high))
+  df_high3 <- flattenImpactSample(impact_sample_high_cor)
+  
+  impact_sample_low_cor <- SampleImpact(dir, Model, Omegatrue_low_cor %>% addTransfParams(), AlgoParams, dat='all')
+  dist_low <- CalcDist(impact_sample_low_cor, AlgoParams)
+  print(paste('low',dist_low))
+  df_low3 <- flattenImpactSample(impact_sample_low_cor)
+  
+  impact_sample_true_cor <- SampleImpact(dir, Model, Omega_true %>% addTransfParams(), AlgoParams, dat='all')
+  dist_true <- CalcDist(impact_sample_true_cor, AlgoParams)
+  print(paste('true', dist_true))
+  df_true3 <- flattenImpactSample(impact_sample_true_cor)
+  
+  get_ks_stat_rank_histogram(df)
+  print(paste('true',dist_true))
+}
+
+for (i in 1:5){
+  #Omega_high_cor <- AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,14,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  #Omega_low_cor <- AlgoResults$Omega_sample_phys[which.min(AlgoResults$Omega_sample_phys[,14,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  Omega_high_cor <- Omega_true
+  Omega_high_cor$eps$hazard_cor <- 0.95
+  Omega_low_cor <- Omega_true
+  Omega_low_cor$eps$hazard_cor <- 0.05
+  df_postpredictive_sampled_highcor <- create_df_postpredictive(AlgoResults, Omega=Omega_high_cor, single_particle=T)
+  df_postpredictive_sampled_lowcor <- create_df_postpredictive(AlgoResults, Omega=Omega_low_cor, single_particle=T)
+  df_postpredictive_true <- create_df_postpredictive(AlgoResults, Omega = Omega_true, single_particle=T)
+  
+  rank_high <- get_ks_stat_rank_histogram(df_postpredictive_sampled_highcor)
+  rank_low <- get_ks_stat_rank_histogram(df_postpredictive_sampled_lowcor)
+  rank_true <- get_ks_stat_rank_histogram(df_postpredictive_true)
+  hist(rank_true)
+  
+  print(get_ks_stat_rank_histogram(df_postpredictive_sampled_highcor))
+  print(get_ks_stat_rank_histogram(df_postpredictive_sampled_lowcor))
+  print(get_ks_stat_rank_histogram(df_postpredictive_true))
+}
+
+get_ks_stat_rank_histogram <- function(df){
+  z_all <- c()
+  groupings <- split(seq_along(df$event_id), df$event_id)
+  for (i in 1:length(groupings)){
+    mat <- cbind(df[groupings[[i]],5], df[groupings[[i]],6:55])
+    z_j <- c()
+    for (j in 1:NCOL(mat)){
+      n_greater <- 0
+      for (k in 1:NCOL(mat[,-j])){
+        if(all(mat[,j] <= mat[,-j][,k])){
+          n_greater <- n_greater + 1
+        }
+      }
+      z_j <- c(z_j, n_greater)
+    }
+    z_all <- c(z_all, rank(z_j,  ties.method ='random')[1])
+  }
+  return(z_all)
+  return(AndersonDarlingTest((z_all-runif(length(z_all), 0,1))/length(z_j), null='punif')$statistic)
+}
+
+get_band_depth_rank <- function(df){
+  z_all <- c()
+  groupings <- split(seq_along(df$event_id), df$event_id)
+  for (i in 1:length(groupings)){
+    print(i)
+    mat <- cbind(df[groupings[[i]],5], df[groupings[[i]],6:55])
+    m <- NCOL(mat)
+    d <- NROW(mat)
+    pre_ranks <- c()
+    for (j in 1:m){
+      sum <- 0
+      for (k in 1:d){
+        rank_k <- sum(mat[k,j] <= mat[k,])
+        sum <- sum + rank_k * (m - rank_k) + (rank_k-1) * sum(mat[d,j]==mat[k,])
+      }
+      pre_ranks <- c(pre_ranks, sum /d)
+    }
+    z_all <- c(z_all, rank(pre_ranks,  ties.method ='random')[1])
+  }
+  random_runif <-((z_all-runif(length(z_all),0,1))/51)
+  hist(random_runif)
+  AndersonDarlingTest(random_runif, null='punif')
+  return(AndersonDarlingTest((z_all-runif(length(z_all), 0,1))/length(z_j), null='punif')$statistic)
+}
+
+saveRDS(list(
+  df_high1 = df_high1,
+  df_high2 = df_high2,
+  df_high3 = df_high3,
+  df_low1 = df_low1,
+  df_low2 = df_low2,
+  df_low3 = df_low3,
+  df_true1 = df_true1,
+  df_true2 = df_true2,
+  df_true3 = df_true3
+), 'ImpactSample_varyingcorrelation')
+
+
+
+get_rank_histogram_pairwise <- function(df){
+  z_all <- c()
+  groupings <- split(seq_along(df$event_id), df$event_id)
+  for (i in 1:length(groupings)){
+    print(i)
+    pairs <- combn(NROW(groupings[[i]]), 2)
+    for (combn in 1:NCOL(pairs)){
+      mat <- cbind(df[groupings[[i]][pairs[,combn]],5], df[groupings[[i]][pairs[,combn]],6:55])
+      z_j <- c()
+      for (j in 1:NCOL(mat)){
+        z_j <- c(z_j, sum(colSums(mat[,j]<= mat[,-j])==NROW(mat)))
+      }
+      z_all <- c(z_all, sum(z_j[1] <= z_j[-1]))
+      #z_all <- c(z_all, rank(z_j,  ties.method ='random')[1])
+    }
+  }
+  return(z_all)
+  return(AndersonDarlingTest((z_all-runif(length(z_all), 0,1))/length(z_j), null='punif')$statistic)
+}
+
+prop_zeros <- c()
+for (i in 1:length(groupings)){
+  prop_zeros <- c(prop_zeros, mean(df[groupings[[i]],5]<0.5))
+}
+plot(prop_zeros, z_all)
+hist(z_all[prop_zeros<0.5]/51)
+AndersonDarlingTest((z_all[prop_zeros<0.5]-runif(length(z_all)))/51, null='punif')$statistic
+
+
+hist(z_j_true)
+abline(v=z_j_true[1], col='red')
+
+hist(z_j_highcor)
+abline(v=z_j_highcor[1], col='red')
+
+es_sample(as.numeric(log(df_postpredictive_truelowcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_truelowcor$impact[ii]])), 
+          as.matrix(sweep(log(df_postpredictive_truelowcor[ii,6:155]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truelowcor$impact[ii]]), "*")))
+
+es_sample(as.numeric(log(df_postpredictive_truehighcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_truehighcor$impact[ii]])), 
+          as.matrix(sweep(log(df_postpredictive_truehighcor[ii,6:155]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truehighcor$impact[ii]]), "*")))
+
+
+crps_sample(as.numeric(log(df_postpredictive_true$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]))[2], as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]), "*"))[2,])
+crps_sample(as.numeric(log(df_postpredictive_sampled_highcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]))[2], as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]), "*"))[2,])
+
+ii <- 801
+plot(as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]), "*"))[1,])
+points(as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]), "*"))[1,], col='blue')
 #Yes, samples are correct:
 # ii <- which(impact_sample$poly[[1]]$impact=='displacement' & impact_sample$poly[[1]]$observed==0)[1:3]
 # plot(1:length(ii), impact_sample$poly[[1]]$observed[ii], col='red', ylim=c(0, 100000))

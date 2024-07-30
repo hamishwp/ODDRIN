@@ -75,19 +75,19 @@ Model$skeleton <- list(
 
 Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
   Lambda1=list(nu=list(dist='unif', min=6.5, max=10.5), 
-               kappa=list(dist='unif', min=0.25, max=2) #, alpha=list(dist='unif', min=-0.1, max=0.5)
+               kappa=list(dist='unif', min=0.25, max=3) #, alpha=list(dist='unif', min=-0.1, max=0.5)
   ), 
-  Lambda2=list(nu=list(dist='unif', min=9, max=12.5), 
-               kappa=list(dist='unif', min=0.25, max=2)),
+  Lambda2=list(nu=list(dist='unif', min=9, max=13.5), 
+               kappa=list(dist='unif', min=0.25, max=3)),
   Lambda3=list(nu=list(dist='unif', min=6.5, max=10), 
-               kappa=list(dist='unif', min=0.25, max=2)),
+               kappa=list(dist='unif', min=0.25, max=3)),
   Lambda4=list(nu=list(dist='unif', min=8, max=12.5), 
-               kappa=list(dist='unif', min=0.25, max=2.5)),
+               kappa=list(dist='unif', min=0.25, max=3)),
   theta=list(theta1=list(dist='unif', min=0, max=1)),
-  eps=list(local=list(dist='unif', min=0.1, max=2.5),
-           hazard_mort=list(dist='unif', min=0, max=1.5),
-           hazard_disp=list(dist='unif', min=0, max=1.5),
-           hazard_bd=list(dist='unif', min=0, max=1.5),
+  eps=list(local=list(dist='unif', min=0.1, max=3),
+           hazard_mort=list(dist='unif', min=0, max=2),
+           hazard_disp=list(dist='unif', min=0, max=2),
+           hazard_bd=list(dist='unif', min=0, max=2),
            hazard_cor=list(dist='unif', min=0, max=1)),
   vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.25),
                   SHDI=list(dist='laplace', location=0, scale=0.25),
@@ -308,7 +308,7 @@ h_0<-function(I,I0, Omega){
   ind<-I>I0
   h<-rep(0,length(I))
   #h[ind]<- I[ind]-I0
-  h[ind] <- exp(Omega$theta$theta1*I[ind])
+  h[ind] <- I[ind] # exp(Omega$theta$theta1*I[ind]) #I[ind]#
   return(h)
 }
 
@@ -320,7 +320,7 @@ fBD<-function(nbuildings, D_BD) mapply(rbiny, nbuildings, D_BD)
 
 # Calculate the unscaled damage function
 fDamUnscaled<-function(I,Params,Omega){ 
-  return(h_0(I,Params$I0,Omega))#+
+  return(h_0(I,Params$I0,Omega)) #+
      #stochastic(Params$Np,Omega$eps_adj$local)) %>%return()
   #(h_0(I,Params$I0,Omega$theta) + 
   #   stochastic(Params$Np,Omega$eps_adj$local)) %>%return()
@@ -333,30 +333,21 @@ fDamUnscaled_BD<-function(I,Params,Omega){
 }
 
 addTransfParams <- function(Omega, I0=Model$I0){
-  Omega$theta$theta1 <- 0.6
-  Omega$Lambda1$loc <- h_0(Omega$Lambda1$nu, I0, Omega)
-  Omega$Lambda2$loc <- h_0(Omega$Lambda2$nu, I0, Omega)
-  Omega$Lambda3$loc <- h_0(Omega$Lambda3$nu, I0, Omega)
-  Omega$Lambda4$loc <- h_0(Omega$Lambda4$nu, I0, Omega)
-  h_10_minus_h_4.5 = h_0(10, I0, Omega) - h_0(4.5, I0, Omega)
-  Omega$Lambda1$scale <- h_10_minus_h_4.5 / (6 * Omega$Lambda1$kappa)
-  Omega$Lambda2$scale <- h_10_minus_h_4.5 / (6 * Omega$Lambda2$kappa)
-  Omega$Lambda3$scale <- h_10_minus_h_4.5 / (6 * Omega$Lambda3$kappa)
-  Omega$Lambda4$scale <- h_10_minus_h_4.5 / (6 * Omega$Lambda4$kappa)
-  Omega$vuln_coeff_adj <- lapply(Omega$vuln_coeff, function(x) x * Omega$Lambda2$scale)
-  Omega$eps_adj <- lapply(Omega$eps, function(x) x * Omega$Lambda2$scale)
+  #Omega$theta$theta1 <- 0.6
+  Omega$Lambda1$loc <- Omega$Lambda1$nu #h_0(Omega$Lambda1$nu, I0, Omega)
+  Omega$Lambda2$loc <- Omega$Lambda2$nu #h_0(Omega$Lambda2$nu, I0, Omega)
+  Omega$Lambda3$loc <- Omega$Lambda3$nu #h_0(Omega$Lambda3$nu, I0, Omega)
+  Omega$Lambda4$loc <- Omega$Lambda4$nu #h_0(Omega$Lambda4$nu, I0, Omega)
+  #h_10_minus_h_4.5 = h_0(10, I0, Omega) - h_0(4.5, I0, Omega)
+  Omega$Lambda1$scale <- Omega$Lambda1$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda1$kappa)
+  Omega$Lambda2$scale <- Omega$Lambda2$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda2$kappa)
+  Omega$Lambda3$scale <- Omega$Lambda3$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda3$kappa)
+  Omega$Lambda4$scale <- Omega$Lambda4$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda4$kappa)
+  Omega$vuln_coeff_adj <- Omega$vuln_coeff #lapply(Omega$vuln_coeff, function(x) x * Omega$Lambda2$scale)
+  Omega$eps_adj <- Omega$eps #lapply(Omega$eps, function(x) x * Omega$Lambda2$scale)
+  Omega$eps_adj$local <- Omega$eps$local / Omega$eps$hazard_mort
   return(Omega)
 }
-
-plot(seq(1,10,0.1), pnorm(exp(seq(1,10,0.1)), 120, 50))
-points(seq(1,10,0.1), pnorm(exp(0.1*seq(1,10,0.1)), 1.6, 0.1), col='green')
-points(seq(1,10,0.1), pnorm(exp(0.01*seq(1,10,0.1)), 1.05, 0.004), col='blue')
-points(seq(1,10,0.1), pnorm(log(seq(1,10,0.1)), 1.6, 0.1), col='red')
-
-
-points(seq(1,5,0.1), plnorm(seq(1,5,0.1), 1.5, 0.2), col='green')
-
-points(seq(1,5,0.1), plnorm(seq(1,5,0.1), 1.2, 0.13), col='green')
 
 # Calculate Mortality and Displacement probabilities from the unscaled damage
 D_MortDisp_calc <- function(Damage, Omega, stoch_event=rbind(0,0)){
@@ -384,19 +375,19 @@ Fbdam <- function(PopRem, D_Disp, D_Mort, D_Rem) {
    }, numeric(3))
 }
 
-start <- Sys.time()
-probs1 <- rep(0.5, 60)
-probs2 <- rep(0.3, 60)
-probs3 <- rep(0.2,60)
-probs_all <- cbind(probs1, probs2, probs3)
-nn <- rep(100,60)
-for (i in 1:100000){
-  for (j in 1:length(probs1)){
-    rmultinom(1, nn[j], c(probs1[j], probs2[j], probs3[j]))
-  }
-}
-finish <- Sys.time()
-finish - start
+# start <- Sys.time()
+# probs1 <- rep(0.5, 60)
+# probs2 <- rep(0.3, 60)
+# probs3 <- rep(0.2,60)
+# probs_all <- cbind(probs1, probs2, probs3)
+# nn <- rep(100,60)
+# for (i in 1:100000){
+#   for (j in 1:length(probs1)){
+#     rmultinom(1, nn[j], c(probs1[j], probs2[j], probs3[j]))
+#   }
+# }
+# finish <- Sys.time()
+# finish - start
 
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -505,7 +496,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     Upp_bounds_4.6 <- c(0.03, 0.1, 0.15)
     Low_bounds_7 <- c(0, 0, 0.00001)
     Upp_bounds_7 <- c(0.15, 0.6, 0.75)
-    Low_bounds_9.5 <- c(10^(-5),0.2,0.3)
+    Low_bounds_9.5 <- c(10^(-6),0.2,0.3)
     #Upp_bounds_9.5 <- c(0.8,0.999,0.999)
     
     # Upp_bounds_4.6_zero_lp <- c(0.0005, 0.005, 0.002)
@@ -668,6 +659,11 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
       
       # Apply DispX
       tLL <- DispX(ODD = ODDy,Omega = proposed,center = Model$center, Method = AlgoParams, output=output)
+      if (NROW(tLL[[1]]) > 0){
+        train_flag = sub("/.*", "", filer)
+        tLL <- lapply(tLL, function(x){x$train_flag = train_flag; return(x)})  
+      }
+ 
       #tLL<-tryCatch(DispX(ODD = ODDy,Omega = proposed,center = Model$center, BD_params = Model$BD_params, LL = F,Method = AlgoParams),
       #              error=function(e) NA)
       # If all is good, add the LL to the total LL
@@ -1001,12 +997,15 @@ mean_sd_dist <- function(impact_sample, AlgoParams){
     ranks_std_average <- (pre_ranks_average-runif(length(pre_ranks_average),0,1))/(AlgoParams$m_CRPS + 1)
     ranks_std_mst <- (pre_ranks_mst-runif(length(pre_ranks_mst),0,1))/(AlgoParams$m_CRPS + 1)
     dist_poly[n,1] <- mean(es_store) #mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$kernel_sd['mortality'])
-    dist_poly[n,2] <- 0.2*(1 - AndersonDarlingTest(ranks_std_average, null='punif')$p.value) #mean(vs_store) #0.5*AndersonDarlingTest(mrh_store, null='punif')$statistic #mean(crps_store[which(impact_type=='displacement')]) * unlist(AlgoParams$kernel_sd['displacement'])
-    dist_poly[n,3] <- 0.2*(1 - AndersonDarlingTest(ranks_std_mst, null='punif')$p.value) #mean(crps_store[which(impact_type=='buildDam')]) * unlist(AlgoParams$kernel_sd['buildDam'])
-    dist_poly[n,4] <- 0#ks.test(ranks_std_average, y='punif')$p.value
-    dist_poly[n,5] <- 0#ks.test(ranks_std_mst, y='punif')$p.value
-    dist_poly[n,6] <- 0#AndersonDarlingTest(ranks_std_average, null='punif')$statistic
-    dist_poly[n,7] <- 0#AndersonDarlingTest(ranks_std_mst, null='punif')$statistic
+    dist_poly[n,2] <- 0 #0.2*(1 - AndersonDarlingTest(ranks_std_average, null='punif')$p.value) #mean(vs_store) #0.5*AndersonDarlingTest(mrh_store, null='punif')$statistic #mean(crps_store[which(impact_type=='displacement')]) * unlist(AlgoParams$kernel_sd['displacement'])
+    dist_poly[n,3] <- 0 #0.2*(1 - AndersonDarlingTest(ranks_std_mst, null='punif')$p.value) #mean(crps_store[which(impact_type=='buildDam')]) * unlist(AlgoParams$kernel_sd['buildDam'])
+
+    #bin_counts <- table(cut(ranks_std_mst, seq(0, 1, 0.1), include.lowest = TRUE, right = FALSE))
+    #sum((bin_counts-length(ranks_std_mst)/10)^2)/(length(ranks_std_mst)/10)
+    dist_poly[n,4] <- 0#sum((bin_counts-length(ranks_std_mst)/10)^2)/(length(ranks_std_mst)/10) #0 #ks.test(ranks_std_average, y='punif')$p.value
+    dist_poly[n,5] <- 0 ## gof.uniform(ranks_std_mst)$Usq #ks.test(ranks_std_mst, y='punif')$p.value
+    dist_poly[n,6] <- 0.2*(1 - AndersonDarlingTest(ranks_std_average, null='punif')$p.value)  #0.2*(1 - cvm.test(ranks_std_mst, null='punif')$p.value) #AndersonDarlingTest(ranks_std_average, null='punif')$statistic
+    dist_poly[n,7] <- 0.2*(1 - AndersonDarlingTest(ranks_std_mst, null='punif')$p.value) #0.2*(1 - ks.test(ranks_std_mst, y='punif')$p.value) #AndersonDarlingTest(ranks_std_mst, null='punif')$statistic
     #logscores  %>% mean()
     #dist_poly[n,4] <- log(ifelse(AD_mort < 2, 2, AD_mort)+1) * unlist(AlgoParams$kernel_sd['mortality'])
     #AD_disp <- AndersonDarlingTest(quants[impact_type=='displacement'], null='punif')$statistic

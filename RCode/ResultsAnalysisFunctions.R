@@ -334,7 +334,7 @@ sample_post_predictive <- function(AlgoResults, M, s, dat='Train', single_partic
   }
 }
 
-plot_posteriors <- function(AlgoResults, pars_i=NULL, s_finish=NULL){
+plot_posteriors <- function(AlgoResults, pars_i=NULL, Omega=NULL, s_finish=NULL){
   AlgoResults %<>% addAlgoParams(s_finish)
   n_params <- NCOL(AlgoResults$Omega_sample_phys[,,1])
   #ncol = 4
@@ -342,7 +342,7 @@ plot_posteriors <- function(AlgoResults, pars_i=NULL, s_finish=NULL){
   plots_list <- list()
   plot_df <- data.frame(AlgoResults$Omega_sample_phys[,, AlgoResults$s_finish])
   priorplot_df <- data.frame(AlgoResults$Omega_sample_phys[,, 1])
-  colnames(plot_df) <- names(priorplot_df) <- names(Omega %>% unlist())
+  colnames(plot_df) <- names(priorplot_df) <- names(Omega_true %>% unlist())
   j <- 1
   if (is.null(pars_i)) pars_i <- 1:n_params
   for(i in pars_i){
@@ -353,8 +353,8 @@ plot_posteriors <- function(AlgoResults, pars_i=NULL, s_finish=NULL){
       #labs(x='', y='') + 
       #scale_fill_discrete("Legend", values = dd.col) + 
       #theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-      geom_vline(xintercept = unlist(Omega)[var], col='red') + 
       geom_density(data=priorplot_df, aes(x=!!ensym(var), y=..density..), col='blue')
+    if (!is.null(Omega)){plots_list[[j]] = plots_list[[j]] + geom_vline(xintercept = unlist(Omega)[var], col='red')}
       #scale_x_log10()+
     j <- j+1
   }
@@ -598,6 +598,43 @@ create_df_postpredictive <- function(AlgoResults, single_particle = F, Omega = N
   df_poly[which(abs(log(df_poly$sampled.1+1)-log(df_poly$observed+1)) >7),] %>% filter(impact==impact_type)
 }
 
+flattenImpactSample <- function(impact_sample){
+  df <- data.frame(event_id = impact_sample$poly[[1]]$event_id,
+                   iso3 = impact_sample$poly[[1]]$iso3,
+                   polygon = impact_sample$poly[[1]]$polygon,
+                   impact = impact_sample$poly[[1]]$impact,
+                   observed = impact_sample$poly[[1]]$observed, 
+                   train_flag = impact_sample$poly[[1]]$train_flag)
+  for (j in 1:length(impact_sample$poly)){
+    df %<>% cbind(impact_sample$poly[[j]]$sampled)
+  }
+  colnames(df)[7:NCOL(df)] <- paste0('sampled.', 1:length(impact_sample$poly))
+  return(df)
+}
+
+
+create_df_postpredictive_from_impact_sample = function(impact_sample){
+  impact_sample_flattened <- flattenImpactSample(impact_sample)
+  
+  df_poly_jitter <- impact_sample_flattened
+  if (any(is.na(df_poly_jitter$sampled.1))){
+    df_poly_jitter <- df_poly_jitter[-which(is.na(df_poly_jitter$sampled.1)),]
+  }
+  jitter_val <- function(x){
+    return_arr <- c()
+    for (x_i in x){
+      if(x_i==0){return_arr <- c(return_arr, runif(1,0.2, 0.3))}
+      else {return_arr <- c(return_arr, runif(1, x_i-0.5, x+0.5))}
+    }
+    return(return_arr)
+  }
+  #df_poly_jitter[which(df_poly_jitter==0, arr.ind=T)] = 0.1
+  df_poly_jitter$observed <- sapply(df_poly_jitter$observed, jitter_val)
+  df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1:2,jitter_val)
+  #df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- t(apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1,sort))
+  return(df_poly_jitter)
+}
+
 plot_df_postpredictive <- function(df_poly_jitter, impact_type){
   df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- t(apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1,sort))
   M <- length(grep('sampled', names(df_poly_jitter)))
@@ -607,8 +644,8 @@ plot_df_postpredictive <- function(df_poly_jitter, impact_type){
   M_upper <- round(quantile(1:M, 0.95))
   df_poly_jitter$means_sampled <- apply(df_poly_jitter[,grep("sampled",names(df_poly_jitter),value = T)], 1, mean)
   
-  #ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-  ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+  ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+  #ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
     geom_errorbar() + geom_point(aes(col=train_flag)) + 
     scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
     scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
@@ -636,14 +673,19 @@ plot_df_postpredictive_PAGER_coloured <- function(df_poly_jitter, impact_type){
     df_poly_jitter$alertlevel[i] <- HAZy$hazard_info$alertlevel[which.max.mmi]
   }
   
-  #ggplot(df_poly_jitter %>% filter(impact==impact_type & train_flag=='TEST' & alertlevel !='null'), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-  ggplot(df_poly_jitter %>% filter(impact==impact_type & train_flag=='TEST' & alertlevel !='null'), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-    geom_errorbar() + geom_point(aes(col=alertlevel)) + 
+  df_poly_jitter$alertlevel <- factor(df_poly_jitter$alertlevel, levels=c('green', 'yellow', 'orange', 'red'))
+  ggplot(df_poly_jitter %>% filter(impact==impact_type & train_flag=='TEST' & alertlevel !='null'), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+  #ggplot(df_poly_jitter %>% filter(impact==impact_type & train_flag=='TEST' & alertlevel !='null'), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+    geom_errorbar() + 
+    geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) +
+    geom_point(aes(col=alertlevel), size=2.5) + 
+    geom_point(shape = 1, size = 3,colour = "black") + 
     scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
     scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
     #geom_pointrange(aes(col=train_flag)) + 
-    geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
-    ylab(paste('Sampled', impact_type)) + xlab(paste('Observed', impact_type)) + scale_color_manual(values = c('green', 'orange', 'red', 'yellow')) + theme_bw() + theme(plot.background = element_rect(fill = rgb(0.95,0.95,0.95)))
+    ylab(paste('ODDRIN Posterior Predictive', impact_type)) + xlab(paste('Observed', impact_type)) + 
+    scale_color_manual(values = c('green'='green', 'yellow'='yellow', 'orange'='orange', 'red'='red'), labels = c('green'='0', 'yellow'='1 - 99', 'orange'='100 - 999', 'red'='1000+'),name = "PAGER Predicted Mortality") + 
+    theme_bw() + theme(plot.background = element_rect(fill = rgb(0.95,0.95,0.95)))
 }
 
 check_quants <- function(AlgoResults, s_finish=NULL){
@@ -721,7 +763,7 @@ check_quants <- function(AlgoResults, s_finish=NULL){
 }
 
 plot_cor_posts_poster <- function(AlgoResults, pars=c(16,17)){
-  AlgoResults %<>% addAlgoParams(s_finish)
+  AlgoResults %<>% addAlgoParams()
   p1 <- ggplot() + 
         geom_point(aes(x=AlgoResults$Omega_sample_phys[1:450,pars[1],1], y=AlgoResults$Omega_sample_phys[1:450,pars[2],1]), col='blue') +
         geom_point(aes(x=AlgoResults$Omega_sample_phys[,pars[1],AlgoResults$s_finish], y=AlgoResults$Omega_sample_phys[,pars[2],AlgoResults$s_finish])) +
@@ -1376,10 +1418,13 @@ plot_vuln_corr = function(AlgoResults, dat='all'){
 plot_fitted_vuln_coefficients = function(AlgoResults, s_finish=NULL){
   AlgoResults %<>% addAlgoParams(s_finish)
   var_posts <- data.frame(AlgoResults$Omega_sample_phys[,15:22,AlgoResults$s_finish])
-  names(var_posts) <-  sub("^[^.]*\\.\\s*", "", names(unlist(Omega))[15:22])
+  var_prior <- data.frame(AlgoResults$Omega_sample_phys[,15:22,1])
+  names(var_posts) <- names(var_prior) <- sub("^[^.]*\\.\\s*", "", names(unlist(Omega))[15:22])
   par(mfrow=c(2,4))
   for (var in c('PDens', 'SHDI', 'GNIc', 'Vs30', 'EQFreq', 'FirstHaz', 'Night', 'FirstHaz.Night')){
-    hist(var_posts[[var]], main=var, xlab='')
+    hist(var_posts[[var]], main=var, xlab='', xlim=c(-1,1), freq=F)
+    lines(density(var_prior[[var]]), col='blue')
+    #lines(seq(-1,1,0.01), dLaplace(seq(-1,1,0.01), 0,0.25))
     abline(v=0, col='red')
   }
   

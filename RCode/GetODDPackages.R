@@ -72,6 +72,9 @@ LoadLibraries<-function(packred){
     library(OpenStreetMap)
     library(osmdata)
     library(lutz)
+    library(ecochange)
+    library(geodata)
+    library(spatialEco)
   }
   
 }
@@ -87,13 +90,16 @@ GetODDPackages<-function(packred){
                         'Rmpi', 'openxlsx', 'ecochange', 'lutz', 'scoringRules',
                         'vegan')
   
+  
+  
   if(!packred) list.of.packages<-c(list.of.packages,
                                    "codetools","latex2exp", "geojsonR", 'geojsonio',
                                    "rJava","devtools","OpenStreetMap","osmdata",
                                    "tidyRSS","geojsonR", "tiff", "gstat",
                                    "FactoMineR","factoextra","xtable",
                                    "gsubfn","mapsapi","leaflet", "ssh","RPostgres",
-                                   "GADMTools", "pscl","multiColl", 'lutz')
+                                   "GADMTools", "pscl","multiColl", 'lutz', 'ecochange',
+                                   'geodata', 'spatialEco')
   
   
   new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
@@ -105,12 +111,13 @@ GetODDPackages<-function(packred){
   
   # devtools::install_github('daroczig/fbRads')
   # if(length(list.of.packages[!("openrouteservice" %in% installed.packages()[,"Package"])])){devtools::install_github("rCarto/osrm")}
-  if(length(list.of.packages[!("ggmap" %in% installed.packages()[,"Package"])])){devtools::install_github("dkahle/ggmap")}
+  #if(length(list.of.packages[!("ggmap" %in% installed.packages()[,"Package"])])){devtools::install_github("dkahle/ggmap")}
+  if(length(list.of.packages[!("ggmap" %in% installed.packages()[,"Package"])])){devtools::install_github("stadiamaps/ggmap")}
   # if(length(list.of.packages[!("countrycodes" %in% installed.packages()[,"Package"])])){devtools::install_github("vincentarelbundock/countrycode")}
   if(length(list.of.packages[!("wbstats" %in% installed.packages()[,"Package"])])){devtools::install_github('nset-ornl/wbstats')}
   if(length(list.of.packages[!("wid" %in% installed.packages()[,"Package"])])){devtools::install_github("WIDworld/wid-r-tool")}
   if(length(list.of.packages[!("parallelsugar" %in% installed.packages()[,"Package"])])){devtools::install_github('nathanvan/parallelsugar')}
-  
+
   LoadLibraries(packred)
   GetSourceFiles(packred)
   

@@ -97,7 +97,7 @@ increaseAggregation_all <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_In
   }
 }
 
-plot_aggregated_regions(ODDyAgg, ODD){
+plot_aggregated_regions <- function(ODDyAgg, ODD){
   plot(ODD@coords)
   available_colors <- colors()
   for (i in 1:NROW(ODDyAgg)){
@@ -159,7 +159,7 @@ aggregateODDbyPop <- function(ODD){
 # e.g. Nepal 31 only reduces number of pixels by about half
 
 #----------------------------------------------------------------------------------------------------------------------------------
-# ----------------------------------------Aggregate by doubling size of every pixel -----------------------------------------------
+# ----------------------------------------Aggregate by doubling/tripling/... size of every pixel -----------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------------
 
 aggregateODDbyX <- function(ODD, aggFactor){
@@ -252,28 +252,28 @@ increaseAggregation_all <- function(folder_in='IIDIPUS_Input'){
 #----------------------------------------------------------------------------------------------------------------------------------
 # ----------------------------------------Compare aggregated vs disaggregated impact ----------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------------
-AlgoParams$Np <- 500
-obs_index <- 1
-
-#ODDyAgg <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects/Train/EQ20191215PHL_135')
-event <- 'EQ20180907ECU_95' #'EQ20191215PHL_135'#
-ODDyAgg <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects_RealAgg5/Train/', event))
-AggImpact <- DispX(ODDyAgg, Omega %>% addTransfParams(), Model$center, AlgoParams, output='SampledAgg')
-impAgg_sampled <- matrix(unlist(lapply(AggImpact, function(x) x$sampled[c(1,2)])), ncol=2, byrow=T)
-
-#ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects_RealFull/Train/EQ20180216MEX_80')
-ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects_RealFull/Train/', event))
-DisaggImpact <- DispX(ODDy, Omega %>% addTransfParams(), Model$center, AlgoParams, output='SampledAgg')
-impDisagg_sampled <- matrix(unlist(lapply(DisaggImpact, function(x) x$sampled[c(1,2)])), ncol=2, byrow=T)
-
-qqplot(impAgg_sampled[,2], impDisagg_sampled[,2])
-abline(0,1)
-plot(log(impAgg_sampled+10))
-points(impDisagg_sampled, col='blue')
-
-ggplot()  + 
-  #scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000), labels = label_comma())  + 
-  #scale_x_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000, 10000, 100000, 1000000), labels = label_comma()) +
-  geom_histogram(data=data.frame(sampled=log(impAgg_sampled[,1]+10)), aes(x=sampled,y=after_stat(count)), alpha=0.4, col="blue", lwd=0.2, fill='blue') +
-  geom_histogram(data=data.frame(sampled=log(impDisagg_sampled[,1]+10)), aes(x=sampled,y=after_stat(count)), alpha=0.4, col='red', lwd=0.2, fill='red') +
-  theme_bw() + ylab('Count') + xlab('log(Sampled Impact+10)')
+# AlgoParams$Np <- 500
+# obs_index <- 1
+# 
+# #ODDyAgg <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects/Train/EQ20191215PHL_135')
+# event <- 'EQ20180907ECU_95' #'EQ20191215PHL_135'#
+# ODDyAgg <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects_RealAgg5/Train/', event))
+# AggImpact <- DispX(ODDyAgg, Omega %>% addTransfParams(), Model$center, AlgoParams, output='SampledAgg')
+# impAgg_sampled <- matrix(unlist(lapply(AggImpact, function(x) x$sampled[c(1,2)])), ncol=2, byrow=T)
+# 
+# #ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects_RealFull/Train/EQ20180216MEX_80')
+# ODDy <- readRDS(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects_RealFull/Train/', event))
+# DisaggImpact <- DispX(ODDy, Omega %>% addTransfParams(), Model$center, AlgoParams, output='SampledAgg')
+# impDisagg_sampled <- matrix(unlist(lapply(DisaggImpact, function(x) x$sampled[c(1,2)])), ncol=2, byrow=T)
+# 
+# qqplot(impAgg_sampled[,2], impDisagg_sampled[,2])
+# abline(0,1)
+# plot(log(impAgg_sampled+10))
+# points(impDisagg_sampled, col='blue')
+# 
+# ggplot()  + 
+#   #scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000), labels = label_comma())  + 
+#   #scale_x_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000, 10000, 100000, 1000000), labels = label_comma()) +
+#   geom_histogram(data=data.frame(sampled=log(impAgg_sampled[,1]+10)), aes(x=sampled,y=after_stat(count)), alpha=0.4, col="blue", lwd=0.2, fill='blue') +
+#   geom_histogram(data=data.frame(sampled=log(impDisagg_sampled[,1]+10)), aes(x=sampled,y=after_stat(count)), alpha=0.4, col='red', lwd=0.2, fill='red') +
+#   theme_bw() + ylab('Count') + xlab('log(Sampled Impact+10)')

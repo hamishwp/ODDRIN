@@ -426,9 +426,13 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   #   close(file_conn) 
   # }
   if (length(missing_quadkeys)> 0){
-    file_conn <- file(file_write, open = "a")
-    writeLines(paste("Event:", event_id, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, not adding building data."), file_conn)
-    close(file_conn)
+    if (is.null(file_write)){
+      print(paste("Event:", event_id, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, not adding building data."))
+    } else {
+      file_conn <- file(file_write, open = "a")
+      writeLines(paste("Event:", event_id, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, not adding building data."), file_conn)
+      close(file_conn)
+    }
     return(ODD)
   }
   
@@ -458,9 +462,14 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   building_locs <- build_coords[inside_bbox,]
   
   if (!missing_quadkeys_flag){
-    file_conn <- file(file_write, open = "a")
-    writeLines(paste("Event:", event_id, ", Complete Building Count from Global Bing Building Footprints"), file_conn)
-    close(file_conn) 
+    if (is.null(file_write)){
+      print(paste("Event:", event_id, ", Complete Building Count from Global Bing Building Footprints"))
+    }
+    else {
+      file_conn <- file(file_write, open = "a")
+      writeLines(paste("Event:", event_id, ", Complete Building Count from Global Bing Building Footprints"), file_conn)
+      close(file_conn)
+    }
   }
   
   colnames(building_locs) <- c('Longitude', 'Latitude')

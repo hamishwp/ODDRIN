@@ -3,8 +3,8 @@
 ################
 
 library(openxlsx)
-library(tidyxl)
-library(rgeos)
+#library(tidyxl)
+#library(rgeos)
 library(sfheaders)
 library(ecochange)
 
@@ -292,6 +292,8 @@ pixelsInPoly <- function(poly, ODDy){
   
   if (length(indies)==0){return(integer())}
   
+  sf_use_s2(FALSE) #Error being raised with st_intersects when this is set to TRUE
+  
   check_intersection <- function(j){
     pixel_sf <- sfheaders::sf_polygon(data.frame(longitude = c(coords[j,1]-lon_cellsize/2, 
                                                                coords[j,1]-lon_cellsize/2,
@@ -311,6 +313,8 @@ pixelsInPoly <- function(poly, ODDy){
   }
   
   inside_poly <- unlist(mclapply(indies, check_intersection, mc.cores=2))
+  
+  sf_use_s2(FALSE) #Change back
   
   if (length(which(inside_poly))==0){return(integer())}
   
@@ -349,7 +353,7 @@ addODDPolygons <- function(ODDy, polygons_list){
     }
   }
   
-  polygons_indexes <- remove_overlaps(polygons_indexes, polygons_list, ODDy@coords)
+  polygons_indexes <- remove_overlaps(polygons_indexes, polygons_list, ODDy@coords, ODDy)
   ODDy@polygons <- polygons_indexes
   
   
@@ -392,7 +396,7 @@ reweight_pixels <- function(ODDy){
   return(ODDy)
 }
 
-remove_overlaps <- function(polygons_indexes, polygons_list, coords){
+remove_overlaps <- function(polygons_indexes, polygons_list, coords, ODDy){
   #find which polygons have intersecting indexes but not intersecting sf polygons
   #this may be the case for pixels lying on the border which have been allocated to two polygons
   #in this case, allocate the pixel to the polygon in which its center lies
@@ -408,16 +412,23 @@ remove_overlaps <- function(polygons_indexes, polygons_list, coords){
   for(i in 2:length(polygons_indexes)){
     for(j in 1:(i-1)){
       if (length(polygons_indexes[[i]]$indexes) == 0 | length(polygons_indexes[[j]]$indexes) == 0) next
-      #WHAT TO DO IF POLYGON OR ISO3
+      
+      #If either is a country or total then skip
       if (!grepl(',', polygons_list[[i]]$polygon_name, fixed = TRUE) | !grepl(',', polygons_list[[j]]$polygon_name, fixed = TRUE)){
         next
       } 
-      polygons_intersect <- gIntersects(polygons_list[[i]]$sf_polygon, polygons_list[[j]]$sf_polygon)
-      polygons_touch <- gTouches(polygons_list[[i]]$sf_polygon, polygons_list[[j]]$sf_polygon)
+      #If at different admin levels (e.g. one is admin level 2, one is admin level 1) then skip
+      if (str_count(polygons_list[[i]]$polygon_name, ',') != str_count(polygons_list[[j]]$polygon_name, ',')){
+        next
+      } 
+      
+      #polygons_intersect <- gIntersects(polygons_list[[i]]$sf_polygon, polygons_list[[j]]$sf_polygon)
+      #polygons_touch <- gTouches(polygons_list[[i]]$sf_polygon, polygons_list[[j]]$sf_polygon)
       indexes_intersect <- intersect(polygons_indexes[[i]]$indexes, polygons_indexes[[j]]$indexes)
       
-      if((!polygons_intersect | polygons_touch) & (length(indexes_intersect) > 0) ){
-        print('intersecting polys')
+      #if((!polygons_intersect | polygons_touch) & (length(indexes_intersect) > 0) ){
+      if (length(indexes_intersect) > 0){
+        print(paste('intersecting polys',polygons_indexes[[i]]$name,polygons_indexes[[j]]$name))
         for (index in indexes_intersect){
           #to allocate a weight to the pixel based on how much of the polygon it contains
           pixel_sf <- sfheaders::sf_polygon(data.frame(longitude = c(coords[index,1]-lon_cellsize/2, 
@@ -432,10 +443,10 @@ remove_overlaps <- function(polygons_indexes, polygons_list, coords){
                                                                     coords[index,2]-lat_cellsize/2)), x='longitude',y='latitude')
           sf::st_crs(pixel_sf) = ODDy@proj4string
           pixel_sp <- as(pixel_sf, 'Spatial')
-          intersection_i <- gIntersection(pixel_sp,polygons_list[[i]]$sf_polygon)
-          intersection_j <- gIntersection(pixel_sp,polygons_list[[j]]$sf_polygon)
-          polygons_indexes[[i]]$weights[which(polygons_indexes[[i]]$indexes==index)] <- ifelse(is.null(intersection_i), 0, gArea(intersection_i)) / (lat_cellsize * lon_cellsize)
-          polygons_indexes[[j]]$weights[which(polygons_indexes[[j]]$indexes==index)] <- ifelse(is.null(intersection_j), 0, gArea(intersection_j)) / (lat_cellsize * lon_cellsize)
+          intersection_i <- intersect(pixel_sp,polygons_list[[i]]$sf_polygon)
+          intersection_j <- intersect(pixel_sp,polygons_list[[j]]$sf_polygon)
+          polygons_indexes[[i]]$weights[which(polygons_indexes[[i]]$indexes==index)] <- ifelse(is.null(intersection_i), 0, area(intersection_i)) / area(pixel_sp)
+          polygons_indexes[[j]]$weights[which(polygons_indexes[[j]]$indexes==index)] <- ifelse(is.null(intersection_j), 0, area(intersection_j)) / area(pixel_sp)
         }
         
         #to simply allocate to the closest polygon:
@@ -1014,7 +1025,7 @@ redoSubNat <- function(dir, haz="EQ", extractedData=T, subnat_file= 'EQ_SubNatio
 #   
 # }
 
-library(openxlsx)
+#library(openxlsx)
 additional_poly_check <- function(ODDy, i, print_to_xl=F){
   
   noteworthy <- F
@@ -1529,8 +1540,8 @@ fix_Zero_cIndies <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_Jul
 
 
 
-ODD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June20/ODDobjects/EQ20180908CHN_96')
-ODD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June20/ODDobjects/EQ20171112IRN_70')
+# ODD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June20/ODDobjects/EQ20180908CHN_96')
+# ODD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_June20/ODDobjects/EQ20171112IRN_70')
 
 
 removeWeights <- function(ODD){
@@ -1671,518 +1682,518 @@ moveTestData <- function(folder_in='IIDIPUS_Input'){
 
 
 # compare impact for aggregated and non-aggregated approaches
-ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/EQ20151207TJK_35')
-ODDyAgg <- ODDy %>% removeWeights() %>% increaseAggregation()
-for (i in 1:length(ODDyAgg@polygons)){
-  ODDyAgg@polygons[[i]]$weights <- rep(1, length(ODDyAgg@polygons[[i]]$indexes))
-}
-
-
-Disps <- DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, Method = AlgoParams)
-DispsAgg <- DispX(ODD = ODDyAgg,Omega = Omega %>% addTransfParams(),center = Model$center, Method = AlgoParams)
-
-samples <- data.frame(impact= Disps[[1]]$impact, observed= Disps[[1]]$observed)
-samples_agg <- data.frame(impact= DispsAgg[[1]]$impact, observed= DispsAgg[[1]]$observed)
-for (i in 1:length(Disps)){
-  samples %<>% add_column(Disps[[i]]$sampled)
-  samples_agg %<>% add_column(DispsAgg[[i]]$sampled)
-}
-
-plot_df <- data.frame(
-  sampled_med = apply(samples[,3:NCOL(samples)], 1, median),
-  sampled_min = apply(samples[,3:NCOL(samples)], 1, min),
-  sampled_max = apply(samples[,3:NCOL(samples)], 1, max),
-  agg_sampled_med = apply(samples_agg[,3:NCOL(samples_agg)], 1, median),
-  agg_sampled_min = apply(samples_agg[,3:NCOL(samples_agg)], 1, min),
-  agg_sampled_max = apply(samples_agg[,3:NCOL(samples_agg)], 1, max)
-)
-plot_df$poly <- 1:NROW(plot_df)
-
-ggplot(plot_df) + 
-  geom_point(aes(x=poly, y=log(sampled_med+0.1))) + 
-  geom_errorbar(aes(x=poly, ymin=log(sampled_min+0.1), ymax=log(sampled_max+0.1), width=0.2)) + 
-  geom_point(aes(x=poly+0.2, y=log(agg_sampled_med+0.1)), col='red') +
-  geom_errorbar(aes(x=poly+0.2, ymin=log(agg_sampled_min+0.1), ymax=log(agg_sampled_max+0.1), width=0.2), col='red')
-
-
-
-remove_partially_missing_buildings <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July21_Agg'){
-  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_InferredFlag/')
-  ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-  SubNatData <- readSubNatData(subnat_file)
-  for (file in ufiles){
-    print(file)
-    ODDy <- readRDS(paste0(ODD_folderin, file))
-    impact <- ODDy@impact
-    SubNatData_filt <- SubNatData %>% filter(EventID==as.numeric(strsplit(file, "_")[[1]][2]))
-    SubNatData_filt$poly_name <- SubNatData_filt$country
-    if(length(unique(impact$iso3))==1){
-      SubNatData_filt$poly_name <- ifelse(SubNatData_filt$poly_name=='TOTAL',  ifelse(unique(impact$iso3)=='TOT', 'TOTAL', countrycode(unique(impact$iso3), origin='iso3c', destination='country.name')),SubNatData_filt$poly_name)
-    }
-    SubNatData_filt$poly_name <- ifelse(is.na(SubNatData_filt$Region), SubNatData_filt$poly_name, paste0(SubNatData_filt$Region, ', ', SubNatData_filt$poly_name))
-    SubNatData_filt$poly_name <- ifelse(is.na(SubNatData_filt$Subregion), SubNatData_filt$poly_name, paste0(SubNatData_filt$Subregion, ', ', SubNatData_filt$poly_name))
-    impact$inferred <- NA
-    for (i in 1:NROW(impact)){
-      matched_row <- SubNatData_filt %>% filter(poly_name==ODDy@polygons[[impact$polygon[i]]]$name & SubNatData_filt[[impact$impact[i]]]==impact$observed[i])
-      if(NROW(matched_row) > 1){
-        if(length(unique(matched_row[[paste0(impact$impact[i], 'Inferred')]]))==1){
-          matched_row <- matched_row[1,]
-        } else {
-          stop('More than one matching row')
-        }
-      }
-      impact$inferred[i] <- matched_row[[paste0(impact$impact[i], 'Inferred')]]
-    }
-    ODDy@impact <- impact
-    
-    saveRDS(ODDy, paste0(ODD_folderout, file))
-  }
-}
-
-fix_Zero_cIndies <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July21_Agg'){
-  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects_withDest/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects/')
-  ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-  for (j in 168:length(ufiles)){
-    file <- ufiles[j]
-    ODDy <- readRDS(paste0(ODD_folderin, file))
-    event_id <- as.numeric(strsplit(file, "_")[[1]][2])
-    
-    if (event_id %in% c(22,40, 45, 46, 47, 53, 57, 60, 75, 83, 84, 87, 88, 92, 99, 104, 107, 119, 121, 134, 140, 169)){
-      stop()
-    }
-    
-    buildDam_impact = ODDy@impact %>% filter(impact == 'buildDam' | impact=='buildDest') %>% group_by(iso3, sdate, build_type, polygon) %>% 
-      summarise(observed = sum(observed), impact='buildDam', qualifier = ifelse(length(unique(qualifier)) > 1, 'mixed', first(qualifier)), 
-                inferred=ifelse(any(inferred), T, F))
-    
-    if (length(buildDam_impact$polygon) != length(unique(buildDam_impact$polygon))){
-      stop()
-    }
-    ODDy@impact <- rbind(ODDy@impact %>% filter(impact != 'buildDam' & impact != 'buildDest'), buildDam_impact)
-    ODDy@impact$impact[which(ODDy@impact$impact=='buildDamDest')] = 'buildDam'
-  
-    saveRDS(ODDy, paste0(ODD_folderout, file))
-  }
-}
-
-removeDestroyed <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
-  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects/')
-  ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-  for (j in 1:length(ufiles)){
-    file <- ufiles[j]
-    ODDy <- readRDS(paste0(ODD_folderin, file))
-    event_id <- as.numeric(strsplit(file, "_")[[1]][2])
-    
-    if (any(ODDy@impact$impact %in% c('buildDest', 'buildDamDest'))){
-       stop()
-    } else {
-      next
-    }
-    if (event_id %in% c(46, 53, 75, 83, 88, 99, 104, 119, 140, 169)){
-      stop()
-    }
-    
-    if (event_id %in% c(45, 57,  60, 87, 92, 107, 134)){
-      ODDy@impact %<>% filter(impact != 'buildDam' & impact != 'buildDest')
-      saveRDS(ODDy, paste0(ODD_folderout, file))
-      next
-    }
-    
-    if (event_id %in% c(22, 40, 47)){
-      ODDy@impact %<>% filter(impact != 'buildDest')
-    }
-    
-    buildDam_impact = ODDy@impact %>% filter(impact == 'buildDam' | impact=='buildDest') %>% group_by(iso3, sdate, build_type, polygon) %>% 
-      summarise(observed = sum(observed), impact='buildDam', qualifier = ifelse(length(unique(qualifier)) > 1, 'mixed', first(qualifier)), 
-                inferred=ifelse(any(inferred), T, F))
-    
-    if (length(buildDam_impact$polygon) != length(unique(buildDam_impact$polygon))){
-      stop()
-    }
-    ODDy@impact <- rbind(ODDy@impact %>% filter(impact != 'buildDam' & impact != 'buildDest'), buildDam_impact)
-    ODDy@impact$impact[which(ODDy@impact$impact=='buildDamDest')] = 'buildDam'
-    
-    saveRDS(ODDy, paste0(ODD_folderout, file))
-  }
-}
-
-
-
-updateVuln <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
-  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects_OldVuln/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects/')
-  ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-  ufiles_haz<-na.omit(list.files(path=paste0(folder_in, '/HAZARDobjects_additionalInfo2/'),pattern=Model$haz,recursive = T,ignore.case = T))
-
-  for (j in 1:length(ufiles)){
-    
-    event_id <- as.numeric(strsplit(ufiles[j], "_")[[1]][2])
-    
-    if (!event_id %in% c(30,37,52,79,137,144)){
-      next
-    }
-    ODDy <- readRDS(paste0(ODD_folderin, ufiles[j]))
-    ODDy$AveSchYrs <- NULL
-    ODDy$LifeExp <- NULL
-    ODDy$EQFreq <- NULL
-    ODDy$Vs30 <- NULL
-    ODDy$GNIc <- NULL
-    ODDy %<>% AddVuln()
-    event_id <- as.numeric(strsplit(ufiles[j], "_")[[1]][2])
-    
-    haz_match <- grep(paste0("_", event_id, "\\b"),  ufiles_haz, value = TRUE)
-    HAZARDobj <- readRDS(paste0(folder_in, '/HAZARDobjects_additionalInfo2/', haz_match))
-    
-    ODDy@hazinfo <- HAZARDobj$hazard_info
-    saveRDS(ODDy, paste0(ODD_folderout, ufiles[j]))
-  }
-}
-
-updateHaz2 <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
-  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects_OldFirstHaz/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects/')
-  ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-  ufiles_haz<-na.omit(list.files(path=paste0(folder_in, '/HAZARDobjects_additionalInfo3/'),pattern=Model$haz,recursive = T,ignore.case = T))
-  
-  for (j in 1:length(ufiles)){
-    
-    ODDy <- readRDS(paste0(ODD_folderin, ufiles[j]))
-    event_id <- as.numeric(strsplit(ufiles[j], "_")[[1]][2])
-    
-    haz_match <- grep(paste0("_", event_id, "\\b"),  ufiles_haz, value = TRUE)
-    HAZARDobj <- readRDS(paste0(folder_in, '/HAZARDobjects_additionalInfo3/', haz_match))
-    
-    #HAZARDobj$hazard_info$first_event = check_preceding_hazards(HAZARDobj)
-    
-    ODDy@hazinfo <- HAZARDobj$hazard_info
-    saveRDS(ODDy, paste0(ODD_folderout, ufiles[j]))
-    # saveRDS(HAZARDobj, paste0(folder_in, '/HAZARDobjects_additionalInfo2/', haz_match))
-  }
-}
-
-
-
-# folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_June20'
-# ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
-# ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-# i <- i + 1
-# print(i)
-# ODDy <- readRDS(paste0(ODD_folderin, ufiles[i]))
-# plotODDy(ODDy, var='EQFreq')
-
-
-
-removeDestroyed <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July21_Agg/'){
-  BD_folderin<-paste0(dir, folder_in, 'BDobjects_withDest/')
-  BD_folderout<-paste0(dir, folder_in, 'BDobjects/')
-  ufiles<-list.files(path=BD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-  magnitudes <- c()
-  for (file in ufiles){
-    BDy <- readRDS(paste0(BD_folderin, file))
-    print(unique(BDy$grading))
-    BDy$grading[which(BDy$grading %in% c('moderate', 'severe','destroyed'))] = 'Damaged'
-    print(unique(BDy$grading))
-    saveRDS(BDy, paste0(BD_folderout, file))
-  }
-
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-SubNatData <- readSubNatData(subnat_file)
-
-# Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
-SubNatDataByEvent <- SubNatData %>% group_by(EventID) %>% group_split()
-
-
-while (i < 169){
-  
-  folderin<- paste0(dir, 'IIDIPUS_Input_I0_equals_4/ODDobjects/') 
-  ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) 
-  
-  file_in <- ufiles[which(sub(".*_", "", ufiles) == i)]
-  
-  ODDy <- readRDS(paste0(dir,"IIDIPUS_Input_I0_equals_4/ODDobjects/",file_in))
-  HAZy <- readRDS(paste0(dir,"IIDIPUS_Input_I0_equals_4/HAZARDobjects/",file_in))
-  
-  SubNatDataByEvent[[i]] <- SubNatDataByEvent[[i]][rowSums(is.na(SubNatDataByEvent[[i]][,-1])) != ncol(SubNatDataByEvent[[i]])-1, ]
-  miniDam<-SubNatDataByEvent[[i]]
-  
-  miniDamSimplified <- data.frame(iso3=unique(trimws(unlist(strsplit(miniDam$source_listed_iso3, ";")))), 
-                                  sdate=data.table::fifelse(is.na(miniDam$GetDisaster_sdate[1]), miniDam$sdate[1]-5, miniDam$GetDisaster_sdate[1]), #miniDam$sdate[which(!is.na(miniDam$sdate))[1]], 
-                                  fdate=data.table::fifelse(is.na(miniDam$GetDisaster_fdate[1]), miniDam$fdate[1]+21, miniDam$GetDisaster_fdate[1]), #miniDam$fdate[which(!is.na(miniDam$sdate))[1]], 
-                                  eventid=i, hazard=miniDam$hazard[which(!is.na(miniDam$sdate))[1]])
-  
-  sdate <- miniDamSimplified$sdate[1]
-  maxdate<-miniDamSimplified$sdate[1]-5
-  if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
-  
-  if (!is.na(SubNatDataByEvent[[i]]$GetDisasterArgs_bbox[1])){
-    bbox = eval(parse(text = SubNatDataByEvent[[i]]$GetDisasterArgs_bbox[1]))
-  } else {
-    bbox<-countriesbbox(unique(miniDamSimplified$iso3))
-    bbox[1] <- ifelse( (bbox[1]-5)  < (-180), 180 - (-180-(bbox[1]-5)), bbox[1]-5)
-    bbox[2] <- max(bbox[2]-5, -90)
-    bbox[3] <- ifelse( (bbox[3]+5)  > 180, -180 + (bbox[3]+5-180), bbox[3] + 5)
-    bbox[4] <- min(bbox[4]+5, 90)
-  }
-  
-  if (!is.na(SubNatDataByEvent[[i]]$GetDisasterArgs_EQ_Params[1])){
-    EQparams <- eval(parse(text=SubNatDataByEvent[[i]]$GetDisasterArgs_EQ_Params[1]))
-  } else {
-    EQparams=list(I0=4, minmag=5)
-  }
-  
-  lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
-  if(is.null(lhazSDF)) {
-    file_conn <- file('ODD_creation_notes/Updated_bbox', open = "a")
-    writeLines(paste0("lhazSDF not found: ", i), file_conn)
-    close(file_conn) 
-    #print(paste0("Warning: no hazard data found for event ", unique(miniDam$iso3), " ",unique(miniDam$hazard), " ", min(miniDam$sdate) ))
-    i <- i + 1
-    next
-  }
-  
-  length(lhazSDF$hazard_info$eventdates)
-  
-  miniDam$sdate[1]
-  plot(0,0, xlim=bbox[c(1,3)],  ylim=bbox[c(2,4)])
-  
-  points(lhazSDF[[2]], col='red')
-  lhazSDF[[1]]$eventdates[1]
-  max(lhazSDF[[2]]$mean, na.rm=T)
-  
-  points(lhazSDF[[3]], col='blue')
-  lhazSDF[[1]]$eventdates[2]
-  max(lhazSDF[[3]]$mean, na.rm=T)
-  
-  points(lhazSDF[[4]], col='green')
-  lhazSDF[[1]]$eventdates[3]
-  max(lhazSDF[[4]]$mean, na.rm=T)
-  
-  points(lhazSDF[[5]], col='pink')
-  lhazSDF[[1]]$eventdates[4]
-  max(lhazSDF[[5]]$mean, na.rm=T)
-  
-  points(lhazSDF[[6]], col='yellow')
-  max(lhazSDF[[6]]$mean, na.rm=T)
-  lhazSDF[[1]]$eventdates[5]
-  
-  points(lhazSDF[[7]], col='orange')
-  max(lhazSDF[[7]]$mean, na.rm=T)
-  lhazSDF[[1]]$eventdates[6]
-  
-  points(lhazSDF[[8]], col='purple')
-  max(lhazSDF[[8]]$mean, na.rm=T)
-  lhazSDF[[1]]$eventdates[7]
-  
-  points(lhazSDF[[9]], col='grey')
-  max(lhazSDF[[9]]$mean, na.rm=T)
-  lhazSDF[[1]]$eventdates[8]
-  
-  points(lhazSDF[[10]], col='salmon')
-  max(lhazSDF[[10]]$mean, na.rm=T)
-  lhazSDF[[1]]$eventdates[9]
-  
-  points(lhazSDF[[11]], col='brown')
-  max(lhazSDF[[11]]$mean, na.rm=T)
-  lhazSDF[[1]]$eventdates[10]
-  
-  points(lhazSDF[[12]], col='maroon')
-  max(lhazSDF[[12]]$mean, na.rm=T)
-  lhazSDF[[1]]$eventdates[11]
-  
-  
-  if (length(grep("hazMean",names(ODDy),value = T)) < length(lhazSDF) - 1){
-    upd_bbox <- c(ODDy@bbox) + c(-0.5,-0.5, 0.5, 0.5)
-    lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=upd_bbox, EQparams = EQparams),error=function(e) NULL)
-    
-    if (length(grep("hazMean",names(ODDy),value = T)) == length(lhazSDF) - 1){
-      file_conn <- file('ODD_creation_notes/Updated_bbox', open = "a")
-      writeLines(paste0("Index: ", i, ', c(',paste(round(upd_bbox,2), collapse=','), ')'), file_conn)
-      close(file_conn) 
-    } else {
-      file_conn <- file('ODD_creation_notes/Updated_bbox', open = "a")
-      writeLines(paste0("Need to redo hazards for ODD index: ", i), file_conn)
-      close(file_conn) 
-      i <- i + 1
-      next
-    }
-  }
-  if (length(grep("hazMean",names(ODDy),value = T)) > length(lhazSDF) - 1){
-    file_conn <- file('ODD_creation_notes/Updated_bbox', open = "a")
-    writeLines(paste0("Less hazards found than on original ODD object ", i), file_conn)
-    close(file_conn) 
-    i <- i + 1
-    next
-  }
-  
-  if (!all(lhazSDF$hazard_info$bbox == HAZy$hazard_info$bbox)){
-    file_conn <- file('ODD_creation_notes/Updated_bbox', open = "a")
-    writeLines(paste0("Same number of hazards but different hazards?: ", i), file_conn)
-    close(file_conn) 
-  }
-  i <- i + 1
-}
-
-miniDamSimplified
-lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
-length(lhazSDF$hazard_info$eventdates)
-
-miniDamSimplified2 <- miniDamSimplified
-miniDamSimplified2$fdate <- miniDamSimplified$fdate -2
-lhazSDF2<-tryCatch(GetDisaster(miniDamSimplified2,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
-length(lhazSDF2$hazard_info$eventdates)
-
-plot(lhazSDF[[2]])
-points(lhazSDF[[3]])
-points(lhazSDF[[4]], col='red')
-points(lhazSDF2[[2]], col='green')
-points(lhazSDF2[[3]], col='yellow')
-  
-  miniDam$sdate[1]
-  plot(0,0, xlim=bbox[c(1,3)],  ylim=bbox[c(2,4)])
-  points(ODDy@coords)
-  points(lhazSDF[[2]], col='red')
-  lhazSDF[[1]]$eventdates[1]
-  points(lhazSDF[[3]], col='blue')
-  lhazSDF[[1]]$eventdates[2]
-  points(lhazSDF[[4]], col='green')
-  lhazSDF[[1]]$eventdates[3]
-  points(lhazSDF[[5]], col='pink')
-  lhazSDF[[1]]$eventdates[4]
-  points(lhazSDF[[6]], col='yellow')
-  lhazSDF[[1]]$eventdates[5]
-  points(lhazSDF[[7]], col='orange')
-  lhazSDF[[1]]$eventdates[7]
-  points(lhazSDF[[8]], col='purple')
-  lhazSDF[[1]]$eventdates[8]
-  
-  namer<-paste0(ODDy@hazard,
-                str_remove_all(as.character.Date(min(ODDy@hazdates)),"-"),
-                unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
-                "_",i)
-  
-  
-  ODDpath<-paste0(dir,"IIDIPUS_Input_I0_equals_4/ODDobjects/",namer)
-  saveRDS(ODDy,ODDpath)
-  
-  # Building damage subset
-  miniDam<-Damage%>%filter(iso3%in%unique(miniDamSimplified$iso3) & 
-                             sdate<mindate & sdate>maxdate)
-  
-  HAZARDpath<-paste0(dir,"IIDIPUS_Input_I0_equals_4/HAZARDobjects/",namer)
-  saveRDS(lhazSDF,HAZARDpath)
-  
-  BDpath=NA_character_
-  if(nrow(miniDam)>0) {
-    # Make building damage object BD
-    BDy<- tryCatch(new("BD",Damage=miniDam,ODD=ODDy),error=function(e) NULL)
-    if(is.null(BDy)) {
-      file_conn6 <- file('ODD_creation_notes/BD_write_failed', open = "a")
-      writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", sdate), file_conn6)
-      close(file_conn6) 
-    }
-    BDpath <-paste0(dir,"IIDIPUS_Input_I0_equals_4/BDobjects/",namer)
-    # Save it out!
-    saveRDS(BDy, BDpath)
-  }
-}
-
-AddBingBuildingCounts(ODDy, isos_bingbuildings, plot_only=T)
-plotODDy(ODDy, var='nBuildings')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-rbPal <- colorRampPalette(c('red','blue'))
-cols <- rbPal(10)[as.numeric(cut(ODDy@coords[,1]> 123.6 & ODDy@coords[,1]< 124.2 & ODDy@coords[,2]< 13 & ODDy@coords[,2] >  10 & ODDy$Population > 0)],breaks = 100))]
-
-plot(ODDy@coords[which(ODDy@coords[,1]> 123.6 & ODDy@coords[,1]< 124.2 & ODDy@coords[,2]< 13 & ODDy@coords[,2] >  10 & ODDy$Population > 0),], col=cols)
-
-library(randomcoloR)
-library(scales)
-plot_impact <- function(ODDy){
-  impact_by_type <- ODDy@impact %>% group_by(impact) %>% group_split()
-  if (length(impact_by_type) > 1){
-    par(mfrow=c(2,2))
-  }
-  for (i in 1:length(impact_by_type)){
-    impact_filtered <- impact_by_type[[i]]
-    ncols <- NROW(impact_filtered)
-    palette <- distinctColorPalette(ncols)
-    plot(ODDy@coords[which(is.na(ODDy$ISO3C)),], col='black', xlim=ODDy@bbox[1,], ylim=ODDy@bbox[2,], main=impact_filtered$impact[1], pch=20)
-    subnat <- F
-    for (k in 1:length(ODDy@polygons)){
-      if (grepl(',', ODDy@polygons[[k]]$name, fixed = TRUE)) subnat <- T
-    }
-    for (ij in 1:ncols){
-      if (!grepl(',', ODDy@polygons[[impact_filtered$polygon[ij]]]$name, fixed = TRUE) & subnat==T) next
-      points(ODDy@coords[ODDy@polygons[[impact_filtered$polygon[ij]]]$indexes,], col=alpha(palette[ij], 1), pch=20, cex=0.5)
-    }
-  }
-  par(mfrow=c(1,1))
-}
-
-
-plot(ODDy@coords[which(!is.na(ODDy$Population)),], col='black')
-points(ODDy@coords[ODDy@polygons[[9]]$indexes,, drop=F], col='green')
-points(ODDy@coords[ODDy@polygons[[16]]$indexes,, drop=F], col='blue')
-points(ODDy@coords[ODDy@polygons[[17]]$indexes,, drop=F], col='pink')
-points(ODDy@coords[ODDy@polygons[[19]]$indexes,, drop=F], col='orange')
-points(ODDy@coords[ODDy@polygons[[20]]$indexes,, drop=F], col='yellow')
-points(ODDy@coords[ODDy@polygons[[22]]$indexes,, drop=F], col='purple')
-points(ODDy@coords[ODDy@polygons[[24]]$indexes,, drop=F], col='grey')
-points(ODDy@coords[ODDy@polygons[[8]]$indexes,, drop=F], col='cyan')
-points(ODDy@coords[ODDy@polygons[[9]]$indexes,, drop=F], col='green', pch=4)
-points(ODDy@coords[ODDy@polygons[[10]]$indexes,, drop=F], col='blue', pch=4)
-points(ODDy@coords[ODDy@polygons[[11]]$indexes,, drop=F], col='pink', pch=4)
-points(ODDy@coords[ODDy@polygons[[12]]$indexes,, drop=F], col='orange', pch=4)
-points(ODDy@coords[ODDy@polygons[[13]]$indexes,, drop=F], col='yellow', pch=4)
-points(ODDy@coords[ODDy@polygons[[14]]$indexes,, drop=F], col='purple', pch=4)
-points(ODDy@coords[ODDy@polygons[[15]]$indexes,, drop=F], col='grey', pch=4)
-points(ODDy@coords[ODDy@polygons[[16]]$indexes,, drop=F], col='cyan', pch=4)
+# ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/EQ20151207TJK_35')
+# ODDyAgg <- ODDy %>% removeWeights() %>% increaseAggregation()
+# for (i in 1:length(ODDyAgg@polygons)){
+#   ODDyAgg@polygons[[i]]$weights <- rep(1, length(ODDyAgg@polygons[[i]]$indexes))
+# }
+# 
+# 
+# Disps <- DispX(ODD = ODDy,Omega = Omega %>% addTransfParams(),center = Model$center, Method = AlgoParams)
+# DispsAgg <- DispX(ODD = ODDyAgg,Omega = Omega %>% addTransfParams(),center = Model$center, Method = AlgoParams)
+# 
+# samples <- data.frame(impact= Disps[[1]]$impact, observed= Disps[[1]]$observed)
+# samples_agg <- data.frame(impact= DispsAgg[[1]]$impact, observed= DispsAgg[[1]]$observed)
+# for (i in 1:length(Disps)){
+#   samples %<>% add_column(Disps[[i]]$sampled)
+#   samples_agg %<>% add_column(DispsAgg[[i]]$sampled)
+# }
+# 
+# plot_df <- data.frame(
+#   sampled_med = apply(samples[,3:NCOL(samples)], 1, median),
+#   sampled_min = apply(samples[,3:NCOL(samples)], 1, min),
+#   sampled_max = apply(samples[,3:NCOL(samples)], 1, max),
+#   agg_sampled_med = apply(samples_agg[,3:NCOL(samples_agg)], 1, median),
+#   agg_sampled_min = apply(samples_agg[,3:NCOL(samples_agg)], 1, min),
+#   agg_sampled_max = apply(samples_agg[,3:NCOL(samples_agg)], 1, max)
+# )
+# plot_df$poly <- 1:NROW(plot_df)
+# 
+# ggplot(plot_df) + 
+#   geom_point(aes(x=poly, y=log(sampled_med+0.1))) + 
+#   geom_errorbar(aes(x=poly, ymin=log(sampled_min+0.1), ymax=log(sampled_max+0.1), width=0.2)) + 
+#   geom_point(aes(x=poly+0.2, y=log(agg_sampled_med+0.1)), col='red') +
+#   geom_errorbar(aes(x=poly+0.2, ymin=log(agg_sampled_min+0.1), ymax=log(agg_sampled_max+0.1), width=0.2), col='red')
+# 
+# 
+# 
+# remove_partially_missing_buildings <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July21_Agg'){
+#   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
+#   ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_InferredFlag/')
+#   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+#   SubNatData <- readSubNatData(subnat_file)
+#   for (file in ufiles){
+#     print(file)
+#     ODDy <- readRDS(paste0(ODD_folderin, file))
+#     impact <- ODDy@impact
+#     SubNatData_filt <- SubNatData %>% filter(EventID==as.numeric(strsplit(file, "_")[[1]][2]))
+#     SubNatData_filt$poly_name <- SubNatData_filt$country
+#     if(length(unique(impact$iso3))==1){
+#       SubNatData_filt$poly_name <- ifelse(SubNatData_filt$poly_name=='TOTAL',  ifelse(unique(impact$iso3)=='TOT', 'TOTAL', countrycode(unique(impact$iso3), origin='iso3c', destination='country.name')),SubNatData_filt$poly_name)
+#     }
+#     SubNatData_filt$poly_name <- ifelse(is.na(SubNatData_filt$Region), SubNatData_filt$poly_name, paste0(SubNatData_filt$Region, ', ', SubNatData_filt$poly_name))
+#     SubNatData_filt$poly_name <- ifelse(is.na(SubNatData_filt$Subregion), SubNatData_filt$poly_name, paste0(SubNatData_filt$Subregion, ', ', SubNatData_filt$poly_name))
+#     impact$inferred <- NA
+#     for (i in 1:NROW(impact)){
+#       matched_row <- SubNatData_filt %>% filter(poly_name==ODDy@polygons[[impact$polygon[i]]]$name & SubNatData_filt[[impact$impact[i]]]==impact$observed[i])
+#       if(NROW(matched_row) > 1){
+#         if(length(unique(matched_row[[paste0(impact$impact[i], 'Inferred')]]))==1){
+#           matched_row <- matched_row[1,]
+#         } else {
+#           stop('More than one matching row')
+#         }
+#       }
+#       impact$inferred[i] <- matched_row[[paste0(impact$impact[i], 'Inferred')]]
+#     }
+#     ODDy@impact <- impact
+#     
+#     saveRDS(ODDy, paste0(ODD_folderout, file))
+#   }
+# }
+# 
+# fix_Zero_cIndies <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July21_Agg'){
+#   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects_withDest/')
+#   ODD_folderout<-paste0(dir, folder_in, '/ODDobjects/')
+#   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+#   for (j in 168:length(ufiles)){
+#     file <- ufiles[j]
+#     ODDy <- readRDS(paste0(ODD_folderin, file))
+#     event_id <- as.numeric(strsplit(file, "_")[[1]][2])
+#     
+#     if (event_id %in% c(22,40, 45, 46, 47, 53, 57, 60, 75, 83, 84, 87, 88, 92, 99, 104, 107, 119, 121, 134, 140, 169)){
+#       stop()
+#     }
+#     
+#     buildDam_impact = ODDy@impact %>% filter(impact == 'buildDam' | impact=='buildDest') %>% group_by(iso3, sdate, build_type, polygon) %>% 
+#       summarise(observed = sum(observed), impact='buildDam', qualifier = ifelse(length(unique(qualifier)) > 1, 'mixed', first(qualifier)), 
+#                 inferred=ifelse(any(inferred), T, F))
+#     
+#     if (length(buildDam_impact$polygon) != length(unique(buildDam_impact$polygon))){
+#       stop()
+#     }
+#     ODDy@impact <- rbind(ODDy@impact %>% filter(impact != 'buildDam' & impact != 'buildDest'), buildDam_impact)
+#     ODDy@impact$impact[which(ODDy@impact$impact=='buildDamDest')] = 'buildDam'
+#   
+#     saveRDS(ODDy, paste0(ODD_folderout, file))
+#   }
+# }
+# 
+# removeDestroyed <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
+#   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
+#   ODD_folderout<-paste0(dir, folder_in, '/ODDobjects/')
+#   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+#   for (j in 1:length(ufiles)){
+#     file <- ufiles[j]
+#     ODDy <- readRDS(paste0(ODD_folderin, file))
+#     event_id <- as.numeric(strsplit(file, "_")[[1]][2])
+#     
+#     if (any(ODDy@impact$impact %in% c('buildDest', 'buildDamDest'))){
+#        stop()
+#     } else {
+#       next
+#     }
+#     if (event_id %in% c(46, 53, 75, 83, 88, 99, 104, 119, 140, 169)){
+#       stop()
+#     }
+#     
+#     if (event_id %in% c(45, 57,  60, 87, 92, 107, 134)){
+#       ODDy@impact %<>% filter(impact != 'buildDam' & impact != 'buildDest')
+#       saveRDS(ODDy, paste0(ODD_folderout, file))
+#       next
+#     }
+#     
+#     if (event_id %in% c(22, 40, 47)){
+#       ODDy@impact %<>% filter(impact != 'buildDest')
+#     }
+#     
+#     buildDam_impact = ODDy@impact %>% filter(impact == 'buildDam' | impact=='buildDest') %>% group_by(iso3, sdate, build_type, polygon) %>% 
+#       summarise(observed = sum(observed), impact='buildDam', qualifier = ifelse(length(unique(qualifier)) > 1, 'mixed', first(qualifier)), 
+#                 inferred=ifelse(any(inferred), T, F))
+#     
+#     if (length(buildDam_impact$polygon) != length(unique(buildDam_impact$polygon))){
+#       stop()
+#     }
+#     ODDy@impact <- rbind(ODDy@impact %>% filter(impact != 'buildDam' & impact != 'buildDest'), buildDam_impact)
+#     ODDy@impact$impact[which(ODDy@impact$impact=='buildDamDest')] = 'buildDam'
+#     
+#     saveRDS(ODDy, paste0(ODD_folderout, file))
+#   }
+# }
+# 
+# 
+# 
+# updateVuln <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
+#   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects_OldVuln/')
+#   ODD_folderout<-paste0(dir, folder_in, '/ODDobjects/')
+#   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+#   ufiles_haz<-na.omit(list.files(path=paste0(folder_in, '/HAZARDobjects_additionalInfo2/'),pattern=Model$haz,recursive = T,ignore.case = T))
+# 
+#   for (j in 1:length(ufiles)){
+#     
+#     event_id <- as.numeric(strsplit(ufiles[j], "_")[[1]][2])
+#     
+#     if (!event_id %in% c(30,37,52,79,137,144)){
+#       next
+#     }
+#     ODDy <- readRDS(paste0(ODD_folderin, ufiles[j]))
+#     ODDy$AveSchYrs <- NULL
+#     ODDy$LifeExp <- NULL
+#     ODDy$EQFreq <- NULL
+#     ODDy$Vs30 <- NULL
+#     ODDy$GNIc <- NULL
+#     ODDy %<>% AddVuln()
+#     event_id <- as.numeric(strsplit(ufiles[j], "_")[[1]][2])
+#     
+#     haz_match <- grep(paste0("_", event_id, "\\b"),  ufiles_haz, value = TRUE)
+#     HAZARDobj <- readRDS(paste0(folder_in, '/HAZARDobjects_additionalInfo2/', haz_match))
+#     
+#     ODDy@hazinfo <- HAZARDobj$hazard_info
+#     saveRDS(ODDy, paste0(ODD_folderout, ufiles[j]))
+#   }
+# }
+# 
+# updateHaz2 <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
+#   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects_OldFirstHaz/')
+#   ODD_folderout<-paste0(dir, folder_in, '/ODDobjects/')
+#   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+#   ufiles_haz<-na.omit(list.files(path=paste0(folder_in, '/HAZARDobjects_additionalInfo3/'),pattern=Model$haz,recursive = T,ignore.case = T))
+#   
+#   for (j in 1:length(ufiles)){
+#     
+#     ODDy <- readRDS(paste0(ODD_folderin, ufiles[j]))
+#     event_id <- as.numeric(strsplit(ufiles[j], "_")[[1]][2])
+#     
+#     haz_match <- grep(paste0("_", event_id, "\\b"),  ufiles_haz, value = TRUE)
+#     HAZARDobj <- readRDS(paste0(folder_in, '/HAZARDobjects_additionalInfo3/', haz_match))
+#     
+#     #HAZARDobj$hazard_info$first_event = check_preceding_hazards(HAZARDobj)
+#     
+#     ODDy@hazinfo <- HAZARDobj$hazard_info
+#     saveRDS(ODDy, paste0(ODD_folderout, ufiles[j]))
+#     # saveRDS(HAZARDobj, paste0(folder_in, '/HAZARDobjects_additionalInfo2/', haz_match))
+#   }
+# }
+# 
+# 
+# 
+# # folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_June20'
+# # ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
+# # ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+# # i <- i + 1
+# # print(i)
+# # ODDy <- readRDS(paste0(ODD_folderin, ufiles[i]))
+# # plotODDy(ODDy, var='EQFreq')
+# 
+# 
+# 
+# removeDestroyed <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July21_Agg/'){
+#   BD_folderin<-paste0(dir, folder_in, 'BDobjects_withDest/')
+#   BD_folderout<-paste0(dir, folder_in, 'BDobjects/')
+#   ufiles<-list.files(path=BD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+#   magnitudes <- c()
+#   for (file in ufiles){
+#     BDy <- readRDS(paste0(BD_folderin, file))
+#     print(unique(BDy$grading))
+#     BDy$grading[which(BDy$grading %in% c('moderate', 'severe','destroyed'))] = 'Damaged'
+#     print(unique(BDy$grading))
+#     saveRDS(BDy, paste0(BD_folderout, file))
+#   }
+# 
+# }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 
+# SubNatData <- readSubNatData(subnat_file)
+# 
+# # Identify events by name and sdate (make sure all rows corresponding to the same event have the same name and sdate!)
+# SubNatDataByEvent <- SubNatData %>% group_by(EventID) %>% group_split()
+# 
+# 
+# while (i < 169){
+#   
+#   folderin<- paste0(dir, 'IIDIPUS_Input_I0_equals_4/ODDobjects/') 
+#   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) 
+#   
+#   file_in <- ufiles[which(sub(".*_", "", ufiles) == i)]
+#   
+#   ODDy <- readRDS(paste0(dir,"IIDIPUS_Input_I0_equals_4/ODDobjects/",file_in))
+#   HAZy <- readRDS(paste0(dir,"IIDIPUS_Input_I0_equals_4/HAZARDobjects/",file_in))
+#   
+#   SubNatDataByEvent[[i]] <- SubNatDataByEvent[[i]][rowSums(is.na(SubNatDataByEvent[[i]][,-1])) != ncol(SubNatDataByEvent[[i]])-1, ]
+#   miniDam<-SubNatDataByEvent[[i]]
+#   
+#   miniDamSimplified <- data.frame(iso3=unique(trimws(unlist(strsplit(miniDam$source_listed_iso3, ";")))), 
+#                                   sdate=data.table::fifelse(is.na(miniDam$GetDisaster_sdate[1]), miniDam$sdate[1]-5, miniDam$GetDisaster_sdate[1]), #miniDam$sdate[which(!is.na(miniDam$sdate))[1]], 
+#                                   fdate=data.table::fifelse(is.na(miniDam$GetDisaster_fdate[1]), miniDam$fdate[1]+21, miniDam$GetDisaster_fdate[1]), #miniDam$fdate[which(!is.na(miniDam$sdate))[1]], 
+#                                   eventid=i, hazard=miniDam$hazard[which(!is.na(miniDam$sdate))[1]])
+#   
+#   sdate <- miniDamSimplified$sdate[1]
+#   maxdate<-miniDamSimplified$sdate[1]-5
+#   if(is.na(miniDamSimplified$fdate[1])) mindate<-miniDamSimplified$sdate[1]+3 else mindate<-miniDamSimplified$fdate[1]+3
+#   
+#   if (!is.na(SubNatDataByEvent[[i]]$GetDisasterArgs_bbox[1])){
+#     bbox = eval(parse(text = SubNatDataByEvent[[i]]$GetDisasterArgs_bbox[1]))
+#   } else {
+#     bbox<-countriesbbox(unique(miniDamSimplified$iso3))
+#     bbox[1] <- ifelse( (bbox[1]-5)  < (-180), 180 - (-180-(bbox[1]-5)), bbox[1]-5)
+#     bbox[2] <- max(bbox[2]-5, -90)
+#     bbox[3] <- ifelse( (bbox[3]+5)  > 180, -180 + (bbox[3]+5-180), bbox[3] + 5)
+#     bbox[4] <- min(bbox[4]+5, 90)
+#   }
+#   
+#   if (!is.na(SubNatDataByEvent[[i]]$GetDisasterArgs_EQ_Params[1])){
+#     EQparams <- eval(parse(text=SubNatDataByEvent[[i]]$GetDisasterArgs_EQ_Params[1]))
+#   } else {
+#     EQparams=list(I0=4, minmag=5)
+#   }
+#   
+#   lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
+#   if(is.null(lhazSDF)) {
+#     file_conn <- file('ODD_creation_notes/Updated_bbox', open = "a")
+#     writeLines(paste0("lhazSDF not found: ", i), file_conn)
+#     close(file_conn) 
+#     #print(paste0("Warning: no hazard data found for event ", unique(miniDam$iso3), " ",unique(miniDam$hazard), " ", min(miniDam$sdate) ))
+#     i <- i + 1
+#     next
+#   }
+#   
+#   length(lhazSDF$hazard_info$eventdates)
+#   
+#   miniDam$sdate[1]
+#   plot(0,0, xlim=bbox[c(1,3)],  ylim=bbox[c(2,4)])
+#   
+#   points(lhazSDF[[2]], col='red')
+#   lhazSDF[[1]]$eventdates[1]
+#   max(lhazSDF[[2]]$mean, na.rm=T)
+#   
+#   points(lhazSDF[[3]], col='blue')
+#   lhazSDF[[1]]$eventdates[2]
+#   max(lhazSDF[[3]]$mean, na.rm=T)
+#   
+#   points(lhazSDF[[4]], col='green')
+#   lhazSDF[[1]]$eventdates[3]
+#   max(lhazSDF[[4]]$mean, na.rm=T)
+#   
+#   points(lhazSDF[[5]], col='pink')
+#   lhazSDF[[1]]$eventdates[4]
+#   max(lhazSDF[[5]]$mean, na.rm=T)
+#   
+#   points(lhazSDF[[6]], col='yellow')
+#   max(lhazSDF[[6]]$mean, na.rm=T)
+#   lhazSDF[[1]]$eventdates[5]
+#   
+#   points(lhazSDF[[7]], col='orange')
+#   max(lhazSDF[[7]]$mean, na.rm=T)
+#   lhazSDF[[1]]$eventdates[6]
+#   
+#   points(lhazSDF[[8]], col='purple')
+#   max(lhazSDF[[8]]$mean, na.rm=T)
+#   lhazSDF[[1]]$eventdates[7]
+#   
+#   points(lhazSDF[[9]], col='grey')
+#   max(lhazSDF[[9]]$mean, na.rm=T)
+#   lhazSDF[[1]]$eventdates[8]
+#   
+#   points(lhazSDF[[10]], col='salmon')
+#   max(lhazSDF[[10]]$mean, na.rm=T)
+#   lhazSDF[[1]]$eventdates[9]
+#   
+#   points(lhazSDF[[11]], col='brown')
+#   max(lhazSDF[[11]]$mean, na.rm=T)
+#   lhazSDF[[1]]$eventdates[10]
+#   
+#   points(lhazSDF[[12]], col='maroon')
+#   max(lhazSDF[[12]]$mean, na.rm=T)
+#   lhazSDF[[1]]$eventdates[11]
+#   
+#   
+#   if (length(grep("hazMean",names(ODDy),value = T)) < length(lhazSDF) - 1){
+#     upd_bbox <- c(ODDy@bbox) + c(-0.5,-0.5, 0.5, 0.5)
+#     lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=upd_bbox, EQparams = EQparams),error=function(e) NULL)
+#     
+#     if (length(grep("hazMean",names(ODDy),value = T)) == length(lhazSDF) - 1){
+#       file_conn <- file('ODD_creation_notes/Updated_bbox', open = "a")
+#       writeLines(paste0("Index: ", i, ', c(',paste(round(upd_bbox,2), collapse=','), ')'), file_conn)
+#       close(file_conn) 
+#     } else {
+#       file_conn <- file('ODD_creation_notes/Updated_bbox', open = "a")
+#       writeLines(paste0("Need to redo hazards for ODD index: ", i), file_conn)
+#       close(file_conn) 
+#       i <- i + 1
+#       next
+#     }
+#   }
+#   if (length(grep("hazMean",names(ODDy),value = T)) > length(lhazSDF) - 1){
+#     file_conn <- file('ODD_creation_notes/Updated_bbox', open = "a")
+#     writeLines(paste0("Less hazards found than on original ODD object ", i), file_conn)
+#     close(file_conn) 
+#     i <- i + 1
+#     next
+#   }
+#   
+#   if (!all(lhazSDF$hazard_info$bbox == HAZy$hazard_info$bbox)){
+#     file_conn <- file('ODD_creation_notes/Updated_bbox', open = "a")
+#     writeLines(paste0("Same number of hazards but different hazards?: ", i), file_conn)
+#     close(file_conn) 
+#   }
+#   i <- i + 1
+# }
+# 
+# miniDamSimplified
+# lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
+# length(lhazSDF$hazard_info$eventdates)
+# 
+# miniDamSimplified2 <- miniDamSimplified
+# miniDamSimplified2$fdate <- miniDamSimplified$fdate -2
+# lhazSDF2<-tryCatch(GetDisaster(miniDamSimplified2,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
+# length(lhazSDF2$hazard_info$eventdates)
+# 
+# plot(lhazSDF[[2]])
+# points(lhazSDF[[3]])
+# points(lhazSDF[[4]], col='red')
+# points(lhazSDF2[[2]], col='green')
+# points(lhazSDF2[[3]], col='yellow')
+#   
+#   miniDam$sdate[1]
+#   plot(0,0, xlim=bbox[c(1,3)],  ylim=bbox[c(2,4)])
+#   points(ODDy@coords)
+#   points(lhazSDF[[2]], col='red')
+#   lhazSDF[[1]]$eventdates[1]
+#   points(lhazSDF[[3]], col='blue')
+#   lhazSDF[[1]]$eventdates[2]
+#   points(lhazSDF[[4]], col='green')
+#   lhazSDF[[1]]$eventdates[3]
+#   points(lhazSDF[[5]], col='pink')
+#   lhazSDF[[1]]$eventdates[4]
+#   points(lhazSDF[[6]], col='yellow')
+#   lhazSDF[[1]]$eventdates[5]
+#   points(lhazSDF[[7]], col='orange')
+#   lhazSDF[[1]]$eventdates[7]
+#   points(lhazSDF[[8]], col='purple')
+#   lhazSDF[[1]]$eventdates[8]
+#   
+#   namer<-paste0(ODDy@hazard,
+#                 str_remove_all(as.character.Date(min(ODDy@hazdates)),"-"),
+#                 unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
+#                 "_",i)
+#   
+#   
+#   ODDpath<-paste0(dir,"IIDIPUS_Input_I0_equals_4/ODDobjects/",namer)
+#   saveRDS(ODDy,ODDpath)
+#   
+#   # Building damage subset
+#   miniDam<-Damage%>%filter(iso3%in%unique(miniDamSimplified$iso3) & 
+#                              sdate<mindate & sdate>maxdate)
+#   
+#   HAZARDpath<-paste0(dir,"IIDIPUS_Input_I0_equals_4/HAZARDobjects/",namer)
+#   saveRDS(lhazSDF,HAZARDpath)
+#   
+#   BDpath=NA_character_
+#   if(nrow(miniDam)>0) {
+#     # Make building damage object BD
+#     BDy<- tryCatch(new("BD",Damage=miniDam,ODD=ODDy),error=function(e) NULL)
+#     if(is.null(BDy)) {
+#       file_conn6 <- file('ODD_creation_notes/BD_write_failed', open = "a")
+#       writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", sdate), file_conn6)
+#       close(file_conn6) 
+#     }
+#     BDpath <-paste0(dir,"IIDIPUS_Input_I0_equals_4/BDobjects/",namer)
+#     # Save it out!
+#     saveRDS(BDy, BDpath)
+#   }
+# }
+# 
+# AddBingBuildingCounts(ODDy, isos_bingbuildings, plot_only=T)
+# plotODDy(ODDy, var='nBuildings')
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# rbPal <- colorRampPalette(c('red','blue'))
+# cols <- rbPal(10)[as.numeric(cut(ODDy@coords[,1]> 123.6 & ODDy@coords[,1]< 124.2 & ODDy@coords[,2]< 13 & ODDy@coords[,2] >  10 & ODDy$Population > 0)],breaks = 100))]
+# 
+# plot(ODDy@coords[which(ODDy@coords[,1]> 123.6 & ODDy@coords[,1]< 124.2 & ODDy@coords[,2]< 13 & ODDy@coords[,2] >  10 & ODDy$Population > 0),], col=cols)
+# 
+# library(randomcoloR)
+# library(scales)
+# plot_impact <- function(ODDy){
+#   impact_by_type <- ODDy@impact %>% group_by(impact) %>% group_split()
+#   if (length(impact_by_type) > 1){
+#     par(mfrow=c(2,2))
+#   }
+#   for (i in 1:length(impact_by_type)){
+#     impact_filtered <- impact_by_type[[i]]
+#     ncols <- NROW(impact_filtered)
+#     palette <- distinctColorPalette(ncols)
+#     plot(ODDy@coords[which(is.na(ODDy$ISO3C)),], col='black', xlim=ODDy@bbox[1,], ylim=ODDy@bbox[2,], main=impact_filtered$impact[1], pch=20)
+#     subnat <- F
+#     for (k in 1:length(ODDy@polygons)){
+#       if (grepl(',', ODDy@polygons[[k]]$name, fixed = TRUE)) subnat <- T
+#     }
+#     for (ij in 1:ncols){
+#       if (!grepl(',', ODDy@polygons[[impact_filtered$polygon[ij]]]$name, fixed = TRUE) & subnat==T) next
+#       points(ODDy@coords[ODDy@polygons[[impact_filtered$polygon[ij]]]$indexes,], col=alpha(palette[ij], 1), pch=20, cex=0.5)
+#     }
+#   }
+#   par(mfrow=c(1,1))
+# }
+# 
+# 
+# plot(ODDy@coords[which(!is.na(ODDy$Population)),], col='black')
+# points(ODDy@coords[ODDy@polygons[[9]]$indexes,, drop=F], col='green')
+# points(ODDy@coords[ODDy@polygons[[16]]$indexes,, drop=F], col='blue')
+# points(ODDy@coords[ODDy@polygons[[17]]$indexes,, drop=F], col='pink')
+# points(ODDy@coords[ODDy@polygons[[19]]$indexes,, drop=F], col='orange')
+# points(ODDy@coords[ODDy@polygons[[20]]$indexes,, drop=F], col='yellow')
+# points(ODDy@coords[ODDy@polygons[[22]]$indexes,, drop=F], col='purple')
+# points(ODDy@coords[ODDy@polygons[[24]]$indexes,, drop=F], col='grey')
+# points(ODDy@coords[ODDy@polygons[[8]]$indexes,, drop=F], col='cyan')
+# points(ODDy@coords[ODDy@polygons[[9]]$indexes,, drop=F], col='green', pch=4)
+# points(ODDy@coords[ODDy@polygons[[10]]$indexes,, drop=F], col='blue', pch=4)
+# points(ODDy@coords[ODDy@polygons[[11]]$indexes,, drop=F], col='pink', pch=4)
+# points(ODDy@coords[ODDy@polygons[[12]]$indexes,, drop=F], col='orange', pch=4)
+# points(ODDy@coords[ODDy@polygons[[13]]$indexes,, drop=F], col='yellow', pch=4)
+# points(ODDy@coords[ODDy@polygons[[14]]$indexes,, drop=F], col='purple', pch=4)
+# points(ODDy@coords[ODDy@polygons[[15]]$indexes,, drop=F], col='grey', pch=4)
+# points(ODDy@coords[ODDy@polygons[[16]]$indexes,, drop=F], col='cyan', pch=4)
 
 #download Philippines ODD objects from scratch
 # getSubNatDataFiltered <- function(dir, haz="EQ",subnat_file= 'EQ_SubNational.xlsx', iso_filter='IRN'){

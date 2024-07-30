@@ -279,7 +279,7 @@ setMethod(f="initialize", signature="ODD",
             bbox<-lhazSDF$hazard_info$bbox
             dater<-min(lhazSDF$hazard_info$sdate)
 	          .Object@hazdates<-lhazSDF$hazard_info$eventdates
-	          .Object@hazinfo <-lhazSDF$hazinfo
+	          .Object@hazinfo <-lhazSDF$hazard_info
 
             year<-AsYear(dater)
             
@@ -343,8 +343,6 @@ setMethod(f="initialize", signature="ODD",
             
             return(.Object)
             
-            
-            return(.Object)
           }
 )
 
@@ -447,7 +445,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   covar_matrix[upper.tri(covar_matrix)] = covar_matrix[lower.tri(covar_matrix)]
   
   
-  covar_matrix_local = covar_matrix * Omega$eps$local
+  covar_matrix_local = covar_matrix * Omega$eps_adj$local
   # covar_matrix_local[1,2] = covar_matrix_local[2,1]  = 1 * sqrt(covar_matrix_local[1,1] * covar_matrix_local[2,2])
   # covar_matrix_local[1,3] = covar_matrix_local[3,1]  =  1 * sqrt(covar_matrix_local[1,1] * covar_matrix_local[3,3])
   # covar_matrix_local[2,3] = covar_matrix_local[3,2]  =  1 * sqrt(covar_matrix_local[2,2] * covar_matrix_local[3,3])
@@ -769,7 +767,11 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
         }
       }
     }
-    impact_obs_sampled <- arrange(merge(impact_sampled, ODD@impact, by=c("polygon", "impact")),desc(observed)) 
+    if (is.na(ODD@impact$observed[1])){ #sampling for new event with unkwown observations
+      impact_obs_sampled <- merge(impact_sampled, ODD@impact, by=c("polygon", "impact"))
+    } else {
+      impact_obs_sampled <- arrange(merge(impact_sampled, ODD@impact, by=c("polygon", "impact")),desc(observed)) 
+    }
     if(LLout) return(CalcPolyDist(impact_obs_sampled, kernel_sd,  kernel, cap))
     return(impact_obs_sampled)
   
@@ -939,7 +941,7 @@ plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL
   
   
   bbox <- ODDy@bbox
-  gadm_iso <- getData("GADM", country="PHL", level=2)
+  gadm_iso <- getData("GADM", country="NZL", level=2)
   gadm_iso <- gadm_iso#gSimplify(gadm_iso, 0.01)
   gadm_iso <- intersect(gadm_iso, bbox)
   gadm_map <- fortify(gadm_iso)
@@ -995,13 +997,84 @@ plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL
   
 }
 
-plotODDy<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.5,map="terrain"){
+plotODDy_pixellated <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7,map="terrain"){
+  
+  if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
+  
+  
+  bbox <- ODDy@bbox
+  #gadm_iso <- getData("GADM", country="NZL", level=2)
+  gadm_iso <- gadm_iso#gSimplify(gadm_iso, 0.01)
+  gadm_iso <- intersect(gadm_iso, bbox)
+  gadm_map <- fortify(gadm_iso)
+  
+  gg <- ggplot()
+  gg <- gg + geom_map(map=gadm_map, data=gadm_map, aes(x=long, y=lat, map_id=id, group=id)) + xlim(bbox[1,1],bbox[1,2]) + ylim(bbox[2,1], bbox[2,2])
+  gg <- gg + coord_map() + geom_polygon(data=gadm_map, aes(x=long, y=lat, group=group), fill='white', color='black')
+  p <- gg + xlab("Longitude") + ylab("Latitude")#+ theme(legend.position = "none")
+  
+
+  hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
+  for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+    tmp<-ODDy[variable]
+    tmp$hazard<-hazard
+    hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+  }
+  ODDy@data$hazard<-hazard
+  brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
+  
+  if(var!="hazard")  {
+    ODDy@data[is.na(ODDy@data$ISO3C),var]<-NA
+    
+    p <- p+geom_tile(data = as.data.frame(ODDy),
+                     mapping = aes(Longitude,Latitude,fill=ODDy@data[[var]]+0.1),alpha=0.8, width=ODDy@grid@cellsize[1]*5,
+                     height=ODDy@grid@cellsize[2]*5) + scale_fill_viridis( trans = "log10", labels = function(x) sprintf("%.0f", x)) + labs(fill = ifelse(GetVarName(var)=='NULL', var, GetVarName(var)))
+    
+    p<-p+geom_contour(data = as.data.frame(ODDy),
+                      mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
+                      alpha=1.0,breaks = brks, lwd=0.8) +
+      scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent") + 
+      labs(colour = "Hazard Intensity")
+    
+    # p+geom_contour_filled(data = as.data.frame(ODDy),
+    #                       mapping = aes(Longitude,Latitude,z=1-ODDy@data$tmp),
+    #                       fill="green",alpha=alpha)+ 
+    #   labs(fill = "Hazard>5")
+    
+    return(p)
+  }
+  
+  ODDy@data$hazard[ODDy@data$hazard==0]<-NA
+  
+  p<-p+geom_contour_filled(data = as.data.frame(ODDy),
+                           mapping = aes(Longitude,Latitude,z=hazard),
+                           alpha=alpha,breaks = brks) +
+    # scale_fill_discrete(low = "transparent",high = "red",na.value = "transparent") + 
+    labs(fill = "Hazard Intensity")
+  p<-p+geom_contour(data = as.data.frame(ODDy),
+                    mapping = aes(Longitude,Latitude,z=hazard),
+                    alpha=0.8,breaks = c(6.0),colour="red")
+  
+  
+}
+
+plotODDy<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.5,map="terrain", api_key_loc='/home/manderso/Documents/Miscellaneous/API_Keys/stadiamap_key_mal'){
   
   if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
   
   if(is.null(bbox)) bbox<-ODDy@bbox
   
-  mad_map <- get_stamenmap(bbox,source = "terrain",maptype = map,zoom=zoomy)
+  if(!file.exists(api_key_loc)){
+    warning('You need an API key from StadiaMaps to get terrain background. 
+            Get one here: https://client.stadiamaps.com/signup/ and save your key (as a string) as an RDS in a local dir. 
+            Pass the location of that directory using the api_key_loc argument')
+    return()
+  }
+  stadiamap_api_key <- readRDS(api_key_loc)
+  register_stadiamaps(key = stadiamap_api_key)
+  
+  #mad_map <- get_stamenmap(bbox,source = "terrain",maptype = map,zoom=zoomy)
+  mad_map <- get_stadiamap(bbox = bbox, zoom = zoomy, maptype = "stamen_terrain_background")
   p<-ggmap(mad_map) + xlab("Longitude") + ylab("Latitude")
   
   hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
@@ -1022,7 +1095,7 @@ plotODDy<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=
         labs(fill = GetVarName(var))
     p<-p+geom_contour(data = as.data.frame(ODDy),
                       mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
-                        alpha=1.0,breaks = brks) +
+                        alpha=1.0,breaks = brks, size=1) +
       scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent") + 
       labs(colour = "Hazard Intensity")
     
@@ -1049,6 +1122,7 @@ plotODDy<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=
   return(p)
   
 }
+
 
 MakeODDPlots<-function(ODDy, input=NULL,zoomer=7, bbox=NULL){
   

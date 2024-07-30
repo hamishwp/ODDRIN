@@ -12,6 +12,7 @@ FBdirectory<-'/home/patten/Documents/IDMC/Facebook_Data/'
 # Do you want only the reduced packages or all? Choose via packred
 packred<-F
 
+
 # Extract Environment Variables
 source('RCode/GetEnv.R')
 # Download and install the necessary packages:
@@ -29,40 +30,152 @@ source('RCode/Simulate.R')
 
 #Choose true Omega for Simulated Data
 
-Omega <- Omega_true <- list(Lambda1 = list(nu=9.05, kappa=1.2),
-                            Lambda2 = list(nu=9.7, kappa=1.25), #list(nu=10.65, kappa=1.5), #
-                            Lambda3 = list(nu=8.9, kappa=1.1),
+Omega <- Omega_true <- list(Lambda1 = list(nu=8.75, kappa=0.6),
+                            Lambda2 = list(nu=11.55, kappa=0.75), #list(nu=10.65, kappa=1.5), #
+                            Lambda3 = list(nu=8.7, kappa=1),
                             Lambda4 = list(nu=9.9, kappa=1.6),
                             theta= list(theta1=0.6),
-                            eps=list(local=0.6, hazard_mort=0.3, hazard_disp=0.5, hazard_bd=0.4, hazard_cor=0.55),
+                            eps=list(local=0.6, hazard_mort=0.5, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
                             #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                            vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.25, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
+                            vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
                             check = list(check=0.5))
 
-
+Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 plot_S_curves(Omega_true)
 
-plot(seq(5,10,0.05),log(pnorm(seq(5,10,0.05)-4.5, 4,0.5)), type='l')
-points(seq(5,10,0.05),log(pnorm(exp(0.3*seq(5,10,0.05)), 12.1, 1.3)), col='blue', type='l')
-points(seq(5,10,0.05), log(pnorm(exp(0.5*seq(5,10,0.05)), 65.1, 11)), col='red', type='l')
-points(seq(5,10,0.05), log(pnorm(exp(1*seq(5,10,0.05)), 3565.1, 850)), col='pink', type='l')
-points(seq(5,10,0.05),log(pnorm(exp(0.01*seq(5,10,0.05)), 1.087, 0.005)), col='green', type='l')
-plot(seq(5,10,0.05), exp(0.9*seq(5,10,0.05)))
+# plot(seq(5,10,0.05),log(pnorm(seq(5,10,0.05)-4.5, 4,0.5)), type='l')
+# points(seq(5,10,0.05),log(pnorm(exp(0.3*seq(5,10,0.05)), 12.1, 1.3)), col='blue', type='l')
+# points(seq(5,10,0.05), log(pnorm(exp(0.5*seq(5,10,0.05)), 65.1, 11)), col='red', type='l')
+# points(seq(5,10,0.05), log(pnorm(exp(1*seq(5,10,0.05)), 3565.1, 850)), col='pink', type='l')
+# points(seq(5,10,0.05),log(pnorm(exp(0.01*seq(5,10,0.05)), 1.087, 0.005)), col='green', type='l')
+# plot(seq(5,10,0.05), exp(0.9*seq(5,10,0.05)))
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 
 set.seed(1)
-simulateDataSet(150, Omega, Model, dir)
+simulateDataSet(180, Omega, Model, dir)
 
 
-AlgoParams$smc_steps <- 100
-AlgoParams$smc_Npart <- 50
+AlgoParams$smc_steps <- 2
+AlgoParams$smc_Npart <- 250
 AlgoParams$m_CRPS <- 60
 AlgoParams$Np <- 1
 AlgoParams$smc_alpha <- 0.9
-AlgoParams$rel_weightings <- c(1,1)
+AlgoParams$rel_weightings <- c(1,0)
 AlgoParams$kernel_sd <- list(displacement = 1, mortality = 7, buildDam=0.6,
                              buildDest = 0.6, buildDamDest = 1)
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-24_121215_alpha0.95_M60_Npart990RealAgg3')
+AlgoParams$input_folder <- 'IIDIPUS_Input_RealAgg3/'
+AlgoResults$input_folder <- 'IIDIPUS_Input_RealAgg3/'
+df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, M=200, output='SampledTotal')
+
+AlgoParams$input_folder <- 'IIDIPUS_Input_RealAgg5/'
+
+tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '_RealAgg5_asprev')
+AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F, tag_notes=tag_notes)
+
+
+Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
+  Lambda1=list(nu=list(dist='unif', min=6.5, max=10.5), 
+               kappa=list(dist='unif', min=0.25, max=2) #, alpha=list(dist='unif', min=-0.1, max=0.5)
+  ), 
+  Lambda2=list(nu=list(dist='unif', min=9, max=12.5), 
+               kappa=list(dist='unif', min=0.25, max=2)),
+  Lambda3=list(nu=list(dist='unif', min=6.5, max=10), 
+               kappa=list(dist='unif', min=0.25, max=2)),
+  Lambda4=list(nu=list(dist='unif', min=8, max=12.5), 
+               kappa=list(dist='unif', min=0.25, max=2.5)),
+  theta=list(theta1=list(dist='unif', min=0, max=1)),
+  eps=list(local=list(dist='unif', min=0.01, max=2),
+           hazard_mort=list(dist='unif', min=0, max=1.5),
+           hazard_disp=list(dist='unif', min=0, max=1.5),
+           hazard_bd=list(dist='unif', min=0, max=1.5),
+           hazard_cor=list(dist='unif', min=0, max=1)),
+  vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.25),
+                  SHDI=list(dist='laplace', location=0, scale=0.25),
+                  GNIc=list(dist='laplace', location=0, scale=0.25),
+                  Vs30=list(dist='laplace', location=0, scale=0.25),
+                  EQFreq=list(dist='laplace', location=0, scale=0.25),
+                  #Mag=list(dist='laplace', location=0, scale=0.25),
+                  FirstHaz=list(dist='laplace', location=0, scale=0.25),
+                  Night=list(dist='laplace', location=0, scale=0.25),
+                  FirstHaz.Night=list(dist='laplace', location=0, scale=0.25)),
+  check=list(check=list(dist='unif', min=0, max=1))
+)
+
+Model$links <-Model$unlinks <- Model$acceptTrans <- Model$skeleton
+
+#Currently, all parameters use a lower and upper bound
+for (i in 1:length(Model$links)){
+  if (is.list(Model$links[[i]])){
+    for (j in 1:length(Model$links[[i]])){
+      Model$links[[i]][[j]] <- 'ab_bounded'
+      Model$unlinks[[i]][[j]] <- 'ab_bounded_inv'
+      Model$acceptTrans[[i]][[j]] <- 'ab_bounded_acc'
+    }
+  } else {
+    Model$links[[i]] <- 'ab_bounded'
+    Model$unlinks[[i]] <- 'ab_bounded_inv'
+    Model$acceptTrans[[i]] <- 'ab_bounded_acc'
+  }
+}
+
+#Set lower and upper bounds for the parameters
+Model$par_lb <- c()
+Model$par_ub <- c()
+
+for (i in 1:length(Model$Priors)){
+  if (is.list(Model$Priors[[i]])){
+    for (j in 1:length(Model$Priors[[i]])){
+      if(Model$Priors[[i]][[j]]$dist == 'unif'){
+        Model$par_lb = c(Model$par_lb, Model$Priors[[i]][[j]]$min)
+        Model$par_ub = c(Model$par_ub, Model$Priors[[i]][[j]]$max)
+      } else if (Model$Priors[[i]][[j]]$dist == 'norm'){
+        Model$par_lb = c(Model$par_lb, Model$Priors[[i]][[j]]$mean - 6 * Model$Priors[[i]][[j]]$sd)
+        Model$par_ub = c(Model$par_ub, Model$Priors[[i]][[j]]$mean + 6 * Model$Priors[[i]][[j]]$sd)
+      } else if (Model$Priors[[i]][[j]]$dist == 'laplace'){
+        Model$par_lb = c(Model$par_lb, Model$Priors[[i]][[j]]$location - 15 * Model$Priors[[i]][[j]]$scale)
+        Model$par_ub = c(Model$par_ub, Model$Priors[[i]][[j]]$location + 15 * Model$Priors[[i]][[j]]$scale)
+      } else {
+        stop('Please update Method.R to adjust acceptance probability to account for other priors before continuing.')
+      }
+    }
+  } else {
+    if(Model$Priors[[i]]$dist == 'unif'){
+      Model$par_lb = c(Model$par_lb, Model$Priors[[i]]$min)
+      Model$par_ub = c(Model$par_ub, Model$Priors[[i]]$max)
+    } else if (Model$Priors[[i]]$dist == 'norm'){
+      Model$par_lb = c(Model$par_lb, Model$Priors[[i]]$mean - 6 * Model$Priors[[i]]$sd)
+      Model$par_ub = c(Model$par_ub, Model$Priors[[i]]$mean + 6 * Model$Priors[[i]]$sd)
+    } else if (Model$Priors[[i]]$dist == 'laplace'){
+      Model$par_lb = c(Model$par_lb, Model$Priors[[i]]$location - 15 * Model$Priors[[i]]$scale)
+      Model$par_ub = c(Model$par_ub, Model$Priors[[i]]$location + 15 * Model$Priors[[i]]$scale)
+    } else {
+      stop('Please update Method.R to adjust acceptance probability to account for other priors before continuing.')
+    }
+  }
+}
+
+addTransfParams <- function(Omega, I0=Model$I0){
+  #Omega$theta$theta1 <- 0.6
+  Omega$Lambda1$loc <- h_0(Omega$Lambda1$nu, I0, Omega)
+  Omega$Lambda2$loc <- h_0(Omega$Lambda2$nu, I0, Omega)
+  Omega$Lambda3$loc <- h_0(Omega$Lambda3$nu, I0, Omega)
+  Omega$Lambda4$loc <- h_0(Omega$Lambda4$nu, I0, Omega)
+  h_10_minus_h_4.5 = h_0(10, I0, Omega) - h_0(4.5, I0, Omega)
+  Omega$Lambda1$scale <- h_10_minus_h_4.5 / (6 * Omega$Lambda1$kappa)
+  Omega$Lambda2$scale <- h_10_minus_h_4.5 / (6 * Omega$Lambda2$kappa)
+  Omega$Lambda3$scale <- h_10_minus_h_4.5 / (6 * Omega$Lambda3$kappa)
+  Omega$Lambda4$scale <- h_10_minus_h_4.5 / (6 * Omega$Lambda4$kappa)
+  Omega$vuln_coeff_adj <- lapply(Omega$vuln_coeff, function(x) x * Omega$Lambda2$scale)
+  Omega$eps_adj <- lapply(Omega$eps, function(x) x * Omega$Lambda2$scale)
+  Omega$eps_adj$local <- Omega$eps$local / Omega$eps$hazard_mort
+  return(Omega)
+}
+
+tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '_RealAgg5_localerrupd')
+AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F, tag_notes=tag_notes)
 
 
 
@@ -111,44 +224,51 @@ execution_time
 #------------------------------------------------------------------------------------------------
 
 # Collect mortality, building damage, and displacement data for simulated data:
-
 ODDsim_paths <-na.omit(list.files(path="IIDIPUS_SimInput/ODDobjects/"))
 df_SimImpact <- data.frame(observed=numeric(),
                            impact=character(),
                            polygon=integer(),
+                           exposure=numeric(),
                            event=integer(),
                            I_max=numeric())
 nHazSim <- c()
+maxIntSim <- c()
 for(i in 1:length(ODDsim_paths)){
   ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDsim_paths[i]))
   if (length(ODDSim@impact$impact)>0){
     nHazSim <- c(nHazSim, length(grep('hazMean', names(ODDSim@data))))
+    maxIntSim <- c(maxIntSim, max(ODDSim@data[, grep('hazMean', colnames(ODDSim@data))],  na.rm=T))
     # if (length(grep('hazMean', names(ODDSim@data))) ==1 & (length(grep('-4', ODDsim_paths[i]))==0)& (length(grep('-5', ODDsim_paths[i]))==0)){
     #   stop()
     # }
     for (j in 1:NROW(ODDSim@impact)){
       df_SimImpact %<>% add_row(observed=ODDSim@impact$observed[j], impact=ODDSim@impact$impact[j], polygon=ODDSim@impact$polygon[j],
-                                event=i, I_max=max(ODDSim$hazMean1[ODDSim@polygons[[ODDSim@impact$polygon[j]]]$indexes],  na.rm=T))
+                                exposure=ifelse(impact=='buildDam', sum(ODDSim@data[ODDSim@polygons[[ODDSim@impact$polygon[j]]]$indexes,'nBuildings']), sum(ODDSim@data[ODDSim@polygons[[ODDSim@impact$polygon[j]]]$indexes,'Population'])),
+                                event=i, I_max=max(ODDSim@data[ODDSim@polygons[[ODDSim@impact$polygon[j]]]$indexes, grep('hazMean', colnames(ODDSim@data))],  na.rm=T))
     }
   }
 }
 ggplot(df_SimImpact %>% filter(impact=='mortality'), aes(x=I_max, y=observed)) + geom_point()
 
 # Collect mortality, building damage, and displacement data for real data:
+#ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/'
 
-ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/'
+ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_RealAgg5/ODDobjects/Train/'
 ODDpaths <-na.omit(list.files(path=ODDpath))
 df_Impact <- data.frame(observed=numeric(), impact=character(),
-                        polygon=integer(), event=integer(), I_max=numeric())
+                        polygon=integer(), exposure=numeric(), event=integer(), I_max=numeric())
 
 nHazReal <- c()
+maxIntReal <- c()
 for(i in 1:length(ODDpaths)){
   ODD <- readRDS(paste0(ODDpath,ODDpaths[i]))
   if (length(ODD@impact$impact)>0){
     nHazReal <- c(nHazReal, length(grep('hazMean', names(ODD@data))))
+    maxIntReal <- c(maxIntReal, max(ODD@data[, grep('hazMean', colnames(ODD@data))],  na.rm=T))
     for (j in 1:NROW(ODD@impact)){
       df_Impact %<>% add_row(observed=ODD@impact$observed[j], impact=ODD@impact$impact[j], polygon=ODD@impact$polygon[j],
-                                event=i, I_max=max(ODD$hazMean1[ODD@polygons[[ODD@impact$polygon[j]]]$indexes],  na.rm=T))
+                             exposure=ifelse(impact=='buildDam', sum(ODD@data[ODD@polygons[[ODD@impact$polygon[j]]]$indexes,'nBuildings']), sum(ODD@data[ODD@polygons[[ODD@impact$polygon[j]]]$indexes,'Population'])),
+                              event=i, I_max=max(ODD@data[ODD@polygons[[ODD@impact$polygon[j]]]$indexes, grep('hazMean', colnames(ODD@data))],  na.rm=T))
     }
   }
 }
@@ -198,9 +318,21 @@ plot_grid(legend, plot_grid( p_mort_obsvals, p_disp_obsvals, p_bd_obsvals,
 grid.arrange(p_mort_obsvals, p_disp_obsvals, p_bd_obsvals, 
              p_mort_obscount, p_disp_obscount, p_bd_obscount, ncol=3, nrow=2)
 
+files <-  paste0(dir, "IIDIPUS_SimInput/Test/")
+
+ufiles<-na.omit(list.files(path=files,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
+for (file in ufiles){
+  print(file)
+  ODD <- readRDS(paste0(files,file))
+  print(NROW(ODD@impact))
+}
+
 #compare the number of hazards per event:
 hist(nHazSim)
 hist(nHazReal)
+#compare the number of hazards per event:
+hist(maxIntSim)
+hist(maxIntReal)
 
 #compare correlation between impact types for simulated and true data:
 impact_type1 = 'mortality'
@@ -219,8 +351,8 @@ grid.arrange(cor_true, cor_sim, ncol=1)
 impact_type='mortality'
 ggplot() + 
   geom_histogram(data=df_Impact %>% filter(impact==impact_type), aes(x=I_max,y=after_stat(count)), alpha=0.3, col='blue', lwd=0.2, fill='blue') +
-  geom_histogram(data=df_SimImpact %>% filter(impact==impact_type), aes(x=I_max,y=after_stat(count)), alpha=0.3, col='yellow', lwd=0.2, fill='yellow')  +
-  scale_y_continuous(breaks = seq(0, 90, by = 10), limits = c(0, 90))
+  geom_histogram(data=df_SimImpact %>% filter(impact==impact_type), aes(x=I_max,y=after_stat(count)), alpha=0.3, col='yellow', lwd=0.2, fill='yellow')  #+
+  #scale_y_continuous(breaks = seq(0, 90, by = 10))
 
 xx <- df_Impact %>% group_by(event) %>%
   summarise(unique_prop = n_distinct(polygon) / n())
@@ -229,6 +361,13 @@ yy <- df_SimImpact %>% group_by(event) %>%
 
 plot((df_Impact %>% group_by(event) %>% summarise(n_obs = n()))$n_obs)
 points((df_SimImpact %>% group_by(event) %>% summarise(n_obs = n()))$n_obs, col='red')
+
+ggplot() + 
+  geom_histogram(data=df_Impact %>% filter(impact==impact_type), aes(x=exposure,y=after_stat(count)), alpha=0.3, col='blue', lwd=0.2, fill='blue') +
+  geom_histogram(data=df_SimImpact %>% filter(impact==impact_type), aes(x=exposure,y=after_stat(count)), alpha=0.3, col='yellow', lwd=0.2, fill='yellow') + 
+  scale_x_log10() #+
+#scale_y_continuous(breaks = seq(0, 90, by = 10))
+
 #------------------------------------------------------------------------------------------------
 #------------------------------------ CHECK HIGH LEVEL PRIORS -----------------------------------
 #------------------------------------------------------------------------------------------------
@@ -340,7 +479,7 @@ AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/H
 plot_correlated_posteriors(AlgoResults, Omega=Omega, pairings=rbind(c(1,2), c(3,4), c(5,6),c(9,10), c(11,12), c(13,14)))
 plot_correlated_posteriors(AlgoResults, Omega=Omega, pairings=rbind(c(15,16), c(17,18), c(19,20), c(21,22), c(7,8), c(22,23)))
 
-plot_corr_posterior_vs_d(AlgoResults, Omega=Omega, pairing=c(3,14))
+plot_corr_posterior_vs_d(AlgoResults, Omega=Omega, pairing=c(21,22))
 
 
 plot_corr_transf_posterior_vs_d(AlgoResults, Omega=Omega, pairing=c(41,44))

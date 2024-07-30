@@ -219,26 +219,59 @@ for (rank_func in c('get_multivariate_ranking', 'get_average_rank', 'get_mst_ran
 }
 
 #### Average Rank + MST:
-n_repeats <- 8
+n_repeats <- 3
 dists <- array(0, dim=c(n_repeats, 8, 3))
+Omega <- AlgoResults$Omega_sample_phys[489,,80] %>% relist(skeleton=Model$skeleton)
+Omega$eps$hazard_cor <- 0.6
+Omega_true <- Omega
 Omega_trialled <- list(Omega_true, Omega_true, Omega_true)
-Omega_trialled[[2]]$eps$hazard_cor <- 0.95
-Omega_trialled[[3]]$eps$hazard_cor <- 0.05
+Omega_trialled[[2]]$eps$hazard_cor <- 0.05
+Omega_trialled[[3]]$eps$hazard_cor <- 0.95
 set.seed(1)
+
+AlgoParams$input_folder = 'IIDIPUS_SimInput_RealAgg5/'
 for (i in 1:n_repeats){
-  simulateDataSet(150, Omega, Model, dir)
+  #simulateDataSet(150, Omega, Model, dir)
+  simulateRealData("IIDIPUS_Input_RealAgg5/ODDobjects/", Omega_true, Model, dir)
   for (j in 1:3){
     impact_sample <- SampleImpact(dir, Model, Omega_trialled[[j]] %>% addTransfParams(), AlgoParams, dat='Train')
     dists[i,,j] <- CalcDist(impact_sample, AlgoParams)
   }
-  directory_path <- paste0(dir, 'IIDIPUS_Input/ODDobjects')
-  # List all files in the directory (excluding directories)
+  directory_path <- paste0(dir, 'IIDIPUS_SimInput_RealAgg5')
+  # # List all files in the directory (excluding directories)
   files_to_delete <- list.files(directory_path, full.names = TRUE, recursive = TRUE)
-  # Filter out directories from the list
+  # # Filter out directories from the list
   files_to_delete <- files_to_delete[!file.info(files_to_delete)$isdir]
-  # Remove the files
+  # # Remove the files
   file.remove(files_to_delete)
 }
+# Energy score favours undercorrelated? Not enough to really tell
+# AD with average definitely punishes undercorrelated
+# MST favours true then undercorrelated then punishes overcorrelated
+# chi squared performs poorly, cannot identify under from correctly correlated
+# cvm maybe does slightly better?
+plot(rep(1:3, each=3), as.numeric(dists[,3,]), col=c(rep(c('red', 'blue', 'green'),3)), pch=19)
+plot(rep(1:3, each=3), as.numeric(dists[,2,]), col=c(rep(c('red', 'blue', 'green'),3)), pch=19)
+
+
+, ylab='p.value for Anderson Darling Test',main='Minimum Spanning Tree Ranking', type='l', ylim=c(0,1))
+for (i in 2:5){
+  lines(c(1,3), dists[i,3,c(1,3)], ylab='p.value for Anderson Darling Test',main='Minimum Spanning Tree Ranking', type='l')
+}
+
+
+chi_store <- c()
+chi_store2 <- c()
+for (j in 1:100){
+  ranks_std_mst <- runif(100)
+  bin_counts <- table(cut(ranks_std_mst, seq(0, 1, 0.1), include.lowest = TRUE, right = FALSE))
+  chi_store <- c(chi_store, sum((bin_counts-length(ranks_std_mst)/10)^2)/(length(ranks_std_mst)/10)) #0 #ks.test(ranks_std_average, y='punif')$p.value
+  bin_counts <- table(cut(ranks_std_mst, seq(0, 1, 0.02), include.lowest = TRUE, right = FALSE))
+  chi_store2 <- c(chi_store2, sum((bin_counts-length(ranks_std_mst)/50)^2)/(length(ranks_std_mst)/50)) #0 #ks.test(ranks_std_average, y='punif')$p.value
+}
+
+
+
 
 #MST Plot:
 plot(c(1,3), dists[1,3,c(1,3)], ylab='p.value for Anderson Darling Test',main='Minimum Spanning Tree Ranking', type='l', ylim=c(0,1))
@@ -263,30 +296,262 @@ for (i in 1:NROW(dists)){
 #-----------------------------------------------------------------------------------------------------------------
 
 ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_RealAgg3/ODDobjects/Train/EQ20191029PHL_125')
-
 ODDy@impact %<>% add_row(ODDy@impact[6,] %>% replace(which(names(ODDy@impact[6,])==c('impact')), 'mortality'))
 ODDy@impact %<>% add_row(ODDy@impact[6,] %>% replace(which(names(ODDy@impact[6,])==c('impact')), 'buildDam'))
 
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput_RealAgg5/ODDobjects/Train/EQ20191029PHL_125')
 
-Omega$eps$local <- 30
-Omega$eps$hazard_mort <- 0.15
-Omega$eps$hazard_disp <- 0.25
-Omega$eps$hazard_bd <- 0.2
-Omega$eps$hazard_cor <- 0.9
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_RealAgg5/ODDobjects/Train/EQ20201229HRV_151')
+
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_RealAgg5/ODDobjects/Train/EQ20170908MEX_67')
+
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects/Test/EQ20190620ABC_5148')
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects/Test/EQ20191016ABC_6061')
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/ODDobjects/Train/EQ20140803ABC_-22')
+
+
+
+#Omega$eps$local <- 2 
+#Omega$eps$hazard_disp <- 1
+#Omega$Lambda1$nu <- 4.3000000001
+#Omega$Lambda1$kappa <- 0.1
+#Omegatransf <- Omega %>% addTransfParams()
+#Omegatransf$Lambda1$loc
+#plot(seq(1,20,0.01), plnorm(seq(1,20,0.01), 2.7, 0.2))
+
+#Omega$Lambda1$nu <- 6
+#Omega$Lambda1$kappa <- 0.01
+Omega$theta$theta1 <- 0.01
+Omega$Lambda1$nu <- 8.3
+Omega$Lambda1$kappa <- 2
+Omega$eps$hazard_disp <- 1.1
+Omegatransf <- Omega %>% addTransfParams()
+plot(seq(4.5, 10,0.1), pnorm(h_0(seq(4.5, 10,0.1), 4.5, Omegatransf), Omegatransf$Lambda1$loc, Omegatransf$Lambda1$scale), ylim=c(0,1))
+
+#Omega$eps$hazard_mort <- 0.001
+#Omega$eps$hazard_disp <- 0.25
+#Omega$eps$hazard_bd <- 0.1
+#Omega$eps$hazard_cor <- 0.9
 impactODD <- DispX(ODDy, Omega %>% addTransfParams(), Model$center, 
                    AlgoParams  %>% replace(which(names(AlgoParams)==c('Np')), 60), output='SampledAgg')
-sampled_impact_flattened <- matrix(unlist(lapply(impactODD, function(x){x$sampled})), ncol=NROW(ODDy@impact), byrow=T)
+sampled_impact_flattened <- matrix(unlist(lapply(impactODD, function(x){x$sampled})), nrow=length(impactODD), byrow=T)
 
 #investigate two different impact types, total aggregation
 obs_of_interest <- c(1,2)
 plot(log(sampled_impact_flattened[,obs_of_interest]+10))
+points(log(impactODD[[1]]$observed[obs_of_interest[1]]+10), log(impactODD[[1]]$observed[obs_of_interest[2]]+10), col='red', pch=19)
 
 #investigate two different spatial polygons, same impact type
-obs_of_interest <- c(4,5)
+obs_of_interest <- c(6,8)
 plot(log(sampled_impact_flattened[,obs_of_interest]+10))
-
+points(log(impactODD[[1]]$observed[obs_of_interest[1]]+10), log(impactODD[[1]]$observed[obs_of_interest[2]]+10), col='red', pch=19)
 
 
 #eps_local needs to be unattached to hazard-wide error so that it can be larger and permit (lack of) correlation between regions
 
+impact_sample <- SampleImpact(dir, Model, Omega_best %>% addTransfParams(), AlgoParams)
+df_impact <- flattenImpactSample(impact_sample) #%>% filter(impact=='mortality')
+mat_impact <- df_impact[,5:65]
 
+quants <- apply(mat_impact, 1, sample_quant)
+median_pred <- apply(mat_impact, 1, median)
+plot(log(median_pred+10), quants)
+
+es_store <- c()
+pre_ranks_average <- c()
+pre_ranks_mst <- c()
+i_store <- c()
+grouped_events <- split(seq_along(df_impact$event_id), df_impact$event_id)
+
+
+#df_impact$group_key <- paste(df_impact$impact, df_impact$event_id, sep = "_")
+#grouped_events <- split(seq_along(df_impact$group_key), df_impact$group_key)
+
+for (i in 1:length(grouped_events)){
+
+  obs <- log(df_impact$observed[grouped_events[[i]]]+AlgoParams$log_offset) * unlist(AlgoParams$kernel_sd[df_impact$impact[grouped_events[[i]]]])
+  sims <- as.matrix(log(df_impact[grouped_events[[i]], 6:65]+AlgoParams$log_offset)) * unlist(AlgoParams$kernel_sd[df_impact$impact[grouped_events[[i]]]])
+  if (length(obs )> 1){
+    i_store <- c(i_store, i)
+    es_store<- c(es_store, es_sample(obs, sims))
+    pre_ranks_average <- c(pre_ranks_average, get_average_rank_single(cbind(obs, sims)))
+    pre_ranks_mst <- c(pre_ranks_mst, get_mst_rank_single(cbind(obs,sims)))  
+  }
+  #vs_store <- c(vs_store, vs_sample(obs,sims))
+  
+  #mrh_store <- c(mrh_store, mrh_calc(cbind(obs, sims)))
+  #crps_store <- c(crps_store, crps_sample(log(observed[i]), log(samples_combined[i,])))
+  #crps_store <- c(crps_store, es_sample(c(log(observed[i]), log(observed[i+200]),log(observed[i+400])), log(samples_combined[c(i, i+200, i+400),])))
+  #crps_store <- c(crps_store, crps_sample(log(observed[i]), log(samples_combined[i,])))
+}
+obs_of_interest <- c(1,2)
+plot(sims[obs_of_interest[1],], sims[obs_of_interest[2],])
+points(obs[obs_of_interest[1]], obs[obs_of_interest[2]], col='red', pch=19)
+vs_sample(obs[obs_of_interest],sims[obs_of_interest,])
+
+grouped_events[i_store[which(pre_ranks_mst<3)]]
+
+lapply(grouped_events, function(x) df_impact$observed[x])
+which(names(grouped_events)=='6')
+hist((pre_ranks_average-runif(length(pre_ranks_average),0,1))/(AlgoParams$m_CRPS + 1))
+hist((pre_ranks_mst-runif(length(pre_ranks_mst),0,1))/(AlgoParams$m_CRPS + 1))
+
+  ranks_std_average <- (pre_ranks_average-runif(length(pre_ranks_average),0,1))/(AlgoParams$m_CRPS + 1)
+  ranks_std_mst <- (pre_ranks_mst-runif(length(pre_ranks_mst),0,1))/(AlgoParams$m_CRPS + 1)
+  dist_poly[n,1] <- mean(es_store)
+  AndersonDarlingTest(ranks_std_average, null='punif')$p.value
+  AndersonDarlingTest(ranks_std_mst, null='punif')$p.value
+
+plot(quants) #not too badly calibrated, tendency to overpredict rather than underpredict
+
+
+#### Investigate what are the problems with the sampled impact that's causing issues with MST histogram #######
+
+# AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-24_121215_alpha0.95_M60_Npart990RealAgg3')
+# 
+# s_change <- 70
+# plot(AlgoResults$d_full[,1,7,10], AlgoResults$d[,1,10])
+
+#AlgoResults$d[,,s_change] <- AlgoResults$d_full[,1, 7,s_change]
+impact_sample <- imp_best
+impact_sample$poly <- lapply(impact_sample$poly, function(x) return(x %>% filter(train_flag=='Train')))
+
+observed <- impact_sample$poly[[1]]$observed
+dist_poly <- array(NA, dim=c(AlgoParams$Np,7))
+impact_type <- impact_sample$poly[[1]]$impact
+impact_weightings <- unlist(AlgoParams$kernel_sd[impact_type])
+event_id <- impact_sample$poly[[1]]$event_id
+grouped_events <- split(seq_along(event_id), event_id)
+i_low_mst <- c()
+for(n in 1:AlgoParams$Np){
+  samples_allocated <- ((n-1)*AlgoParams$m_CRPS+1):(n*AlgoParams$m_CRPS)
+  samples_combined <- sapply(impact_sample$poly[samples_allocated], function(x){x$sampled}) #doesn't work if samples_allocated is length 1
+  #medians <- apply(samples_combined, 1, mean)
+  dist_poly[n,1] <- 0#mean((log(medians[which(impact_type=='mortality')]+10)-log(observed[which(impact_type=='mortality')]+10))^2) * unlist(AlgoParams$kernel_sd['mortality'])
+  dist_poly[n,2] <- 0#mean((log(medians[which(impact_type=='displacement')]+10)-log(observed[which(impact_type=='displacement')]+10))^2) * unlist(AlgoParams$kernel_sd['displacement'])
+  dist_poly[n,3] <- 0#mean((log(medians[which(impact_type=='buildDam')]+10)-log(observed[which(impact_type=='buildDam')]+10))^2) * unlist(AlgoParams$kernel_sd['buildDam'])
+  
+  #quants <- (apply(cbind(observed,samples_combined), 1, sample_quant)-runif(length(observed),0,1))/(NCOL(samples_combined)+1)
+  #AD_mort <- AndersonDarlingTest(quants[impact_type=='mortality'],null='punif')$statistic
+  #dist_poly[n,4] <- AD_mort * unlist(AlgoParams$kernel_sd['mortality'])
+  es_store <- c()
+  pre_ranks_average <- c()
+  pre_ranks_mst <- c()
+  #vs_store <- c()
+  #mrh_store <- c()
+  for (i in 1:length(grouped_events)){
+    #For each event, compute the energy score of the observed data vs the 'prediction' (simulated data)
+    #Each impact type is weighted differently, simply multiplying the observation and the simulations by this weight performs the weighting
+    obs <- log(observed[grouped_events[[i]]]+AlgoParams$log_offset) *impact_weightings[grouped_events[[i]]]
+    sims <- log(samples_combined[grouped_events[[i]],]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]
+    #obs <- log(observed[grouped_events[[i]]]+AlgoParams$log_offset)*impact_weightings[grouped_events[[i]]]
+    #sims <- log(samples_combined[grouped_events[[i]],]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]
+    
+    if (length(grouped_events[[i]])==1){
+      #LOOSEEND: Double check that crps_sample is in fact the same as 
+      es_store<- c(es_store, crps_sample(obs, sims))
+      #mrh_store <- c(mrh_store, mrh_calc(cbind(obs, sims)))
+      next
+    } 
+    #es_store<- c(es_store, vs_sample(obs, sims, w_vs = matrix(impact_weightings[grouped_events[[i]]] %*% t(impact_weightings[grouped_events[[i]]]), ncol=length(grouped_events[[i]]))))
+    es_store<- c(es_store, es_sample(obs, sims))
+    pre_ranks_average <- c(pre_ranks_average, get_average_rank_single(cbind(obs, sims)))
+    pre_ranks_mst <- c(pre_ranks_mst, get_mst_rank_single(cbind(obs,sims)))
+    #vs_store <- c(vs_store, vs_sample(obs,sims))
+    if (pre_ranks_mst[length(pre_ranks_mst)] < 3){
+      i_low_mst <- c(i_low_mst, i)
+    }
+    
+    #mrh_store <- c(mrh_store, mrh_calc(cbind(obs, sims)))
+    #crps_store <- c(crps_store, crps_sample(log(observed[i]), log(samples_combined[i,])))
+    #crps_store <- c(crps_store, es_sample(c(log(observed[i]), log(observed[i+200]),log(observed[i+400])), log(samples_combined[c(i, i+200, i+400),])))
+    #crps_store <- c(crps_store, crps_sample(log(observed[i]), log(samples_combined[i,])))
+  }
+  #logscores <- ifelse(is.finite(logscores), logscores, 600)
+  ranks_std_average <- (pre_ranks_average-runif(length(pre_ranks_average),0,1))/(AlgoParams$m_CRPS + 1)
+  ranks_std_mst <- (pre_ranks_mst-runif(length(pre_ranks_mst),0,1))/(AlgoParams$m_CRPS + 1)
+  dist_poly[n,1] <- mean(es_store) #mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$kernel_sd['mortality'])
+  dist_poly[n,2] <- 0.2*(1 - AndersonDarlingTest(ranks_std_average, null='punif')$p.value) #mean(vs_store) #0.5*AndersonDarlingTest(mrh_store, null='punif')$statistic #mean(crps_store[which(impact_type=='displacement')]) * unlist(AlgoParams$kernel_sd['displacement'])
+  dist_poly[n,3] <- 0.2*(1 - AndersonDarlingTest(ranks_std_mst, null='punif')$p.value) #mean(crps_store[which(impact_type=='buildDam')]) * unlist(AlgoParams$kernel_sd['buildDam'])
+  
+  bin_counts <- table(cut(ranks_std_mst, seq(0, 1, 0.1), include.lowest = TRUE, right = FALSE))
+  #sum((bin_counts-length(ranks_std_mst)/10)^2)/(length(ranks_std_mst)/10)
+  dist_poly[n,4] <- 0#sum((bin_counts-length(ranks_std_mst)/10)^2)/(length(ranks_std_mst)/10) #0 #ks.test(ranks_std_average, y='punif')$p.value
+  dist_poly[n,5] <- 0#gof.uniform(ranks_std_mst)$Usq #ks.test(ranks_std_mst, y='punif')$p.value
+  dist_poly[n,6] <- 0#gof.uniform(ranks_std_mst)$Usq.pvalue #AndersonDarlingTest(ranks_std_average, null='punif')$statistic
+  dist_poly[n,7] <- 0#AndersonDarlingTest(ranks_std_mst, null='punif')$statistic
+  #logscores  %>% mean()
+  #dist_poly[n,4] <- log(ifelse(AD_mort < 2, 2, AD_mort)+1) * unlist(AlgoParams$kernel_sd['mortality'])
+  #AD_disp <- AndersonDarlingTest(quants[impact_type=='displacement'], null='punif')$statistic
+  #dist_poly[n,5] <- AD_disp * unlist(AlgoParams$kernel_sd['displacement'])
+  
+  #AD_bd <- AndersonDarlingTest(quants[impact_type=='buildDam'], null='punif')$statistic
+  #dist_poly[n,6] <- AD_bd * unlist(AlgoParams$kernel_sd['buildDam'])
+  
+  #AD_mort_nonzero <- AndersonDarlingTest(quants[impact_type=='mortality' & medians != 0], null='punif')$statistic
+  #dist_poly[n,7] <- AD_mort_nonzero * unlist(AlgoParams$kernel_sd['mortality']) #ifelse(rbinom(1, 1, P_unif_test(AD_mort_nonzero))==1, 0, AD_mort_nonzero)
+  #dist_poly[n,7] <- log(ifelse(AD_mort_nonzero < 2, 2, AD_mort_nonzero)+1) * unlist(AlgoParams$kernel_sd['mortality'])
+  #dist_poly[n,7] <- 0#ifelse(is.na(dist_poly[n,7]), 50 * unlist(AlgoParams$kernel_sd['mortality']), dist_poly[n,7])
+  #  dist_poly[n,j] <- ifelse(is.na(dist_poly[n,j]), 0, dist_poly[n,j])
+  #}
+}
+
+plot_obs_vs_sims <- function(i){
+  #dev.off()
+  obs <- log(observed[grouped_events[[i]]]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]
+  sims <- log(samples_combined[grouped_events[[i]],]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]
+  polygon_id = impact_sample$poly[[1]]$polygon[grouped_events[[i]]]
+  impact_types = impact_type[grouped_events[[i]]]
+  obs <- obs[which(impact_types=='mortality')]
+  sims <- sims[which(impact_types=='mortality'),, drop=F]
+  polygon_id <- polygon_id[which(impact_types=='mortality')]
+  impact_types <- impact_types[which(impact_types=='mortality')]
+  if (length(obs) < 8){
+    par(mfrow=c(length(obs), length(obs)))
+    for (j in 1:length(obs)){
+      for (k in 1:length(obs)){
+        xlim=range(c(obs[j], sims[j,]))
+        ylim=range(c(obs[k], sims[k,]))
+        plot(sims[j,], sims[k,], xlim=xlim, ylim=ylim, xlab = paste(impact_types[j], polygon_id[j]), ylab= paste(impact_types[k],polygon_id[k]))
+        points(obs[j], obs[k], col='red', pch=4)
+      }
+    }
+  }
+  if (length(obs) > 8){
+    par(mfrow=c(4, 4), mai = c(0.5, 0.5, 0.5, 0.5))
+    for (j in 1:4){
+      for (k in 1:4){
+        xlim=range(c(obs[j], sims[j,]))
+        ylim=range(c(obs[k], sims[k,]))
+        plot(sims[j,], sims[k,], xlim=xlim, ylim=ylim, xlab = paste(impact_types[j], polygon_id[j]), ylab= paste(impact_types[k],polygon_id[k]))
+        points(obs[j], obs[k], col='red', pch=4)
+      }
+    }
+  }
+}
+
+i_low_mst
+
+# Weak ones: 37, 45 slightly, 90 slightly, 93, 109 well off.
+# Strong ones: 112
+plot_obs_vs_sims(37)
+
+
+
+
+ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_RealAgg5/ODDobjects/Train/EQ20170908MEX_67')
+sampled_mat <- array(0, dim=c(100, 15))
+for (i in 1:100){
+  print(i)
+  Omega_samp <-  AlgoResults$Omega_sample_phys[sample(1:1000,1),,130] %>% relist(skeleton=Model$skeleton)
+  sampled <- DispX(ODDy, Omega_samp %>% addTransfParams(),center=Model$center, 
+                   AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% replace(which(names(AlgoParams)==c('Np')), 1),
+                   output='SampledAgg')
+  sampled_mat[i, ] <- sampled[[1]]$sampled
+}
+obs <- sampled[[1]]$observed
+
+obs_of_interest <- c(1,2)
+plot(log(sampled_mat[,c(obs_of_interest[1], obs_of_interest[2])]+10), xlim=log(range(sampled_mat[,obs_of_interest[1]], obs[obs_of_interest[1]])+10), ylim=log(range(sampled_mat[,obs_of_interest[2]], obs[obs_of_interest[2]])+10),
+     xlab='MEX67Displacement', ylab='GTM67Displacement')
+points(log(obs[obs_of_interest[1]]+10), log(obs[obs_of_interest[2]]+10), col='red', pch=19)

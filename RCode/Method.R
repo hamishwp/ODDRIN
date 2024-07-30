@@ -130,6 +130,9 @@ modifyAcc <- function(xNew, xPrev, Model, propCOV){
         if(Model$Priors[[i]][[j]]$dist == 'laplace'){
           product = product * (dLaplace(xNew[index], Model$Priors[[i]][[j]]$location, Model$Priors[[i]][[j]]$scale)/ dLaplace(xPrev[index], Model$Priors[[i]][[j]]$location, Model$Priors[[i]][[j]]$scale))
         }
+        if(Model$Priors[[i]][[j]]$dist == 'invgamma'){
+          product = product * (dinvgamma(xNew[index], shape=Model$Priors[[i]][[j]]$shape, scale=Model$Priors[[i]][[j]]$scale)/ dinvgamma(xPrev[index], shape=Model$Priors[[i]][[j]]$shape, scale=Model$Priors[[i]][[j]]$scale))
+        }
         index = index + 1
       }
     } else {
@@ -138,6 +141,9 @@ modifyAcc <- function(xNew, xPrev, Model, propCOV){
       }
       if(Model$Priors[[i]]$dist=='laplace'){
         product = product * (dLaplace(xNew[index], Model$Priors[[i]]$location, Model$Priors[[i]]$scale)/ dLaplace(xPrev[index], Model$Priors[[i]]$location, Model$Priors[[i]]$scale))
+      }
+      if(Model$Priors[[i]]$dist=='invgamma'){
+        product = product * (dinvgamma(xNew[index], shape=Model$Priors[[i]]$shape, scale=Model$Priors[[i]]$scale)/ dinvgamma(xPrev[index], shape=Model$Priors[[i]]$shape, scale= Model$Priors[[i]]$scale))
       }
       index = index + 1
     }
@@ -301,7 +307,7 @@ AlgoStep1 <- function(dir, AlgoParams, AlgoResults){
   }
   AlgoResults$tolerancestore[1] <- max(AlgoResults$d[,,1]) + 1 #set tolerance to larger than maximum distance
   AlgoResults$accrate_store[1] <- 1
-  AlgoResults$propCOV_multiplier[1] <- 0.1
+  AlgoResults$propCOV_multiplier[1] <- 0.2
   end_time <- Sys.time()
   
   #weight distances by inverse MAD at first step
@@ -344,6 +350,7 @@ AlgoStep1 <- function(dir, AlgoParams, AlgoResults){
 
 perturb_particles <- function(s, propCOV, AlgoParams, tolerance_s, W_s, Omega_sample_s, Omega_sample_phys_s,
                               d_s, d_full_s, sampled_full_s, rel_weights){
+  
   for(n in 1:AlgoParams$smc_Npart){
     print(paste(' Step:', s, ', Particle:', n))
     if(W_s[n]>0){
@@ -351,7 +358,7 @@ perturb_particles <- function(s, propCOV, AlgoParams, tolerance_s, W_s, Omega_sa
       repeat {
         Omega_prop <- multvarNormProp(xt=Omega_sample_s[n,], propPars=propCOV) #perturb the proposal
         Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
-        # 
+        
         if (all(unlist(Omega_prop_phys) < Model$par_ub) & all(unlist(Omega_prop_phys) > Model$par_lb)) {break}
       }
       # Omega_prop <- multvarNormProp(xt=Omega_sample_s[n,], propPars=propCOV) #perturb the proposal
@@ -548,7 +555,12 @@ resample_particles <- function(s, N_T, Npart, AlgoResults){
 
 calc_propCOV <- function(s, n_x, Npart, AlgoResults){
   #calculate perturbation covariance based on Filippi et al., 2012
-  tilda_i <- which(rowSums(adrop(AlgoResults$d[,,s-1, drop=F], drop=3)<AlgoResults$tolerancestore[s])>0) #identify old particles that fall within the new tolerance
+  
+  # propCOV2 <- propCOV
+  # for (i in 1:NROW(propCOV2)){
+  #   for (j in 1:NCOL(propCOV2)){tilda_i <- which(rowSums(adrop(AlgoResults$d[1:min(2000, Npart),,s-1, drop=F], drop=3)<AlgoResults$tolerancestore[s])>0) #identify old particles that fall within the new tolerance
+  
+  tilda_i <- which(rowSums(adrop(AlgoResults$d[,,s-1, drop=F], drop=3)<AlgoResults$tolerancestore[s])>0)
   Omega_tilda <- AlgoResults$Omega_sample[tilda_i,,s-1] 
   W_tilda <- AlgoResults$W[tilda_i,s-1]
   W_tilda <- W_tilda/sum(W_tilda) #normalise weights
@@ -569,14 +581,12 @@ calc_propCOV <- function(s, n_x, Npart, AlgoResults){
   
   #check that the indexes are right here!
   propCOV <- matrix(0, nrow=n_x, ncol=n_x)
+  #for (n in 1:min(2000, Npart)){
   for (n in 1:Npart){
     for(k in 1:length(tilda_i)){
       propCOV <- propCOV + AlgoResults$W[n,s] * W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]))
     }
   }
-  # propCOV2 <- propCOV
-  # for (i in 1:NROW(propCOV2)){
-  #   for (j in 1:NCOL(propCOV2)){
   #     if (!(i == j | (i %in% c(1,2,3,4,5,6,9,11,14,16,17) & j %in% c(1,2,3,4,5,6,9,11,14,16,17)))){
   #       propCOV2[i,j] <- 0
   #     }
@@ -587,7 +597,7 @@ calc_propCOV <- function(s, n_x, Npart, AlgoResults){
   return(propCOV)
 }
 
-plot_abcsmc <- function(s, n_x, Npart, Omega_sample_phys, Omega){
+plot_abcsmc <- function(s, n_x, Npart, Omega_sample_phys, Omega, accrate=NULL){
   par(mfrow=c(5,4))
   for (i in 1:min(n_x, 20)){
     plot(Omega_sample_phys[,i,s], main=names(unlist(Omega))[i])
@@ -675,7 +685,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=NULL, tag_
     print(paste('Time:', end_time-start_time))
     start_time <- Sys.time()
     
-
+    if (s>2){ AlgoParams$smc_alpha <- (1 - AlgoResults$accrate_store[s-1]) }
     AlgoResults <- update_tolerance_and_weights(s, AlgoParams$smc_alpha, AlgoResults)
     AlgoResults <- resample_particles(s, N_T, AlgoParams$smc_Npart, AlgoResults)
     propCOV <- calc_propCOV(s, n_x, AlgoParams$smc_Npart, AlgoResults) * propCOV_multiplier
@@ -722,14 +732,15 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=NULL, tag_
     }
     AlgoResults$propCOV[,,s] <- propCOV
     AlgoResults$propCOV_multiplier[s] <- propCOV_multiplier
-    AlgoResults$accrate_store[s] <- mean(AlgoResults$Omega_sample_phys[,1,s]!=AlgoResults_small$Omega_sample_phys_s[,1])
+    AlgoResults$accrate_store[s] <- mean(AlgoResults$Omega_sample_phys[which(AlgoResults$W[,s]>0),1,s]!=AlgoResults_small$Omega_sample_phys_s[which(AlgoResults$W[,s]>0),1])
+
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
     
     if (AlgoResults$accrate_store[s] < 0.2){
-      propCOV_multiplier <- max(propCOV_multiplier / 2, 0.1)
-    } else if (AlgoResults$accrate_store[s] > 0.4){
-      propCOV_multiplier <- propCOV_multiplier * 2
-    }
+      propCOV_multiplier <- max(propCOV_multiplier / 2, 0.2)
+    } #else if (AlgoResults$accrate_store[s] > 0.4){
+      #propCOV_multiplier <- propCOV_multiplier * 2
+    #}
 
     # if ((s+2)%%5 == 0){
     #   for(n in 1:AlgoParams$smc_Npart){
@@ -752,11 +763,11 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=NULL, tag_
     
     print(s)
     
-    #plot_abcsmc(s, n_x, AlgoParams$smc_Npart, AlgoResults$Omega_sample_phys, Omega)
-    par(mfrow=c(2,1))
-    plot(AlgoResults$tolerancestore)
-    plot(AlgoResults$Omega_sample_phys[,7,s])
-    
+    #plot_abcsmc(s, n_x, AlgoParams$smc_Npart, AlgoResults$Omega_sample_phys, Omega, accrate=AlgoResults$accrate_store)
+    #par(mfrow=c(3,1))
+    #plot(AlgoResults$tolerancestore)
+    #hist(AlgoResults$Omega_sample_phys[,1,s])
+    #hist(AlgoResults$Omega_sample_phys[,2,s])
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))  
   }
   

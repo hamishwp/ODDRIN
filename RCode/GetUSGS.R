@@ -61,8 +61,8 @@ SearchUSGSbbox<-function(bbox,sdate,fdate=NULL,minmag=5){
 }
 
 check_preceding_hazards <- function(HAZobj){
-  sdate <- HAZobj$hazard_info$sdate
-  fdate <- HAZobj$hazard_info$fdate
+  sdate <- as.character(HAZobj$hazard_info$sdate)
+  fdate <- as.character(HAZobj$hazard_info$fdate)
   bbox <- HAZobj$hazard_info$bbox
   minmag=4
   debut<-"https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson"
@@ -104,7 +104,7 @@ check_hazsdf<-function(hazsdf=NULL,minmag,bbox=NULL){
   return(T)
 }
 
-  GetUSGS_id<-function(USGSid,titlz="tmp",I0=4.5,minmag=5){
+GetUSGS_id<-function(USGSid,titlz="tmp",I0=4.5,minmag=5){
   
   url<-paste0("https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=",USGSid,"&format=geojson")
   tmp<-FROM_GeoJson(url)
@@ -129,7 +129,10 @@ check_hazsdf<-function(hazsdf=NULL,minmag,bbox=NULL){
   }
   
   print(sdate)
+  PAGER_alert <- GetPagerFatality(tmp$properties$products$losspager[[1]]$contents$pager.xml$url)
   
+  # Create HAZARD object
+  event_features <- GetUSGSfeatures(tmp$id)
   return(new("HAZARD",
              obj=hazsdf,
              hazard="EQ",
@@ -137,7 +140,13 @@ check_hazsdf<-function(hazsdf=NULL,minmag,bbox=NULL){
              I0=I0,
              alertlevel=ifelse(is.null(tmp$properties$alert),"green",tmp$properties$alert),
              #alertscore=ifelse(i<=length(alertscores),alertscores[i],0))
-             alertscore=NA_real_))
+             alertscore=0, 
+             depth=event_features$depth, 
+             magnitude=event_features$magnitude, 
+             max_mmi=event_features$max_mmi,
+             eventtime=event_features$eventtime,
+             USGS_id=tmp$id, 
+             alertfull=PAGER_alert))
   
 }
 
@@ -213,7 +222,7 @@ GetUSGSfeatures<-function(USGSid){
 GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5){
   
   if(!is.null(USGSid)) {
-    hazsdf<-GetUSGS_id(USGSid)
+    hazsdf<-GetUSGS_id(USGSid, I0=I0, minmag=minmag)
     if(is.null(hazsdf)) return(NULL)
     bbox<-hazsdf@bbox
     USGS<-SearchUSGSbbox(expandBbox(hazsdf@bbox,f = 200,scaling = F),

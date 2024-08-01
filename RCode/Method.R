@@ -685,7 +685,7 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=NULL, tag_
     print(paste('Time:', end_time-start_time))
     start_time <- Sys.time()
     
-    if (s>2){ AlgoParams$smc_alpha <- (1 - AlgoResults$accrate_store[s-1]) }
+    if (s>2){ AlgoParams$smc_alpha <- min(0.9,(1 - AlgoResults$accrate_store[s-1])) }
     AlgoResults <- update_tolerance_and_weights(s, AlgoParams$smc_alpha, AlgoResults)
     AlgoResults <- resample_particles(s, N_T, AlgoParams$smc_Npart, AlgoResults)
     propCOV <- calc_propCOV(s, n_x, AlgoParams$smc_Npart, AlgoResults) * propCOV_multiplier
@@ -763,6 +763,10 @@ delmoral_parallel <- function(AlgoParams, Model, unfinished=F, oldtag=NULL, tag_
     
     print(s)
     
+    par(mfrow=c(2,1))
+    hist(AlgoResults$Omega_sample_phys[,2,s])
+    plot(AlgoResults$essstore)
+    par(mfrow=c(1,1))
     #plot_abcsmc(s, n_x, AlgoParams$smc_Npart, AlgoResults$Omega_sample_phys, Omega, accrate=AlgoResults$accrate_store)
     #par(mfrow=c(3,1))
     #plot(AlgoResults$tolerancestore)

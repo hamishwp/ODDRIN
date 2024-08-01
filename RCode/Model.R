@@ -94,42 +94,11 @@ Model$Priors <- list( #All uniform so currently not included in the acceptance p
                   GNIc=list(dist='laplace', location=0, scale=0.25),
                   Vs30=list(dist='laplace', location=0, scale=0.25),
                   EQFreq=list(dist='laplace', location=0, scale=0.25),
-                  #Mag=list(dist='laplace', location=0, scale=0.25),
                   FirstHaz=list(dist='laplace', location=0, scale=0.25),
                   Night=list(dist='laplace', location=0, scale=0.25),
                   FirstHaz.Night=list(dist='laplace', location=0, scale=0.25)),
   check=list(check=list(dist='unif', min=0, max=1))
 )
-
-#Priors real:
-
-# Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
-#   Lambda1=list(mu=list(dist='unif', min=6.5, max=10.5), 
-#                sigma=list(dist='unif', min=0.25, max=2) #, alpha=list(dist='unif', min=-0.1, max=0.5)
-#   ), 
-#   Lambda2=list(mu=list(dist='unif', min=9, max=12.5), 
-#                sigma=list(dist='unif', min=0.25, max=2)),
-#   Lambda3=list(mu=list(dist='unif', min=6.5, max=10), 
-#                sigma=list(dist='unif', min=0.25, max=2)),
-#   Lambda4=list(mu=list(dist='unif', min=8, max=12.5), 
-#                sigma=list(dist='unif', min=0.25, max=2.5)),
-#   theta=list(theta1=list(dist='unif', min=0, max=1)),
-#   eps=list(local=list(dist='unif', min=0, max=1.5),
-#            hazard_mort=list(dist='unif', min=0, max=1.5),
-#            hazard_disp=list(dist='unif', min=0, max=1.5),
-#            hazard_bd=list(dist='unif', min=0, max=1.5),
-#            hazard_cor=list(dist='unif', min=0, max=1)),
-#   vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.25),
-#                   EQFreq=list(dist='laplace', location=0, scale=0.25),
-#                   SHDI=list(dist='laplace', location=0, scale=0.25),
-#                   GNIc=list(dist='laplace', location=0, scale=0.25),
-#                   Vs30=list(dist='laplace', location=0, scale=0.25),
-#                   Mag=list(dist='laplace', location=0, scale=0.25),
-#                   FirstHaz=list(dist='laplace', location=0, scale=0.25),
-#                   Night=list(dist='laplace', location=0, scale=0.25),
-#                   FirstHaz.Night=list(dist='laplace', location=0, scale=0.25)),
-#   check=list(check=list(dist='unif', min=0, max=1))
-# )
 
 #Set up the same structure to links, unlinks and acceptance transformations as Model$skeleton
 # Links: transforms the parameters onto a more convenient domain (e.g. for MCMC proposals)

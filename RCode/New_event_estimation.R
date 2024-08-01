@@ -461,6 +461,51 @@ plotODDyAgg <- function(ODDyAgg, ODDy=NULL, zoomy=7,var="Population",breakings=N
   return(p)
 }
 
+addPolygonNames <- function(ODDy){
+  polygon_names <- unlist(lapply(ODDy@polygons, function(x) x$name))
+  polygon_names_id <- data.frame(polygon_name=polygon_names, id=1:length(polygon_names))
+  ODDy@impact <- merge(ODDy@impact, polygon_names_id, by.x='polygon', by.y='id')
+  return(ODDy)
+}
+
+addObs <- function(ODDyWithAggImpact, observed_data, impact_type = 'mortality', add_zeros=T){
+  ODDyWithAggImpact %<>% addPolygonNames()
+  impact_with_obs <- ODDyWithAggImpact@impact %>% filter(impact==impact_type)
+  impact_with_obs$observed <- NULL
+  impact_with_obs <- merge(impact_with_obs, observed_data, by.x=c('polygon_name', 'impact'), by.y=c('name', 'impact'), all.x=T)
+  if(add_zeros) {impact_with_obs$observed[which(is.na(impact_with_obs$observed))] = 0}
+  return(impact_with_obs)
+}
+
+plot_AggImpacts <- function(impact_with_obs, regions=NULL){
+  
+  sampled_cols <- grep('sampled.',colnames(impact_with_obs))
+  if (is.null(regions)){
+    regions_i = order(apply(impact_with_obs[, sampled_cols],1,function(x) mean(as.numeric(x))), decreasing=T)
+    # Filter to GADM Level 2:
+    regions_i <- regions_i[unlist(lapply(gregexpr(",", impact_with_obs$polygon_name[regions_i]), function(x) length(x) > 1))]
+    regions_i <- regions_i[1:12]
+  } else {
+    stop('add some way to select named regions')
+  }
+  
+  plots_list <- list()
+  j <- 1
+  for(i in regions_i){
+    plots_list[[j]] <- ggplot(data.frame(sampled=as.numeric(impact_with_obs[i,sampled_cols])), aes(x = sampled))  +
+      geom_histogram(aes(y= ..density..),color = "black", alpha = 0.7) +
+      ggtitle(ODDyWithAggImpact@polygons[[impact_with_obs[i, 'polygon']]]$name) + scale_x_continuous(trans=scales::pseudo_log_trans(base = 10), 
+                                                                                                 breaks=c(0,10,100, 1000,10000), limits=c(-1,10000))
+      #labs(x='', y='') + 
+      #scale_fill_discrete("Legend", values = dd.col) + 
+      #theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+    plots_list[[j]] = plots_list[[j]] + geom_vline(xintercept = impact_with_obs[i,'observed'], col='red')
+    #scale_x_log10()+
+    j <- j+1
+  }
+  do.call(grid.arrange,plots_list)
+}
+
 #This plot displays much better but code needs a bit of tidying
 plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7,map="terrain"){
   
@@ -557,6 +602,21 @@ plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL
   #                   mapping = aes(Longitude,Latitude,z=hazard),
   #                   alpha=0.8,breaks = c(6.0),colour="red")
   
+}
+
+addObsData_MAR20230908 <- function(){
+  observed_data_MAR20230908 <- data.frame(name=character(), impact=character(), observed=integer())
+  observed_data_MAR20230908 %<>% add_row(name='Marrakech, Marrakech-Tensift-AlHaouz, Morocco', impact='mortality', observed = 15)
+  observed_data_MAR20230908 %<>% add_row(name='AlHaouz, Marrakech-Tensift-AlHaouz, Morocco', impact='mortality', observed = 1684)
+  observed_data_MAR20230908 %<>% add_row(name='Taroudannt, Souss-Massa-Draâ, Morocco', impact='mortality', observed = 980)
+  observed_data_MAR20230908 %<>% add_row(name='Chichaoua, Marrakech-Tensift-AlHaouz, Morocco', impact='mortality', observed = 202)
+  observed_data_MAR20230908 %<>% add_row(name='Azilal, Tadla-Azilal, Morocco', impact='mortality', observed = 11)
+  observed_data_MAR20230908 %<>% add_row(name='Ouarzazate, Souss-Massa-Draâ, Morocco', impact='mortality', observed = 41)
+  observed_data_MAR20230908 %<>% add_row(name='Morocco', impact='mortality', observed = 2946)
+  observed_data_MAR20230908 %<>% add_row(name='TOTAL', impact='mortality', observed = 2946)
+  
+  impact_with_obs <- addObs(ODDyWithAggImpact, observed_data_MAR20230908, 'mortality', add_zeros=T )
+  plot_AggImpacts(impact_with_obs)
 }
 
 

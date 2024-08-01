@@ -142,6 +142,19 @@ plot_d_vs_step = function(AlgoResults, ymax=NULL, s_finish=NULL){
   }
 }
 
+plot_mean_d_vs_step = function(AlgoResults, ymax=NULL, s_finish=NULL){
+  AlgoResults %<>% addAlgoParams(s_finish)
+  
+  ymin=min(AlgoResults$d, na.rm=T)
+  ymax=ifelse(is.null(ymax), max(AlgoResults$d[which(is.finite(AlgoResults$d))], na.rm=T), ymax)
+  plot(1, mean(apply(adrop(AlgoResults$d[,,1, drop=F], drop=3), 1, min, na.rm=T)), xlim=c(1, AlgoResults$s_finish), xlab='Algorithm Step', ylab='Mean Energy Score', ylim=c(ymin, 35))
+  for (s in 2:AlgoResults$s_finish){
+    nonzero_weights <- which(AlgoResults$W[,s] != 0)
+    points(s,mean(apply(adrop(AlgoResults$d[nonzero_weights,,s, drop=F], drop=3), 1, min, na.rm=T)))
+  }
+}
+
+
 plot_acc_prob = function(AlgoResults, s_finish=NULL){
   AlgoResults %<>% addAlgoParams(s_finish)
   

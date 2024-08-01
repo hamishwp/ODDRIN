@@ -31,11 +31,11 @@ source('RCode/Simulate.R')
 #Choose true Omega for Simulated Data
 
 Omega <- Omega_true <- list(Lambda1 = list(nu=8.75, kappa=0.6),
-                            Lambda2 = list(nu=11.55, kappa=0.75), #list(nu=10.65, kappa=1.5), #
-                            Lambda3 = list(nu=8.7, kappa=1),
+                            Lambda2 = list(nu=11.7, kappa=0.85), #list(nu=10.65, kappa=1.5), #
+                            Lambda3 = list(nu=8.7, kappa=0.7),
                             Lambda4 = list(nu=9.9, kappa=1.6),
                             theta= list(theta1=0.6),
-                            eps=list(local=0.6, hazard_mort=0.5, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
+                            eps=list(local=0.9, hazard_mort=0.55, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
                             #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
                             vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
                             check = list(check=0.5))
@@ -53,7 +53,7 @@ plot_S_curves(Omega_true)
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 
 set.seed(1)
-simulateDataSet(180, Omega, Model, dir)
+simulateDataSet(172, Omega, Model, dir)
 
 
 AlgoParams$smc_steps <- 2
@@ -70,7 +70,7 @@ AlgoParams$input_folder <- 'IIDIPUS_Input_RealAgg3/'
 AlgoResults$input_folder <- 'IIDIPUS_Input_RealAgg3/'
 df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, M=200, output='SampledTotal')
 
-AlgoParams$input_folder <- 'IIDIPUS_Input_RealAgg5/'
+AlgoParams$input_folder <- 'IIDIPUS_SimInput/'
 
 tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '_RealAgg5_asprev')
 AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F, tag_notes=tag_notes)
@@ -223,6 +223,33 @@ execution_time
 #--------------------------------(and compare to real data)--------------------------------------
 #------------------------------------------------------------------------------------------------
 
+moveTestData <- function(folder_in='IIDIPUS_SimInput'){
+  ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
+  ODD_foldertest<-paste0(dir, folder_in, '/Test/')
+  ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
+  i <- 0
+  for (file in ufiles){
+    i <- i + 1
+    if (i %%3 != 0){next}
+    file.copy(from = paste0(ODD_folderall, file),
+              to = paste0(ODD_foldertest, file))
+    file.remove(from = paste0(ODD_folderall, file))
+  }
+  # BD_folderall<-paste0(dir, folder_in, '/BDobjects/')
+  # BD_foldertest<-paste0(dir, folder_in, '/BDobjects/Test/')
+  # ufiles<-list.files(path=BD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
+  # i <- 0
+  # for (file in ufiles){
+  #   i <- i + 1
+  #   if (i %%3 != 0){next}
+  #   file.copy(from = paste0(BD_folderall, file),
+  #             to = paste0(BD_foldertest, file))
+  #   file.remove(from = paste0(BD_folderall, file))
+  # }
+  
+}
+moveTestData('IIDIPUS_SimInput')
+
 # Collect mortality, building damage, and displacement data for simulated data:
 ODDsim_paths <-na.omit(list.files(path="IIDIPUS_SimInput/ODDobjects/"))
 df_SimImpact <- data.frame(observed=numeric(),
@@ -318,7 +345,7 @@ plot_grid(legend, plot_grid( p_mort_obsvals, p_disp_obsvals, p_bd_obsvals,
 grid.arrange(p_mort_obsvals, p_disp_obsvals, p_bd_obsvals, 
              p_mort_obscount, p_disp_obscount, p_bd_obscount, ncol=3, nrow=2)
 
-files <-  paste0(dir, "IIDIPUS_SimInput/Test/")
+files <-  paste0(dir, "IIDIPUS_SimInput/ODDobjects/")
 
 ufiles<-na.omit(list.files(path=files,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
 for (file in ufiles){

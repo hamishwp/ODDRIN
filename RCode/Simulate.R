@@ -75,7 +75,7 @@ setMethod(f="initialize", signature="ODDSim",
               if (grouping_mechanism < 0.75 | max(.Object@data[,grep('hazMean', colnames(.Object@data))], na.rm=T) < 7){
                 n_col_groups <- round(rpois(1,0.3))+1
                 n_row_groups <- 1
-              } else if (grouping_mechanism < 0.85){
+              } else if (grouping_mechanism < 0.95){
                 n_col_groups <- round(runif(1,4,20))
                 if (n_col_groups==4){ n_col_groups=2; n_row_groups=2}
                 if (n_col_groups==6){ n_col_groups=3; n_row_groups=2}
@@ -90,7 +90,7 @@ setMethod(f="initialize", signature="ODDSim",
               } else {
                 n_col_groups <- round(runif(1,3,15))#round(rweibull(1,0.3,0.15)+1) # round(runif(1,2, 15))
                 n_row_groups <- round(runif(1,3,15)) #n_col_groups#round(rweibull(1,0.5,1.2)+1) # round(runif(1,3, 15))
-                while ((n_col_groups*n_row_groups) > 200){
+                while ((n_col_groups*n_row_groups) > 170){
                   n_col_groups <- round(runif(1,3,15)) #round(rweibull(1,0.3,0.15)+1) # round(runif(1,2, 15))
                   n_row_groups <- round(runif(1,3,15)) #n_col_groups#round(rweibull(1,0.5,1.2)+1) #round(runif(1,3, 15))
                 }

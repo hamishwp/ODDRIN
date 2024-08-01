@@ -1,6 +1,6 @@
 
 # GDACS:
-for (i in )
+#for (i in )
 
 # PAGER:
 Hazy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_additionalInfo3/EQ20230206TUR_169')

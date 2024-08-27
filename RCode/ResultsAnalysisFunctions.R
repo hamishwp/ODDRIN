@@ -517,7 +517,12 @@ create_df_postpredictive <- function(AlgoResults, single_particle = F, Omega = N
   # If single_particle == F, samples from the full posterior
   
   start_time <- Sys.time()
-  AlgoResults %<>% addAlgoParams(s_finish)
+  if (length(dim(AlgoResults$Omega_sample_phys))==3){ #SMC
+    AlgoResults %<>% addAlgoParams(s_finish)
+  } else { #MCMC
+    AlgoResults$s_finish = NA
+  }
+  
   if (single_particle){
     if(is.null(Omega)){
       if (particle_best){ # best particle at final step
@@ -676,7 +681,7 @@ plot_df_postpredictive_PAGER_coloured <- function(df_poly_jitter, impact_type){
   M_upper <- round(quantile(1:M, 0.95))
   df_poly_jitter$means_sampled <- apply(df_poly_jitter[,grep("sampled",names(df_poly_jitter),value = T)], 1, mean)
   
-  folderin_haz <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_wMaxMMIDiff/'
+  folderin_haz <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_wMaxMMIDiff/'
   ufiles_haz <- na.omit(list.files(path=folderin_haz,pattern=Model$haz,recursive = T,ignore.case = T))
   df_poly_jitter$alertlevel <- ''
   for(i in 1:NROW(df_poly_jitter)){
@@ -691,13 +696,13 @@ plot_df_postpredictive_PAGER_coloured <- function(df_poly_jitter, impact_type){
   #ggplot(df_poly_jitter %>% filter(impact==impact_type & train_flag=='TEST' & alertlevel !='null'), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
     geom_errorbar() + 
     geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) +
-    geom_point(aes(col=alertlevel), size=2.5) + 
+    geom_point(col='red', size=2.5) + #geom_point(aes(col=alertlevel), size=2.5) + 
     geom_point(shape = 1, size = 3,colour = "black") + 
     scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
     scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
     #geom_pointrange(aes(col=train_flag)) + 
     ylab(paste('ODDRIN Posterior Predictive', impact_type)) + xlab(paste('Observed', impact_type)) + 
-    scale_color_manual(values = c('green'='green', 'yellow'='yellow', 'orange'='orange', 'red'='red'), labels = c('green'='0', 'yellow'='1 - 99', 'orange'='100 - 999', 'red'='1000+'),name = "PAGER Predicted Mortality") + 
+    #scale_color_manual(values = c('green'='green', 'yellow'='yellow', 'orange'='orange', 'red'='red'), labels = c('green'='0', 'yellow'='1 - 99', 'orange'='100 - 999', 'red'='1000+'),name = "PAGER Predicted Mortality") + 
     theme_bw() + theme(plot.background = element_rect(fill = rgb(0.95,0.95,0.95)))
 }
 
@@ -829,6 +834,58 @@ add_covar <- function(df_poly, covars='EQFreq', dat='all'){
   }
   return(df_poly)
 }
+
+add_covar2 <- function(df_poly, covars=c('NightFlag', ''), dat='all'){
+  
+  folderin<-paste0(dir,AlgoResults$input_folder, "ODDobjects/")
+  ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
+  impact_sample_flattened <- flattenImpactSample(imp_best)
+  columns_obs_sampled <- c(grep('observed', colnames(impact_sample_flattened)), grep('sampled.', colnames(impact_sample_flattened)))
+  impact_sample_flattened$obs_quantile <- apply(impact_sample_flattened, 1, function(x) sample_quant(x[columns_obs_sampled]))
+  impact_sample_flattened$samp_median <- apply(impact_sample_flattened, 1, function(x) median(as.numeric(x[grep('sampled.', colnames(impact_sample_flattened))])))
+  #hist(impact_sample_flattened$obs_quantile[impact_sample_flattened$samp_median>0], breaks=c(0,10,20,30, 40, 50, 60, 70, 80, 90, 101), xlab='Observation Quantile', main='')
+  #hist(impact_sample_flattened$obs_quantile[impact_sample_flattened$samp_median], breaks=c(0,10,20,30, 40, 50, 60, 70, 80, 90, 101), xlab='Observation Quantile', main='')
+  df_plot <- impact_sample_flattened
+  hist(df_plot$obs_quantile[impact_sample_flattened$samp_median>0 &  df_plot$impact=='mortality'], breaks=c(0,10,20,30, 40, 50, 60, 70, 80, 90, 101), xlab='Observation Quantile', main='')
+  
+  if (tolower(dat)=='train'){
+    ufiles <- grep('^Train/' , ufiles, value = TRUE)
+  } else if (tolower(dat)=='test'){
+    ufiles <- grep('^Test/' , ufiles, value = TRUE)
+  }
+  
+  covar <- 'SHDI'
+  df_plot[[covar]] <- NA
+  df_plot[['night_main_hazard']] <- NA
+  
+  for(i in 1:NROW(df_plot)){
+    file_match <- grep(paste0("_", df_plot$event_id[i], "\\b"),  ufiles, value = TRUE)
+    if (length(file_match) > 1) stop('Multiple ODD files for event with the same ID.')
+    ODDy <- readRDS(paste0(folderin,file_match))
+    poly_indexes <- ODDy@polygons[[df_plot$polygon[i]]]$indexes
+    # if ('hazMean' %in% covars){
+    #   poly_pop_restricted <- poly_indexes[which(ODDy@data$Population[poly_indexes] > 1000)]
+    #   df_poly[['hazMean']][i] <- max(ODDy@data[poly_pop_restricted,grep("hazMean",names(ODDy),value = T)], na.rm=T)
+    # } 
+    #df_poly[[covar]][i] <- median(ODDy@data[[covar]][poly_indexes])
+    #find mode:
+    max_haz <- which(as.matrix(ODDy@data[,grep("hazMean",names(ODDy@data))] == max(ODDy@data[,grep("hazMean",names(ODDy@data))], na.rm=T)), arr.ind=T)[1,2]
+    hour <- as.numeric(substr(ODDy@hazinfo$eventtimes, 1, 2))
+    night_flag <- ifelse(hour>=22 | hour < 6, 1, 0)
+    df_plot[i, 'night_main_hazard'] <- night_flag[max_haz]
+    exposed_restrict <- which(ODDy@data[poly_indexes,paste0('hazMean', max_haz)] > 6 & ODDy@data$Population[poly_indexes] > 100)
+    print(length(exposed_restrict))
+    if (length(exposed_restrict)==0){
+      exposed_restrict = poly_indexes
+    }
+    df_plot[[covar]][i] <- mean(ODDy@data[[covar]][poly_indexes[exposed_restrict]], na.rm=T)
+  }
+  ggplot(df_plot %>% filter(samp_median > 0 & night_main_hazard==1), aes(x=SHDI, y=obs_quantile)) + geom_point()
+  plot(df_plot[[covar]], df_plot$obs_quantile, col=ifelse(df_plot$night_main_hazard, 'red', 'blue'), xlab='SHDI', ylab='Observation Quantile')
+  
+  #return(df_poly)
+}
+
 
 
 # ------------- Regionalise countries according to PAGER proposed regionalisation --------------
@@ -1775,5 +1832,16 @@ compare2Pager <- function(AlgoResults, s_finish=NULL){
     geom_point(size=2.5) + scale_color_manual(values=list('red'='red', 'orange'='orange', 'yellow'='yellow', 'green'='green', 'null'='white')) + # + geom_errorbar() 
     geom_abline(intercept=log(1000+1), slope=0, col='red') + geom_abline(intercept=log(100+1), slope=0, col='orange') + geom_abline(intercept=log(1+1), slope=0, col='yellow')
   
+}
+
+#Plot impact histogram for a single event:
+
+
+plot_total_impact <- function(ODD_with_impact){
+  tot_impact <- colSums(ODD_with_impact@data[,grep('displacement.s', names(ODD_with_impact@data))])
+  ggplot(data.frame(value = tot_impact), aes(x = value)) +
+    geom_histogram(aes(y = ..density..), binwidth = 0.5, fill = "#002147", color = "black") +
+    scale_x_log10(labels = scales::comma) +   # Log10 scale with full number labels
+    labs(x = "Posterior Predictive Total Displacement (Morocco Earthquake)", y = "")
 }
 

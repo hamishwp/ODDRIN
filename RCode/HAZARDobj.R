@@ -59,7 +59,7 @@ setMethod(f="initialize", signature="HAZARD",
             
             if(!is.null(obj)){
               # find bbox of entries within I>I0 polygon and crop object
-              inI0<-obj@coords[obj@data$mmi_mean>.Object@I0,, drop=F]
+              inI0<-obj@coords[!is.na(obj@data$mmi_mean) & obj@data$mmi_mean>.Object@I0,, drop=F]
               # Take a bounding box a little larger than the I>I0 object but inside original (the 5 is obv. arbitrary)
               bbox<-c(max(obj@bbox[1],min(inI0[,1])-5*obj@grid@cellsize[1]),
                       max(obj@bbox[2],min(inI0[,2])-5*obj@grid@cellsize[2]),

@@ -31,17 +31,19 @@ source('RCode/Simulate.R')
 #Choose true Omega for Simulated Data
 
 Omega <- Omega_true <- list(Lambda1 = list(nu=8.75, kappa=0.6),
-                            Lambda2 = list(nu=11.7, kappa=0.85), #list(nu=10.65, kappa=1.5), #
+                            Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
                             Lambda3 = list(nu=8.7, kappa=0.7),
                             Lambda4 = list(nu=9.9, kappa=1.6),
                             theta= list(theta1=0.6),
-                            eps=list(local=0.9, hazard_mort=0.55, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
+                            eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
                             #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
                             vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
                             check = list(check=0.5))
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 plot_S_curves(Omega_true)
+
+Model$HighLevelPriors(Omega_ln %>% addTransfParams(), Model)
 
 # plot(seq(5,10,0.05),log(pnorm(seq(5,10,0.05)-4.5, 4,0.5)), type='l')
 # points(seq(5,10,0.05),log(pnorm(exp(0.3*seq(5,10,0.05)), 12.1, 1.3)), col='blue', type='l')
@@ -52,8 +54,50 @@ plot_S_curves(Omega_true)
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 
+#MCMC:
+AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/' #'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/'
+AlgoParams$kernel_sd <- list(displacement = 1, mortality = 7, buildDam=0.6,
+                             buildDest = 0.6, buildDamDest = 1)
+AlgoParams$N_steps <- 1000
+AlgoParams$learning_rate <- 1000
+AlgoParams$m_CRPS <- 60
+AlgoParams$N_steps <- 1000
+AlgoParams$learning_rate <- 40
+AlgoParams$Np <- 1
+AlgoParams$rel_weightings <- c(1,0)
+AlgoParams$rho <- 0.95
+#AlgoResults <- readRDS(paste0(dir, 'IIDIPUS_Results/abcsmc_2024-07-29_140215_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2'))
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-07-29_140215_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
+init_val_phys <- AlgoResults$Omega_sample_phys[401,,130] %>% relist(skeleton=Model$skeleton)
+propCOV <- cov(AlgoResults$Omega_sample[,,130])/4
+
+
+tag_notes <- paste0('MCMC_RealAgg5_Trial')
+AlgoResults <- correlated_MCMC(AlgoParams, Model, unfinished = F, propCOV = propCOV, init_val_phys = init_val_phys, tag_notes=tag_notes)
+
+tag_notes <- paste0('MCMC_RealAgg5_Trial')
+AlgoResults <- correlated_MCMC(AlgoParams, Model, unfinished = T, propCOV = propCOV, init_val_phys = init_val_phys, tag_notes=tag_notes,
+                               oldtag='mcmc_2024-08-05_155604.382051_MCMC_RealAgg5_Trial')
+
+
+# Generate samples from higher level prior to initialise MCMC:
+n_samples <- 300
+samples <- array(NA, dim=c(n_samples, length(unlist(Omega))))
+for (i in 1:n_samples){
+  if (i %% 10 == 0){
+    print(paste('Sample:',i))
+  }
+  samples[i,] <- HLPrior_sample(Model, AlgoParams)
+}
+saveRDS(samples, paste0(dir, 'IIDIPUS_Results/HLPriorSamples'))
+
+diag(cov(samples))
+
+
+
+
 set.seed(1)
-simulateDataSet(172, Omega, Model, dir)
+simulateDataSet(170, Omega, Model, dir)
 
 
 AlgoParams$smc_steps <- 2
@@ -66,11 +110,11 @@ AlgoParams$kernel_sd <- list(displacement = 1, mortality = 7, buildDam=0.6,
                              buildDest = 0.6, buildDamDest = 1)
 
 AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-24_121215_alpha0.95_M60_Npart990RealAgg3')
-AlgoParams$input_folder <- 'IIDIPUS_Input_RealAgg3/'
-AlgoResults$input_folder <- 'IIDIPUS_Input_RealAgg3/'
+AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg3/'
+AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg3/'
 df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, M=200, output='SampledTotal')
 
-AlgoParams$input_folder <- 'IIDIPUS_SimInput/'
+AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/'
 
 tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '_RealAgg5_asprev')
 AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F, tag_notes=tag_notes)
@@ -280,7 +324,7 @@ ggplot(df_SimImpact %>% filter(impact=='mortality'), aes(x=I_max, y=observed)) +
 # Collect mortality, building damage, and displacement data for real data:
 #ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/'
 
-ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_RealAgg5/ODDobjects/Train/'
+ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/ODDobjects/Train/'
 ODDpaths <-na.omit(list.files(path=ODDpath))
 df_Impact <- data.frame(observed=numeric(), impact=character(),
                         polygon=integer(), exposure=numeric(), event=integer(), I_max=numeric())

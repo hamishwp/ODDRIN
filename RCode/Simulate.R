@@ -77,6 +77,7 @@ setMethod(f="initialize", signature="ODDSim",
                 n_row_groups <- 1
               } else if (grouping_mechanism < 0.95){
                 n_col_groups <- round(runif(1,4,20))
+                n_row_groups <- 1
                 if (n_col_groups==4){ n_col_groups=2; n_row_groups=2}
                 if (n_col_groups==6){ n_col_groups=3; n_row_groups=2}
                 if (n_col_groups==8){ n_col_groups=4; n_row_groups=2}
@@ -181,12 +182,13 @@ setMethod(f="initialize", signature="ODDSim",
               #   .Object@impact <- .Object@impact[sample(1:NROW(.Object@impact),round(NROW(.Object@impact)*2/3), replace=F), ]
               # }
               
-              .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
-                transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
+              # .Object@IDPs<-DamageData[,c("sdate","gmax","qualifierDisp")]%>%
+              #   transmute(date=sdate,IDPs=gmax,qualifier=qualifierDisp)
             } else {
+              stop('Not setup for other hazards')
               # THIS IS READY FOR THE IPM APPROACH FOR MID/LONG DURATION HAZARDS
-              .Object@IDPs<-DamageData%>%group_by(sdate)%>%summarise(IDPs=max(IDPs),.groups = 'drop_last')%>%
-                transmute(date=sdate,IDPs=IDPs)
+              # .Object@IDPs<-DamageData%>%group_by(sdate)%>%summarise(IDPs=max(IDPs),.groups = 'drop_last')%>%
+              #   transmute(date=sdate,IDPs=IDPs)
               # Note that I leave .Object@gmax intentionally blank
             }
             
@@ -338,20 +340,26 @@ simulateEvent <- function(r, I0 = 4.5){
   # - The maximum magnitude varies randomly in [5, 9.3] and the spread in [15, 25]
   # - The earthquake standard deviation in each cell is random uniform in [0.8,1.1]
   
-  min_mmi =4.5
-  max_mmi = max(4.7, rnorm(1,6.5, 1.1)) # rnorm(1, 1, 0.28)
-  sigma = max_mmi + 2.5 + runif(1,0,2) #runif(1, 3,8.5)
+  min_mmi =4.45
+  max_mmi = max(4.7, rnorm(1,6.5, 1.1))
+   # rnorm(1, 1, 0.28)
+  sigma = 0.2 * (max_mmi-4)^3 + runif(1,-0.5,0.5) + 1#0.7*(max_mmi - 4.5)^2.2 + (max_mmi - 6) + 2 + runif(1,-0.1,0.1) #runif(1, 3,8.5)
   r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, s=r@nrows))
   #r <- exp(r-min_mmi)
   r <- r * ((max_mmi-min_mmi)/r@data@max) + min_mmi
+ 
+  cells_above_I0 <- xyFromCell(r, which(values(r>4.5)))
+  crop_extent <- c(min(cells_above_I0[,1]), max(cells_above_I0[,1]), min(cells_above_I0[,2]), max(cells_above_I0[,2]))
+  r <- crop(r, crop_extent, snap='out')
+  #values(r)[values(r) < I0] = NA
+  #r <- trim(r)
   #r <- (r - r@data@min) / (r@data@max-r@data@min) * (max_mmi-min_mmi) + min_mmi
-  #plot(r)
   sd <- setValues(r, runif(r@ncols*r@nrows, 0.8, 1.1))
   #r <- 4.51 + exp(r)
   names(r) <- 'mmi_mean'
   r$mmi_sd <- sd
   hazsdf <- as(r, 'SpatialPixelsDataFrame')
-  hazsdf<-hazsdf[hazsdf$mmi_mean>I0,]
+  #hazsdf<-hazsdf[hazsdf$mmi_mean>I0,]
   colnames(hazsdf@coords)<-rownames(hazsdf@bbox)<-c("Longitude","Latitude")
 
   return(hazsdf)
@@ -423,22 +431,25 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   
   xmn <- round(runif(1, -180, 179.5)/0.05)*0.05
   ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
-  r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  xsize <- 25/12
+  ysize <- 25/12
+  r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+xsize, ymn=ymn,ymx=ymn+ysize, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   
-  while(all(is.na(coords2country(as(r, 'SpatialPixelsDataFrame')@coords)))){ #repeat until over a country
+  while(mean(is.na(coords2country(as(r, 'SpatialPixelsDataFrame')@coords)))>0.5){ #repeat until over a country
     xmn <- round(runif(1, -180, 179.5)/0.05)*0.05
     ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
-    r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+0.5, ymn=ymn,ymx=ymn+0.5, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+    r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+xsize, ymn=ymn,ymx=ymn+ysize, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   }
   
-  lenny = rgeom(1, 0.6) + 1 #generate number of events according to a geometric distribution
-  bbox = c(xmn,ymn,xmn+0.5,ymn+0.5) 
+  lenny = ifelse(runif(1)<0.5, rgeom(1, 0.6) + 1, 1) #generate number of events according to a geometric distribution
+  bbox = c(xmn,ymn,xmn+xsize,ymn+ysize) 
   lhazdat<-list(hazard_info=list(bbox=bbox,sdate=min(miniDam$sdate),fdate=max(miniDam$fdate),
                                  NumEvents=lenny,hazard="EQ", I0=I0, eventdates=c(), depths=c(), 
                                 magnitudes=c(), max_mmi=c(), eventtimes=c(), usgs_ids=c(), alertfull=list()))
+  
   for(i in 1:lenny){
     hazsdf <- simulateEvent(r, I0)
-    while(NROW(hazsdf)==0 | length(which(hazsdf@data$mmi_mean > I0))<=1 | is.null(hazsdf@data$mmi_mean)){
+    while(NROW(hazsdf)<=9 | length(which(hazsdf@data$mmi_mean > I0))<=1 | is.null(hazsdf@data$mmi_mean)){
       hazsdf <- simulateEvent(r, I0)
     }
   
@@ -448,7 +459,7 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
                   hazard="EQ",
                   dater= min(miniDam$sdate),
                   I0=I0,
-                  alertlevel=ifelse(max(hazsdf$mmi_mean)>7.5, 'red', ifelse(max(hazsdf$mmi_mean)>6, 'orange', 'green')), #assign pretty arbitrarily, don't think this is used in the model, 
+                  alertlevel=ifelse(max(hazsdf$mmi_mean, na.rm=T)>7.5, 'red', ifelse(max(hazsdf$mmi_mean, na.rm=T)>6, 'orange', 'green')), #assign pretty arbitrarily, don't think this is used in the model, 
                   alertscore=0,
                   depth= runif(1,0,50), #doesn't matter as not currently included in model
                   magnitude=runif(1,4,10),  
@@ -479,8 +490,19 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
     print('Simulation failed: affected region under simulated event is too small')
     return(NULL)
   }
-  PopSim <- simulatePopulation(r)
-  GDPSim <- simulateGDP(r)
+  
+  max_extent <- extent(lhazdat[[2]])
+  if (lenny > 1){
+    for (i in 2:lenny){
+      max_extent[c(1,3)] <- pmin(max_extent[c(1,3)], extent(lhazdat[[i]])[c(1,3)])
+      max_extent[c(2,4)] <- pmin(max_extent[c(2,4)], extent(lhazdat[[i]])[c(2,4)])
+    }
+  }
+ 
+  PopSim <- simulatePopulation(crop(r, max_extent))
+
+  GDPSim <- simulateGDP(crop(r, max_extent))
+
   
   ODDSim <- tryCatch(new('ODDSim', lhazSDF=lhazdat,DamageData=miniDam, PopSim=PopSim, GDPSim=GDPSim, # no longer use GDP but use the spatial groupings of GDPSim for grouping vulnerability covariates
                          Model=Model), error=function(e) NULL)
@@ -501,18 +523,24 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   
   # Rather than simulating eventids and sdates, just take real events but remove all data except 
   # sdate, fdate, eventid, and displacement/mortality qualifiers
-  DamageData = GetDisplacements(haz, saved=F, GIDD=F, EMDAT=T)
-  DamageData %<>% head(n=nEvents) %>% mutate(iso3='ABC', gmax=NA, mortality=NA) 
+  #DamageData = GetDisplacements(haz, saved=F, GIDD=F, EMDAT=T)
+  #DamageData %<>% head(n=nEvents) %>% mutate(iso3='ABC', gmax=NA, mortality=NA) 
   
-  ODDpaths = c()
-  BDpaths = c()
-  for(ev in unique(DamageData$eventid)){
+  DamageData <- data.frame(iso3='ABC', hazard='EQ', eventid=1:nEvents, 
+                           sdate = sort(sample(seq(as.Date('2012/01/01'), as.Date('2024/01/01'), by="day"), nEvents)))
+  DamageData$fdate <- DamageData$sdate + runif(nEvents, 0,14)
+  
+  set.seed(1)
+  seeds_events <- sample(1:1000, nEvents, replace=F)
+  for(i in 1:nEvents){
+    set.seed(seeds_events[i]) # helps with debugging if issue with a particular event
+    ev = unique(DamageData$eventid)[i]
     miniDam<-DamageData%>%filter(eventid==ev)
     ODDSim <- simulateODDSim(miniDam, Model, I0=I0)
     if (is.null(ODDSim) | is.null(ODDSim$hazMean1)){
       next
     }
-    BDSim <- new('BDSim', ODDSim)
+    #BDSim <- new('BDSim', ODDSim)
     namer<-paste0(ODDSim@hazard,
                   str_remove_all(as.character.Date(min(ODDSim@hazdates)),"-"),
                   unique(miniDam$iso3)[1],
@@ -521,8 +549,8 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     ODDpath<-paste0(dir,"IIDIPUS_SimInput/ODDobjects/",namer)
     saveRDS(ODDSim,ODDpath)
     
-    BDpath<-paste0(dir,"IIDIPUS_SimInput/BDobjects/",namer) 
-    saveRDS(BDSim,BDpath)
+    #BDpath<-paste0(dir,"IIDIPUS_SimInput/BDobjects/",namer) 
+    #saveRDS(BDSim,BDpath)
     print(paste0('Saved simulated hazard to ', namer))
   }
   
@@ -554,21 +582,21 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     # }
     
   }
-  for (i in 1:length(BDpaths)){
-    BDSim <- readRDS(paste0("IIDIPUS_SimInput/BDobjects/", BDpaths[i]))
-    BDSim %<>% BDX(Omega %>% addTransfParams(), Model, Method=list(Np=1,cores=1), output='sim')
-    #take these simulations as the actual values
-    BDSim@data$grading <- BDSim@data$ClassPred
-    #switch those affected to 'Damaged' with probability 0.5
-    affected <- which(BDSim@data$grading != 'notaffected')
-    for (j in affected){
-      BDSim@data$grading[j] = ifelse(runif(1)>0.5, BDSim@data$grading[j], 'Damaged')
-    }
-    if(NROW(BDSim@data)>100){
-      BDSim@data <- BDSim@data[1:100,]
-    }
-    saveRDS(BDSim,paste0("IIDIPUS_SimInput/BDobjects/",BDpaths[i]))
-  }
+  # for (i in 1:length(BDpaths)){
+  #   BDSim <- readRDS(paste0("IIDIPUS_SimInput/BDobjects/", BDpaths[i]))
+  #   BDSim %<>% BDX(Omega %>% addTransfParams(), Model, Method=list(Np=1,cores=1), output='sim')
+  #   #take these simulations as the actual values
+  #   BDSim@data$grading <- BDSim@data$ClassPred
+  #   #switch those affected to 'Damaged' with probability 0.5
+  #   affected <- which(BDSim@data$grading != 'notaffected')
+  #   for (j in affected){
+  #     BDSim@data$grading[j] = ifelse(runif(1)>0.5, BDSim@data$grading[j], 'Damaged')
+  #   }
+  #   if(NROW(BDSim@data)>100){
+  #     BDSim@data <- BDSim@data[1:100,]
+  #   }
+  #   saveRDS(BDSim,paste0("IIDIPUS_SimInput/BDobjects/",BDpaths[i]))
+  # }
   
   if (outliers){
     #double the impact of the highest intensity earthquake

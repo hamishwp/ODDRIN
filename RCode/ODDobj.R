@@ -401,13 +401,13 @@ FormParams<-function(ODD,listy){
   # return(Params)
 }
 
-setGeneric("DispX", function(ODD,Omega,center, Method, output='SampledAgg')
+setGeneric("DispX", function(ODD,Omega,center, Method, output='SampledAgg', event_i=NA)
   standardGeneric("DispX") )
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center,
                                    Method=list(Np=20,cores=8,cap=-300, 
                                                kernel_sd=list(displacement=1,mortality=7,buildDam=0.6,buildDest=0.6, buildDamDest=0.6), 
-                                               kernel='crps_with_mean'), output='SampledAgg'
+                                               kernel='crps_with_mean'), output='SampledAgg', event_i = NA
 ){
   # ... Function description ...
   # LL: Returns 'likelihood' if true or data simulated from model if false
@@ -456,7 +456,12 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   # }
   
   #eps_event <- array(0, dim=c(3, Method$Np))
-  eps_event <- t(rmvnorm(Method$Np, rep(0, 3), sigma=covar_matrix))
+  if (is.na(event_i)){
+    eps_event <- t(rmvnorm(Method$Np, rep(0, 3), sigma=covar_matrix))
+  } else {
+    eps_event <-  chol(covar_matrix) %*% t(Omega$u[event_i,,])
+  }
+  
   
   #slower:
   # eps_local <- rmvnorm(length(hrange)*Method$Np*length(notnans), rep(0,3), sigma=covar_matrix_local)
@@ -681,7 +686,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   
   #Method$cores is equal to AlgoParams$NestedCores (changed in Model file)
   if(Method$cores>1) { 
-    CalcDam_out <- mclapply(X = notnans,FUN = CalcDam,mc.cores = 4)
+    CalcDam_out <- mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$cores)
   } else  {CalcDam_out <- lapply(X = notnans,FUN = CalcDam)}
   
   Dam[notnans,,]<-aperm(simplify2array(lapply(CalcDam_out, function(x) x$samples)), perm=c(3,2,1))
@@ -997,7 +1002,7 @@ plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL
   
 }
 
-plotODDy_pixellated <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7,map="terrain"){
+plotODDy_pixellated <- function(ODDy, gadm_iso, zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7,map="terrain"){
   
   if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
   

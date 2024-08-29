@@ -6,6 +6,7 @@ GetSourceFiles<-function(packred){
   # Basic functions:
   source('RCode/Functions_red.R')
   source('RCode/GetInitialValues.R')
+  
   # S4 object classes required:
   source('RCode/ODDobj.R')
   source('RCode/BDobj.R')
@@ -14,24 +15,35 @@ GetSourceFiles<-function(packred){
   if(!packred){
     # Basic functions:
     source('RCode/Functions.R')
+    
     # Disaster related:
     source('RCode/GetGDACS.R')
     source('RCode/GetUSGS.R')
     source('RCode/GetDisaster.R')
+    source('RCode/GetSubNationalData.R')
+    source('RCode/AggregateODD.R')
+    
     # IDP estimate related:
-    source('RCode/GetDisplacements.R')
+    # source('RCode/GetDisplacements.R')
     # source('RCode/GetHelix.R')
+    
     # Demography & population related:
     source('RCode/AddVulnerability.R')
-    source('RCode/GetPopDemo.R')
     source('RCode/GetSocioEconomic.R')
-    source('RCode/GetINFORM.R')
-    source('RCode/GetWorldBank.R')
     source('RCode/GetWorldPop.R')
+    source('RCode/GetPopDemo.R')
+    #source('RCode/GetINFORM.R')
+    #source('RCode/GetWorldBank.R')
+    
     # Damage estimate related:
-    source('RCode/GetOSM.R')
-    source('RCode/GetSatDamage.R')  
     source('RCode/GetBuildingCounts.R')
+    #source('RCode/GetOSM.R')
+    #source('RCode/GetSatDamage.R') 
+    
+    #Simulated data Related:
+    source('RCode/Simulate.R')
+    
+    #Results Analysis:
     source('RCode/ResultsAnalysisFunctions.R')
     
   }
@@ -40,84 +52,101 @@ GetSourceFiles<-function(packred){
 
 LoadLibraries<-function(packred){
   
-  library(dplyr)
-  library(magrittr)
   library(tidyverse)
-  library(ggplot2)
-  library(sf)
+  library(magrittr)
   library(ggmap)
-  library(geojsonR)
-  library(countrycode)
-  library(stringr)
   library(pracma)
   library(parallel)
-  library(doParallel)
-  library(foreach)
-  library(ExtDist)
-  library(EnvStats)
-  library(posterior)
-  library(VGAM)
   library(mvtnorm)
   library(abind)
   library(Rmpi)
-  #library(rgeos)
-  library(DescTools)
+  library(countrycode)
+  library(raster)
   library(scoringRules)
-  library(vegan)
-  # library(ecochange)
+  library(viridis)
+  library(gridExtra)
   
   if(!packred) {
-    library(codetools)
-    library(osmdata)
-    library(OpenStreetMap)
-    library(osmdata)
+    library(sf)  
+    library(geojsonR)
+    library(geosphere)
+    library(rworldmap)
     library(lutz)
+    library(xml2)
+    library(gstat)
+    library(terra) 
+    library(wid)
+    library(geojsonio)
+    library(jsonlite)
+    library(reshape2)
     library(ecochange)
-    library(geodata)
-    library(spatialEco)
+    library(openxlsx)
+    library(osmdata)
+    
+    # library(doParallel)
+    # library(foreach)
+    # library(EnvStats)
+    # library(posterior)
+    # library(VGAM)
+    # library(DescTools)
+    # library(codetools)
+    # library(OpenStreetMap)
+    # library(ecochange)
+    # library(geodata)
+    # library(spatialEco)
+    # library(ExtDist)
   }
-  
 }
 
 GetODDPackages<-function(packred){
   
-  list.of.packages <- c("dplyr", "ggplot2","sf","tidyverse","openxlsx","pracma",
-                         "tiff", "gstat", "mvtnorm", 'DescTools', #'rgeos', 
-                        "RColorBrewer", "geosphere","GGally", "wbstats",
-                        "countrycode","rworldmap","rworldxtra","chron","ncdf4",
-                        "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 
-                        'EnvStats', 'posterior', 'doParallel', 'VGAM', 'abind',
-                        'Rmpi', 'openxlsx', 'ecochange', 'lutz', 'scoringRules',
-                        'vegan')
+  # list.of.packages <- c("dplyr", "ggplot2","sf","tidyverse","openxlsx","pracma",
+  #                        "tiff", "gstat", "mvtnorm", 'DescTools', #'rgeos', 
+  #                       "RColorBrewer", "geosphere","GGally", "wbstats",
+  #                       "countrycode","rworldmap","rworldxtra","chron","ncdf4",
+  #                       "GADMTools","akima","adehabitatMA","flexsurv", "ExtDist", 
+  #                       'EnvStats', 'posterior', 'doParallel', 'VGAM', 'abind',
+  #                       'Rmpi', 'openxlsx', 'ecochange', 'lutz', 'scoringRules',
+  #                       'vegan')
+  
+  list.of.packages <- c('tidyverse', 'magrittr', 'pracma', 'parallel',
+                        'mvtnorm', 'abind', 'Rmpi', 'countrycode', 'raster', 'scoringRules',
+                        'viridis', 'gridExtra')
   
   
   
   if(!packred) list.of.packages<-c(list.of.packages,
-                                   "codetools","latex2exp", "geojsonR", 'geojsonio',
-                                   "rJava","devtools","OpenStreetMap","osmdata",
-                                   "tidyRSS","geojsonR", "tiff", "gstat",
-                                   "FactoMineR","factoextra","xtable",
-                                   "gsubfn","mapsapi","leaflet", "ssh","RPostgres",
-                                   "GADMTools", "pscl","multiColl", 'lutz', 'ecochange',
-                                   'geodata', 'spatialEco')
+                                   'sf', 'geojsonR', 'geosphere', 'rworldmap', 'lutz',
+                                   'xml2', 'gstat', 'terra', 'geojsonio', 'jsonlite', 'reshape2',
+                                   'ecochange', 'openxlsx', 'osmdata')
+                                   # "codetools","latex2exp", "geojsonR", 'geojsonio',
+                                   # "rJava","devtools","OpenStreetMap","osmdata",
+                                   # "tidyRSS","geojsonR", "tiff", "gstat",
+                                   # "FactoMineR","factoextra","xtable",
+                                   # "gsubfn","mapsapi","leaflet", "ssh","RPostgres",
+                                   # "GADMTools", "pscl","multiColl", 'lutz', 'ecochange',
+                                   # 'geodata', 'spatialEco')
   
   
   new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
   if(length(new.packages)>0) install.packages(new.packages, repos='http://cran.us.r-project.org')
   
   # This package makes sure you're uptodate on all packages, including things like tidyverse 
-  if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager", repos='http://cran.us.r-project.org')
-  BiocManager::install("Biobase", version = "3.19")
+  #if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager", repos='http://cran.us.r-project.org')
+  #BiocManager::install("Biobase", version = "3.19")
   
   # devtools::install_github('daroczig/fbRads')
   # if(length(list.of.packages[!("openrouteservice" %in% installed.packages()[,"Package"])])){devtools::install_github("rCarto/osrm")}
   #if(length(list.of.packages[!("ggmap" %in% installed.packages()[,"Package"])])){devtools::install_github("dkahle/ggmap")}
   if(length(list.of.packages[!("ggmap" %in% installed.packages()[,"Package"])])){devtools::install_github("stadiamaps/ggmap")}
   # if(length(list.of.packages[!("countrycodes" %in% installed.packages()[,"Package"])])){devtools::install_github("vincentarelbundock/countrycode")}
-  if(length(list.of.packages[!("wbstats" %in% installed.packages()[,"Package"])])){devtools::install_github('nset-ornl/wbstats')}
-  if(length(list.of.packages[!("wid" %in% installed.packages()[,"Package"])])){devtools::install_github("WIDworld/wid-r-tool")}
-  if(length(list.of.packages[!("parallelsugar" %in% installed.packages()[,"Package"])])){devtools::install_github('nathanvan/parallelsugar')}
+  #if(length(list.of.packages[!("wbstats" %in% installed.packages()[,"Package"])])){devtools::install_github('nset-ornl/wbstats')}
+  #if(length(list.of.packages[!("parallelsugar" %in% installed.packages()[,"Package"])])){devtools::install_github('nathanvan/parallelsugar')}
 
+  if (!packred){
+    if(length(list.of.packages[!("wid" %in% installed.packages()[,"Package"])])){devtools::install_github("WIDworld/wid-r-tool")}
+  }
+  
   LoadLibraries(packred)
   GetSourceFiles(packred)
   

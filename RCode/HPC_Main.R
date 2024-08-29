@@ -48,7 +48,7 @@ AlgoParams$smc_Npart <- 25
 AlgoParams$n_nodes <- 39
 AlgoParams$smc_steps <- 100
 AlgoParams$rel_weightings <- c(0,1)
-AlgoParams$kernel_sd <- list(displacement = 1, mortality = 7, buildDam=0.6,
+AlgoParams$impact_weights <- list(displacement = 1, mortality = 7, buildDam=0.6,
                              buildDest = 0, buildDamDest = 0)
 
 start_time <- Sys.time()

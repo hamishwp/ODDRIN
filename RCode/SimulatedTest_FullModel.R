@@ -10,7 +10,7 @@ setwd(directory)
 # Directory of the Data for Good data, e.g. Disaster Mapping, 4G connectivity, etc
 FBdirectory<-'/home/patten/Documents/IDMC/Facebook_Data/'
 # Do you want only the reduced packages or all? Choose via packred
-packred<-F
+packred<-T
 
 
 # Extract Environment Variables
@@ -18,7 +18,7 @@ source('RCode/GetEnv.R')
 # Download and install the necessary packages:
 source('RCode/GetODDPackages.R')
 # Sourcing the data:
-source('RCode/GetData.R')
+#source('RCode/GetData.R')
 # Extract model functions and priors
 source('RCode/Model.R')
 # Extract the model parameterisation algorithm, default = Adaptive MCMC
@@ -56,8 +56,6 @@ Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 
 #MCMC:
 AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/' #'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/'
-AlgoParams$kernel_sd <- list(displacement = 1, mortality = 7, buildDam=0.6,
-                             buildDest = 0.6, buildDamDest = 1)
 AlgoParams$N_steps <- 1000
 AlgoParams$learning_rate <- 1000
 AlgoParams$m_CRPS <- 60
@@ -106,8 +104,7 @@ AlgoParams$m_CRPS <- 60
 AlgoParams$Np <- 1
 AlgoParams$smc_alpha <- 0.9
 AlgoParams$rel_weightings <- c(1,0)
-AlgoParams$kernel_sd <- list(displacement = 1, mortality = 7, buildDam=0.6,
-                             buildDest = 0.6, buildDamDest = 1)
+
 
 AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-24_121215_alpha0.95_M60_Npart990RealAgg3')
 AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg3/'
@@ -238,8 +235,7 @@ AlgoParams$smc_Npart <- 500
 AlgoParams$n_nodes <- 1
 AlgoParams$smc_steps <- 100
 AlgoParams$rel_weightings <- c(1,1)
-AlgoParams$kernel_sd <- list(displacement = 1, mortality = 7, buildDam=0.6,
-                             buildDest = 0, buildDamDest = 0)
+AlgoParams$input_folder <- 'IIDIPUS_SimInput/'
 
 tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '500parttest_0.1propcov')
 AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F,tag_notes=tag_notes)
@@ -594,8 +590,6 @@ for (i in 1:n_repeats){
   }
 }
 
-AlgoParams$kernel_sd$mortality <- 7
-AlgoParams$kernel_sd$buildDam <-0.6
 cor_seq <- c(0.1, 0.55,0.95)
 n_repeats <- 20
 results2 <- array(0, dim=c(n_repeats, length(cor_seq), 2))
@@ -636,7 +630,7 @@ for (i in 1:length(ufiles)){
   points(sampled_highcor[,c(1,2)], col='red')
   points(obs[1], obs[2], col='blue', pch=19)
   tLL_truecor[[1]]
-  w_vs <- matrix(unlist(AlgoParams$kernel_sd[tLL_truecor[[1]]$impact]) %*% t(unlist(AlgoParams$kernel_sd[tLL_truecor[[1]]$impact])), ncol=NROW(tLL_truecor[[1]]))
+  w_vs <- matrix(unlist(AlgoParams$impact_weights[tLL_truecor[[1]]$impact]) %*% t(unlist(AlgoParams$impact_weights[tLL_truecor[[1]]$impact])), ncol=NROW(tLL_truecor[[1]]))
   vs_true <- vs_sample(log(obs+10), log(t(sampled_truecor)+10), w_vs=w_vs)
   vs_highcor <- vs_sample(log(obs+10), log(t(sampled_highcor)+10), w_vs=w_vs)
   
@@ -761,10 +755,10 @@ points(df_postpredictive_true[i_1,5],df_postpredictive_true[ i_2,5], col='red' ,
 #particle_min.d <- which(min(AlgoResults$d, na.rm=T)==AlgoResults$d, arr.ind=T)
 
 ii <- 2:3
-plot(t(as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]), "*"))))
-points(t(as.matrix(sweep(log(df_postpredictive_truelowcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truelowcor$impact[ii]]), "*"))), col='blue')
-points(t(as.matrix(sweep(log(df_postpredictive_truehighcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truehighcor$impact[ii]]), "*"))), col='green')
-points(t(as.numeric(log(df_postpredictive_true$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]))), col='red', cex=2, pch=12)
+plot(t(as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_true$impact[ii]]), "*"))))
+points(t(as.matrix(sweep(log(df_postpredictive_truelowcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_truelowcor$impact[ii]]), "*"))), col='blue')
+points(t(as.matrix(sweep(log(df_postpredictive_truehighcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_truehighcor$impact[ii]]), "*"))), col='green')
+points(t(as.numeric(log(df_postpredictive_true$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$impact_weights[df_postpredictive_true$impact[ii]]))), col='red', cex=2, pch=12)
 
 
 i_1 <- 1153; i_2 <- 1154
@@ -778,13 +772,13 @@ es_high <- c()
 for (event_id in unique(df_postpredictive_true$event_id)){
   ii <- which(df_postpredictive_true$event_id==event_id)
   
-  es_true <- c(es_true, es_sample(as.numeric(log(df_postpredictive_true$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]])), 
-            as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]), "*"))))
+  es_true <- c(es_true, es_sample(as.numeric(log(df_postpredictive_true$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$impact_weights[df_postpredictive_true$impact[ii]])), 
+            as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_true$impact[ii]]), "*"))))
   
-  es_low <- c(es_low, es_sample(as.numeric(log(df_postpredictive_truelowcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_truelowcor$impact[ii]])), 
-            as.matrix(sweep(log(df_postpredictive_truelowcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truelowcor$impact[ii]]), "*"))))
-  es_high <- c(es_high, es_sample(as.numeric(log(df_postpredictive_truehighcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_truehighcor$impact[ii]])), 
-                                as.matrix(sweep(log(df_postpredictive_truehighcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truehighcor$impact[ii]]), "*"))))
+  es_low <- c(es_low, es_sample(as.numeric(log(df_postpredictive_truelowcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$impact_weights[df_postpredictive_truelowcor$impact[ii]])), 
+            as.matrix(sweep(log(df_postpredictive_truelowcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_truelowcor$impact[ii]]), "*"))))
+  es_high <- c(es_high, es_sample(as.numeric(log(df_postpredictive_truehighcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$impact_weights[df_postpredictive_truehighcor$impact[ii]])), 
+                                as.matrix(sweep(log(df_postpredictive_truehighcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_truehighcor$impact[ii]]), "*"))))
   
   n_impacts <- c(n_impacts, length(ii))
   mean_mort <- c(mean_mort, mean(df_postpredictive_true[ii[which(df_postpredictive_true$impact[ii]=='mortality')], 5]))
@@ -802,12 +796,12 @@ points(as.numeric(df_postpredictive_truehighcor[i_1,6:55]), as.numeric(df_postpr
 points(as.numeric(df_postpredictive_truelowcor[i_1,6:55]), as.numeric(df_postpredictive_truelowcor[ i_2,6:55]), col='blue')
 points(df_postpredictive_true[i_1,5],df_postpredictive_true[ i_2,5], col='red' ,pch=12, cex=2)
 
-es_sample(as.numeric(log(df_postpredictive_sampled_highcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]])), 
-          as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]), "*")))
+es_sample(as.numeric(log(df_postpredictive_sampled_highcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$impact_weights[df_postpredictive_sampled_highcor$impact[ii]])), 
+          as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_sampled_highcor$impact[ii]]), "*")))
 
-pred_true <- as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]), "*"))
-pred_highcor <- as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]), "*"))
-obs <- as.numeric(log(df_postpredictive_sampled_highcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]))
+pred_true <- as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_true$impact[ii]]), "*"))
+pred_highcor <- as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_sampled_highcor$impact[ii]]), "*"))
+obs <- as.numeric(log(df_postpredictive_sampled_highcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$impact_weights[df_postpredictive_sampled_highcor$impact[ii]]))
 
 
 flattenImpactSample <- function(impact_sample){
@@ -964,19 +958,19 @@ abline(v=z_j_true[1], col='red')
 hist(z_j_highcor)
 abline(v=z_j_highcor[1], col='red')
 
-es_sample(as.numeric(log(df_postpredictive_truelowcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_truelowcor$impact[ii]])), 
-          as.matrix(sweep(log(df_postpredictive_truelowcor[ii,6:155]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truelowcor$impact[ii]]), "*")))
+es_sample(as.numeric(log(df_postpredictive_truelowcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$impact_weights[df_postpredictive_truelowcor$impact[ii]])), 
+          as.matrix(sweep(log(df_postpredictive_truelowcor[ii,6:155]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_truelowcor$impact[ii]]), "*")))
 
-es_sample(as.numeric(log(df_postpredictive_truehighcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_truehighcor$impact[ii]])), 
-          as.matrix(sweep(log(df_postpredictive_truehighcor[ii,6:155]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_truehighcor$impact[ii]]), "*")))
+es_sample(as.numeric(log(df_postpredictive_truehighcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$impact_weights[df_postpredictive_truehighcor$impact[ii]])), 
+          as.matrix(sweep(log(df_postpredictive_truehighcor[ii,6:155]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_truehighcor$impact[ii]]), "*")))
 
 
-crps_sample(as.numeric(log(df_postpredictive_true$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]))[2], as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]), "*"))[2,])
-crps_sample(as.numeric(log(df_postpredictive_sampled_highcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]))[2], as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]), "*"))[2,])
+crps_sample(as.numeric(log(df_postpredictive_true$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$impact_weights[df_postpredictive_true$impact[ii]]))[2], as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_true$impact[ii]]), "*"))[2,])
+crps_sample(as.numeric(log(df_postpredictive_sampled_highcor$observed[ii]+AlgoParams$log_offset)*unlist(AlgoParams$impact_weights[df_postpredictive_sampled_highcor$impact[ii]]))[2], as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_sampled_highcor$impact[ii]]), "*"))[2,])
 
 ii <- 801
-plot(as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_sampled_highcor$impact[ii]]), "*"))[1,])
-points(as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$kernel_sd[df_postpredictive_true$impact[ii]]), "*"))[1,], col='blue')
+plot(as.matrix(sweep(log(df_postpredictive_sampled_highcor[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_sampled_highcor$impact[ii]]), "*"))[1,])
+points(as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset), 1, as.numeric(AlgoParams$impact_weights[df_postpredictive_true$impact[ii]]), "*"))[1,], col='blue')
 #Yes, samples are correct:
 # ii <- which(impact_sample$poly[[1]]$impact=='displacement' & impact_sample$poly[[1]]$observed==0)[1:3]
 # plot(1:length(ii), impact_sample$poly[[1]]$observed[ii], col='red', ylim=c(0, 100000))

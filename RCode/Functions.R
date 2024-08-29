@@ -1,7 +1,3 @@
-library(countrycode)
-library(raster)
-library(geosphere)
-library(terra)
 
 # # 2D DENSITY PLOT WITH MODIFIED COLOUR AXIS
 # ggplot(as.data.frame(buildings),aes(Longitude,Latitude))+
@@ -357,9 +353,6 @@ InterpDay<-function(ndata,day){
   return(val)
 }
 
-library(rworldmap)
-library(rworldxtra)
-library(sp)
 coords2country = function(points,iso=T)
 {  
   if(dim(points)[2]!=2) stop("coords2country Error: long/lat coords are invalid")

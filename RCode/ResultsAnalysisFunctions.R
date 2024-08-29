@@ -320,7 +320,7 @@ sample_post_predictive <- function(AlgoResults, M, s, dat='Train', single_partic
   for (i in 1:NROW(df_poly)){
     if (is.na(df_poly[i,'sampled.1'])) next 
     df_poly$crps[i] <- crps(log(as.numeric(df_poly[i, grep("sampled", names(df_poly))])+10), log(df_poly$observed[i]+10)) * 
-      unlist(AlgoParams$kernel_sd)[df_poly$impact[i]]
+      unlist(AlgoParams$impact_weights)[df_poly$impact[i]]
   }
   
   if (tolower(dat)=='train'){
@@ -736,9 +736,9 @@ check_quants <- function(AlgoResults, s_finish=NULL){
   samples_allocated <- 1:length(impact_sample$poly)
   samples_combined <- sapply(impact_sample$poly[samples_allocated], function(x){x$sampled}) #doesn't work if samples_allocated is length 1
   medians <- apply(samples_combined, 1, median)
-  sum((log(medians[which(impact_type=='mortality')]+10)-log(observed[which(impact_type=='mortality')]+10))^2 * unlist(AlgoParams$kernel_sd['mortality']))
-  sum((log(medians[which(impact_type=='displacement')]+10)-log(observed[which(impact_type=='displacement')]+10))^2 * unlist(AlgoParams$kernel_sd['displacement']))
-  sum((log(medians[which(impact_type=='buildDam')]+10)-log(observed[which(impact_type=='buildDam')]+10))^2 * unlist(AlgoParams$kernel_sd['buildDam']))
+  sum((log(medians[which(impact_type=='mortality')]+10)-log(observed[which(impact_type=='mortality')]+10))^2 * unlist(AlgoParams$impact_weights['mortality']))
+  sum((log(medians[which(impact_type=='displacement')]+10)-log(observed[which(impact_type=='displacement')]+10))^2 * unlist(AlgoParams$impact_weights['displacement']))
+  sum((log(medians[which(impact_type=='buildDam')]+10)-log(observed[which(impact_type=='buildDam')]+10))^2 * unlist(AlgoParams$impact_weights['buildDam']))
   
   hist((apply(cbind(observed,samples_combined), 1, sample_quant))[impact_type=='mortality' & medians!=0])
   
@@ -747,9 +747,9 @@ check_quants <- function(AlgoResults, s_finish=NULL){
   hist(quants[impact_type=='mortality' & medians != 0])
   hist(quants[impact_type=='displacement'])
   hist(quants[impact_type=='buildDam' & !impact_sample$poly[[1]]$inferred])
-  AndersonDarlingTest(quants[impact_type=='mortality'], 'punif')$statistic * unlist(AlgoParams$kernel_sd['mortality'])
-  AndersonDarlingTest(quants[impact_type=='displacement'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['displacement'])
-  AndersonDarlingTest(quants[impact_type=='buildDam'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['buildDam'])
+  AndersonDarlingTest(quants[impact_type=='mortality'], 'punif')$statistic * unlist(AlgoParams$impact_weights['mortality'])
+  AndersonDarlingTest(quants[impact_type=='displacement'], null='punif')$statistic * unlist(AlgoParams$impact_weights['displacement'])
+  AndersonDarlingTest(quants[impact_type=='buildDam'], null='punif')$statistic * unlist(AlgoParams$impact_weights['buildDam'])
 
   finish_time <- Sys.time()
   finish_time-start_time
@@ -764,7 +764,7 @@ check_quants <- function(AlgoResults, s_finish=NULL){
   samples_allocated2 <- 1:length(impact_sample2$poly)
   samples_combined2 <- sapply(impact_sample2$poly[samples_allocated2], function(x){x$sampled}) #doesn't work if samples_allocated is length 1
   medians2 <- apply(samples_combined2, 1, median)
-  sum((log(medians2[which(impact_type2=='mortality')]+10)-log(observed2[which(impact_type2=='mortality')]+10))^2 * unlist(AlgoParams$kernel_sd['mortality']))
+  sum((log(medians2[which(impact_type2=='mortality')]+10)-log(observed2[which(impact_type2=='mortality')]+10))^2 * unlist(AlgoParams$impact_weights['mortality']))
 
   quants2 <- (apply(cbind(observed2,samples_combined2), 1, sample_quant)-runif(length(observed2),0,1))/(NCOL(samples_combined2)+1)
   hist(quants[impact_type=='mortality'])
@@ -775,8 +775,8 @@ check_quants <- function(AlgoResults, s_finish=NULL){
   cvm.test(quants[impact_type=='mortality'], 'punif')$statistic
   cvm.test(quants2[impact_type2=='mortality'], 'punif')$statistic
   
-  10*AndersonDarlingTest(quants[impact_type=='displacement'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['displacement'])
-  10*AndersonDarlingTest(quants[impact_type=='buildDam'], null='punif')$statistic * unlist(AlgoParams$kernel_sd['buildDam'])
+  10*AndersonDarlingTest(quants[impact_type=='displacement'], null='punif')$statistic * unlist(AlgoParams$impact_weights['displacement'])
+  10*AndersonDarlingTest(quants[impact_type=='buildDam'], null='punif')$statistic * unlist(AlgoParams$impact_weights['buildDam'])
   
 }
 

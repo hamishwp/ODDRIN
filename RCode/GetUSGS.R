@@ -8,7 +8,6 @@
 # library(raster)
 # library(dplyr)
 # library(magrittr)
-library(xml2)
 # source('RCode/HAZARDobj.R')
 
 # Create an object of the required form from the USGS data
@@ -371,23 +370,22 @@ GetPagerFatality <- function(url){
   print(pager_alert_fatalities)
 }
 
-library(xml2)
 get_intensities_raw <- function(url){
   # Read the XML data from the URL
   xml_file <- read_xml(url)
   grid <- xmlParse(xml_file)
-  
-  xml_data <- xmlToList(grid) 
+
+  xml_data <- xmlToList(grid)
   lines <- strsplit(xml_data[[20]], "\n")[[1]]
-  
+
   intensities <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][5]))
   longitude <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][1]))
   latitude <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][2]))
   plot_df <- data.frame(longitude=longitude, latitude=latitude, intensities=intensities)
-  
+
   #ggplot(plot_df, aes(x=longitude, y=latitude, color=intensities)) + geom_point() +
   #  scale_color_gradient(low = "green", high = "red")
-  
+
   return(plot_df[-1,])
 }
 

@@ -406,12 +406,17 @@ setGeneric("DispX", function(ODD,Omega,center, Method, output='SampledAgg', even
 # Code that calculates/predicts the total human displacement 
 setMethod("DispX", "ODD", function(ODD,Omega,center,
                                    Method=list(Np=20,cores=8,cap=-300, 
-                                               kernel_sd=list(displacement=1,mortality=7,buildDam=0.6,buildDest=0.6, buildDamDest=0.6), 
-                                               kernel='crps_with_mean'), output='SampledAgg', event_i = NA
+                                               impact_weights=list(displacement=1,mortality=7,buildDam=0.6), 
+                                               kernel='energy_score'), output='SampledAgg', event_i = NA
 ){
-  # ... Function description ...
-  # LL: Returns 'likelihood' if true or data simulated from model if false
-  # Sim: Set to true when generating data for a simulated ODD object. 
+  # Samples from the model to simulate the impact of an event.
+  # Output type options:
+  #     - SampledFull: Simulates and returns the impact in every pixel
+  #     - SampledAgg: Simulates the impact in every pixel, but returns a data frame only containing
+  #                   simulations aggregated at the same level as the true observations
+  #     - SampledTotal: Simulates the impact in every pixel, but returns a data frame containing
+  #                   only the total for each impact type (aggregated over all pixels)
+  #     - ODDwithSampled: Returns the ODD object with columns Mort, Disp, and BuildDam for the simulated impact
   
   #elapsed_time <- c()
   #start_time <- Sys.time()
@@ -419,13 +424,14 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   # Extract 0D parameters & speed up loop
   Params<-FormParams(ODD,list(Np=Method$Np,center=center))
   Params$I0 <- Model$I0 #some objects have different I0 but don't want this to affect the model
+  
   # Income distribution percentiles & extract income percentile  
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
   Sinc<-ExtractCIndy(ODD,var = SincN)
-  # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
-  if(output != 'LL') {notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$AveSchYrs)))
-  } else notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) )) #!ODD$ISO3C%in%ODD@impact$iso3))
   
+  # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
+  notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$SHDI)))
+
   # Calculate non-local linear predictor values
   LP<-GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=T)
   LP_buildings <- GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=F)
@@ -462,24 +468,6 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     eps_event <-  chol(covar_matrix) %*% t(Omega$u[event_i,,])
   }
   
-  
-  #slower:
-  # eps_local <- rmvnorm(length(hrange)*Method$Np*length(notnans), rep(0,3), sigma=covar_matrix_local)
-  # eps_local_transf <- aperm(array(eps_local, dim=c(length(hrange), Method$Np, length(notnans), 3)), c(1, 4, 2, 3))
-  # #eps_event <- array(0, dim=c(length(hrange), 3, Method$Np))
-  # for (i in 1:Method$Np){
-  #   eps_event[,,i] <- rmvnorm(length(hrange), rep(0, 3), sigma=covar_matrix)
-    #eps_event[,,i] <- rmvt(length(hrange), sigma=covar_matrix, df=5)
-    #eps_event <- stochastic(Method$Np,Omega$eps_adj$hazard)
-    #eps_disp[h,] <- stochastic(Method$Np,Omega$eps_adj$disp)
-    #eps_bd[h,] <- stochastic(Method$Np,Omega$eps_adj$bd)
-  # }
-  # eps_local <- array(0, dim=c(length(hrange),Method$Np))
-  # for (h_i in 1:length(hrange)){
-  #   eps_local[h_i,] <- stochastic(Params$Np,Omega$eps_adj$local)
-  # }
-
-  
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
 
   #Function to predict damage per gridpoint
@@ -487,43 +475,32 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     
     # elapsed_time <- c()
     # start_time <- Sys.time()
+
+    #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochasticregen = finish_time-start_time); start_time <- Sys.time()
+    
+    eps_local_long <- rmvnorm(length(hrange)*Method$Np, rep(0,3), sigma=covar_matrix_local)
+    eps_local_ij <- aperm(array(eps_local_long, dim=c(length(hrange), Method$Np, 3)), c(1,3,2))
+    
+    ##SLOWER:
     # for (i in 1:Method$Np){
     #   eps_local_ij[,,i] <- rmvnorm(length(hrange), rep(0,3), sigma=covar_matrix_local)
     # }
     # notnans_ij <- which(notnans==ij)
     #eps_local_ij <- adrop(eps_local_transf[,,,notnans_ij, drop=F], drop=4)
-
-    #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochasticregen = finish_time-start_time); start_time <- Sys.time()
-    
-    #eps_local_long <-array(0, dim=c(length(hrange)*Method$Np, 3))
-    
-    eps_local_long <- rmvnorm(length(hrange)*Method$Np, rep(0,3), sigma=covar_matrix_local)
-    eps_local_ij <- aperm(array(eps_local_long, dim=c(length(hrange), Method$Np, 3)), c(1,3,2))
     
     locallinp<- LP[ij,] # LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] 
+    
     # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochasticreshape = finish_time-start_time); start_time <- Sys.time()
-    
-    #return(elapsed_time)
-    #eps_local_ij <- rmvnorm(Method$Np, rep(0,3), sigma=covar_matrix_local)
-    #eps_local_ij <- array(0, dim=c(length(hrange), 3, Method$Np))
-    # Calculate local linear predictor (NOTE: is a vector due to income distribution)
-    
-    #locallinp<-rep(1,10) #reduces parameter space and removes demographic covariates
-  
-    
     
     # Sample population per income distribution (Assumes 8 percentiles):
     # Population is split evenly between the income quantiles, with remainders randomly allocated between
-    #lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) #matrix(round(ODD@data$Population[ij]/length(locallinp)), nrow=length(locallinp), ncol = Method$Np)
     lPopS <- matrix(ODD@data$Population[ij] %/% 8, nrow=8, ncol=Method$Np) + rmultinom(Method$Np,ODD@data$Population[ij] %% 8,rep(1/8,8)) 
-    #lPopS <- matrix(ODD@data$Population[ij] / 8, nrow=8, ncol=Method$Np) + rmultinom(Method$Np,ODD@data$Population[ij] %% 8,rep(1/8,8)) 
-    #lPopS <- matrix(ODD@data$Population[ij] %/% 8, nrow=8, ncol=Method$Np) + matrix(runif(Method$Np) < ODD@data$Population[ij] %% 8, nrow=8, ncol=Method$Np)
-
+    #lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) #matrix(round(ODD@data$Population[ij]/length(locallinp)), nrow=length(locallinp), ncol = Method$Np)
     #lPopS <- matrix(round(ODD@data$Population[ij]/ 8), nrow=8, ncol=Method$Np)
     
     # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
     
-    #lPopS <- matrix(round(ODD@data$Population[ij]/8), nrow=8, ncol=Method$Np)
+    
     lPopDisp <- array(0, dim=c(length(locallinp), Method$Np))
     lPopMort <- array(0, dim=c(length(locallinp), Method$Np))
     tPop <-array(0,c(3, Method$Np)) #row 1 = tDisp, #row 2 = tMort, #row 3 = tRem
@@ -531,70 +508,38 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     
     # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); 
     
-    #for mean dam:
-    # p_mort_mean <- rep(0, length(hrange))
-    # p_disp_mean <- rep(0, length(hrange))
-    # lPopDisp_mean <- array(0, dim=c(length(locallinp), 1))
-    # lPopMort_mean <- array(0, dim=c(length(locallinp), 1))
-    # lPopRem_mean <- rep(ODD@data$Population[ij]/8, 8)
-    
     for(h_i in hrange_order){
       start_time <- Sys.time()
       h <- hrange[h_i]
 
       if(is.na(ODD@data[ij,h])) next
       
-      # Resample population based on who is remaining
-      
-      # ind<-tPop[3,]>0
-      # if(h_i!=1) {
-      #   if(sum(ind)==0) break #if no remaining population, skip modelling
-      #   if(length(lPopS[,ind])==0) break #if no remaining population, skip modelling
-      #   if(sum(ind)>1) sumz<-colSums(lPopS[,ind])
-      #   else sumz<-sum(lPopS[,ind])
-      #   lPopS[,!ind]<-0
-      #   lPopS[,ind]<-SplitSamplePop(Pop=tPop[3,ind]) # don't understand why we would be resampling population between income groups here?
-      # }
-      
       nonzero_pop <- which(lPopS != 0, arr.ind=T)
       if (length(nonzero_pop)==0) next
       
-      # Sample hazard Intensity 
-      # the uncertainty is too high... so I scale it to get some interpretable results (I know, I'm not really a statistician, I don't even have a degree, I was actually just having a look around the department when they confused me for the interviewee. I didn't have the heart to say anything. You don't hate me as much as I do)
-      # I_ij<-rnorm(n = Method$Np,
-      #             mean = ODD@data[ij,paste0("hazMean",h)],
-      #             sd = ODD@data[ij,paste0("hazSD",h)]/10)
       
       # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
       
+      ## Sample hazard Intensity 
+      ## Doesn't work very well as don't have the covariance of the errors, so must instead assume they are independent
+      ## So instead just use the mean value
+      # I_ij<-rnorm(n = Method$Np,
+      #             mean = ODD@data[ij,paste0("hazMean",h)],
+      #             sd = ODD@data[ij,paste0("hazSD",h)]/10)
       I_ij<-ODD@data[ij,h]
       Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]] + event_lp[h_i], error=function(e) NA) #+ rep(eps_local[h_i,], each=8), error=function(e) NA)
       
       # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, damcalc = finish_time-start_time); start_time <- Sys.time()
       
-      #if(any(is.na(Damage))) print(ij)
-      
       D_MortDisp <- D_MortDisp_calc(Damage, Omega, eps_event[1:2, nonzero_pop[,2], drop=F] + adrop(eps_local_ij[h_i,1:2,nonzero_pop[,2], drop=F], drop = 1)) #First row of D_MortDisp is D_Mort, second row is D_Disp
-      #D_MortDisp <- D_MortDisp_calc(Damage, Omega, eps_event[1:2, nonzero_pop[,2], drop=F] + t(eps_local_ij[nonzero_pop[,2], 1:2, drop=F]))
-      
+
       # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, mortdisp = finish_time-start_time); start_time <- Sys.time()
       
       D_Rem <- pmax(0, 1 - D_MortDisp[2,] - D_MortDisp[1,]) #probability of neither death nor displacement. Use pmax to avoid errors caused by numerical accuracy.
 
-      
       # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, d_rem = finish_time-start_time); start_time <- Sys.time()
       
-
       Dam <- Fbdam(lPopS[nonzero_pop], D_MortDisp[2,], D_MortDisp[1,], D_Rem)
-      
-      #for mean dam:
-      # if (Method$kernel == 'crps_with_mean'){
-      #   Damage_Mean <- h_0(I_ij,Params$I0,Omega) + locallinp
-      #   D_MortDisp_Mean <- D_MortDisp_calc(Damage_Mean, Omega) 
-      #   lPopMort_mean <- lPopMort_mean + D_MortDisp_Mean[1,] * lPopRem_mean
-      #   lPopDisp_mean <- lPopDisp_mean + D_MortDisp_Mean[2,] * lPopRem_mean
-      #   lPopRem_mean <- lPopRem_mean * (1-D_MortDisp_Mean[1,]) * (1-D_MortDisp_Mean[2,])
-      # }
       
       # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, fbdam = finish_time-start_time); start_time <- Sys.time()
       
@@ -635,16 +580,11 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     
     #if no building destruction data:
     if(!BD_data_present) return(list(samples=rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np))))#, 
-                                #means= c(sum(lPopMort_mean), sum(lPopDisp_mean), NA))) #return total displacement and mortality, set number of buildings damaged and destroyed to NA
-    
+
     locallinp_buildings <- LP_buildings[ij]
     
-    #use Np+1 as we add a last slot for the mean
     nUnaff = rep(ODD@data$nBuildings[ij], Method$Np)
     nDam = rep(0, Method$Np)
-    
-    #nUnaff_mean = ODD@data$nBuildings[ij]
-    #nDam_mean = 0
     
     #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
     
@@ -655,20 +595,14 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
 
       I_ij<-ODD@data[ij,h]
       Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + event_lp[h_i], error=function(e) NA) #+ eps_local[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
-      #Damage_mean <- h_0(I_ij,Params$I0,Omega) + locallinp_buildings
-      
-      D_Dam <- D_Dam_calc(Damage, Omega, eps_event[3,] + eps_local_ij[h_i,3,]) #First row of D_DestDam is D_Dest, second row is D_Dam
-      #D_Dam <- D_Dam_calc(Damage, Omega, eps_event[3,] + eps_local_ij[,3]) 
-      #D_Dam_mean <- D_Dam_calc(Damage_mean, Omega)
+ 
+      D_Dam <- D_Dam_calc(Damage, Omega, eps_event[3,] + eps_local_ij[h_i,3,]) 
       
       # Accumulate the number of buildings damaged/destroyed, but not the number of buildings remaining
       nDam_new <- rbinom(Method$Np, nUnaff, D_Dam)
       nUnaff <- nUnaff - nDam_new
       nDam <- nDam + nDam_new
-      
-      #nDam_new_mean = nUnaff_mean * D_Dam_mean
-      #nUnaff_mean = nUnaff_mean - nDam_new_mean
-      #nDam_mean = nDam_mean + nDam_new_mean
+    
     }
     
     #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time);
@@ -676,21 +610,17 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     #return(elapsed_time)
     
     
-    return(list(samples = rbind(tPop[1:2,,drop=FALSE], nDam[1:Method$Np])))#, 
-           #means = c(sum(lPopMort_mean), sum(lPopDisp_mean), nDam_mean)))
+    return(list(samples = rbind(tPop[1:2,,drop=FALSE], nDam[1:Method$Np])))
   }
   
-  Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged, Dam[,,4] = Buildings Destroyed
+  Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged
   Dam_means<-array(0,c(nrow(ODD),3))
   
-  
-  #Method$cores is equal to AlgoParams$NestedCores (changed in Model file)
-  if(Method$cores>1) { 
-    CalcDam_out <- mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$cores)
+  if(Method$NestedCores>1) { 
+    CalcDam_out <- mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$NestedCores)
   } else  {CalcDam_out <- lapply(X = notnans,FUN = CalcDam)}
   
   Dam[notnans,,]<-aperm(simplify2array(lapply(CalcDam_out, function(x) x$samples)), perm=c(3,2,1))
-  #Dam_means[notnans,]<- aperm(simplify2array(lapply(CalcDam_out, function(x) x$means)), perm=c(2,1))
   
   if (output=='SampledFull'){
     return(Dam)
@@ -698,6 +628,10 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     SampledTot <- colSums(Dam)
     df_SampledTot <- list()
     impact_types <- unique(ODD@impact$impact)
+    
+    #Many ODD objects don't contain 'total' impact values (to avoid double counting), so we need to obtain these. 
+    #We combine the polygons with observations so long as the proportion of overlapping pixels is less than 10%
+    #and the total coverage of the exposed area is greater than 90%. Then sum the observations across these polygons.
     observed_total=rep(NA, length(impact_types))
     get_overlap_coverage <- function(impact_type){
       indexes_list <- lapply(ODD@polygons[ODD@impact$polygon[which(ODD@impact$impact==impact_type)]], function(x) x$indexes)
@@ -736,16 +670,10 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, dam_sample = finish_time-start_time); start_time <- Sys.time()
   
-  # return(Disp)
-
-  # If the IDMC estimate is foreseen to be a lower or upper bound, or a generally poor estimate
-  # for(c in ODD@gmax$iso3){
-  #   ind<-ODD@data$ISO3C==c  & !is.na(ODD@data$ISO3C)
-  #   Disp[ind,]%<>%qualifierDisp(qualifier = ODD@gmax$qualifier[ODD@gmax$iso3==c],mu = Omega$mu)
-  # }
-  
-  
-  funcy<-function(i,LLout=T, kernel_sd=Method$kernel_sd, kernel=Method$kernel, cap=Method$cap, polygons_indexes=ODD@polygons) {
+  funcy<-function(i, impact_weights=Method$impact_weights, kernel=Method$kernel, cap=Method$cap, polygons_indexes=ODD@polygons) {
+    
+    # funcy() aggregates the simulate impact (for each impact type) across each polygon, when
+    # there is a matching observation for that impact type and polygon
     
     tmp<-data.frame(iso3=ODD$ISO3C, displacement=Dam[,i,1], mortality=Dam[,i,2], buildDam=Dam[,i,3])#, 
                                     #mort_mean=Dam_means[,1], disp_mean=Dam_means[,2], buildDam_mean=Dam_means[,3])
@@ -758,88 +686,51 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
           impact_sampled <- rbind(impact_sampled, data.frame(polygon=polygon_id,
                                                  impact=impact,
                                                  sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
-                                                 #mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'mort_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
         } else if (impact=='displacement'){
           impact_sampled <- rbind(impact_sampled, data.frame(polygon=polygon_id,
                                                  impact=impact,
                                                  sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
-                                                 #mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'disp_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
         } else {
           impact_sampled <- rbind(impact_sampled, data.frame(polygon=polygon_id,
                                                  impact=impact,
                                                  sampled=floor(sum(tmp[polygons_indexes[[polygon_id]]$indexes,impact]  * polygons_indexes[[polygon_id]]$weights, na.rm=T))))
-                                                 #mean=sum(tmp[polygons_indexes[[polygon_id]]$indexes,'buildDam_mean']  * polygons_indexes[[polygon_id]]$weights, na.rm=T)))
         }
       }
     }
-    if (is.na(ODD@impact$observed[1])){ #sampling for new event with unkwown observations
-      impact_obs_sampled <- merge(impact_sampled, ODD@impact, by=c("polygon", "impact"))
-    } else {
-      impact_obs_sampled <- arrange(merge(impact_sampled, ODD@impact, by=c("polygon", "impact")),desc(observed)) 
-    }
-    if(LLout) return(CalcPolyDist(impact_obs_sampled, kernel_sd,  kernel, cap))
+    impact_obs_sampled <- arrange(merge(impact_sampled, ODD@impact, by=c("polygon", "impact")),desc(observed)) 
     return(impact_obs_sampled)
-  
   }
   
-  if (output == 'ODDwithSampled'){ 
-    ODD@data$Disp<-Dam[,1,1]  #should this be named data$DispPred or something instead?
+  if (output == 'ODDwithSampled'){ #usually used for generating simulated data
+    ODD@data$Disp<-Dam[,1,1]  
     ODD@data$Mort<-Dam[,1,2]
     ODD@data$BuildDam<-Dam[,1,3]
-    ODD@predictDisp<-funcy(1,LLout=F) 
+    ODD@predictDisp<-funcy(1) 
     return(ODD)
   }
   
-  for (i in 1:length(ODD@polygons)){
+  for (i in 1:length(ODD@polygons)){ #weights can be used to downweight pixels that are only partly in a polygon
     if(is.null(ODD@polygons[[i]]$weights)){
       ODD@polygons[[i]]$weights <- rep(1, length=length(ODD@polygons[[i]]$indexes))
     }
   }
   
-  #IF TIMING (remove if not): ------------------
-  # if (LL==F){
-  #   dummy <- lapply(1:Method$Np, funcy, LLout=F)
-  #   finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, agg_dam = finish_time-start_time); start_time <- Sys.time()
-  #   return(elapsed_time)
-  # }
+  ## IF TIMING: --------------------------------
+  # dummy <- lapply(1:Method$Np, funcy, LLout=F)
+  # finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, agg_dam = finish_time-start_time); start_time <- Sys.time()
+  # return(elapsed_time)
   # --------------------------------------------
+  
   if(is.null(ODD$nBuildings)){
     ODD@impact <- ODD@impact[!ODD@impact$impact %in% c('buildDam', 'buildDest', 'buildDamDest'),]
   }
   
   if(output == 'SampledAgg'){
-    return(lapply(1:Method$Np, funcy, LLout=F))
+    return(lapply(1:Method$Np, funcy))
   }
   
-  outer<-vapply(1:Method$Np,funcy,numeric(1), kernel_sd=Method$kernel_sd)
-  outer[outer < (-745)]<- -745
-  
-  
-  # Find the best fit solution, not sure what this is for ...
-  # if(NROW(outer)>1) {
-  #   if(LL)  return(log(rowMeans(exp(outer),na.rm=T)))
-  #   MLE<-which.max(log(colSums(exp(outer),na.rm=T)))
-  # }  else {
-  #   return(outer) #SMC-CHANGE
-  #   if(LL)  return(log(mean(exp(outer),na.rm=T)))
-  #   MLE<-which.max(log(exp(outer)))
-  # }
-  
-  if(output=='LL') return(outer)
-  
-  if(Method$Np == 1){
-    MLE=1
-  } else {
-    MLE <- which.max(outer)
-  }
-  # Save into ODD object
-  # ODD@data$Disp<-Disp[,MLE]*sum(ODD@gmax$gmax)/mean(sum(Disp[,MLE])) %>% round()
-  ODD@data$Disp<-Dam[,MLE,1]  #should this be named data$DispPred or something instead?
-  ODD@data$Mort<-Dam[,MLE,2]
-  ODD@data$BuildDam<-Dam[,MLE,3]
-  ODD@data$BuildDest<-Dam[,MLE,4]
-  # I know this is kind of repeating code, but I want the other function as fast as possible
-  ODD@predictDisp<-funcy(MLE,LLout=F) 
+  stop('Output type selected as "output" not recognised, please select either SampledAgg, SampledTotal,
+       SampledFull, or ODDwithSampled')
   
   return(ODD)
   
@@ -939,24 +830,160 @@ GetVarName<-function(varname){
   as.character(lookup[varname])
 }
 
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#==============================================================================
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#====================Functions for plotting ODD objects =======================
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#==============================================================================
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7,map="terrain"){
+# Plot the ODD object with the GADM administrative boundaries as the background:
+# plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7){
+#   gadm_level=2
+#   if (is.null(bbox)) bbox <- ODDy@bbox
+#   iso3_unique <- unique(ODDy$ISO3C)
+#   iso3_unique <- iso3_unique[!is.na(iso3_unique)]
+#   gadm_iso <- as(geodata::gadm(country=iso3_unique[1], level=gadm_level, path=paste0(dir, 'Demography_Data/GADM/')), 'Spatial')
+#   if (length(iso3_unique) > 1){
+#     for (i in 2:length(iso3_unique)){
+#       gadm_iso %<>% rbind(as(geodata::gadm(country=iso3_unique[i], level=gadm_level, path=paste0(dir, 'Demography_Data/GADM/')), 'Spatial'))
+#     }
+#   }
+#   #gadm_iso <- gSimplify(gadm_iso, 0.01)
+#   gadm_iso <- intersect(gadm_iso, bbox)
+#   gadm_map <- fortify(gadm_iso)
+#   
+#   gg <- ggplot()
+#   gg <- gg + geom_map(map=gadm_map, data=gadm_map, aes(map_id=id, group=id)) + xlim(bbox[1,1],bbox[1,2]) + ylim(bbox[2,1], bbox[2,2])
+#   gg <- gg + coord_map() + geom_polygon(data=gadm_map, aes(x=long, y=lat, group=group), fill='white', color='black')
+#   p <- gg + xlab("Longitude") + ylab("Latitude")#+ theme(legend.position = "none")
+#   
+#   hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
+#   for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+#     tmp<-ODDy[variable]
+#     tmp$hazard<-hazard
+#     hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+#   }
+#   ODDy@data$hazard<-hazard
+#   brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
+#   
+#   if(var!="hazard")  {
+#     ODDy@data[is.na(ODDy@data$ISO3C),var]<-NA
+#     
+#     fill_colours <- c('white', 'turquoise', 'deepskyblue', 'purple', 'purple4')
+#     
+#     if (is.null(breakings)) {
+#       breakings_max = max(ODDy@data[[var]], na.rm=T) 
+#       log_breakings_max = round(log(breakings_max, 10))
+#       breakings = c(0, 10^seq(1, log_breakings_max, 1))
+#     }
+#     options(scipen=10000)
+#     p <- p+geom_raster(data=as.data.frame(ODDy) %>% filter(!is.na(!!ensym(var))),aes(Longitude,Latitude,fill=!!ensym(var)), #as.numeric(!!ensym(var))),
+#                        alpha=0.9,interpolate = T, inherit.aes = FALSE) + coord_cartesian() +
+#       scale_fill_gradientn(colors=fill_colours, breaks=breakings, na.value = "transparent", trans = 'pseudo_log') +
+#       labs(fill = var)+xlab("Longitude") + ylab("Latitude") + geom_polygon(data=gadm_map, aes(x=long, y=lat, group=group), fill='transparent', color='grey', lwd=0.1)
+#     
+#     p<-p+geom_contour(data = as.data.frame(ODDy),
+#                       mapping = aes(Longitude,Latitude,z=hazard,colour=after_stat(level)),
+#                       alpha=1,breaks = brks, lwd=0.7) +
+#       scale_colour_gradient(low = "#FFFF99",high = "red",na.value = "transparent") + 
+#       labs(colour = "Hazard Intensity")
+#     
+#     
+#     return(p)
+#   }
+#   
+#   ODDy@data$hazard[ODDy@data$hazard==0]<-NA
+#   p <- p+geom_contour_filled(data = as.data.frame(ODDy),
+#                              mapping = aes(Longitude,Latitude,z=hazard),
+#                              alpha=1,breaks = brks, lwd=0.5) +
+#     scale_colour_gradient(low = "#FFFF99",high = "red",na.value = "transparent") + 
+#     labs(fill = "Hazard Intensity")
+#   
+# }
+
+
+# plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7,map="terrain"){
+#   
+#   if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
+#   
+#   
+#   bbox <- ODDy@bbox
+#   gadm_iso <- getData("GADM", country="NZL", level=2)
+#   gadm_iso <- gadm_iso#gSimplify(gadm_iso, 0.01)
+#   gadm_iso <- intersect(gadm_iso, bbox)
+#   gadm_map <- fortify(gadm_iso)
+# 
+#   gg <- ggplot()
+#   gg <- gg + geom_map(map=gadm_map, data=gadm_map, aes(x=long, y=lat, map_id=id, group=id)) + xlim(bbox[1,1],bbox[1,2]) + ylim(bbox[2,1], bbox[2,2])
+#   gg <- gg + coord_map() + geom_polygon(data=gadm_map, aes(x=long, y=lat, group=group), fill='white', color='black')
+#   p <- gg + xlab("Longitude") + ylab("Latitude")#+ theme(legend.position = "none")
+# 
+#   p
+#   
+#   hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
+#   for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+#     tmp<-ODDy[variable]
+#     tmp$hazard<-hazard
+#     hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+#   }
+#   ODDy@data$hazard<-hazard
+#   brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
+#   
+#   if(var!="hazard")  {
+#     ODDy@data[is.na(ODDy@data$ISO3C),var]<-NA
+#     
+#     p<-p+geom_contour_filled(data = as.data.frame(ODDy),
+#                              mapping = aes(Longitude,Latitude,z=ODDy@data[[var]]),
+#                              breaks=breakings,alpha=alpha)+ 
+#       labs(fill = GetVarName(var))
+#     p<-p+geom_contour(data = as.data.frame(ODDy),
+#                       mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
+#                       alpha=1.0,breaks = brks, lwd=1.2) +
+#       scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent") + 
+#       labs(colour = "Hazard Intensity")
+#     
+#     # p+geom_contour_filled(data = as.data.frame(ODDy),
+#     #                       mapping = aes(Longitude,Latitude,z=1-ODDy@data$tmp),
+#     #                       fill="green",alpha=alpha)+ 
+#     #   labs(fill = "Hazard>5")
+#     
+#     return(p)
+#   }
+#   
+#   ODDy@data$hazard[ODDy@data$hazard==0]<-NA
+#   
+#   p<-p+geom_contour_filled(data = as.data.frame(ODDy),
+#                            mapping = aes(Longitude,Latitude,z=hazard),
+#                            alpha=alpha,breaks = brks) +
+#     # scale_fill_discrete(low = "transparent",high = "red",na.value = "transparent") + 
+#     labs(fill = "Hazard Intensity")
+#   p<-p+geom_contour(data = as.data.frame(ODDy),
+#                     mapping = aes(Longitude,Latitude,z=hazard),
+#                     alpha=0.8,breaks = c(6.0),colour="red")
+#   
+#   
+# }
+
+plotODDy <-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.5,map="terrain", api_key_loc='/home/manderso/Documents/Miscellaneous/API_Keys/stadiamap_key_mal'){
   
   if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
   
+  if(is.null(bbox)) bbox<-ODDy@bbox
   
-  bbox <- ODDy@bbox
-  gadm_iso <- getData("GADM", country="NZL", level=2)
-  gadm_iso <- gadm_iso#gSimplify(gadm_iso, 0.01)
-  gadm_iso <- intersect(gadm_iso, bbox)
-  gadm_map <- fortify(gadm_iso)
-
-  gg <- ggplot()
-  gg <- gg + geom_map(map=gadm_map, data=gadm_map, aes(x=long, y=lat, map_id=id, group=id)) + xlim(bbox[1,1],bbox[1,2]) + ylim(bbox[2,1], bbox[2,2])
-  gg <- gg + coord_map() + geom_polygon(data=gadm_map, aes(x=long, y=lat, group=group), fill='white', color='black')
-  p <- gg + xlab("Longitude") + ylab("Latitude")#+ theme(legend.position = "none")
-
-  p
+  if(!file.exists(api_key_loc)){
+    warning('You need an API key from StadiaMaps to get terrain background. 
+            Get one here: https://client.stadiamaps.com/signup/ and save your key (as a string) as an RDS in a local dir. 
+            Pass the location of that directory using the api_key_loc argument')
+    return()
+  }
+  stadiamap_api_key <- readRDS(api_key_loc)
+  register_stadiamaps(key = stadiamap_api_key)
+  
+  #mad_map <- get_stamenmap(bbox,source = "terrain",maptype = map,zoom=zoomy)
+  mad_map <- get_stadiamap(bbox = bbox, zoom = zoomy, maptype = "stamen_terrain_background")
+  p<-ggmap(mad_map) + xlab("Longitude") + ylab("Latitude")
   
   hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
   for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
@@ -976,7 +1003,7 @@ plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL
       labs(fill = GetVarName(var))
     p<-p+geom_contour(data = as.data.frame(ODDy),
                       mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
-                      alpha=1.0,breaks = brks, lwd=1.2) +
+                      alpha=1.0,breaks = brks, size=1) +
       scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent") + 
       labs(colour = "Hazard Intensity")
     
@@ -1000,16 +1027,23 @@ plotODDy_GADM <- function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL
                     alpha=0.8,breaks = c(6.0),colour="red")
   
   
+  return(p)
+  
 }
 
-plotODDy_pixellated <- function(ODDy, gadm_iso, zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7,map="terrain"){
-  
-  if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
-  
+plotODDy_GADM <- function(ODDy, zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7, gadm_level=2){
+  #Plots background as GADM regions rather than terrain:
   
   bbox <- ODDy@bbox
   #gadm_iso <- getData("GADM", country="NZL", level=2)
-  gadm_iso <- gadm_iso#gSimplify(gadm_iso, 0.01)
+  iso3_unique <- iso3_unique[!is.na(iso3_unique)]
+  gadm_iso <- as(geodata::gadm(country=iso3_unique[1], level=gadm_level, path=paste0(dir, 'Demography_Data/GADM/')), 'Spatial')
+  if (length(iso3_unique) > 1){
+    for (i in 2:length(iso3_unique)){
+      gadm_iso %<>% rbind(as(geodata::gadm(country=iso3_unique[i], level=gadm_level, path=paste0(dir, 'Demography_Data/GADM/')), 'Spatial'))
+    }
+  }
+  #gadm_iso <- gSimplify(gadm_iso, 0.01)
   gadm_iso <- intersect(gadm_iso, bbox)
   gadm_map <- fortify(gadm_iso)
   
@@ -1063,108 +1097,112 @@ plotODDy_pixellated <- function(ODDy, gadm_iso, zoomy=7,var="Population",breakin
   
 }
 
-plotODDy<-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.5,map="terrain", api_key_loc='/home/manderso/Documents/Miscellaneous/API_Keys/stadiamap_key_mal'){
+plotODDyAgg <- function(ODDyAgg, ODDy=NULL, zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7,map="terrain", gadm_level=2){
+  # Plots aggregated impact/exposure across GADM regions rather than by pixel
+  # Will sum over the variable (so not appropriate for covariates e.g. SHDI or EQFreq)
   
-  if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
-  
-  if(is.null(bbox)) bbox<-ODDy@bbox
-  
-  if(!file.exists(api_key_loc)){
-    warning('You need an API key from StadiaMaps to get terrain background. 
-            Get one here: https://client.stadiamaps.com/signup/ and save your key (as a string) as an RDS in a local dir. 
-            Pass the location of that directory using the api_key_loc argument')
-    return()
+  bbox <- ODDyAgg@bbox
+  iso3_unique <- unique(ODDyAgg$ISO3C)
+  iso3_unique <- iso3_unique[!is.na(iso3_unique)]
+  gadm_iso <- as(geodata::gadm(country=iso3_unique[1], level=gadm_level, path=paste0(dir, 'Demography_Data/GADM/')), 'Spatial')
+  if (length(iso3_unique) > 1){
+    for (i in 2:length(iso3_unique)){
+      gadm_iso %<>% rbind(as(geodata::gadm(country=iso3_unique[i], level=gadm_level, path=paste0(dir, 'Demography_Data/GADM/')), 'Spatial'))
+    }
   }
-  stadiamap_api_key <- readRDS(api_key_loc)
-  register_stadiamaps(key = stadiamap_api_key)
+  #gadm_iso <- gSimplify(gadm_iso, 0.01)
+  gadm_iso <- intersect(gadm_iso, bbox)
+  gadm_map <- fortify(gadm_iso)
   
-  #mad_map <- get_stamenmap(bbox,source = "terrain",maptype = map,zoom=zoomy)
-  mad_map <- get_stadiamap(bbox = bbox, zoom = zoomy, maptype = "stamen_terrain_background")
-  p<-ggmap(mad_map) + xlab("Longitude") + ylab("Latitude")
-  
-  hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
-  for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
-    tmp<-ODDy[variable]
-    tmp$hazard<-hazard
-    hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+  ii <- 1
+  if (is.null(gadm_iso$NAME_2)){
+    gadm_names <- paste0(gadm_iso$NAME_1)
+  } else {
+    #gadm_names <- paste0(gadm_iso$NAME_2, gadm_iso$NAME_1)
+    gadm_names <- paste0(gsub(" ", "",gadm_iso$NAME_2, fixed=T), ', ', gsub(" ", "",gadm_iso$NAME_1, fixed=T))
   }
-  ODDy@data$hazard<-hazard
-  brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
   
-  if(var!="hazard")  {
-    ODDy@data[is.na(ODDy@data$ISO3C),var]<-NA
+  plot_table = data.frame(id=character(), var=numeric(), region_name=character())
+  # Find the polygon matching each region
+  for (i in 1:length(gadm_names)){
+    #region_name <- paste0(gadm_iso$NAME_2[region_i], ', ', gadm_iso$NAME_1[region_i])
+    match <- which(unlist(lapply(ODDyAgg@polygons, function(x) ifelse(length(grep(gadm_names[i], x$name)>0), T, F))))
+    if (length(match)==0) next
+    #impact_region <- colSums(impact_median[ODDyAgg@polygons[[match]]$indexes,1,])
+    plot_table %<>% add_row(id=as.character(i), var=sum(ODDyAgg@data[ODDyAgg@polygons[[match]]$indexes, var]), 
+                            region_name=gadm_names[i])
+  }
+  
+  #add the modeled displacement and mortality
+  gadm_map[[var]] <- plyr::join(gadm_map, plot_table, by="id", type='left')$var
+  #gadm_map$Mortality <- plyr::join(gadm_map, plot_table, by="id", type='left')$mort
+  gadm_map[is.na(gadm_map[,var]), var] = 0
+  #gadm_map$Displacement[is.na(gadm_map$Displacement)] = 0
+  
+  options(scipen=10000)
+  gg <- ggplot()
+  gg <- gg + geom_map(map=gadm_map, data=gadm_map, aes(map_id=id, group=id)) + xlim(bbox[1,1],bbox[1,2]) + ylim(bbox[2,1], bbox[2,2])
+  gg <- gg + coord_map() + geom_polygon(data=gadm_map, aes(x=long, y=lat, group=group, fill=!!ensym(var)), color='black', lwd=0.2) + 
+    scale_fill_gradient(low = "white",high = "blue",na.value = "transparent", name=var)
+  p <- gg + xlab("Longitude") + ylab("Latitude")# + theme(legend.position = "none")  + scale_fill_discrete(name = "New Legend Title")
+  
+  if (!is.null(ODDy)){
+    hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
+    for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+      tmp<-ODDy[variable]
+      tmp$hazard<-hazard
+      hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+    }
+    ODDy@data$hazard<-hazard
+    brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
     
-    p<-p+geom_contour_filled(data = as.data.frame(ODDy),
-                             mapping = aes(Longitude,Latitude,z=ODDy@data[[var]]),
-                             breaks=breakings,alpha=alpha)+ 
-        labs(fill = GetVarName(var))
     p<-p+geom_contour(data = as.data.frame(ODDy),
                       mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
-                        alpha=1.0,breaks = brks, size=1) +
-      scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent") + 
+                      alpha=1.0,breaks = brks, lwd=0.8) +
+      scale_colour_gradient(low = "#FFFF99",high = "red",na.value = "transparent") + 
       labs(colour = "Hazard Intensity")
     
-    # p+geom_contour_filled(data = as.data.frame(ODDy),
-    #                       mapping = aes(Longitude,Latitude,z=1-ODDy@data$tmp),
-    #                       fill="green",alpha=alpha)+ 
-    #   labs(fill = "Hazard>5")
-    
-    return(p)
   }
-    
-  ODDy@data$hazard[ODDy@data$hazard==0]<-NA
-  
-  p<-p+geom_contour_filled(data = as.data.frame(ODDy),
-                    mapping = aes(Longitude,Latitude,z=hazard),
-                    alpha=alpha,breaks = brks) +
-    # scale_fill_discrete(low = "transparent",high = "red",na.value = "transparent") + 
-    labs(fill = "Hazard Intensity")
-  p<-p+geom_contour(data = as.data.frame(ODDy),
-                    mapping = aes(Longitude,Latitude,z=hazard),
-                    alpha=0.8,breaks = c(6.0),colour="red")
-    
-  
   return(p)
-  
 }
 
 
-MakeODDPlots<-function(ODDy, input=NULL,zoomer=7, bbox=NULL){
-  
-    ODDy@data$Disp[ODDy@data$Disp<1]<-0
-  
-    mad_map <- get_stamenmap(ODDy@bbox,source = "stamen",maptype = "terrain",zoom=zoomer)
-    q<-ggmap(mad_map)
-    p1<-q+ geom_raster(data=as.data.frame(ODDy),aes(Longitude,Latitude,fill=Disp),
-                       alpha=0.5,interpolate = T, inherit.aes = FALSE) + coord_cartesian() +
-      scale_fill_gradient2(low = "blue",mid="blue",high = "red",trans = "log",
-                           # breaks=c(0,1,10,100),
-                           na.value = "transparent")+#,limits=c(0,100)) +
-      # labs(fill = "Displaced Pop. / Total Pop.")+xlab("Longitude") + ylab("Latitude");p
-      labs(fill = "Displaced Population")+xlab("Longitude") + ylab("Latitude");p1
-
-    p2<-q+ geom_raster(data = as.data.frame(ODDy),
-                               mapping = aes(Longitude,Latitude,fill=hazMean1),
-                               alpha=0.5,  inherit.aes = FALSE) + coord_cartesian() +
-      scale_fill_gradient2(low = "darkorchid2",mid="olivedrab4",high = "yellow",
-                           midpoint = 6,breaks=c(4.5,5,5.5,6,6.5,7,7.5,8),
-                           na.value = "transparent")+#,limits=c(0,100)) +
-      labs(fill = "Hazard Intensity")+xlab("Longitude") + ylab("Latitude");p2    
-    # p2<-q+ geom_contour_filled(data = as.data.frame(ODDy),
-    #                   mapping = aes(Longitude,Latitude,z=hazMean1,fill=..level..),
-    #                   alpha=0.5, inherit.aes = FALSE,bins = 20,) + coord_cartesian() +
-    #   scale_fill_discrete(low = "transparent",high = "purple",na.value = "transparent") + 
-    #   labs(fill = "Hazard Intensity")+xlab("Longitude") + ylab("Latitude");p2
-    
-    plotty<-gridExtra::grid.arrange(p1,p2,nrow=1); plotty
-    
-    if(is.null(input)) return(plotty)
-        
-    ggsave(paste0(input$datadir,input$plotdir,ODDy@hazard,input$sdate,input$iso3,".png"), plotty)
-    
-    return(plotty)
-  
-}
+# MakeODDPlots<-function(ODDy, input=NULL,zoomer=7, bbox=NULL){
+#   
+#     ODDy@data$Disp[ODDy@data$Disp<1]<-0
+#   
+#     mad_map <- get_stamenmap(ODDy@bbox,source = "stamen",maptype = "terrain",zoom=zoomer)
+#     q<-ggmap(mad_map)
+#     p1<-q+ geom_raster(data=as.data.frame(ODDy),aes(Longitude,Latitude,fill=Disp),
+#                        alpha=0.5,interpolate = T, inherit.aes = FALSE) + coord_cartesian() +
+#       scale_fill_gradient2(low = "blue",mid="blue",high = "red",trans = "log",
+#                            # breaks=c(0,1,10,100),
+#                            na.value = "transparent")+#,limits=c(0,100)) +
+#       # labs(fill = "Displaced Pop. / Total Pop.")+xlab("Longitude") + ylab("Latitude");p
+#       labs(fill = "Displaced Population")+xlab("Longitude") + ylab("Latitude");p1
+# 
+#     p2<-q+ geom_raster(data = as.data.frame(ODDy),
+#                                mapping = aes(Longitude,Latitude,fill=hazMean1),
+#                                alpha=0.5,  inherit.aes = FALSE) + coord_cartesian() +
+#       scale_fill_gradient2(low = "darkorchid2",mid="olivedrab4",high = "yellow",
+#                            midpoint = 6,breaks=c(4.5,5,5.5,6,6.5,7,7.5,8),
+#                            na.value = "transparent")+#,limits=c(0,100)) +
+#       labs(fill = "Hazard Intensity")+xlab("Longitude") + ylab("Latitude");p2    
+#     # p2<-q+ geom_contour_filled(data = as.data.frame(ODDy),
+#     #                   mapping = aes(Longitude,Latitude,z=hazMean1,fill=..level..),
+#     #                   alpha=0.5, inherit.aes = FALSE,bins = 20,) + coord_cartesian() +
+#     #   scale_fill_discrete(low = "transparent",high = "purple",na.value = "transparent") + 
+#     #   labs(fill = "Hazard Intensity")+xlab("Longitude") + ylab("Latitude");p2
+#     
+#     plotty<-gridExtra::grid.arrange(p1,p2,nrow=1); plotty
+#     
+#     if(is.null(input)) return(plotty)
+#         
+#     ggsave(paste0(input$datadir,input$plotdir,ODDy@hazard,input$sdate,input$iso3,".png"), plotty)
+#     
+#     return(plotty)
+#   
+# }
 
 convODDy2raster<-function(ODDy,filename=NULL){
   

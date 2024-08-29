@@ -1,11 +1,9 @@
-library(ggplot2)
-library(sf)
-library("ggmap")
-library(OpenStreetMap)
-library(osmdata)
-library(tidyverse)
-library(sp)
-library(gstat)
+# library(ggplot2)
+# library(sf)
+# library("ggmap")
+# library(OpenStreetMap)
+# library(osmdata)
+# library(sp)
 
 ExtractParams<-function(haz="EQ"){
   if(haz=="EQ") return(list(I0=4.3,minmag=5))
@@ -130,148 +128,148 @@ KrigMeUp<-function(poly,values=NULL){
   
 }
 
-GetDisaster_old<-function(d_type,country,bbox,s_date,f_date,folder=NULL,plotty=FALSE){
-  # d_type - disaster type, explained in https://eonet.sci.gsfc.nasa.gov/api/v3-beta/categories
-  # bbox is bounding box in the form 'min lon, max lat, max lon, min lat'
-  # s_date, f_date - start and end date for search of events in format YYYY-MM-DD
-  # wordcloudy plots a word cloud of the disasters found in the search
-  
-  if(!is.null(folder)){
-    
-    filer<-paste0(folder,'/',list.files(path=folder,pattern='.*shp'))
-    # event <- lapply(filer, st_read)
-    event <- st_read(filer)
-    
-    mad_map <- get_stamenmap(bbox,source = "stamen",maptype = "toner-lite",zoom=6)
-    p<-ggmap(mad_map)
-    
-    q<-p+stat_density2d(mapping = aes(x=LONGITUDE, y=LATITUDE,alpha = ..level..),
-                        data=filter(event,FRP>1),fill="red", size=0.01, bins=20, geom="polygon",contour = T,na.rm = T,
-                        show.legend = F) + xlab("Longitude") + ylab("Latitude")
-    
-    ggsave(paste0("Oz_VIIRS_aug-feb.png"), plot=q,path = paste0(folder,'/Plots/'),width = 6,height = 5.)
-    
-    bbox<-c(110.18,-44.93,115.01,-10.17)
-    mad_map <- get_stamenmap(bbox,source = "stamen",maptype = "toner-lite",zoom=7)
-    p<-ggmap(mad_map)
-    
-    p + geom_point(mapping = aes(x=LONGITUDE, y=LATITUDE,group=ACQ_DATE,colour=ACQ_DATE),alpha=0.05,data=filter(event,FRP>30)) 
-    
-    stop()
-    # cnt<-maps::map('world',country)
-    
-    #     stat_density2d(aes(alpha=..level.., fill=..level.., weight=BRIGHTNESS), 
-    #                size=2, bins=10, geom="polygon") + 
-    # scale_fill_gradient(low = "yellow", high = "red") +
-    # scale_alpha(range = c(0.00, 0.5), guide = FALSE) +
-    # geom_density2d(colour="black", bins=10, aes(weight=BRIGHTNESS))
-    
-    if(is.null(bbox)){
-      bbox<-unname(st_bbox(event[[2]]))
-      disasters<-data.frame(LATITUDE=event[[2]]$LATITUDE,LONGITUDE=event[[2]]$LONGITUDE,BRIGHTNESS=event[[2]]$BRIGHTNESS,ACQ_DATE=event[[2]]$ACQ_DATE)
-    } else {
-      disasters<-data.frame(LATITUDE=event[[2]]$LATITUDE,LONGITUDE=event[[2]]$LONGITUDE,BRIGHTNESS=event[[2]]$BRIGHTNESS,ACQ_DATE=event[[2]]$ACQ_DATE) %>%
-        filter(LATITUDE>bbox[2]&LATITUDE<bbox[4]&LONGITUDE>bbox[1]&LONGITUDE<bbox[3])
-      breakz<-c(0,0.02,Inf)
-      limitz<-c(0.02,0.05)
-    }
-    
-    p<-ggplot(disasters, aes(x=LONGITUDE, y=LATITUDE,
-                             weight=BRIGHTNESS,fill=..level..) ) +
-      stat_density2d(size=2, bins=50, geom="polygon",alpha=0.1) + 
-      scale_fill_gradient(low = "yellow", high = "red") +
-      geom_density2d(colour="black", bins=10) + coord_fixed() +
-      xlab("Longitude") + ylab("Latitude") + ggtitle(paste0(d_type," ",country)) + theme(plot.title = element_text(hjust = 0.5))
-    #p<-p+geom_path(inherit.aes = FALSE,mapping=aes(x,y),data=data.frame(x=cnt$x,y=cnt$y))+xlim(bbox[1]-2,bbox[3]+2)+ylim(bbox[2]-2,bbox[4]+2)
-    print(p)
-    ggsave(paste0(d_type,"_",country,"_WeightedDisasterKernel.png"), plot=p,path = paste0(folder,'/'),width = 6,height = 5.)
-    
-    mad_map <- get_stamenmap(bbox,source = "stamen",maptype = "terrain")
-    p<-ggmap(mad_map)
-    
-    # p<- p+ theme_bw() + stat_density2d(mapping = aes(x=LONGITUDE, y=LATITUDE,fill=..level.., alpha=cut(..level..,breaks=breakz)),
-    p<- p+ theme_bw() + stat_density2d(mapping = aes(x=LONGITUDE, y=LATITUDE,fill=..level..),alpha=0.05, 
-                                       data=disasters,size=1, bins=50, geom="polygon") + 
-      #scale_alpha_manual(values=c(0,1),guide="none") +
-      # scale_fill_gradient2(low = rgb(1,0,0,alpha = 0),mid="yellow", high = "red",limits=limitz, na.value = rgb(0,1,0,alpha = 0)) +
-      scale_fill_gradient2(low = rgb(1,0,0,alpha = 0),mid="yellow", high = "red", na.value = rgb(0,1,0,alpha = 0)) +
-      geom_density2d(colour="black", bins=3, mapping = aes(x=LONGITUDE, y=LATITUDE,
-                                                           fill=..level..), 
-                     data=disasters) + 
-      xlab("Longitude") + ylab("Latitude") + ggtitle(paste0(d_type," ",country)) + theme(plot.title = element_text(hjust = 0.5))
-    print(p)
-    
-    ggsave(paste0("East_Gippsland_",d_type,"_",country,"_DisasterKernel.png"), plot=p,path = paste0(folder,'/Plots/'),width = 6,height = 5.)
-    
-    dlist<-as.list(unique(disasters$ACQ_DATE))
-    p<-ggmap(mad_map)
-    for (day in dlist){
-      q<-p+ stat_density2d(mapping = aes(x=LONGITUDE, y=LATITUDE,
-                                         fill=..level.., alpha=cut(..level..,breaks=c(0,0.01,Inf))), 
-                           data=filter(disasters,ACQ_DATE==day),size=2, bins=50, geom="polygon") + 
-        scale_alpha_manual(values=c(0,1),guide="none") +
-        scale_fill_gradient2(low = rgb(1,0,0,alpha = 0),mid="yellow", high = "red",limits=c(0.01,0.05), na.value = rgb(0,1,0,alpha = 0)) +
-        #scale_alpha(range = c(0.00, 0.5), guide = FALSE) #+
-        geom_density2d(colour="black", bins=3, mapping = aes(x=LONGITUDE, y=LATITUDE), 
-                       filter(disasters,ACQ_DATE==day)) + 
-        xlab("Longitude") + ylab("Latitude") + ggtitle(paste0(d_type," ",country,": ",day)) + theme(plot.title = element_text(hjust = 0.5))
-      ggsave(paste0(d_type,"_",country,"_",day,"_DisasterKernel.png"), plot=q,path = paste0(folder,'/Plots/'),width = 6,height = 5.)
-    }  
-    nameGIF<-paste0(folder,"/",d_type,"_",country,"_DisasterKernel")
-    system(command= paste0("convert ",folder,"/",d_type,"_",country,"_20* -delay 100 -loop 0 ",nameGIF,".gif"))
-    
-    return(event)
-  }
-  
-  d_choice<-c("Drought"=6,"Dust and Haze"=7,"Wildfires"=8,"Floods"=9,"Severe Storms"=10,"Volcanoes"=12,"Landslides"=14,"Earthquakes"=16,"Snow"=17,"Temperature Extremes"=18,"Manmade"=19)
-  if (is.na(d_choice[d_type])){stop("GetDisaster error: input disaster type (e.g. 'Severe Storms') does not exist")}
-  
-  if(d_type=="Earthquakes"){
-    # https://earthquake.usgs.gov/fdsnws/event/1/
-    # "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2014-01-01&endtime=2014-01-02"
-    
-    return(event)
-  }
-  
-  if(d_type=="Wildfires"){
-    #https://firms.modaps.eosdis.nasa.gov/active_fire/#firms-shapefile
-    
-    return(event)
-  }
-  
-  #loc<-paste0(as.character(unlist(bbox)),collapse=",")
-  loc<-paste0(as.character(unlist(c(100.,5.,175.,70.))),collapse=",")
-  library(geojsonR)
-  events<-FROM_GeoJson(paste0("https://eonet.sci.gsfc.nasa.gov/api/v3-beta/events/geojson?start=",s_date,"&end=",f_date,"?bbox=",loc,"?status=open"))
-  # CAN ALSO BE USING v2.1: "https://eonet.sci.gsfc.nasa.gov/api/v2.1/events"
-  # Check out "https://developers.arcgis.com/python/sample-notebooks/mapping-recent-natural-disasters/"
-  tmp<-NULL
-  for (i in 1:length(events$features)){tmp<-c(tmp,events$features[[i]]$properties$categories[[1]]$title)}
-  disasters<-events$features[grep(d_type, tmp, ignore.case=TRUE)]
-  
-  #lapply(disasters, grep...)
-  
-  if(plotty){
-    # source('http://www.sthda.com/upload/rquery_wordcloud.r')
-    # for(i in 1:length(disasters)){tmp<-disasters[[i]]$properties$title}
-    # res<-rquery.wordcloud(tmp, type ="text", lang = "english",excludeWords = d_type)
-    # Sys.sleep(2)
-    library(OpenStreetMap)
-    library(osmdata)
-    q<-opq(bbox = bbox)%>%add_osm_feature("amenity",c("house","apartments","cabins","bungalow"))
-    homes<-osmdata_sf(q)
-    q<-opq(bbox = bbox)%>%add_osm_feature("amenity",c("static_caravan","hotel"))
-    tourists<-osmdata_sf(q)
-    q<-opq(bbox = bbox)%>%add_osm_feature("amenity",c(""))
-    transport<-osmdata_sf(q)
-    
-    openmap(upperLeft = c(bbox[1],bbox[2]),lowerRight = c(bbox[3],bbox[4]),minNumTiles=3L,type = "osm")
-    
-    #res<-rquery.wordcloud(tmp, type ="text", lang = "english",excludeWords = c("sea","lake","ice"))
-  }
-  return(disasters)
-  # https://www.gdacs.org/datareport/resources/VO/273070/geojson_273070_2.geojson
-}
+# GetDisaster_old<-function(d_type,country,bbox,s_date,f_date,folder=NULL,plotty=FALSE){
+#   # d_type - disaster type, explained in https://eonet.sci.gsfc.nasa.gov/api/v3-beta/categories
+#   # bbox is bounding box in the form 'min lon, max lat, max lon, min lat'
+#   # s_date, f_date - start and end date for search of events in format YYYY-MM-DD
+#   # wordcloudy plots a word cloud of the disasters found in the search
+#   
+#   if(!is.null(folder)){
+#     
+#     filer<-paste0(folder,'/',list.files(path=folder,pattern='.*shp'))
+#     # event <- lapply(filer, st_read)
+#     event <- st_read(filer)
+#     
+#     mad_map <- get_stamenmap(bbox,source = "stamen",maptype = "toner-lite",zoom=6)
+#     p<-ggmap(mad_map)
+#     
+#     q<-p+stat_density2d(mapping = aes(x=LONGITUDE, y=LATITUDE,alpha = ..level..),
+#                         data=filter(event,FRP>1),fill="red", size=0.01, bins=20, geom="polygon",contour = T,na.rm = T,
+#                         show.legend = F) + xlab("Longitude") + ylab("Latitude")
+#     
+#     ggsave(paste0("Oz_VIIRS_aug-feb.png"), plot=q,path = paste0(folder,'/Plots/'),width = 6,height = 5.)
+#     
+#     bbox<-c(110.18,-44.93,115.01,-10.17)
+#     mad_map <- get_stamenmap(bbox,source = "stamen",maptype = "toner-lite",zoom=7)
+#     p<-ggmap(mad_map)
+#     
+#     p + geom_point(mapping = aes(x=LONGITUDE, y=LATITUDE,group=ACQ_DATE,colour=ACQ_DATE),alpha=0.05,data=filter(event,FRP>30)) 
+#     
+#     stop()
+#     # cnt<-maps::map('world',country)
+#     
+#     #     stat_density2d(aes(alpha=..level.., fill=..level.., weight=BRIGHTNESS), 
+#     #                size=2, bins=10, geom="polygon") + 
+#     # scale_fill_gradient(low = "yellow", high = "red") +
+#     # scale_alpha(range = c(0.00, 0.5), guide = FALSE) +
+#     # geom_density2d(colour="black", bins=10, aes(weight=BRIGHTNESS))
+#     
+#     if(is.null(bbox)){
+#       bbox<-unname(st_bbox(event[[2]]))
+#       disasters<-data.frame(LATITUDE=event[[2]]$LATITUDE,LONGITUDE=event[[2]]$LONGITUDE,BRIGHTNESS=event[[2]]$BRIGHTNESS,ACQ_DATE=event[[2]]$ACQ_DATE)
+#     } else {
+#       disasters<-data.frame(LATITUDE=event[[2]]$LATITUDE,LONGITUDE=event[[2]]$LONGITUDE,BRIGHTNESS=event[[2]]$BRIGHTNESS,ACQ_DATE=event[[2]]$ACQ_DATE) %>%
+#         filter(LATITUDE>bbox[2]&LATITUDE<bbox[4]&LONGITUDE>bbox[1]&LONGITUDE<bbox[3])
+#       breakz<-c(0,0.02,Inf)
+#       limitz<-c(0.02,0.05)
+#     }
+#     
+#     p<-ggplot(disasters, aes(x=LONGITUDE, y=LATITUDE,
+#                              weight=BRIGHTNESS,fill=..level..) ) +
+#       stat_density2d(size=2, bins=50, geom="polygon",alpha=0.1) + 
+#       scale_fill_gradient(low = "yellow", high = "red") +
+#       geom_density2d(colour="black", bins=10) + coord_fixed() +
+#       xlab("Longitude") + ylab("Latitude") + ggtitle(paste0(d_type," ",country)) + theme(plot.title = element_text(hjust = 0.5))
+#     #p<-p+geom_path(inherit.aes = FALSE,mapping=aes(x,y),data=data.frame(x=cnt$x,y=cnt$y))+xlim(bbox[1]-2,bbox[3]+2)+ylim(bbox[2]-2,bbox[4]+2)
+#     print(p)
+#     ggsave(paste0(d_type,"_",country,"_WeightedDisasterKernel.png"), plot=p,path = paste0(folder,'/'),width = 6,height = 5.)
+#     
+#     mad_map <- get_stamenmap(bbox,source = "stamen",maptype = "terrain")
+#     p<-ggmap(mad_map)
+#     
+#     # p<- p+ theme_bw() + stat_density2d(mapping = aes(x=LONGITUDE, y=LATITUDE,fill=..level.., alpha=cut(..level..,breaks=breakz)),
+#     p<- p+ theme_bw() + stat_density2d(mapping = aes(x=LONGITUDE, y=LATITUDE,fill=..level..),alpha=0.05, 
+#                                        data=disasters,size=1, bins=50, geom="polygon") + 
+#       #scale_alpha_manual(values=c(0,1),guide="none") +
+#       # scale_fill_gradient2(low = rgb(1,0,0,alpha = 0),mid="yellow", high = "red",limits=limitz, na.value = rgb(0,1,0,alpha = 0)) +
+#       scale_fill_gradient2(low = rgb(1,0,0,alpha = 0),mid="yellow", high = "red", na.value = rgb(0,1,0,alpha = 0)) +
+#       geom_density2d(colour="black", bins=3, mapping = aes(x=LONGITUDE, y=LATITUDE,
+#                                                            fill=..level..), 
+#                      data=disasters) + 
+#       xlab("Longitude") + ylab("Latitude") + ggtitle(paste0(d_type," ",country)) + theme(plot.title = element_text(hjust = 0.5))
+#     print(p)
+#     
+#     ggsave(paste0("East_Gippsland_",d_type,"_",country,"_DisasterKernel.png"), plot=p,path = paste0(folder,'/Plots/'),width = 6,height = 5.)
+#     
+#     dlist<-as.list(unique(disasters$ACQ_DATE))
+#     p<-ggmap(mad_map)
+#     for (day in dlist){
+#       q<-p+ stat_density2d(mapping = aes(x=LONGITUDE, y=LATITUDE,
+#                                          fill=..level.., alpha=cut(..level..,breaks=c(0,0.01,Inf))), 
+#                            data=filter(disasters,ACQ_DATE==day),size=2, bins=50, geom="polygon") + 
+#         scale_alpha_manual(values=c(0,1),guide="none") +
+#         scale_fill_gradient2(low = rgb(1,0,0,alpha = 0),mid="yellow", high = "red",limits=c(0.01,0.05), na.value = rgb(0,1,0,alpha = 0)) +
+#         #scale_alpha(range = c(0.00, 0.5), guide = FALSE) #+
+#         geom_density2d(colour="black", bins=3, mapping = aes(x=LONGITUDE, y=LATITUDE), 
+#                        filter(disasters,ACQ_DATE==day)) + 
+#         xlab("Longitude") + ylab("Latitude") + ggtitle(paste0(d_type," ",country,": ",day)) + theme(plot.title = element_text(hjust = 0.5))
+#       ggsave(paste0(d_type,"_",country,"_",day,"_DisasterKernel.png"), plot=q,path = paste0(folder,'/Plots/'),width = 6,height = 5.)
+#     }  
+#     nameGIF<-paste0(folder,"/",d_type,"_",country,"_DisasterKernel")
+#     system(command= paste0("convert ",folder,"/",d_type,"_",country,"_20* -delay 100 -loop 0 ",nameGIF,".gif"))
+#     
+#     return(event)
+#   }
+#   
+#   d_choice<-c("Drought"=6,"Dust and Haze"=7,"Wildfires"=8,"Floods"=9,"Severe Storms"=10,"Volcanoes"=12,"Landslides"=14,"Earthquakes"=16,"Snow"=17,"Temperature Extremes"=18,"Manmade"=19)
+#   if (is.na(d_choice[d_type])){stop("GetDisaster error: input disaster type (e.g. 'Severe Storms') does not exist")}
+#   
+#   if(d_type=="Earthquakes"){
+#     # https://earthquake.usgs.gov/fdsnws/event/1/
+#     # "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2014-01-01&endtime=2014-01-02"
+#     
+#     return(event)
+#   }
+#   
+#   if(d_type=="Wildfires"){
+#     #https://firms.modaps.eosdis.nasa.gov/active_fire/#firms-shapefile
+#     
+#     return(event)
+#   }
+#   
+#   #loc<-paste0(as.character(unlist(bbox)),collapse=",")
+#   loc<-paste0(as.character(unlist(c(100.,5.,175.,70.))),collapse=",")
+# 
+#   events<-FROM_GeoJson(paste0("https://eonet.sci.gsfc.nasa.gov/api/v3-beta/events/geojson?start=",s_date,"&end=",f_date,"?bbox=",loc,"?status=open"))
+#   # CAN ALSO BE USING v2.1: "https://eonet.sci.gsfc.nasa.gov/api/v2.1/events"
+#   # Check out "https://developers.arcgis.com/python/sample-notebooks/mapping-recent-natural-disasters/"
+#   tmp<-NULL
+#   for (i in 1:length(events$features)){tmp<-c(tmp,events$features[[i]]$properties$categories[[1]]$title)}
+#   disasters<-events$features[grep(d_type, tmp, ignore.case=TRUE)]
+#   
+#   #lapply(disasters, grep...)
+#   
+#   if(plotty){
+#     # source('http://www.sthda.com/upload/rquery_wordcloud.r')
+#     # for(i in 1:length(disasters)){tmp<-disasters[[i]]$properties$title}
+#     # res<-rquery.wordcloud(tmp, type ="text", lang = "english",excludeWords = d_type)
+#     # Sys.sleep(2)
+#     library(OpenStreetMap)
+#     library(osmdata)
+#     q<-opq(bbox = bbox)%>%add_osm_feature("amenity",c("house","apartments","cabins","bungalow"))
+#     homes<-osmdata_sf(q)
+#     q<-opq(bbox = bbox)%>%add_osm_feature("amenity",c("static_caravan","hotel"))
+#     tourists<-osmdata_sf(q)
+#     q<-opq(bbox = bbox)%>%add_osm_feature("amenity",c(""))
+#     transport<-osmdata_sf(q)
+#     
+#     openmap(upperLeft = c(bbox[1],bbox[2]),lowerRight = c(bbox[3],bbox[4]),minNumTiles=3L,type = "osm")
+#     
+#     #res<-rquery.wordcloud(tmp, type ="text", lang = "english",excludeWords = c("sea","lake","ice"))
+#   }
+#   return(disasters)
+#   # https://www.gdacs.org/datareport/resources/VO/273070/geojson_273070_2.geojson
+# }
 
 
 

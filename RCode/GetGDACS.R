@@ -409,7 +409,7 @@ ModOmori<-function(M0){
 }
 
 Match_HelixGDACS<-function(directory,helixDB,hazard="EQ",dfGDACS=NULL){
-  library(geosphere)
+  #library(geosphere)
   
   #dfGDACS<-FilterGDACS(directory,haz=hazard,syear = syear,fyear = max(as.integer(format(helixDB$sdate,"%Y"))))
   if(is.null(dfGDACS)) {

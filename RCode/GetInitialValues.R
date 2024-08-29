@@ -26,7 +26,8 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   # # Read in Stiff data and calculate the mean and standard deviation, again using all regions in the dataset:
   # if(!file.exists(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))) stop("Please download the VS30 dataset (geotiff and auxiliary files) here https://earthquake.usgs.gov/data/vs30/.")
   #stiff<-raster(paste0(dir,"Hazard_Data/global_vs30_tif/global_vs30.tif"))
-  
+  #stiffAgg <- aggregate(stiff, 5) #Need to aggregate a bit otherwise quantile crashes R
+  #raster::quantile(stiffAgg, probs=c(0.01,0.99))
   
   # # Read in Global Data Lab data and calculate the mean and standard deviation of each variable
   # # Note that we calculate the mean and sd using all regions (not just those in the training set)

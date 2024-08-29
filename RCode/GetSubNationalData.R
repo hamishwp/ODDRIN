@@ -1,43 +1,26 @@
-################
-### ODDpolys ###
-################
+############################
+### GetSubNationalData.R ###
+############################
 
-library(openxlsx)
-#library(tidyxl)
-#library(rgeos)
-library(sfheaders)
-library(ecochange)
+# Create all HAZARD, ODD and BD objects for events in EQ_SubNational.xlsx
 
-# cleanSubNatData <- function(SubNatData){
-#   # Clean data from xlsx file by converting data to the appropriate formats/data types
-#   SubNatData$source_date <- openxlsx::convertToDate(SubNatData$source_date)
-#   SubNatData$sdate <- openxlsx::convertToDate(SubNatData$sdate)
-#   SubNatData$fdate <- openxlsx::convertToDate(SubNatData$fdate)
-#   SubNatData$mortality <- as.integer(SubNatData$mortality)
-#   SubNatData$displacement <- as.integer(SubNatData$displacement)
-#   SubNatData$buildDam <- as.integer(SubNatData$buildDam)
-#   SubNatData$buildDest <- as.integer(SubNatData$buildDest)
-#   return(SubNatData)
-# }
-
+# Where would we like to log error messages?
 folder_write <- 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/'
 
 readSubNatData <- function(subnat_file){
   # Clean data from xlsx file by converting data to the appropriate formats/data types
   
-  SubNatData <-  read.xlsx('/home/manderso/Downloads/EQ_SubNational.xlsx', colNames = TRUE , na.strings = c("","NA"))
-  x <-xlsx_cells('/home/manderso/Downloads/EQ_SubNational.xlsx')
-  formats <- xlsx_formats('/home/manderso/Downloads/EQ_SubNational.xlsx')
-  
-  # SubNatData <-  read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
-  # x <-xlsx_cells(paste0(dir, 'IIDIPUS_Input/', subnat_file))
-  # formats <- xlsx_formats(paste0(dir, 'IIDIPUS_Input/', subnat_file))
+  SubNatData <-  read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+  x <-xlsx_cells(paste0(dir, 'IIDIPUS_Input/', subnat_file))
+  formats <- xlsx_formats(paste0(dir, 'IIDIPUS_Input/', subnat_file))
 
+  #Set the values in all red cells to NA:
   red_cells <- x %>% filter(local_format_id %in% which(formats$local$fill$patternFill$fgColor$rgb == "FFFF0000")) %>% dplyr::select(row, col)
   red_cells$row <- red_cells$row - 1
   red_cells <- red_cells[-which(red_cells$col > NCOL(SubNatData)), ]
   SubNatData[as.matrix(red_cells)] <- NA
   
+  #Mark which observations are 'inferred' (e.g. assumed 0s due to non-reporting):
   pink_cells <- x %>% filter(local_format_id %in% which(formats$local$fill$patternFill$fgColor$rgb == "FFFF00FF")) %>% dplyr::select(row, col)
   SubNatData$buildDamInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDam_exlusion_reason'))]-1)
   SubNatData$buildDestInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDest_exlusion_reason'))]-1)
@@ -47,6 +30,7 @@ readSubNatData <- function(subnat_file){
   
   SubNatData <- SubNatData[!is.na(SubNatData$iso3), ]
   
+  #ensure data is in the correct format:
   SubNatData$source_date <- openxlsx::convertToDate(SubNatData$source_date)
   SubNatData$sdate <- openxlsx::convertToDate(SubNatData$sdate)
   SubNatData$fdate <- openxlsx::convertToDate(SubNatData$fdate)
@@ -68,16 +52,16 @@ getPolyData <- function(polygon_name, subregion, region, country, iso3){
   # Uses getGADM() or getbb() to retrieve the polygon of a region
   # Details:
   #    - Polygon_name is just used to label the polygon at the end (and isn't used to actually find the region)
-  #    - Any missing values for subregion or region should be set to NA
+  #    - Any missing values for subregion or region should be set to NA (e.g. when looking at national data)
   #    - Returns a list containing:
   #         - $polygon_name set to polygon_name
   #         - $sf_polygon set to a polygon (that works with the sf package) corresponding to this region, or NULL if polygon not found
   #    - Attempts to use ecochange::getGADM() function but if this fails will attempt the osmdata::getbb() function
+  
   if (country=='TOTAL'){
     return(list(polygon_name = polygon_name, sf_polygon = NULL))
   }
   
-  GADM_level <- 2
   GADM_array <- c(subregion, region, country)
   GADM_iso3 <- iso3
   if (is.na(GADM_array[1]) & is.na(GADM_array[2])){ #national data, can use iso3 code already in ODD object

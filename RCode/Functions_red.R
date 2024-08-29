@@ -1,5 +1,5 @@
 # library(countrycode)
-library(raster)
+#library(raster)
 # library(geosphere)
 
 returnX<-function(x,a=NULL,b=NULL) x

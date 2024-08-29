@@ -1,9 +1,9 @@
-library(ggplot2)
-library(sf)
-library(tidyverse)
-library(sp)
-library(magrittr)
-library(dplyr)
+# library(ggplot2)
+# library(sf)
+# library(tidyverse)
+# library(sp)
+# library(magrittr)
+# library(dplyr)
 
 ExtractParams<-function(haz="EQ"){
   if(haz=="EQ") return(list(I0=4.3,minmag=5))

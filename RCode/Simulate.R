@@ -509,7 +509,7 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   return(ODDSim)
 }
 
-simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5, cap=-300){
+simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5, folder_write='IIDIPUS_SimInput/'){
   # Input:
   # - nEvents: The number of ODDSim objects to generate
   # - Omega: The model parameterisation
@@ -546,24 +546,24 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
                   unique(miniDam$iso3)[1],
                   "_",ODDSim@eventid)
     # Save out objects to save on RAM
-    ODDpath<-paste0(dir,"IIDIPUS_SimInput/ODDobjects/",namer)
+    ODDpath<-paste0(dir,folder_write, "ODDobjects/",namer)
     saveRDS(ODDSim,ODDpath)
     
-    #BDpath<-paste0(dir,"IIDIPUS_SimInput/BDobjects/",namer) 
+    #BDpath<-paste0(dir,folder_write,"BDobjects/",namer) 
     #saveRDS(BDSim,BDpath)
     print(paste0('Saved simulated hazard to ', namer))
   }
   
   #calculate Model$center based on the simulated events
-  Model$center <- ExtractCentering(dir, input_folder='IIDIPUS_SimInput/', saver=F)
+  Model$center <- ExtractCentering(dir, input_folder=folder_wite, saver=F)
   
-  ODDpaths <-na.omit(list.files(path="IIDIPUS_SimInput/ODDobjects/"))
-  BDpaths <-na.omit(list.files(path="IIDIPUS_SimInput/BDobjects/"))
+  ODDpaths <-na.omit(list.files(path=paste0(folder_write,"ODDobjects/")))
+  BDpaths <-na.omit(list.files(path=paste0(folder_write, "BDobjects/")))
   k <- 10
   intensities <- c() #store eq intensities
   #now loop through each event and simulate the displacement, mortality, and building destruction using DispX()
   for(i in 1:length(ODDpaths)){
-    ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
+    ODDSim <- readRDS(paste0(folder_write,"ODDobjects/",ODDpaths[i]))
     intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
     ODDSim %<>% DispX(Omega %>% addTransfParams(), Model$center, output='ODDwithSampled',
@@ -574,7 +574,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     ODDSim@impact %<>% dplyr::select(-sampled)
     
     #overwrite ODDSim with the updated
-    saveRDS(ODDSim, paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
+    saveRDS(ODDSim, paste0(folder_write, "ODDobjects/",ODDpaths[i]))
     # if (i < 100){
     #   saveRDS(ODDSim, paste0("IIDIPUS_Input/ODDobjects/Train/",ODDpaths[i]))
     # } else {
@@ -583,7 +583,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     
   }
   # for (i in 1:length(BDpaths)){
-  #   BDSim <- readRDS(paste0("IIDIPUS_SimInput/BDobjects/", BDpaths[i]))
+  #   BDSim <- readRDS(paste0(folder_write,"BDobjects/", BDpaths[i]))
   #   BDSim %<>% BDX(Omega %>% addTransfParams(), Model, Method=list(Np=1,cores=1), output='sim')
   #   #take these simulations as the actual values
   #   BDSim@data$grading <- BDSim@data$ClassPred
@@ -595,19 +595,19 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   #   if(NROW(BDSim@data)>100){
   #     BDSim@data <- BDSim@data[1:100,]
   #   }
-  #   saveRDS(BDSim,paste0("IIDIPUS_SimInput/BDobjects/",BDpaths[i]))
+  #   saveRDS(BDSim,paste0(folder_write, "BDobjects/",BDpaths[i]))
   # }
   
   if (outliers){
     #double the impact of the highest intensity earthquake
     i <- which.max(intensities)
-    ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
+    ODDSim <- readRDS(paste0(folder_write, "ODDobjects/",ODDpaths[i]))
     ODDSim@gmax %<>% mutate(
       gmax = 2 * gmax,
       mortality = 2 * mortality,
       buildDestroyed = 2 * buildDestroyed
     )
-    saveRDS(ODDSim, paste0("IIDIPUS_SimInput/ODDobjects/",ODDpaths[i]))
+    saveRDS(ODDSim, paste0(folder_write, "ODDobjects/",ODDpaths[i]))
   }
   return(Model$center)
 }
@@ -650,8 +650,8 @@ perturb_impacts <- function(d=1900, AlgoParams){
 }
 
 
-simulateRealData <- function(input_folder, Omega, Model, dir, outliers = FALSE, I0=4.5, cap=-300){
-  
+simulateRealData <- function(input_folder, Omega, Model, dir, outliers = FALSE, I0=4.5){
+  #simulate impact data for real events
   input_folder <- "IIDIPUS_Input_RealAgg5/ODDobjects/"
   ODDpaths <-na.omit(list.files(path=input_folder, recursive=T))
   k <- 10

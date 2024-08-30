@@ -37,8 +37,8 @@ GetSourceFiles<-function(packred){
     
     # Damage estimate related:
     source('RCode/GetBuildingCounts.R')
+    source('RCode/GetSatDamage.R') 
     #source('RCode/GetOSM.R')
-    #source('RCode/GetSatDamage.R') 
     
     #Simulated data Related:
     source('RCode/Simulate.R')
@@ -82,6 +82,7 @@ LoadLibraries<-function(packred){
     library(ecochange)
     library(openxlsx)
     library(osmdata)
+    library(tidyxl)
     
     # library(doParallel)
     # library(foreach)
@@ -118,7 +119,7 @@ GetODDPackages<-function(packred){
   if(!packred) list.of.packages<-c(list.of.packages,
                                    'sf', 'geojsonR', 'geosphere', 'rworldmap', 'lutz',
                                    'xml2', 'gstat', 'terra', 'geojsonio', 'jsonlite', 'reshape2',
-                                   'ecochange', 'openxlsx', 'osmdata')
+                                   'ecochange', 'openxlsx', 'osmdata', 'tidyxl')
                                    # "codetools","latex2exp", "geojsonR", 'geojsonio',
                                    # "rJava","devtools","OpenStreetMap","osmdata",
                                    # "tidyRSS","geojsonR", "tiff", "gstat",
@@ -150,6 +151,8 @@ GetODDPackages<-function(packred){
   LoadLibraries(packred)
   GetSourceFiles(packred)
   
+  #see what packages different files are using
+  #NCmisc::list.functions.in.file(filename = paste0(dir,"RCode/GetSatDamage.R"), alphabetic = FALSE) |> print()
 }
 
 GetODDPackages(packred)

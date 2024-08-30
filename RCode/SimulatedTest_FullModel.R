@@ -95,7 +95,7 @@ diag(cov(samples))
 
 
 set.seed(1)
-simulateDataSet(170, Omega, Model, dir)
+simulateDataSet(170, Omega, Model, dir, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/')
 
 
 AlgoParams$smc_steps <- 2
@@ -235,7 +235,7 @@ AlgoParams$smc_Npart <- 500
 AlgoParams$n_nodes <- 1
 AlgoParams$smc_steps <- 100
 AlgoParams$rel_weightings <- c(1,1)
-AlgoParams$input_folder <- 'IIDIPUS_SimInput/'
+AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/'
 
 tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '500parttest_0.1propcov')
 AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F,tag_notes=tag_notes)
@@ -263,7 +263,7 @@ execution_time
 #--------------------------------(and compare to real data)--------------------------------------
 #------------------------------------------------------------------------------------------------
 
-moveTestData <- function(folder_in='IIDIPUS_SimInput'){
+moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput'){
   ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
   ODD_foldertest<-paste0(dir, folder_in, '/Test/')
   ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
@@ -288,10 +288,10 @@ moveTestData <- function(folder_in='IIDIPUS_SimInput'){
   # }
   
 }
-moveTestData('IIDIPUS_SimInput')
+moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput')
 
 # Collect mortality, building damage, and displacement data for simulated data:
-ODDsim_paths <-na.omit(list.files(path="IIDIPUS_SimInput/ODDobjects/"))
+ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/"))
 df_SimImpact <- data.frame(observed=numeric(),
                            impact=character(),
                            polygon=integer(),
@@ -301,7 +301,7 @@ df_SimImpact <- data.frame(observed=numeric(),
 nHazSim <- c()
 maxIntSim <- c()
 for(i in 1:length(ODDsim_paths)){
-  ODDSim <- readRDS(paste0("IIDIPUS_SimInput/ODDobjects/",ODDsim_paths[i]))
+  ODDSim <- readRDS(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/",ODDsim_paths[i]))
   if (length(ODDSim@impact$impact)>0){
     nHazSim <- c(nHazSim, length(grep('hazMean', names(ODDSim@data))))
     maxIntSim <- c(maxIntSim, max(ODDSim@data[, grep('hazMean', colnames(ODDSim@data))],  na.rm=T))
@@ -385,7 +385,7 @@ plot_grid(legend, plot_grid( p_mort_obsvals, p_disp_obsvals, p_bd_obsvals,
 grid.arrange(p_mort_obsvals, p_disp_obsvals, p_bd_obsvals, 
              p_mort_obscount, p_disp_obscount, p_bd_obscount, ncol=3, nrow=2)
 
-files <-  paste0(dir, "IIDIPUS_SimInput/ODDobjects/")
+files <-  paste0(dir, "IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/")
 
 ufiles<-na.omit(list.files(path=files,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
 for (file in ufiles){

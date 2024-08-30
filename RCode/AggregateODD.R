@@ -4,6 +4,24 @@
 # ---------------- AGGREGATE BY REGIONS WITH SIMILAR VULNERABILITY / HAZARD INTENSITY / POPULATION DENSITY ------------------------
 #----------------------------------------------------------------------------------------------------------------------------------
 
+increaseAggregation_all <- function(folder_in='IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12'){
+  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
+  ODD_folderout<-paste0(dir, 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_Aug31_Agg', '/ODDobjects/')
+  ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  for (file in ufiles[1:length(ufiles)]){
+    event_id <- as.numeric(strsplit(file, "_")[[1]][2])
+    ODDy <- readRDS(paste0(ODD_folderin, file))
+    saveRDS(ODDy, paste0(dir, folder_in, '/ODDobjects/', file))
+    ODDyAgg <- tryCatch(increaseAggregation(removeWeights(ODDy)),error=function(e) NULL)
+    if(is.null(ODDyAgg)){
+      print(event_id)
+      next
+    }
+    saveRDS(ODDyAgg, paste0(ODD_folderout, file))
+  }
+}
+
+
 removeWeights <- function(ODD){
   pixels_of_interest <- which(!is.na(ODD$ISO3C))
   for (i in pixels_of_interest){
@@ -187,6 +205,7 @@ aggregateODDbyX <- function(ODD, aggFactor){
   i = 1
   for (col_chunk in col_chunks){
     for (row_chunk in row_chunks){
+
       middle_col <- ceiling(length(col_chunk)/2)
       middle_row <- ceiling(length(row_chunk)/2)
       middle_index <- coords_wide[row_chunk[middle_row], col_chunk[middle_col]]
@@ -198,9 +217,16 @@ aggregateODDbyX <- function(ODD, aggFactor){
       pop_weights <- ODD$Population[indexes]/sum(ODD$Population[indexes], na.rm=T)
       pop_weights[is.na(pop_weights)] = 0
       
-      match_mat <- do.call(rbind,lapply(ODD@polygons, function(x) indexes %in% x$indexes))
+      #which polygons do these pixels come from: rows= polygons, columns=pixels
+      #values are the weight of that polygon for that pixel
+      match_mat_weights <- do.call(rbind,lapply(ODD@polygons, function(x) x$weights[match(indexes, x$indexes)]))
+      match_mat_weights[which(is.na(match_mat_weights))] = 0
+      #match_mat <- do.call(rbind,lapply(ODD@polygons, function(x) indexes %in% x$indexes))
+      
       if (NROW(match_mat)>1){
-        matched_weights <- rowSums(sweep(match_mat, 2, pop_weights,'*'))
+        #weight of new pixel for polygon = sum over (proportion of new pixel's population that lies in that old pixel x 
+        #                                              old pixel's weight for that polygon)
+        matched_weights <- rowSums(sweep(match_mat_weights, 2, pop_weights,'*'))
       } else {
         matched_weights <- sum(match_mat * pop_weights)
       }

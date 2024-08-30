@@ -1,11 +1,11 @@
-library(sf)
-library(ggplot2)
-library("ggmap")
-library(OpenStreetMap)
-library(osmdata)
-source("RCode/Functions.R")
-library(gridExtra)
-library(magrittr)
+# library(sf)
+# library(ggplot2)
+# library("ggmap")
+# library(OpenStreetMap)
+# library(osmdata)
+# source("RCode/Functions.R")
+# library(gridExtra)
+# library(magrittr)
 
 ExtractAllCOPERNICUS<-function(dir,haz="EQ"){
   
@@ -310,9 +310,9 @@ getCopernicusSource <- function(event_i){
 
 
 
-library(data.table)
-library(geojsonio)
-library(jsonlite)
+# library(data.table)
+# library(geojsonio)
+# library(jsonlite)
 BD_increase_coverage_bing <- function(BDy, ODDy){
   
   #event_i <- 67

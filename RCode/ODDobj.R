@@ -330,6 +330,7 @@ setMethod(f="initialize", signature="ODD",
             #stop("Add the full variables to the cIndies data.frame")
             # Bind it all together!
             .Object@cIndies<-WID
+            .Object@cIndies$value[which(.Object@cIndies$value==0)] = 0.0001 # 0 values cause issues when applying log transform to GNIc
             
             # Here we add the vulnerabilities used in the linear predictor
             .Object%<>%AddVuln()

@@ -270,6 +270,17 @@ plot_corr_transf_posterior_vs_d = function(AlgoResults, include_priors=F, Omega=
   # }
 }
 
+crps <- function(sample, obs){
+  sample <- sort(sample)
+  m <- length(sample)
+  crps <- 0
+  for (i in 1:m){
+    crps <- crps + (sample[i]-obs)*(m*as.numeric(obs<sample[i]) -i + 0.5)
+  }
+  crps <- (crps*2)/(m^2)
+  return(crps)
+}
+
 sample_post_predictive <- function(AlgoResults, M, s, dat='Train', single_particle=F, Omega=NULL, particle_i = NULL, 
                                    return_type='Poly', output='SampledAgg'){
   AlgoParams$input_folder <- AlgoResults$input_folder
@@ -698,8 +709,10 @@ plot_df_postpredictive_PAGER_coloured <- function(df_poly_jitter, impact_type){
     geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) +
     geom_point(col='red', size=2.5) + #geom_point(aes(col=alertlevel), size=2.5) + 
     geom_point(shape = 1, size = 3,colour = "black") + 
-    scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
-    scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+    #scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) log(x+10), labels = scales::trans_format("log10")), labels = scales::comma) + 
+    scale_x_continuous(trans=scales::pseudo_log_trans(sigma=5,base = 10), breaks = c(0,20,100,1000, 10000, 100000), labels= scales::comma_format(),  minor_breaks =NULL) + 
+    scale_y_continuous(trans=scales::pseudo_log_trans(sigma=5,base = 10), breaks = c(0,20,100,1000, 10000, 100000), labels= scales::comma_format(),  minor_breaks =NULL) + 
+    #scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
     #geom_pointrange(aes(col=train_flag)) + 
     ylab(paste('ODDRIN Posterior Predictive', impact_type)) + xlab(paste('Observed', impact_type)) + 
     #scale_color_manual(values = c('green'='green', 'yellow'='yellow', 'orange'='orange', 'red'='red'), labels = c('green'='0', 'yellow'='1 - 99', 'orange'='100 - 999', 'red'='1000+'),name = "PAGER Predicted Mortality") + 

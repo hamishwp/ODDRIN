@@ -48,6 +48,7 @@ var(exp(-8*loss_store[1:5])/exp(-8*loss_store[6:10])) # learning rate of 8 seems
 
   
 Omega_best <- AlgoResults$Omega_sample_phys[984,,120] %>% relist(skeleton=Model$skeleton)
+Omega_best <- AlgoResults$Omega_sample_phys[401,,130] %>% relist(skeleton=Model$skeleton)
 AlgoParams$input_folder='IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/'
 AlgoParams$Np <- 1
 AlgoParams$m_CRPS <- 100
@@ -67,7 +68,7 @@ plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6),
 
 #df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, M=100, output='SampledTotal')
 df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=T, 
-                                                           Omega = AlgoResults$Omega_sample_phys[,1564]%>% relist(skeleton=Model$skeleton),
+                                                           Omega = AlgoResults$Omega_sample_phys[401,,130] %>% relist(skeleton=Model$skeleton),
                                                            M=100, output='SampledTotal')
 
 #saveRDS(df_postpredictive_sampled_best, paste0(dir, 'IIDIPUS_Results/', 'sampledpost', gsub(gsub(gsub(Sys.time(), pattern = " ", replacement = "_"), pattern = ":", replacement = ""), pattern = "\\..*", replacement = "")))

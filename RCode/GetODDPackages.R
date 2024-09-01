@@ -50,7 +50,7 @@ GetSourceFiles<-function(packred){
   
 }
 
-LoadLibraries<-function(packred){
+LoadLibraries<-function(packred, loadRmpi=F){
   
   library(tidyverse)
   library(magrittr)
@@ -59,12 +59,15 @@ LoadLibraries<-function(packred){
   library(parallel)
   library(mvtnorm)
   library(abind)
-  library(Rmpi)
   library(countrycode)
   library(raster)
   library(scoringRules)
   library(viridis)
   library(gridExtra)
+  library(devtools)
+  library(shiny)
+  library(usethis)
+  if (loadRmpi){library(Rmpi)}
   
   if(!packred) {
     library(sf)  
@@ -99,7 +102,7 @@ LoadLibraries<-function(packred){
   }
 }
 
-GetODDPackages<-function(packred){
+GetODDPackages<-function(packred, loadRmpi=F){
   
   # list.of.packages <- c("dplyr", "ggplot2","sf","tidyverse","openxlsx","pracma",
   #                        "tiff", "gstat", "mvtnorm", 'DescTools', #'rgeos', 
@@ -111,8 +114,9 @@ GetODDPackages<-function(packred){
   #                       'vegan')
   
   list.of.packages <- c('tidyverse', 'magrittr', 'pracma', 'parallel',
-                        'mvtnorm', 'abind', 'Rmpi', 'countrycode', 'raster', 'scoringRules',
-                        'viridis', 'gridExtra')
+                        'mvtnorm', 'abind', 'countrycode', 'raster', 'scoringRules',
+                        'viridis', 'gridExtra', 'devtools', 'shiny', 'usethis')
+  if (loadRmpi){ list.of.packages <- c(list.of.packages,'Rmpi')}
   
   
   
@@ -155,7 +159,7 @@ GetODDPackages<-function(packred){
   #NCmisc::list.functions.in.file(filename = paste0(dir,"RCode/GetSatDamage.R"), alphabetic = FALSE) |> print()
 }
 
-GetODDPackages(packred)
+GetODDPackages(packred, loadRmpi)
 
 filers<-c(paste0(dir,"Demography_Data"),
           paste0(dir,"Demography_Data/SocioEconomic"),

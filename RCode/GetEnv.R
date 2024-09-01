@@ -6,4 +6,6 @@ setwd(directory)
 FBdirectory<-'/home/patten/Documents/IDMC/Facebook_Data/'
 # Do you want only the reduced packages or all? Choose via packred
 packred<-F
+# Do you want to load the Rmpi package? This is used for MPI (parallelising across nodes) - only required for the parallel implementation of the ABC-SMC algorithm
+loadRmpi <- T
 

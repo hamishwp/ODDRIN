@@ -102,7 +102,6 @@ getPolyData <- function(polygon_name, subregion, region, country, iso3){
     regions_found <- c(getGADM(level=1, country=GADM_iso3), getGADM(level=2, country=GADM_iso3))
     warning(paste0('No polygons (or more than one polygon) found for ', polygon_name, 
                    ' using getGADM(). Closest region found: ', regions_found[which.min(adist(GADM_array[1], regions_found ))]))
-    
     #attempt getbb()
     if(GADM_level != 0) GADM_array <- c(GADM_array, country)
     polygon <- tryCatch(getbb(paste(GADM_array, collapse=','), format_out='sf_polygon'), error=function(e) NULL) 
@@ -365,11 +364,10 @@ pixel_weight_border_correction <- function(ODDy){
     }
     for (g in 2:3){
       if (is.null(polygon_matches[[g]])) next
-      if(round(weight_sum[g],3) > 1){
-        stop()
+      if(round(weight_sum[g],3) > 1.1){
         file_conn <- file(paste0(folder_write, 'ODD_creation_notes'), open = "a")
         #writeLines(paste("Region:", ODDy@polygons[[polygon_matches[[g]][1,1]]]$name, "Event Date:", ODDy@hazdates[1], '. Sum of pixel weights for a polygon is larger than 1'), file_conn)
-        print(paste("Region:", ODDy@polygons[[polygon_matches[[g]][1,1]]]$name, "Event Date:", ODDy@hazdates[1], '. Sum of pixel weights for a polygon is larger than 1'), file_conn)
+        print(paste("Region:", paste(unlist(lapply(ODDy@polygons[polygon_matches[[g]][,1]], function(x) x$name)), collapse=' and '), "Event Date:", ODDy@hazdates[1],'. Sum of pixel weights for a polygon is', round(weight_sum[g],3), ' (larger than 1.1)'), file_conn)
         
         close(file_conn)
       } 

@@ -243,12 +243,12 @@ setMethod(f="initialize", signature="ODDSim",
             EQFreq_vals <- runif(length(ulist), 1, 10)
             SHDI_vals <- runif(length(ulist), 0.1, 0.9)
             for(i in 1:length(ulist)){
-              .Object@data$AveSchYrs[GDPSim %in% ulist[i]] <- AveSchYrs_vals[i]
-              .Object@data$LifeExp[GDPSim %in% ulist[i]] <- LifeExp_vals[i]
-              .Object@data$GNIc[GDPSim %in% ulist[i]] <- GNIc_vals[i]
-              .Object@data$Vs30[GDPSim %in% ulist[i]] <- Vs30_vals[i]
-              .Object@data$EQFreq[GDPSim %in% ulist[i]] <- EQFreq_vals[i]
-              .Object@data$SHDI[GDPSim %in% ulist[i]] <- SHDI_vals[i]
+              .Object@data$AveSchYrs[GDPSim %in% ulist[i]] <- AveSchYrs_vals[1] + rbeta(1, 1,5) * (AveSchYrs_vals[i] - AveSchYrs_vals[1]) #cluster the values towards the first
+              .Object@data$LifeExp[GDPSim %in% ulist[i]] <- LifeExp_vals[1] + rbeta(1, 1,5) * (LifeExp_vals[i] - LifeExp_vals[1])
+              .Object@data$GNIc[GDPSim %in% ulist[i]] <- GNIc_vals[1] + rbeta(1, 1,5) * (GNIc_vals[i] - GNIc_vals[1])
+              .Object@data$Vs30[GDPSim %in% ulist[i]] <- Vs30_vals[1] + rbeta(1, 1,5) * (Vs30_vals[i] - Vs30_vals[1])
+              .Object@data$EQFreq[GDPSim %in% ulist[i]] <- EQFreq_vals[1] + rbeta(1, 1,5) * (EQFreq_vals[i] - EQFreq_vals[1])
+              .Object@data$SHDI[GDPSim %in% ulist[i]] <- SHDI_vals[1] + rbeta(1, 1,5) * (SHDI_vals[i] - SHDI_vals[1])
             }
             .Object@data$PDens <- .Object@data$Population
             
@@ -495,7 +495,7 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   if (lenny > 1){
     for (i in 2:lenny){
       max_extent[c(1,3)] <- pmin(max_extent[c(1,3)], extent(lhazdat[[i]])[c(1,3)])
-      max_extent[c(2,4)] <- pmin(max_extent[c(2,4)], extent(lhazdat[[i]])[c(2,4)])
+      max_extent[c(2,4)] <- pmax(max_extent[c(2,4)], extent(lhazdat[[i]])[c(2,4)])
     }
   }
  
@@ -555,7 +555,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   }
   
   #calculate Model$center based on the simulated events
-  Model$center <- ExtractCentering(dir, input_folder=folder_wite, saver=F)
+  Model$center <- ExtractCentering(dir, input_folder=folder_write, saver=F)
   
   ODDpaths <-na.omit(list.files(path=paste0(folder_write,"ODDobjects/")))
   BDpaths <-na.omit(list.files(path=paste0(folder_write, "BDobjects/")))
@@ -567,7 +567,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
     ODDSim %<>% DispX(Omega %>% addTransfParams(), Model$center, output='ODDwithSampled',
-                      Method=list(Np=1,cores=1))
+                      Method=list(Np=1,cores=1, NestedCores=1))
     #take these simulations as the actual values
     ODDSim@impact <- data.frame(impact=character(), iso3=character(), qualifier=character(), value=numeric())
     ODDSim@impact <- ODDSim@predictDisp %>% mutate(observed=sampled, qualifier = ifelse(is.na(sampled), NA, 'total'))

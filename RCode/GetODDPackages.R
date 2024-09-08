@@ -67,6 +67,7 @@ LoadLibraries<-function(packred, loadRmpi=F){
   library(devtools)
   library(shiny)
   library(usethis)
+  library(LaplacesDemon)
   if (loadRmpi){library(Rmpi)}
   
   if(!packred) {
@@ -115,7 +116,8 @@ GetODDPackages<-function(packred, loadRmpi=F){
   
   list.of.packages <- c('tidyverse', 'magrittr', 'pracma', 'parallel',
                         'mvtnorm', 'abind', 'countrycode', 'raster', 'scoringRules',
-                        'viridis', 'gridExtra', 'devtools', 'shiny', 'usethis')
+                        'viridis', 'gridExtra', 'devtools', 'shiny', 'usethis',
+                        'LaplacesDemon')
   if (loadRmpi){ list.of.packages <- c(list.of.packages,'Rmpi')}
   
   

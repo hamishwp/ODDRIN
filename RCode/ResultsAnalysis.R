@@ -11,6 +11,26 @@ AlgoResultsSMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Result
 
 AlgoResultsMCMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-08-19_075743_MCMC_RealAgg5_Trial_LR40_Rho0.975propCOVdiv12')
 
+
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-09-07_081752_alphaAdaptive_M100_Npart1000_Sim50by50_propCOVmult0.2')
+AlgoParams$cores <- 1
+AlgoParams$NestedCores <- 4
+AlgoParams$Np <- 1
+AlgoParams$m_CRPS <- 100
+AlgoParams$smc_Npart <- 50
+AlgoParams$rel_weightings <- c(1,1)
+AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/'
+dists <- array(NA, dim=c(50, 2))
+for (i in 1:50){
+  print(i)
+  proposed<- AlgoResults$Omega_sample_phys[i,,132] %>% relist(skeleton=Model$skeleton)
+  impact_sample <- SampleImpact(dir, Model, proposed %>% addTransfParams(), AlgoParams)
+  dists[i,] = CalcDist(impact_sample, AlgoParams)[1:2]
+}
+
+
+
 plot(AlgoResultsMCMC$loss, type='l')
 
 plot(AlgoResultsSMC$Omega_sample_phys[,16,1], AlgoResultsSMC$Omega_sample_phys[,17,1], col='blue', xlab='SHDI.coef', ylab='GNIc.coef')

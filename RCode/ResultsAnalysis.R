@@ -20,15 +20,109 @@ AlgoParams$Np <- 1
 AlgoParams$m_CRPS <- 100
 AlgoParams$smc_Npart <- 50
 AlgoParams$rel_weightings <- c(1,1)
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/'
-dists <- array(NA, dim=c(50, 2))
-for (i in 1:50){
+AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput2/'
+dists <- array(NA, dim=c(100, 2))
+for (i in 1:100){
   print(i)
-  proposed<- AlgoResults$Omega_sample_phys[i,,132] %>% relist(skeleton=Model$skeleton)
+  proposed<- Omega_true 
+  proposed$eps$hazard_cor = i/100
   impact_sample <- SampleImpact(dir, Model, proposed %>% addTransfParams(), AlgoParams)
   dists[i,] = CalcDist(impact_sample, AlgoParams)[1:2]
 }
 
+#Simulated correlated vuln
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-09-22_151452_alphaAdaptive_M100_Npart1000_Sim50by50_propCOVmult0.2')
+plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)), 
+                           Omega=list(Lambda1 = list(nu=8.75, kappa=0.6),
+                                      Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
+                                      Lambda3 = list(nu=8.55, kappa=0.8),
+                                      Lambda4 = list(nu=9.9, kappa=1.6),
+                                      theta= list(theta1=0.6),
+                                      eps=list(local=0.8, hazard_mort=0.48, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
+                                      #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                                      vuln_coeff = list(PDens=0, SHDI=-0.3, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
+                                      check = list(check=0.5)))
+plot_d_vs_step(AlgoResults, ymax=6)
+
+
+#AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-09-15_204947_alphaAdaptive_M100_Npart1000_Sim50by50_propCOVmult0.2')
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-09-18_080708_alphaAdaptive_M100_Npart1000_Sim50by50_propCOVmult0.2')
+plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)), 
+                           Omega=list(Lambda1 = list(nu=8.75, kappa=0.6),
+                                      Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
+                                      Lambda3 = list(nu=8.7, kappa=0.7),
+                                      Lambda4 = list(nu=9.9, kappa=1.6),
+                                      theta= list(theta1=0.6),
+                                      eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
+                                      #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                                      vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
+                                      check = list(check=0.5)))
+#SimPosteriors.pdf, 7 x 9 inches
+
+plot_d_vs_step(AlgoResults, ymax=6)
+points(AlgoResults$tolerancestore, pch=20, col='red')
+#DvsStep.pdf, 6 x 9 inches
+df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
+                                                           M=100, output='SampledAgg')
+
+df_postpredictive_sampled_true <- create_df_postpredictive(AlgoResults, single_particle=T, 
+                                                           Omega =list(Lambda1 = list(nu=8.75, kappa=0.6),
+                                                                       Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
+                                                                       Lambda3 = list(nu=8.7, kappa=0.7),
+                                                                       Lambda4 = list(nu=9.9, kappa=1.6),
+                                                                       theta= list(theta1=0.6),
+                                                                       eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
+                                                                       #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                                                                       vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
+                                                                       check = list(check=0.5)),
+                                                           M=100, output='SampledAgg')
+
+saveRDS(df_postpredictive_sampled_best, 'SimPostPredictive23rdSept')
+saveRDS(df_postpredictive_sampled_true, 'SimTruePredictive23rdSept')
+
+df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/SimPostPredictive16thSept')
+df_postpredictive_sampled_true <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/SimTruePredictive16thSept')
+
+plot_df_postpredictive_compare(df_postpredictive_sampled_true %>% filter(train_flag=='TEST'),
+                               df_postpredictive_sampled_best %>% filter(train_flag=='TEST'), 'mortality')
+#PostPredSim.pdf, 5 x 9 inches
+
+# Real data results:
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
+plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
+#RealPosteriors.pdf, 7 x 9 inches
+
+AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/'
+df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
+                                                           M=100, output='SampledTotal')
+
+df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/sampledBest18thSept')
+
+mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none")
+disp_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'displacement')  + guides(color="none")
+buildDam_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'buildDam')  + guides(color="none") + 
+                      scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma, limits=c(50,100000)) 
+  
+grid.arrange(mort_test, disp_test, buildDam_test, ncol=3)
+#PostPredReal.pdf, 4 x 12 inches
+
+AlgoResults %<>% addAlgoParams(s_finish=NULL)
+for (i in c(16,)){
+  p_H_given_y = sum(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish]>0)/length(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish])
+  p_H = sum(AlgoResults$Omega_sample_phys[,i,1]>0)/length(AlgoResults$Omega_sample_phys[,i,1])
+  print(paste('Bayes factor for', names(unlist(Omega))[i], ':', round(p_H_given_y * (1-p_H)/((1-p_H_given_y)*p_H), 3)))
+  print(paste('Post. prob of greater than 0:', sum(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish]>0)/length(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish])))
+}
+
+
+
+
+
+
+
+#plot_df_postpredictive(df_postpredictive_sampled_true %>% filter(train_flag=='TEST'), 'mortality')
+#plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'), 'mortality')
 
 
 plot(AlgoResultsMCMC$loss, type='l')
@@ -79,8 +173,8 @@ plot_df_postpredictive(imp_best_plot, 'mortality')
 
 #generic plots
 plot_posteriors(AlgoResults, 15:22)
-plot_d_vs_step(AlgoResults, ymax=6)
 plot_acc_prob(AlgoResults); abline(h=0.05)
+
 
 plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(9,10), c(11,12), c(13,14)))
 

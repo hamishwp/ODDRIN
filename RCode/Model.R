@@ -87,7 +87,7 @@ Model$Priors <- list( #All uniform so currently not included in the acceptance p
            hazard_mort=list(dist='unif', min=0, max=1.5),
            hazard_disp=list(dist='unif', min=0, max=1.5),
            hazard_bd=list(dist='unif', min=0, max=1.5),
-           hazard_cor=list(dist='unif', min=-1, max=1)),
+           hazard_cor=list(dist='unif', min=0, max=1)),
   vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.35),
                   SHDI=list(dist='laplace', location=0, scale=0.35),
                   GNIc=list(dist='laplace', location=0, scale=0.35),
@@ -310,6 +310,7 @@ addTransfParams <- function(Omega, I0=Model$I0){
   Omega$Lambda2$scale <- Omega$Lambda2$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda2$kappa)
   Omega$Lambda3$scale <- Omega$Lambda3$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda3$kappa)
   Omega$Lambda4$scale <- Omega$Lambda4$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda4$kappa)
+  if (Omega$eps$hazard_cor < 0){Omega$eps$hazard_cor = 0.001}
   Omega$vuln_coeff_adj <- Omega$vuln_coeff #lapply(Omega$vuln_coeff, function(x) x * Omega$Lambda2$scale)
   Omega$eps_adj <- Omega$eps #lapply(Omega$eps, function(x) x * Omega$Lambda2$scale)
   Omega$eps_adj$local <- Omega$eps$local / Omega$eps$hazard_mort # local mort / hazard wide mort = ratio
@@ -449,16 +450,16 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     impact_intens_8 <- HLP_impacts(8, lp, Omega)
     adder <- adder + sum(impact_intens_8[1,] > impact_intens_8[2,])
     
-    ##Print results (helpful for debugging / identifying issue with a proposed Omega)
-    #print('Upper bounds at I=4.6:')
-    #print(paste('Passed', c('Mort:', 'DispMort:', 'BuildDam:'), !HLP_impacts(4.6, lp[2], Omega)>Upp_bounds_4.6))
-    #print('Lower bounds at I=7:')
-    #print(paste('Passed', c('Mort:', 'DispMort:', 'BuildDam:'), !HLP_impacts(7, lp[1], Omega)<Low_bounds_7))
-    #print('Upper bounds at I=7:')
-    #print(paste('Passed', c('Mort:', 'DispMort:', 'BuildDam:'), !HLP_impacts(7, lp[2], Omega)>Upp_bounds_7))
-    #print('Lower bounds at I=9.5:')
-    #print(paste('Passed', c('Mort:', 'DispMort:', 'BuildDam:'), !HLP_impacts(9.5, lp[1], Omega)<Low_bounds_9.5))
-    #print(paste('p(Disp)>p(Mort) at Intensity 8:', all(!(impact_intens_8[1,] > impact_intens_8[2,]))))
+    #Print results (helpful for debugging / identifying issue with a proposed Omega)
+    # print('Upper bounds at I=4.6:')
+    # print(paste('Passed', c('Mort:', 'DispMort:', 'BuildDam:'), !HLP_impacts(4.6, lp[2], Omega)>Upp_bounds_4.6))
+    # print('Lower bounds at I=7:')
+    # print(paste('Passed', c('Mort:', 'DispMort:', 'BuildDam:'), !HLP_impacts(7, lp[1], Omega)<Low_bounds_7))
+    # print('Upper bounds at I=7:')
+    # print(paste('Passed', c('Mort:', 'DispMort:', 'BuildDam:'), !HLP_impacts(7, lp[2], Omega)>Upp_bounds_7))
+    # print('Lower bounds at I=9.5:')
+    # print(paste('Passed', c('Mort:', 'DispMort:', 'BuildDam:'), !HLP_impacts(9.5, lp[1], Omega)<Low_bounds_9.5))
+    # print(paste('p(Disp)>p(Mort) at Intensity 8:', all(!(impact_intens_8[1,] > impact_intens_8[2,]))))
     
 
     return(adder) 
@@ -679,6 +680,7 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
     dist_poly[n,1] <- 0
     
     es_store <- c()
+    vs_store <- c()
     #pre_ranks_average <- c() #can also assess quantiles for uniformity based on the average pre-rank function
     #pre_ranks_mst <- c() #can also assess quantiles for uniformity based on the minimum spanning tree pre-rank function
     
@@ -694,12 +696,15 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
         next
       } 
       es_store<- c(es_store, es_sample(obs, sims))
+      w_vs <- sqrt(as.numeric(impact_weightings[grouped_events[[i]]]) %*% t(as.numeric(impact_weightings[grouped_events[[i]]]))) / (length(grouped_events[[i]])^2)
+      if(vs_sample(obs, sims, w_vs = w_vs) > 5000){stop()}
+      vs_store <- c(vs_store, vs_sample(obs, sims, w_vs = w_vs))
       #pre_ranks_average <- c(pre_ranks_average, get_average_rank_single(cbind(obs, sims)))
       #pre_ranks_mst <- c(pre_ranks_mst, get_mst_rank_single(cbind(obs,sims)))
 
     }
     dist_poly[n,1] <- mean(es_store) #mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$impact_weights['mortality'])
-    dist_poly[n,2] <- 0 
+    dist_poly[n,2] <- mean(vs_store)
     dist_poly[n,3] <- 0
     
     ## Ways to assess uniformity of quantiles:
@@ -1274,3 +1279,44 @@ vulnerabilityVars<-function(DispData,Model){
 #       lwd=2,type="b",pch=3,lty=4)
 # legend(x=0.45, y=-20, legend=c("Destroyed","Severe","Moderate","Possible","Unaffected"),
 #        col=c("black","red","orange","green","blue"),lty=c(1,1,2,3,4),lwd = 2,pch = c(0,0:3))
+
+# obs <- c(100, 100, 100)
+# sim1 <- rnorm(10000, 100, 0.00001)
+# sim2 <- rnorm(10000, 100, 28)
+# sim3 <- rnorm(10000,100, 0.000001)
+# w_2 <- 0.125
+# w_vs <- cbind(c(1,w_2,1),c(w_2,w_2,w_2), c(1,w_2,1))
+# vs_sample(obs, rbind(sim1, sim2,sim3), w_vs=w_vs, p=0.5)
+# 
+# #Disp:
+# obs <- c(100, 100, 100)
+# sim1 <- rnorm(10000, 100, 7)
+# sim2 <- rnorm(10000, 100, 7)
+# sim3 <- rnorm(10000,100, 7)
+# w_2 <- 1/7
+# w_vs <- cbind(c(w_2,w_2,w_2),c(w_2,w_2,w_2), c(w_2,w_2,w_2))
+# vs_sample(obs, rbind(sim1, sim2,sim3), w_vs=w_vs, p=0.5)
+# 
+# #Mort
+# obs <- c(100, 100, 100)
+# sim1 <- rnorm(10000, 100, 1)
+# sim2 <- rnorm(10000, 100, 1)
+# sim3 <- rnorm(10000,100, 1)
+# w_2 <- 1
+# w_vs <- cbind(c(w_2 ,w_2,w_2 ),c(w_2,w_2,w_2), c(w_2 ,w_2,w_2 ))
+# vs_sample(obs, rbind(sim1, sim2,sim3), w_vs=w_vs, p=0.5)
+# 
+# #DispMort:
+# obs <- c(100, 100, 100)
+# sim1 <- rnorm(10000, 100, 1)
+# sim2 <- rnorm(10000, 100, 3)
+# sim3 <- rnorm(10000,100, 5)
+# w_1 = 1; w_2 = 1/3; w_3 = 1/5
+# w_12 <- sqrt(w_1*w_2); w_23=sqrt(w_2*w_3); w_13=sqrt(w_1*w_3)
+# w_vs <- cbind(c(w_1 ,w_12, w_13),c(w_12,w_2,w_23), c(w_13,w_23,w_3))
+# vs_sample(obs, rbind(sim1, sim2,sim3), w_vs=w_vs, p=0.5)
+# 
+# 
+# xgr <- c(1,3,5,8,10)
+# plot(xgr, c(1, 1/5, 1/13, 1/33, 1/50), type='l')
+# lines(xgr,1/xgr, col='red')

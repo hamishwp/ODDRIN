@@ -68,6 +68,7 @@ LoadLibraries<-function(packred, loadRmpi=F){
   library(shiny)
   library(usethis)
   library(LaplacesDemon)
+  library(cowplot)
   if (loadRmpi){library(Rmpi)}
   
   if(!packred) {
@@ -117,7 +118,7 @@ GetODDPackages<-function(packred, loadRmpi=F){
   list.of.packages <- c('tidyverse', 'magrittr', 'pracma', 'parallel',
                         'mvtnorm', 'abind', 'countrycode', 'raster', 'scoringRules',
                         'viridis', 'gridExtra', 'devtools', 'shiny', 'usethis',
-                        'LaplacesDemon')
+                        'LaplacesDemon', 'cowplot')
   if (loadRmpi){ list.of.packages <- c(list.of.packages,'Rmpi')}
   
   
@@ -154,7 +155,7 @@ GetODDPackages<-function(packred, loadRmpi=F){
     if(length(list.of.packages[!("wid" %in% installed.packages()[,"Package"])])){devtools::install_github("WIDworld/wid-r-tool")}
   }
   
-  LoadLibraries(packred)
+  LoadLibraries(packred, loadRmpi)
   GetSourceFiles(packred)
   
   #see what packages different files are using
@@ -233,12 +234,15 @@ if (!packred){
   }
   
   #PGA data:
-  if(!file.exists(paste0(dir,"Hazard_Data/gdpga/pga_475y.tif"))){
-    print("Please download the hazard frequency data from here: https://www.geonode-gfdrrlab.org/layers/hazard:pga_475y")
-    print("Select Download Layer -> Data -> Original Dataset")
-    print("Then extract the file pga_475y.tif and move to ./Hazard_Data/gdpga/")
-    stop("GetODDPackages.R problem finding Earthquake Frequency data")
-  } 
-  
-  
+  # if(!file.exists(paste0(dir,"Hazard_Data/gdpga/pga_475y.tif"))){
+  #   print("Please download the hazard frequency data from here: https://www.geonode-gfdrrlab.org/layers/hazard:pga_475y")
+  #   print("Select Download Layer -> Data -> Original Dataset")
+  #   print("Then extract the file pga_475y.tif and move to ./Hazard_Data/gdpga/")
+  #   stop("GetODDPackages.R problem finding Earthquake Frequency data")
+  # } 
+  if (!file.exists(paste0(dir, 'Hazard_Data/GEM-GSHM_PGA-475y-rock_v2023/v2023_1_pga_475_rock_3min.tif'))){
+      print("Please download the hazard frequency data from here: https://www.globalquakemodel.org/product/global-seismic-hazard-map") #
+      print('Extract the zip file and move to ./HazardData/')
+      stop('GetODDPackages.R problem finding Earthquake Frequency data')
+  }
 }

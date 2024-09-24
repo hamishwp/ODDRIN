@@ -650,6 +650,8 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
       next
     }
     
+    
+    
     #Fetch building count data:
     #ODDy_build <- tryCatch(AddBuildingCounts(ODDy, i, paste0(folder_write, 'Building_count_notes')), error=function(e) NULL)
     ODDy_build <- tryCatch(getBingBuildingsGlobal(ODDy, i, paste0(folder_write, 'Building_count_notes')), error=function(e) NULL)
@@ -716,10 +718,12 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     # Save some RAM
     rm(ODDy)
   }
-  
   return(path)
-  
 }
+
+rast <- rast('/home/manderso/Downloads/GEM-GSHM_PGA-475y-rock_v2023/v2023_1_pga_475_rock_3min.tif')
+
+
 
 moveTestData <- function(folder_in='IIDIPUS_Input'){
   ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')

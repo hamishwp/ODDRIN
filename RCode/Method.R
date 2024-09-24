@@ -775,7 +775,7 @@ initialise_particles_Rmpi_corr <- function(dir, Npart, n_nodes){
       u_node[n,,,] = rnorm(length(u_node[n,,,]))
       
       proposed = Omega_sample_phys_node[n,] %>% relist(skeleton=Model$skeleton) %>% addTransfParams()
-      proposed$u = AlgoResults$u[n,,,,1]
+      proposed$u = u_node[n,,,]
       
       
       start_time <- Sys.time()
@@ -993,6 +993,7 @@ perturb_particles_Rmpi_corr <- function(dir, Npart, n_nodes, W_curr, Omega_curr,
   return(list(Omega_sample_node=Omega_sample_node, 
               Omega_sample_phys_node=Omega_sample_phys_node,
               d_node=d_node, 
+              u_node=u_node,
               d_full_node=d_full_node,
               sampled_full_node=NULL))#sampled_full_node))
 }
@@ -1040,7 +1041,7 @@ resample_particles_corr <- function(s, N_T, Npart, AlgoResults){
     AlgoResults$Omega_sample_phys[,,s] <- AlgoResults$Omega_sample_phys[choice,,s-1] 
     AlgoResults$d[,,s] <- adrop(AlgoResults$d[choice,,s-1, drop=F], drop=3)
     AlgoResults$u[,,,,ifelse(s %% 3==0, 3, s%%3)] <- adrop(AlgoResults$u[choice,,,,ifelse((s-1) %% 3 == 0, 3, (s-1)%%3), drop=F], drop=5) # as we are just saving the most recent 3 u, this refreshes every 3 steps
-    AlgoResults$u_selected[,,,,s] <- adrop(AlgoResults$u[choice[1:3],,,,ifelse((s-1) %% 3 == 0, 3, (s-1)%%3), drop=F], drop=5) # as we are just saving the most recent 3 u, this refreshes every 3 steps
+    #AlgoResults$u_selected[,,,,s] <- adrop(AlgoResults$u[choice[1:3],,,,ifelse((s-1) %% 3 == 0, 3, (s-1)%%3), drop=F], drop=5) # as we are just saving the most recent 3 u, this refreshes every 3 steps
     AlgoResults$d_full[,,,s] <- adrop(AlgoResults$d_full[choice,,,s-1, drop=F], drop=4)
     #AlgoResults$sampled_full[,,,s] <- adrop(AlgoResults$sampled_full[choice,,,s-1, drop=F], drop=4)
     AlgoResults$W[,s] <-rep(1/Npart,Npart) 
@@ -1049,7 +1050,7 @@ resample_particles_corr <- function(s, N_T, Npart, AlgoResults){
     AlgoResults$Omega_sample_phys[,,s] <- AlgoResults$Omega_sample_phys[,,s-1] 
     AlgoResults$d[,,s] <- adrop(AlgoResults$d[,,s-1, drop=F], drop=3)
     AlgoResults$u[,,,,ifelse(s %% 3==0, 3, s%%3)] <- adrop(AlgoResults$u[,,,,ifelse((s-1) %% 3 == 0, 3, (s-1)%%3), drop=F], drop=5) # as we are just saving the most recent 3 u, this refreshes every 3 steps
-    AlgoResults$u_selected[,,,,s] <- adrop(AlgoResults$u_selected[,,,,s-1, drop=F], drop=5)
+    #AlgoResults$u_selected[,,,,s] <- adrop(AlgoResults$u_selected[,,,,s-1, drop=F], drop=5)
     AlgoResults$d_full[,,,s] <- adrop(AlgoResults$d_full[,,,s-1, drop=F], drop=4)
     #AlgoResults$sampled_full[,,,s] <- adrop(AlgoResults$sampled_full[,,,s-1, drop=F], drop=4)
   }
@@ -1085,7 +1086,7 @@ delmoral_parallel_corr <- function(AlgoParams, Model, unfinished=F, oldtag=NULL,
     W = array(NA, dim=c(AlgoParams$smc_Npart, AlgoParams$smc_steps)), #Weights
     d = array(Inf, dim=c(AlgoParams$smc_Npart, AlgoParams$Np, AlgoParams$smc_steps)), #Distances
     u = array(NA, dim=c(AlgoParams$smc_Npart, AlgoParams$n_events,AlgoParams$m_CRPS,3,3)), # last value would be smc_steps if we had unlimited storage, but instead just store 3
-    u_selected = array(NA, dim=c(3, AlgoParams$n_events, AlgoParams$m_CRPS, 3, AlgoParams$smc_steps)), #just store full chain of u for the first three particles
+    #u_selected = array(NA, dim=c(3, AlgoParams$n_events, AlgoParams$m_CRPS, 3, AlgoParams$smc_steps)), #just store full chain of u for the first three particles
     d_full = NULL, #array(Inf, dim=c(AlgoParams$smc_Npart, 3 * AlgoParams$Np, AlgoParams$smc_steps)), #Distances broken down into: poly_crps, poly_mean, point
     sampled_full = NULL,
     tolerancestore=array(NA, AlgoParams$smc_steps),
@@ -1139,7 +1140,7 @@ delmoral_parallel_corr <- function(AlgoParams, Model, unfinished=F, oldtag=NULL,
     if(AlgoParams$n_nodes>1){
       node_return <- mpi.remote.exec(perturb_particles_Rmpi_corr, dir, AlgoParams$smc_Npart, AlgoParams$n_nodes, 
                                      AlgoResults_small$W_s, AlgoResults_small$Omega_sample_s, AlgoResults_small$Omega_sample_phys_s, 
-                                     AlgoResults_small$d_s, AlgoResults_small$d_full_s, AlgoResults$u_s, AlgoResults_small$sampled_full_s, 
+                                     AlgoResults_small$d_s, AlgoResults_small$d_full_s, AlgoResults_small$u_s, AlgoResults_small$sampled_full_s, 
                                      propCOV, AlgoResults_small$tolerance_s, rel_weights = AlgoResults_small$rel_weights)
       #print(node_return)
       particle_divisions <- split(1:AlgoParams$smc_Npart, sort(1:AlgoParams$smc_Npart%%AlgoParams$n_nodes))
@@ -1151,7 +1152,7 @@ delmoral_parallel_corr <- function(AlgoParams, Model, unfinished=F, oldtag=NULL,
         AlgoResults$Omega_sample_phys[particle_divisions[[j]],,s] <- node_return[[j]]$Omega_sample_phys_node
         AlgoResults$d[particle_divisions[[j]],,s] <- node_return[[j]]$d_node
         AlgoResults$u[particle_divisions[[j]],,,,ifelse(s %% 3==0, 3, s%%3)] <- node_return[[j]]$u_node
-        AlgoResults$u_selected[,,,,s] <- node_return[[j]]$u_node[1:3,,,, drop=F]
+        #AlgoResults$u_selected[,,,,s] <- node_return[[j]]$u_node[1:3,,,, drop=F]
         AlgoResults$d_full[particle_divisions[[j]],,,s] <- node_return[[j]]$d_full_node
         #AlgoResults$sampled_full[particle_divisions[[j]],,,s] <- node_return[[j]]$sampled_full_node
       }
@@ -1163,7 +1164,7 @@ delmoral_parallel_corr <- function(AlgoParams, Model, unfinished=F, oldtag=NULL,
       AlgoResults$Omega_sample_phys[,,s] <- step_s_results$Omega_sample_phys_s
       AlgoResults$d[,,s] <- step_s_results$d_s
       AlgoResults$u[,,,,ifelse(s %% 3==0, 3, s%%3)] <- step_s_results$u_s
-      AlgoResults$u_selected[,,,,s] <- step_s_results$u_s[1:3,,,, drop=F]
+      #AlgoResults$u_selected[,,,,s] <- step_s_results$u_s[1:3,,,, drop=F]
       AlgoResults$d_full[,,,s] <- step_s_results$d_full_s
       #AlgoResults$sampled_full[,,,s] <- step_s_results$sampled_full_s
     }

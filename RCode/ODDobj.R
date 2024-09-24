@@ -1037,6 +1037,7 @@ plotODDy_GADM <- function(ODDy, zoomy=7,var="Population",breakings=NULL,bbox=NUL
   
   bbox <- ODDy@bbox
   #gadm_iso <- getData("GADM", country="NZL", level=2)
+  iso3_unique <- unique(ODDy$ISO3C)
   iso3_unique <- iso3_unique[!is.na(iso3_unique)]
   gadm_iso <- as(geodata::gadm(country=iso3_unique[1], level=gadm_level, path=paste0(dir, 'Demography_Data/GADM/')), 'Spatial')
   if (length(iso3_unique) > 1){

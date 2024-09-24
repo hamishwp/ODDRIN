@@ -10,7 +10,7 @@ setwd(directory)
 # Directory of the Data for Good data, e.g. Disaster Mapping, 4G connectivity, etc
 FBdirectory<-'/home/patten/Documents/IDMC/Facebook_Data/'
 # Do you want only the reduced packages or all? Choose via packred
-packred<-T
+packred<-F
 
 
 # Extract Environment Variables
@@ -32,12 +32,12 @@ source('RCode/Simulate.R')
 
 Omega <- Omega_true <- list(Lambda1 = list(nu=8.75, kappa=0.6),
                             Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
-                            Lambda3 = list(nu=8.7, kappa=0.7),
+                            Lambda3 = list(nu=8.55, kappa=0.8),
                             Lambda4 = list(nu=9.9, kappa=1.6),
                             theta= list(theta1=0.6),
-                            eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
+                            eps=list(local=0.8, hazard_mort=0.48, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
                             #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                            vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
+                            vuln_coeff = list(PDens=0, SHDI=-0.3, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
                             check = list(check=0.5))
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
@@ -79,7 +79,7 @@ AlgoResults <- correlated_MCMC(AlgoParams, Model, unfinished = T, propCOV = prop
 
 
 # Generate samples from higher level prior to initialise MCMC:
-n_samples <- 300
+n_samples <- 500
 samples <- array(NA, dim=c(n_samples, length(unlist(Omega))))
 for (i in 1:n_samples){
   if (i %% 10 == 0){
@@ -95,7 +95,7 @@ diag(cov(samples))
 
 
 set.seed(1)
-simulateDataSet(170, Omega, Model, dir, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/')
+simulateDataSet(167, Omega, Model, dir, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3/')
 
 
 AlgoParams$smc_steps <- 2
@@ -231,14 +231,14 @@ AlgoParams$cores <- 1
 AlgoParams$NestedCores <- 4
 AlgoParams$Np <- 1
 AlgoParams$m_CRPS <- 60
-AlgoParams$smc_Npart <- 500
+AlgoParams$smc_Npart <- 50
 AlgoParams$n_nodes <- 1
 AlgoParams$smc_steps <- 100
 AlgoParams$rel_weightings <- c(1,1)
 AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/'
 
-tag_notes <- paste0('alpha', AlgoParams$smc_alpha, '500parttest_0.1propcov')
-AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F,tag_notes=tag_notes)
+tag_notes <- paste0('alpha', AlgoParams$smc_alpha, 'test_ucorr')
+AlgoResults <- delmoral_parallel_corr(AlgoParams, Model, unfinished = F,tag_notes=tag_notes)
 
 
 start_time <- Sys.time()
@@ -265,7 +265,7 @@ execution_time
 
 moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput'){
   ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
-  ODD_foldertest<-paste0(dir, folder_in, '/Test/')
+  ODD_foldertest<-paste0(dir, folder_in, '/ODDobjects/Test/')
   ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
   i <- 0
   for (file in ufiles){
@@ -288,10 +288,10 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput'
   # }
   
 }
-moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput')
+moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3')
 
 # Collect mortality, building damage, and displacement data for simulated data:
-ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/"))
+ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3/ODDobjects/Train/", recursive=T))
 df_SimImpact <- data.frame(observed=numeric(),
                            impact=character(),
                            polygon=integer(),
@@ -301,7 +301,7 @@ df_SimImpact <- data.frame(observed=numeric(),
 nHazSim <- c()
 maxIntSim <- c()
 for(i in 1:length(ODDsim_paths)){
-  ODDSim <- readRDS(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/",ODDsim_paths[i]))
+  ODDSim <- readRDS(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3/ODDobjects/Train/",ODDsim_paths[i]))
   if (length(ODDSim@impact$impact)>0){
     nHazSim <- c(nHazSim, length(grep('hazMean', names(ODDSim@data))))
     maxIntSim <- c(maxIntSim, max(ODDSim@data[, grep('hazMean', colnames(ODDSim@data))],  na.rm=T))
@@ -321,14 +321,19 @@ ggplot(df_SimImpact %>% filter(impact=='mortality'), aes(x=I_max, y=observed)) +
 #ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/'
 
 ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/ODDobjects/Train/'
-ODDpaths <-na.omit(list.files(path=ODDpath))
+ODDpaths <-na.omit(list.files(path=ODDpath, recursive=T))
 df_Impact <- data.frame(observed=numeric(), impact=character(),
                         polygon=integer(), exposure=numeric(), event=integer(), I_max=numeric())
 
+# EQFreq_min <- c()
+# EQFreq_max <- c()
+
 nHazReal <- c()
 maxIntReal <- c()
+
 for(i in 1:length(ODDpaths)){
   ODD <- readRDS(paste0(ODDpath,ODDpaths[i]))
+  #iso3 <- c(iso3, unique(ODD$ISO3C))
   if (length(ODD@impact$impact)>0){
     nHazReal <- c(nHazReal, length(grep('hazMean', names(ODD@data))))
     maxIntReal <- c(maxIntReal, max(ODD@data[, grep('hazMean', colnames(ODD@data))],  na.rm=T))
@@ -336,6 +341,8 @@ for(i in 1:length(ODDpaths)){
       df_Impact %<>% add_row(observed=ODD@impact$observed[j], impact=ODD@impact$impact[j], polygon=ODD@impact$polygon[j],
                              exposure=ifelse(impact=='buildDam', sum(ODD@data[ODD@polygons[[ODD@impact$polygon[j]]]$indexes,'nBuildings']), sum(ODD@data[ODD@polygons[[ODD@impact$polygon[j]]]$indexes,'Population'])),
                               event=i, I_max=max(ODD@data[ODD@polygons[[ODD@impact$polygon[j]]]$indexes, grep('hazMean', colnames(ODD@data))],  na.rm=T))
+      # EQFreq_min <- c(EQFreq_min, min(ODD$EQFreq[ODD@polygons[[ODD@impact$polygon[j]]]$indexes], na.rm=T))
+      # EQFreq_max <- c(EQFreq_max, max(ODD$EQFreq[ODD@polygons[[ODD@impact$polygon[j]]]$indexes], na.rm=T))
     }
   }
 }
@@ -348,42 +355,68 @@ library(cowplot)
 library(scales)
 plot_true_vs_simulated_obsvals <- function(impact_type){
   p <- ggplot()  + 
-    scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000), labels = label_comma())  + 
-    scale_x_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000, 10000, 100000, 1000000), labels = label_comma()) +
+    scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
+    scale_x_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000, 10000, 100000, 1000000), labels=function(x) {ifelse(x==0, "0", ifelse(x==10, "10",parse(text=gsub("[+]", "", gsub("1e", "10^", scientific_format()(x))))))}, expand = expand_scale(mult = c(0,0.1))) +
     geom_histogram(data=df_SimImpact %>% filter(impact==impact_type), aes(x=observed,y=after_stat(count)), alpha=0.4, col="blue", lwd=0.2, fill="blue") +
     geom_histogram(data=df_Impact %>% filter(impact==impact_type), aes(x=observed,y=after_stat(count)), alpha=0.4, col='red', lwd=0.2, fill='red') +
-    theme_bw() + ylab('Count') + xlab('Oberved')
+    theme_bw() + ylab('Count') + xlab('Oberved') 
   return(p)
 }
 plot_true_vs_simulated_obscount <- function(impact_type){
-  p <- ggplot() +
-    scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 1, 10, 100), labels = label_comma())  + 
-    geom_histogram(data=df_SimImpact %>% filter(impact==impact_type) %>% group_by(event) %>% tally(), aes(x=n, y=after_stat(count), fill='Simulated Data', col='Simulated Data'), alpha=0.3, col='blue', lwd=0.2) + 
-    geom_histogram(data=df_Impact %>% filter(impact==impact_type) %>% group_by(event) %>% tally(), aes(x=n, y=after_stat(count), fill='Real Data', col='Real Data'), alpha=0.3, col='red', lwd=0.2) +
-    ylab('Count') + xlab('Number of Observations per event') + theme_bw() +
-    scale_fill_manual(values = c("Real Data" = "red", "Simulated Data" = "blue"))+ labs(fill = "") +
-    guides(fill = guide_legend(override.aes = list(color = NULL)))
+  df_sim_tally <- df_SimImpact %>% group_by(event) %>% summarise(n = sum(impact == impact_type))
+  df_real_tally <- df_Impact %>% group_by(event) %>% summarise(n = sum(impact == impact_type)) 
+  if (impact_type=='mortality' | impact_type=='buildDam'){ 
+    max_val <- max(max(df_sim_tally$n), max(df_real_tally$n))
+    #breaks <- seq(2.5, max_val + 5 + (5-max_val %%5), 5)
+    
+    p <- ggplot() +
+      scale_x_continuous(expand = expand_scale(add = c(2.5,7.5))) + 
+      scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 1, 10, 100), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
+      geom_histogram(data=df_sim_tally, aes(x=n, y=after_stat(count),fill='Simulated Data', col='Simulated Data'), binwidth=4, center=3,alpha=0.3, col='blue', lwd=0.2) + 
+      geom_histogram(data=df_real_tally, aes(x=n, y=after_stat(count),fill='Real Data', col='Real Data'), binwidth=4, center=3, alpha=0.3, col='red', lwd=0.2) +
+      ylab('Count') + xlab('Number of Observations per event') + theme_bw() +
+      scale_fill_manual(values = c("Real Data" = "red", "Simulated Data" = "blue"))+ labs(fill = "") +
+      guides(fill = guide_legend(override.aes = list(color = NULL)))
+    p
+  } else {
+    p <- ggplot() +
+      scale_x_continuous(expand = expand_scale(mult = c(0,0.1))) + 
+      scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 1, 10, 100), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
+      geom_histogram(data=df_sim_tally, aes(x=n, y=after_stat(count),fill='Simulated Data', col='Simulated Data'),alpha=0.3, col='blue', lwd=0.2) + 
+      geom_histogram(data=df_real_tally, aes(x=n, y=after_stat(count),fill='Real Data', col='Real Data'), alpha=0.3, col='red', lwd=0.2) +
+      ylab('Count') + xlab('Number of Observations per event') + theme_bw() +
+      scale_fill_manual(values = c("Real Data" = "red", "Simulated Data" = "blue"))+ labs(fill = "") +
+      guides(fill = guide_legend(override.aes = list(color = NULL)))
+  }
+  p
   return(p)
 }
-
-p_mort_obsvals <- plot_true_vs_simulated_obsvals('mortality') + xlab('Observed Mortality')
+p_mort_obsvals <- plot_true_vs_simulated_obsvals('mortality') + xlab('Observed Mortality') 
 p_disp_obsvals <- plot_true_vs_simulated_obsvals('displacement') + xlab('Observed Displacement')
 p_bd_obsvals <- plot_true_vs_simulated_obsvals('buildDam') + xlab('Observed Building Damage')
-p_mort_obscount <- plot_true_vs_simulated_obscount('mortality') + xlab('Number of Mortality Observations per Event') 
-p_disp_obscount <- plot_true_vs_simulated_obscount('displacement') + xlab('Number of Displacement Observations per Event')
-p_bd_obscount <- plot_true_vs_simulated_obscount('buildDam') + xlab('Number of Building Damage Observations per Event')
-legend <- get_legend(p_mort_obscount + theme(legend.position="bottom"))
+p_mort_obscount <- plot_true_vs_simulated_obscount('mortality') + xlab('Number of Mortality Observations in Event') + scale_x_continuous(breaks=c(1,40,80, 120, 160), labels=c(1,40,80,120,160),expand = expand_scale(add=c(1, 0), mult = c(0,0.1)))
+p_disp_obscount <- plot_true_vs_simulated_obscount('displacement') + xlab('Number of Displacement Observations in Event') + scale_x_continuous(breaks=0:7, labels=0:7, expand = expand_scale(mult = c(0,0.1)))
+p_bd_obscount <- plot_true_vs_simulated_obscount('buildDam') + xlab('Number of Building Damage Observations in Event')
+legend <- get_plot_component(p_mort_obscount +
+                               theme(legend.position="bottom"), 'guide-box', return_all=T)[[3]]
 
 # add the legend underneath the row we made earlier. Give it 10% of the height
 # of one plot (via rel_heights).
-plot_grid(legend, plot_grid( p_mort_obsvals, p_disp_obsvals, p_bd_obsvals, 
-                          p_mort_obscount + theme(legend.position="none"), p_disp_obscount + theme(legend.position="none"), 
-                          p_bd_obscount + theme(legend.position="none"),
-                          align = 'vh', hjust = -1, nrow = 2
-), ncol = 1, rel_heights=c(0.1,1))
+p_1 <- plot_grid( plot_grid( p_mort_obsvals, p_disp_obsvals, p_bd_obsvals, align = 'vh', nrow = 1),legend, ncol = 1, rel_heights=c(1,0.1))
 
-grid.arrange(p_mort_obsvals, p_disp_obsvals, p_bd_obsvals, 
-             p_mort_obscount, p_disp_obscount, p_bd_obscount, ncol=3, nrow=2)
+p_2 <- plot_grid( plot_grid( p_mort_obscount + theme(legend.position="none"),
+                             p_disp_obscount + theme(legend.position="none"), 
+                             p_bd_obscount + theme(legend.position="none"), align = 'vh', nrow = 1), legend,ncol = 1, rel_heights=c(1,0.1))
+
+plot_grid(p_1, p_2, ncol=1)
+
+plot_grid(legend,plot_grid(p_mort_obsvals, p_disp_obsvals, p_bd_obsvals,
+          p_mort_obscount + theme(legend.position="none"),
+          p_disp_obscount + theme(legend.position="none"), 
+          p_bd_obscount + theme(legend.position="none"), align = 'vh'), ncol = 1, rel_heights=c(0.075,1))
+
+#SimVsObs.pdf, 7 x 12 inches
+
 
 files <-  paste0(dir, "IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/")
 
@@ -411,6 +444,19 @@ cor_true <- ggplot(data=merge(df_Impact%>% filter(impact==impact_type1), df_Impa
 cor_sim <- ggplot(data=merge(df_SimImpact%>% filter(impact==impact_type1), df_SimImpact %>% filter(impact==impact_type2), by=c('event', 'polygon')),
        aes(x=observed.x, y=observed.y)) + xlab(impact_type1) + ylab(impact_type2) +
   geom_point() + scale_x_log10() + scale_y_log10() + ggtitle('Observed Impact Data, with each point representing an observation for one event and region')
+
+grid.arrange(cor_true, cor_sim, ncol=1)
+
+merged_df <- merge(df_Impact%>% filter(impact==impact_type1), df_Impact %>% filter(impact==impact_type1), by=c('event'))
+merged_df %<>% filter(polygon.x < polygon.y)
+cor_true <- ggplot(merged_df, aes(x=observed.x, y=observed.y)) + xlab(impact_type1) + ylab(impact_type1) +
+  geom_point() + scale_x_log10() + scale_y_log10() + ggtitle('Observed Impact Data, with each point representing an observation for one event and region')
+
+
+merged_df_sim <- merge(df_SimImpact%>% filter(impact==impact_type1), df_SimImpact %>% filter(impact==impact_type1), by=c('event'))
+merged_df_sim %<>% filter(polygon.x < polygon.y)
+cor_sim <- ggplot(merged_df_sim, aes(x=observed.x, y=observed.y)) + xlab(impact_type1) + ylab(impact_type1) +
+  geom_point() + scale_x_log10() + scale_y_log10() + ggtitle('Simulated Impact Data, with each point representing an observation for one event and region')
 
 grid.arrange(cor_true, cor_sim, ncol=1)
 

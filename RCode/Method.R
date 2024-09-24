@@ -1491,7 +1491,8 @@ correlated_AMCMC <- function(AlgoParams, Model, propCOV = NULL, init_val_phys = 
     
     #calculate the acceptance probability:
     #print(modifyAcc(Omega_prop, Omega_sample_s[n,], Model))
-    AlgoResults$accprob_store[s] <- min(1, exp(-AlgoParams$learning_rate * loss_prop)/exp(-AlgoParams$learning_rate * AlgoResults$loss[s-1]) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[,s-1], Model, AlgoResults$lambda_store[s] * AlgoResults$Sigma_store[,,s]))
+    min_loss <- min(AlgoParams$learning_rate * loss_prop, AlgoParams$learning_rate * AlgoResults$loss[s-1])
+    AlgoResults$accprob_store[s] <- min(1, exp(-AlgoParams$learning_rate * loss_prop + min_loss)/exp(-AlgoParams$learning_rate * AlgoResults$loss[s-1] + min_loss) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[,s-1], Model, AlgoResults$lambda_store[s] * AlgoResults$Sigma_store[,,s]))
     
     u <- runif(1)
     if(u < AlgoResults$accprob_store[s]){

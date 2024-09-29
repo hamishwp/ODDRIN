@@ -288,10 +288,10 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput'
   # }
   
 }
-moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3')
+moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput')
 
 # Collect mortality, building damage, and displacement data for simulated data:
-ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3/ODDobjects/Train/", recursive=T))
+ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/Train/", recursive=T))
 df_SimImpact <- data.frame(observed=numeric(),
                            impact=character(),
                            polygon=integer(),
@@ -301,7 +301,7 @@ df_SimImpact <- data.frame(observed=numeric(),
 nHazSim <- c()
 maxIntSim <- c()
 for(i in 1:length(ODDsim_paths)){
-  ODDSim <- readRDS(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3/ODDobjects/Train/",ODDsim_paths[i]))
+  ODDSim <- readRDS(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/Train/",ODDsim_paths[i]))
   if (length(ODDSim@impact$impact)>0){
     nHazSim <- c(nHazSim, length(grep('hazMean', names(ODDSim@data))))
     maxIntSim <- c(maxIntSim, max(ODDSim@data[, grep('hazMean', colnames(ODDSim@data))],  na.rm=T))

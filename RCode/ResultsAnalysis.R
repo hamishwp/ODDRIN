@@ -79,8 +79,8 @@ df_postpredictive_sampled_true <- create_df_postpredictive(AlgoResults, single_p
 saveRDS(df_postpredictive_sampled_best, 'SimPostPredictive23rdSept')
 saveRDS(df_postpredictive_sampled_true, 'SimTruePredictive23rdSept')
 
-df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/SimPostPredictive16thSept')
-df_postpredictive_sampled_true <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/SimTruePredictive16thSept')
+df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SimPostPredictive16thSept')
+df_postpredictive_sampled_true <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SimTruePredictive16thSept')
 
 plot_df_postpredictive_compare(df_postpredictive_sampled_true %>% filter(train_flag=='TEST'),
                                df_postpredictive_sampled_best %>% filter(train_flag=='TEST'), 'mortality')
@@ -98,13 +98,19 @@ df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_p
 
 df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/sampledBest18thSept')
 
-mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none")
+library(grid)
+mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none") 
 disp_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'displacement')  + guides(color="none")
 buildDam_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'buildDam')  + guides(color="none") + 
-                      scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma, limits=c(50,100000)) 
+                      scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma, limits=c(50,100000))
   
-grid.arrange(mort_test, disp_test, buildDam_test, ncol=3)
-#PostPredReal.pdf, 4 x 12 inches
+
+p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
+p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
+p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
+
+grid.arrange(p1, p2, p3, ncol=3)
+#PostPredReal.pdf, 4 x 12.1 inches
 
 AlgoResults %<>% addAlgoParams(s_finish=NULL)
 for (i in c(16,)){

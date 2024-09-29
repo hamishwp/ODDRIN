@@ -169,9 +169,9 @@ getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demograph
   spat_agg <- aggregate(popy_cropped, fact=agg_level, fun=sum, expand=F) 
   
   names(spat_agg) <- 'Population'
-  spat_agg$dummy <- 0 #need to add some variable so that pixels with 0 population are not lost when converting to SpatialPixelsDataFrame
-  spdf <- as(spat_agg, 'SpatialPixelsDataFrame')
-  spdf@data <- spdf@data[,-2, drop=F] #remove dummy
+  #spat_agg$dummy <- 0 #need to add some variable so that pixels with 0 population are not lost when converting to SpatialPixelsDataFrame
+  #spdf <- as(spat_agg, 'SpatialPixelsDataFrame')
+  #spdf@data <- spdf@data[,-2, drop=F] #remove dummy
   
   iso3_lookup <- data.frame(ISO3C=c(NA, unique(iso3c_all)), id=0:length(iso3c_all))
   nations@data$order <- 1:NROW(nations@data)
@@ -179,17 +179,22 @@ getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demograph
   nations@data <- nations@data[order(nations@data$order),]
     
   rastered_iso3 <- rasterize(nations, spat_agg, field='id', fun=mode_non_na)
-  spdf_iso3 <- as(rastered_iso3, 'SpatialPixelsDataFrame')
-  colnames(spdf_iso3@data) <- 'id'
-  spdf_iso3@data$order <- 1:NROW(spdf_iso3@data)
-  spdf_iso3@data %<>% merge(iso3_lookup, all.x=T)
-  spdf_iso3@data <- spdf_iso3@data[order(spdf_iso3@data$order),'ISO3C', drop=F]
+  rastered_iso3_df <- data.frame(id=values(rastered_iso3))
+  rastered_iso3_df$order <- 1:NROW(rastered_iso3_df)
+  rastered_iso3_df %<>% merge(iso3_lookup, all.x=T)
+  rastered_iso3_df <- rastered_iso3_df[order(rastered_iso3_df$order),'ISO3C', drop=F]
+  values(rastered_iso3) <- as.factor(rastered_iso3_df$ISO3C)
   
-  spdf@data <- merge_rastered_spdf(spdf, spdf_iso3, 'ISO3C') 
- 
-  colnames(spdf@coords) <- c('Longitude', 'Latitude')
-  rownames(spdf@bbox) <- c('Longitude', 'Latitude')
-  return(spdf)
+  
+  pop <- stack(spat_agg, rastered_iso3)
+  names(pop) <- c('Population', 'ISO3C')
+  if (any(levels(pop$ISO3C)[[1]]$ID != 1:NROW(levels(pop$ISO3C)[[1]]))){
+    stop('Factor levels have not been assigned in increasing order. Have assumed that they have been 
+          assigned this way when obtaining values.')
+  }
+  
+  return(brick(pop))
+  
 }
 
 #----------------------GRIDDED WORLDPOP----------------------------

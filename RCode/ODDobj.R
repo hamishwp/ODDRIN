@@ -38,8 +38,8 @@
 
 checkODD<-function(object) {
   
-  if(!is.null(object$Population) & any(object$Population<0,na.rm = T)) return(F) 
-  if(!is.null(object$GDP) & any(object$GDP<0,na.rm = T)) return(F) 
+  if('Population' %in% names(ODDy)) if (any(values(ODDy[['Population']])<0,na.rm = T)) return(F) 
+  if('GDP' %in% names(ODDy)) if (any(values(ODDy[['GDP']]) <0,na.rm = T)) return(F) 
   if(any(is.na(object@cIndies$value))) 
     print(paste0("WARNING: missing country indicator elements for ",object@cIndies$iso3[is.na(object@cIndies$value)]))
   
@@ -68,13 +68,17 @@ setClass("ODD",
                    predictDisp="data.frame",
                    #modifier="list",
                    polygons="list", 
-                   hazinfo="list"),
-         contains = "SpatialPixelsDataFrame")
+                   hazinfo="list",
+                   ISO3C='character'),
+         contains = "RasterBrick")
 
-ExtractI0poly<-function(hsdf,ODD){
+ExtractI0poly<-function(HazDat,ODD){
 
   # Extract contours
-  pcontour<-adehabitatMA::getcontour(raster::subset(hsdf,mean>=ODD@I0))
+  pcontour<-adehabitatMA::getcontour(raster::subset(HazDat,mean>=ODD@I0))
+  pcontour<-adehabitatMA::getcontour(HazDat)
+  
+  
   conts<-data.frame()
   id<-1
   # For each contour, extract points within only if it has a large enough area inside
@@ -112,14 +116,12 @@ interp_overlay <- function(layer, ODD){
   return(coords_df$var)
 }
 
-# Add GDP data to the ODD object by interpolating onto the grid using cubic splines
+# Add hazard data to the ODD object by interpolating onto the grid using bilinear interpolation
 setGeneric("AddHazSDF", function(ODD,lhazSDF) 
   standardGeneric("AddHazSDF") )
 setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
   
   ODD@I0<-lhazSDF$hazard_info$I0
-  # interpolate data onto the grid
-  coords<- list(xo=unique(ODD$Longitude), yo=unique(ODD$Latitude)) #Genx0y0(ODD)
   lenny<-length(lhazSDF) ; start<-2
   alertscores<-alertlevels<-c() ; dates<-rep(lhazSDF$hazard_info$sdate,lenny-start+1)
   
@@ -127,107 +129,28 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
   
   for (i in start:lenny){
     print(i-start+1)
-    hsdf<-lhazSDF[[i]]
+    HazDat<-lhazSDF[[i]]
     # Extract detail of specific hazard
-    dates[i-start+1]<-hsdf@eventdate
-    alertlevels%<>%c(hsdf@alertlevel)
-    alertscores%<>%c(hsdf@alertscore)
+    dates[i-start+1]<-HazDat@eventdate
+    alertlevels%<>%c(HazDat@alertlevel)
+    alertscores%<>%c(HazDat@alertscore)
     
     if(lhazSDF$hazard_info$hazard=="TC"){
-      
-      layer<-with(as.data.frame(hsdf),akima::interp(x=Longitude,y=Latitude,z=mean,
-                                     xo=coords$xo,yo=coords$yo,
-                                     linear=F,extrap = F))
-
-      
-      layer<-c(layer$z)
-      layer[layer<ODD@I0]<-NA
-      
-      ODD@data[paste0("hazMean",i-start+1)]<-layer
-      
+      stop('Not yet set up for TC hazards')
     } else {
-      
-      # extract polycontour of I<I0
-      pcontour<-ExtractI0poly(hsdf=hsdf,ODD=ODD)
-      # Find all ODD coordinates not inside polycontour
-      insidepoly<-rep(F,nrow(ODD))
-      if (length(unique(pcontour$id)) > 0){
-        for(p in 1:length(unique(pcontour$id))){
-          tcont<-filter(pcontour,id==p)
-          insidepoly<-insidepoly | sp::point.in.polygon(ODD@coords[,1],
-                                                        ODD@coords[,2],
-                                                        tcont$Longitude,
-                                                        tcont$Latitude)>0
-        }
-      }
-      rm(tcont)
-      hsdf%<>%as.data.frame
-      # Interpolate BOTH MEAN & SD onto the ODD grid
-      print("mean")
-      
-      #DELETE:::::::::::::::::::::::::::::::::::::::::::
-      # rbPal <- colorRampPalette(c('red','blue'))
-      # layer2 <- layer$z
-      # rownames(layer2) <- layer$x
-      # colnames(layer2) <- layer$y
-      # layer_expand <- melt(layer2)
-      # Col <- rbPal(10)[as.numeric(cut(c(hsdf$mean, layer_expand$value),breaks = 10))]
-      # plot(hsdf$Longitude, hsdf$Latitude,col=Col[1:10605])
-      # points(layer_expand$Var1, layer_expand$Var2, col=Col[10606:16045], pch=19)
-      # 
-      # points(layer$x[20:34], rep(layer$y[66], 15), pch=19, col=Col[10606:10620])
-      # points(layer$x[20:34], rep(layer$y[67], 15), pch=19, col=Col[10621:10635])
-      # points(layer$x[20:34], rep(layer$y[68], 15), pch=19, col=Col[10636:10650])
-      # points(layer$x[20:34], rep(layer$y[69], 15), pch=19, col=Col[10651:10665])
-      # points(layer$x[20:34], rep(layer$y[70], 15), pch=19, col=Col[10666:10680])
-      
-      #::::::::::::::::::::::::::::::::::::::
-      
-      
-      layer<-with(hsdf,akima::interp(x=Longitude,y=Latitude,z=mean,
-                                     xo=coords$xo,yo=coords$yo,
-                                     linear=T,extrap = F))
-      
-      layer$z[!insidepoly]<-NA
-      var <- interp_overlay(layer, ODD)
-      
-      #layer<-c(layer$z)
-      #layer[!insidepoly]<-NA
-      
-      if(all(is.na(var))) next
-      
-      ODD@data[paste0("hazMean",i-start+1)]<-var
-      
-      print("sd")
-      layer<-with(hsdf,akima::interp(x=Longitude,y=Latitude,z=sd,
-                                     xo=coords$xo,yo=coords$yo,
-                                     linear=T,extrap = F))
-      
-      # layer<-c(layer$z)
-      # layer[!insidepoly]<-NA
-      
-      layer$z[!insidepoly]<-NA
-      var <- interp_overlay(layer, ODD)
-      
-      ODD@data[paste0("hazSD",i-start+1)]<-var
-      
-      polysave[,i-start+1]<-insidepoly
+      haz_interpolated <- resample(HazDat,ODD, method = "bilinear")
+      ODD[[paste0("hazMean", i-start+1)]] <- haz_interpolated[['mean']]
+      ODD[[paste0("hazSD", i-start+1)]] <- haz_interpolated[['sd']]
     }
   }
   
-  if(lhazSDF$hazard_info$hazard=="TC") { 
-    ind<-unname(apply(ODD@data,2, function(x) sum(!is.na(x))))
-    ODD@data<-ODD@data[,ind>0]
-  }#else ODD$Population[rowSums(polysave)==0]<-NA
-  
-  # ODD@hazdates<-dates
   ODD@alerts<-data.frame(alertscores=alertscores,alertlevels=alertlevels)
   
   return(ODD)
   
 })
 
-# Initialisation of the ODD object
+
 setMethod(f="initialize", signature="ODD",
           # definition=function(.Object,bbox,lhazSDF,dater=NULL,dir=directory,
           definition=function(.Object,lhazSDF=NULL,DamageData=NULL,dir="./",Model=list(
@@ -241,26 +164,15 @@ setMethod(f="initialize", signature="ODD",
                           "p70p80", # Income share held by 70th - 80th percentiles
                           "p80p90", # Income share held by 80th - 90th percentiles
                           "p90p100") # top 10% share of Income Distribution
-            ), agg_level=1) {
+          ), agg_level=1) {
             
             if(is.null(lhazSDF)) return(.Object)
             if(!class(lhazSDF[[length(lhazSDF)]])[1]=="HAZARD") return(.Object)
             
-            
-            
-            
- 
-            
-            #stop("Also remove INFORM crap from Model.R")
-            
-            
-
-            
-            
             .Object@dir<-dir
             .Object@hazard<-lhazSDF$hazard_info$hazard
-
-	          if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
+            
+            if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
             if(.Object@hazard%in%c("EQ","TC")){
               if(!is.null(DamageData$gmax)){
                 #If using subnational data, @impact is overwritten separately later in GetSubNationalData.R
@@ -278,39 +190,48 @@ setMethod(f="initialize", signature="ODD",
             # This bounding box is taken as the minimum region that encompasses all hazard events in HAZARD object:
             bbox<-lhazSDF$hazard_info$bbox
             dater<-min(lhazSDF$hazard_info$sdate)
-	          .Object@hazdates<-lhazSDF$hazard_info$eventdates
-	          .Object@hazinfo <-lhazSDF$hazard_info
-
+            .Object@hazdates<-lhazSDF$hazard_info$eventdates
+            .Object@hazinfo <-lhazSDF$hazard_info
+            
             year<-AsYear(dater)
             
             print("Fetching population data")
             #obj <-GetPopulationBbox(.Object@dir,bbox=bbox)
             obj <- getWorldPop_ODD(.Object@dir, year, bbox, agg_level)
+            .Object@file <- obj@file
             .Object@data <- obj@data
-            .Object@coords.nrs <-obj@coords.nrs
-            .Object@grid <-obj@grid
-            .Object@grid.index <-obj@grid.index
-            .Object@coords <-obj@coords
-            .Object@bbox <-obj@bbox
-            .Object@proj4string <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            .Object@legend <- obj@legend
+            .Object@title <- obj@title
+            .Object@extent <- obj@extent
+            .Object@rotated <- obj@rotated
+            .Object@rotation <- obj@rotation
+            .Object@ncols <- obj@ncols
+            .Object@nrows <- obj@nrows
+            .Object@crs <- obj@crs
+            .Object@srs <- obj@srs
+            .Object@history <- obj@history
+            .Object@z <- obj@z
+            # .Object@proj4string <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
-          
+            #levels(pop[['ISO3C']])[[1]]$VALUE[values(pop[['ISO3C']])]
             print("Adding hazard events")
             # Including minshake polygon per hazard event using getcontour from adehabitatMA package
             .Object%<>%AddHazSDF(lhazSDF)
             
             # Extract empty indices to save time
-            inds<-which(!is.na(.Object$Population))
-            .Object@data$ISO3C[-inds] <- NA
+            inds<-which(!is.na(values(.Object[['Population']])))
+            values(.Object[['ISO3C']])[-inds] <- NA
+            #levels(pop[['ISO3C']])[[1]]$VALUE[values(pop[['ISO3C']])]
             
             print("Filter spatial data per country")
             #.Object@data$ISO3C<-NA_character_
             #.Object@data$ISO3C[inds]<-coords2country(.Object@coords[inds,])
-            iso3c<-unique(.Object@data$ISO3C) ; iso3c<-iso3c[!is.na(iso3c)]
+            iso3c<-unique(levels(.Object[['ISO3C']])[[1]][[1]]$VALUE) 
+            iso3c<-iso3c[!is.na(iso3c)]
             
-           
-            print("Interpolate population values")
-  
+            
+            #print("Interpolate population values")
+            
             # Note there are as many values returned as iso3c codes (returns as data.frame with columns 'iso3' and 'factor')
             # Popfactors<-InterpPopWB(iso3c,dater, normdate=as.Date(paste(year, "2015-01-01"))
             # 
@@ -333,6 +254,8 @@ setMethod(f="initialize", signature="ODD",
             .Object@cIndies$value[which(.Object@cIndies$value==0)] = 0.0001 # 0 values cause issues when applying log transform to GNIc
             
             # Here we add the vulnerabilities used in the linear predictor
+            .Object@ISO3C <- levels(.Object[['ISO3C']])[[1]][[1]]$VALUE
+            
             .Object%<>%AddVuln()
             
             
@@ -343,7 +266,6 @@ setMethod(f="initialize", signature="ODD",
             checkODD(.Object)
             
             return(.Object)
-            
           }
 )
 
@@ -430,17 +352,20 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
   Sinc<-ExtractCIndy(ODD,var = SincN)
   
+  ODD_df <- data.frame(rasterToPoints(ODD))
+  ODD_df$ISO3C <- levels(ODD[['ISO3C']])[[1]][[1]]$VALUE[ODD_df$ISO3C]
+  
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
-  notnans<-which(!(is.na(ODD$Population) | is.na(ODD$ISO3C) | is.na(ODD$SHDI)))
+  notnans<-which(!(is.na(ODD_df$Population) | is.na(ODD_df$ISO3C) | is.na(ODD_df$SHDI)))
 
   # Calculate non-local linear predictor values
-  LP<-GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=T)
-  LP_buildings <- GetLP(ODD,Omega,Params,Sinc,notnans, split_GNI=F)
+  LP<-GetLP(ODD_df,Omega,Params,Sinc,notnans, split_GNI=T)
+  LP_buildings <- GetLP(ODD_df,Omega,Params,Sinc,notnans, split_GNI=F)
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetLP = finish_time-start_time); start_time <- Sys.time()
 
-  BD_data_present <- !is.null(ODD$nBuildings)
-  hrange<-grep("hazMean",names(ODD),value = T)
+  BD_data_present <- !is.null(ODD_df$nBuildings)
+  hrange<-grep("hazMean",names(ODD_df),value = T)
   hrange_order <- order(paste(ODD@hazinfo$eventdates, ODD@hazinfo$eventtimes))
   
   event_lp <- getLP_event(ODD@hazinfo, Omega, Params)
@@ -495,7 +420,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     
     # Sample population per income distribution (Assumes 8 percentiles):
     # Population is split evenly between the income quantiles, with remainders randomly allocated between
-    lPopS <- matrix(ODD@data$Population[ij] %/% 8, nrow=8, ncol=Method$Np) + rmultinom(Method$Np,ODD@data$Population[ij] %% 8,rep(1/8,8)) 
+    lPopS <- matrix(ODD_df$Population[ij] %/% 8, nrow=8, ncol=Method$Np) + rmultinom(Method$Np,ODD_df$Population[ij] %% 8,rep(1/8,8)) 
     #lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) #matrix(round(ODD@data$Population[ij]/length(locallinp)), nrow=length(locallinp), ncol = Method$Np)
     #lPopS <- matrix(round(ODD@data$Population[ij]/ 8), nrow=8, ncol=Method$Np)
     
@@ -513,7 +438,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       start_time <- Sys.time()
       h <- hrange[h_i]
 
-      if(is.na(ODD@data[ij,h])) next
+      if(is.na(ODD_df[ij,h])) next
       
       nonzero_pop <- which(lPopS != 0, arr.ind=T)
       if (length(nonzero_pop)==0) next
@@ -527,7 +452,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       # I_ij<-rnorm(n = Method$Np,
       #             mean = ODD@data[ij,paste0("hazMean",h)],
       #             sd = ODD@data[ij,paste0("hazSD",h)]/10)
-      I_ij<-ODD@data[ij,h]
+      I_ij<-ODD_df[ij,h]
       Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]] + event_lp[h_i], error=function(e) NA) #+ rep(eps_local[h_i,], each=8), error=function(e) NA)
       
       # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, damcalc = finish_time-start_time); start_time <- Sys.time()
@@ -574,7 +499,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     tPop[2,] <- colSums(lPopMort)
     
     #ensure the total displaced, deceased or remaining does not exceed total population
-    tPop[tPop>ODD@data$Population[ij]] <- floor(ODD@data$Population[ij])
+    tPop[tPop>ODD_df$Population[ij]] <- floor(ODD_df$Population[ij])
     
     # if (length(elapsed_time)==9) {return(elapsed_time)
     # } else {(return(rep(0,9)))}
@@ -584,17 +509,17 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
 
     locallinp_buildings <- LP_buildings[ij]
     
-    nUnaff = rep(ODD@data$nBuildings[ij], Method$Np)
+    nUnaff = rep(ODD_df$nBuildings[ij], Method$Np)
     nDam = rep(0, Method$Np)
     
     #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
     
     for (h_i in hrange_order){
       h <- hrange[h_i]
-      if(is.na(ODD@data[ij,h])) next
+      if(is.na(ODD_df[ij,h])) next
       if(all(nUnaff==0)) break #if no remaining buildings, skip modelling
 
-      I_ij<-ODD@data[ij,h]
+      I_ij<-ODD_df[ij,h]
       Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + event_lp[h_i], error=function(e) NA) #+ eps_local[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
  
       D_Dam <- D_Dam_calc(Damage, Omega, eps_event[3,] + eps_local_ij[h_i,3,]) 
@@ -614,8 +539,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     return(list(samples = rbind(tPop[1:2,,drop=FALSE], nDam[1:Method$Np])))
   }
   
-  Dam<-array(0,c(nrow(ODD),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged
-  Dam_means<-array(0,c(nrow(ODD),3))
+  Dam<-array(0,c(nrow(ODD_df),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged
+  Dam_means<-array(0,c(nrow(ODD_df),3))
   
   if(Method$NestedCores>1) { 
     CalcDam_out <- mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$NestedCores)
@@ -639,7 +564,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       universal_set <- Reduce(union, indexes_list)
       overlap <- Reduce(intersect, indexes_list)
       prop_overlap <- ifelse(length(indexes_list)>1,length(overlap)/length(universal_set),0)
-      prop_coverage <- length(unique(universal_set))/sum(!is.na(ODD$ISO3C))
+      prop_coverage <- length(unique(universal_set))/sum(!is.na(ODD_df$ISO3C))
       return(c(prop_overlap, prop_coverage))
     }
     
@@ -676,7 +601,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     # funcy() aggregates the simulate impact (for each impact type) across each polygon, when
     # there is a matching observation for that impact type and polygon
     
-    tmp<-data.frame(iso3=ODD$ISO3C, displacement=Dam[,i,1], mortality=Dam[,i,2], buildDam=Dam[,i,3])#, 
+    tmp<-data.frame(iso3=ODD_df$ISO3C, displacement=Dam[,i,1], mortality=Dam[,i,2], buildDam=Dam[,i,3])#, 
                                     #mort_mean=Dam_means[,1], disp_mean=Dam_means[,2], buildDam_mean=Dam_means[,3])
     impact_sampled<-data.frame(polygon = numeric(), impact = character(), sampled = numeric(), mean=numeric())
     
@@ -703,9 +628,13 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   }
   
   if (output == 'ODDwithSampled'){ #usually used for generating simulated data
-    ODD@data$Disp<-Dam[,1,1]  
-    ODD@data$Mort<-Dam[,1,2]
-    ODD@data$BuildDam<-Dam[,1,3]
+    stop('Update for raster ODD object type')
+    ODD[['Disp']]<-Dam[,1,1]  
+    names(ODD)[length(names(ODD))] <- 'Disp'
+    ODD[['Mort']]<-Dam[,1,2]  
+    names(ODD)[length(names(ODD))] <- 'Mort'
+    ODD[['BuildDam']]<-Dam[,1,3]  
+    names(ODD)[length(names(ODD))] <- 'BuildDam'
     ODD@predictDisp<-funcy(1) 
     return(ODD)
   }
@@ -722,7 +651,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   # return(elapsed_time)
   # --------------------------------------------
   
-  if(is.null(ODD$nBuildings)){
+  if(is.null(ODD_df$nBuildings)){
     ODD@impact <- ODD@impact[!ODD@impact$impact %in% c('buildDam', 'buildDest', 'buildDamDest'),]
   }
   

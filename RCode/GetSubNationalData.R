@@ -15,7 +15,7 @@
 
 
 # Where would we like to log error messages?
-folder_write <- 'IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/'
+folder_write <- 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_Sept26/'
 
 readSubNatData <- function(subnat_file){
   # Clean data from xlsx file by converting data to the appropriate formats/data types
@@ -224,63 +224,82 @@ pixelsInPoly <- function(poly, ODDy){
   #returns the indexes of the ODDy pixels are inside the polygon 'poly'
   
   poly_sp <- SpatialPolygons(poly)
-  proj4string(poly_sp)<- ODDy@proj4string
+  proj4string(poly_sp)<- proj4string(ODDy)
   poly_sf <- st_as_sf(poly_sp)
   
-  insidepoly<-rep(FALSE,nrow(ODDy@data))
-  lon_cellsize <- ODDy@grid@cellsize[1]
-  lat_cellsize <- ODDy@grid@cellsize[2]
+  indexes_rast <- ODDy[['Population']]
+  values(indexes_rast) <- 1:ncell(ODDy)
+  indexes_rast <- crop(indexes_rast, extent(poly_sf), snap='out')
+  pixels_as_poly <- as.polygons(rast(indexes_rast),aggregate=F)
+  intersects <- as.matrix(st_intersects(st_as_sf(pixels_as_poly), poly_sf))
+  return(values(indexes_rast)[which(intersects)])
   
-  # Get rid of values outside the bounding box first
-  coords <- ODDy@coords
-  indies<- which(coords[,1] >= (poly_sp@bbox[1,1]-lon_cellsize/2) &
-    coords[,1]<= (poly_sp@bbox[1,2]+ lon_cellsize/2) &
-    coords[,2]>= (poly_sp@bbox[2,1]-lat_cellsize/2) &
-    coords[,2]<= (poly_sp@bbox[2,2]+lon_cellsize/2))
-  
-  if (length(indies)==0){return(integer())}
-  
-  sf_use_s2(FALSE) #Error being raised with st_intersects when this is set to TRUE
-  
-  check_intersection <- function(j){
-    pixel_sf <- sfheaders::sf_polygon(data.frame(longitude = c(coords[j,1]-lon_cellsize/2, 
-                                                               coords[j,1]-lon_cellsize/2,
-                                                               coords[j,1]+lon_cellsize/2, 
-                                                               coords[j,1]+lon_cellsize/2, 
-                                                               coords[j,1]-lon_cellsize/2), 
-                                                 latitude = c(coords[j,2]-lat_cellsize/2, 
-                                                              coords[j,2]+lat_cellsize/2,
-                                                              coords[j,2]+lat_cellsize/2, 
-                                                              coords[j,2]-lat_cellsize/2,
-                                                              coords[j,2]-lat_cellsize/2)), x='longitude',y='latitude')
-    sf::st_crs(pixel_sf) = ODDy@proj4string
-    
-    if(st_intersects(pixel_sf, poly_sf, sparse=F)[1,1]){
-      return(T)
-    } else return(F)
-  }
-  
-  inside_poly <- unlist(mclapply(indies, check_intersection, mc.cores=2))
-  
-  sf_use_s2(TRUE) #Change back
-  
-  if (length(which(inside_poly))==0){return(integer())}
-  
-  return(indies[which(inside_poly)])
+  # insidepoly<-rep(FALSE,ncell(ODDy))
+  # lon_cellsize <- res(ODDy)[1]
+  # lat_cellsize <- res(ODDy)[2]
+  # 
+  # dummy_rast <- ODDy[['Population']]
+  # values(dummy_rast) <- F
+  # values(dummy_rast)[insidepoly] <- T
+  # 
+  # subst(rast(ODDy), 1, 1, others=NA)
+  # ODDy[['Population']] %>% terra::as.polygons() %>% st_as_sf() %>% filter(value==1)
+  # 
+  # # Get rid of values outside the bounding box first
+  # coords <- xyFromCell(ODDy, 1:ncell(ODDy))
+  # indies<- which(coords[,1] >= (poly_sp@bbox[1,1]-lon_cellsize/2) &
+  #   coords[,1]<= (poly_sp@bbox[1,2]+ lon_cellsize/2) &
+  #   coords[,2]>= (poly_sp@bbox[2,1]-lat_cellsize/2) &
+  #   coords[,2]<= (poly_sp@bbox[2,2]+lon_cellsize/2))
+  # 
+  # if (length(indies)==0){return(integer())}
+  # 
+  # #sf_use_s2(FALSE) #Error being raised with st_intersects when this is set to TRUE
+  # 
+  # sf_polygon
+  # 
+  # 
+  # check_intersection <- function(j){
+  #   pixel_sf <- sfheaders::sf_polygon(data.frame(longitude = c(coords[j,1]-lon_cellsize/2, 
+  #                                                              coords[j,1]-lon_cellsize/2,
+  #                                                              coords[j,1]+lon_cellsize/2, 
+  #                                                              coords[j,1]+lon_cellsize/2, 
+  #                                                              coords[j,1]-lon_cellsize/2), 
+  #                                                latitude = c(coords[j,2]-lat_cellsize/2, 
+  #                                                             coords[j,2]+lat_cellsize/2,
+  #                                                             coords[j,2]+lat_cellsize/2, 
+  #                                                             coords[j,2]-lat_cellsize/2,
+  #                                                             coords[j,2]-lat_cellsize/2)), x='longitude',y='latitude')
+  #   sf::st_crs(pixel_sf) = proj4string(ODDy)
+  #   
+  #   if(st_intersects(pixel_sf, poly_sf, sparse=F)[1,1]){
+  #     return(T)
+  #   } else return(F)
+  # }
+  # 
+  # inside_poly <- unlist(mclapply(indies, check_intersection, mc.cores=2))
+  # 
+  # sf_use_s2(TRUE) #Change back
+  # 
+  # if (length(which(inside_poly))==0){return(integer())}
+  # 
+  # return(indies[which(inside_poly)])
 }
 
-reweight_pixels <- function(polygons_indexes, polygons_list, coords, ODDy){
+reweight_pixels <- function(polygons_indexes, polygons_list, ODDy){
   #find which polygons have intersecting indexes but not intersecting sf polygons
   #this may be the case for pixels lying on the border which have been allocated to two polygons
   #in this case, allocate the pixel to the polygon in which its center lies
+  
+  coords <- xyFromCell(ODDy, 1:(NROW(ODDy)*NCOL(ODDy)))
   for (i in 1:length(polygons_indexes)){
     polygons_indexes[[i]]$weights <- rep(1, length(polygons_indexes[[i]]$indexes))
   }
   
   if (length(polygons_indexes) == 1) return(polygons_indexes)
   
-  lon_cellsize <- ODDy@grid@cellsize[1]
-  lat_cellsize <- ODDy@grid@cellsize[2]
+  lon_cellsize <- res(ODDy)[1]
+  lat_cellsize <- res(ODDy)[2]
   
   for(i in 2:length(polygons_indexes)){
     for(j in 1:(i-1)){
@@ -314,7 +333,7 @@ reweight_pixels <- function(polygons_indexes, polygons_list, coords, ODDy){
                                                                     coords[index,2]+lat_cellsize/2, 
                                                                     coords[index,2]-lat_cellsize/2,
                                                                     coords[index,2]-lat_cellsize/2)), x='longitude',y='latitude')
-          sf::st_crs(pixel_sf) = ODDy@proj4string
+          sf::st_crs(pixel_sf) = proj4string(ODDy)
           pixel_sp <- as(pixel_sf, 'Spatial')
           intersection_i <- intersect(pixel_sp,polygons_list[[i]]$sf_polygon)
           intersection_j <- intersect(pixel_sp,polygons_list[[j]]$sf_polygon)
@@ -349,7 +368,7 @@ pixel_weight_border_correction <- function(ODDy){
   # then either part of the pixel lies in the water or in a region for which we do not have impact data. 
   # We assume the former, and scale the weights so that they sum to one. 
   # Is there a way of knowing if it is the latter, and not rescaling? 
-  pixels_of_interest <- which(!is.na(ODDy$ISO3C))
+  pixels_of_interest <- which(!is.na(values(ODDy[['ISO3C']])))
   for (i in pixels_of_interest){
     weight_sum = c(0, 0, 0)
     polygon_matches = list(c(), c(), c())
@@ -365,7 +384,7 @@ pixel_weight_border_correction <- function(ODDy){
     for (g in 2:3){
       if (is.null(polygon_matches[[g]])) next
       if(round(weight_sum[g],3) > 1.1){
-        file_conn <- file(paste0(folder_write, 'ODD_creation_notes'), open = "a")
+        file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
         #writeLines(paste("Region:", ODDy@polygons[[polygon_matches[[g]][1,1]]]$name, "Event Date:", ODDy@hazdates[1], '. Sum of pixel weights for a polygon is larger than 1'), file_conn)
         print(paste("Region:", paste(unlist(lapply(ODDy@polygons[polygon_matches[[g]][,1]], function(x) x$name)), collapse=' and '), "Event Date:", ODDy@hazdates[1],'. Sum of pixel weights for a polygon is', round(weight_sum[g],3), ' (larger than 1.1)'), file_conn)
         
@@ -392,7 +411,7 @@ addODDPolygons <- function(ODDy, polygons_list){
     print(i)
     if(!grepl(',', polygons_list[[i]]$polygon_name, fixed = TRUE)){ #check if subnational by searching for comma in polygon name
       if (polygons_list[[i]]$polygon_name=='TOTAL'){ #if 'TOTAL' then add all pixels to the polygon
-        inPolyInds <- which(!is.na(ODDy$ISO3C))
+        inPolyInds <- which(!is.na(values(ODDy[['ISO3C']])))
         polygons_indexes[[i]] <- list(name=polygons_list[[i]]$polygon_name, indexes = inPolyInds)
       } else { #if national then add pixels with appropriate ISO3C value to the polygon
         if (polygons_list[[i]]$polygon_name=='Kosovo'){ #kosovo doesn't seem to work with countrycode
@@ -400,20 +419,20 @@ addODDPolygons <- function(ODDy, polygons_list){
         } else {
           iso3 <- countrycode(polygons_list[[i]]$polygon_name, origin='country.name', destination='iso3c')
         }
-        inPolyInds <- which(ODDy@data$ISO3C == iso3)
+        inPolyInds <- which(values(ODDy[['ISO3C']]) == which(levels(ODDy[['ISO3C']])[[1]][[1]]$VALUE==iso3))
         polygons_indexes[[i]] <- list(name=polygons_list[[i]]$polygon_name, indexes = inPolyInds)
       }
     } else {
       if(!is.null(polygons_list[[i]]$sf_polygon)){
         #inPolyInds <- intersect(which(inPoly((polygons_list[[i]]$sf_polygon)@polygons[[1]], pop = ODDy@coords)$indies), which(ODDy@data$ISO3C==iso3))
-        inPolyInds <- intersect(pixelsInPoly((polygons_list[[i]]$sf_polygon)@polygons, ODDy), which(!is.na(ODDy$ISO3C)))
+        inPolyInds <- intersect(pixelsInPoly((polygons_list[[i]]$sf_polygon)@polygons, ODDy), which(!is.na(values(ODDy[['ISO3C']]))))
         if(length(inPolyInds)==0) warning(paste('Region not found in impacted area. Polygon name: ', polygons_list[[i]]$polygon_name))
         polygons_indexes[[i]] <- list(name=polygons_list[[i]]$polygon_name, indexes = inPolyInds)
       }
     }
   }
   
-  polygons_indexes <- reweight_pixels(polygons_indexes, polygons_list, ODDy@coords, ODDy)
+  polygons_indexes <- reweight_pixels(polygons_indexes, polygons_list, ODDy)
   ODDy@polygons <- polygons_indexes
   
   return(ODDy)
@@ -425,7 +444,7 @@ addODDImpact <- function(ODDy, impact){
   ODDy@impact <- impact
   
   #if polygon is 'TOTAL' but only one country is exposed, can rename the 'TOTAL' polygon with the country
-  unique_iso3 <- unique(ODDy$ISO3C)[!is.na(unique(ODDy$ISO3C))]
+  unique_iso3 <- unique(ODDy@ISO3C)[!is.na(unique(ODDy@ISO3C))]
   if (length(unique_iso3)==1){
     i_TOTAL <- which(sapply(ODDy@polygons, function(poly){ifelse(poly$name=='TOTAL', T, F)}))
     i_iso3 <- which(sapply(ODDy@polygons, function(poly){ifelse(grepl(",",poly$name), F, T)}))
@@ -441,7 +460,7 @@ addODDImpact <- function(ODDy, impact){
   if (any(ODDy@impact$observed[impact_rows_remove] > 0)){
     missing_polys <- which(ODDy@impact$observed[impact_rows_remove] > 0)
     missing_poly_names <- unique(unlist(lapply(ODDy@polygons[ODDy@impact$polygon[impact_rows_remove[missing_polys]]], function(x){x$name})))
-    file_conn <- file(paste0(folder_write, 'ODD_creation_notes'), open = "a")
+    file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
     writeLines(paste("Country:", unique_iso3[1], "Event Date:", ODDy@hazdates[1], ', region', missing_poly_names, 'with impact greater than 0 not included in modelled region.'), file_conn)
     close(file_conn)
   }
@@ -461,6 +480,61 @@ addODDImpact <- function(ODDy, impact){
   
   return(ODDy)
 }
+
+
+updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, event_id, subnat_file='EQ_SubNational.xlsx'){
+  # Update an existing ODD object (ODDy) using subnational data:
+  #   - Edit the 'impact' slot to include subnational data from the provided spreadsheet (default is EQ_subnational.xlsx)
+  #   - Edit the 'polygons' slot to identify the pixels belonging to each polygon for which we have impact data
+  
+  #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
+  SubNatData <- readSubNatData(subnat_file)
+  SubNatData <- SubNatData[which(!is.na(SubNatData$event_name)), ]
+  
+  SubNatData_match <- SubNatData %>% group_by(event_name, sdate) %>% filter(EventID==event_id) %>% group_split()
+  # Use event date and iso3 to identify the event in subnat data that correspond to the ODD object
+  # (note that all rows for the same event in SubNatData should have the same name and sdate!)
+  # SubNatData_match <- SubNatData %>% group_by(event_name, sdate) %>% filter(
+  #   length(intersect(trimws(unlist(strsplit(source_listed_iso3, ";"))),unique(ODDy@data$ISO3C)))>0,
+  #   sdate > (event_sdate - 1) &  fdate < (event_fdate + 1) #LOOSEEND: HAZDATES FOR EXISTING ODD OBJECTS ARE DODGEY
+  # ) %>% group_split()
+  
+  #if more than one matching event is found in subnat data then choose manually
+  id_chosen <- 1
+  if(length(SubNatData_match)>1){
+    cat(paste('Please select between the following',length(SubNatData_match),'events by typing the id of the chosen source and pressing return.\n'))
+    print('Desired Event:')
+    print(paste('Event Date:', event_sdate, 'Countries:', paste(unique(ODDy@ISO3C[!is.na(ODDy@ISO3C)], na.rm=TRUE), collapse=" ")))
+    for(i in 1:length(SubNatData_match)){
+      print(paste0('Option ', i,':'))
+      print(SubNatData_match[[i]][1, c('event_name', 'iso3', 'sdate', 'fdate', 'notes')])
+    }
+    id_chosen <- as.integer(readline(prompt='id selected: '))
+  }
+  SubNatEvent <- SubNatData_match[[id_chosen]]
+  
+  iso3_unique <- unique(ODDy@ISO3C)[which(!is.na(unique(ODDy@ISO3C)))]
+  if (length(iso3_unique)==1){
+    #replace 'TOTAL' with name of the country
+    SubNatEvent$iso3[which(SubNatEvent$iso3=='TOT')] = iso3_unique
+    SubNatEvent$country[which(SubNatEvent$country=='TOTAL')] = countrycode(iso3_unique, origin='iso3c', destination='country.name')
+  }
+  
+  SubNatImpact <- getSubNatImpact(SubNatEvent, subnational=TRUE) #populate the 'impact' slot in ODDy using the national and subnational data
+  
+  #remove overlapping polygons using SubNatImpact$impact and SubNatImpact$polygons_list
+  #find the polygons and complements we want to use for each impact type and add to ODDy@impact
+  
+  ODDy <- addODDPolygons(ODDy, SubNatImpact$polygons_list) #populate the 'polygons' slot in ODDy using the regions for which we have impact data
+  ODDy <- addODDImpact(ODDy, SubNatImpact$impact)
+  
+  ODDy <- pixel_weight_border_correction(ODDy)
+  
+  #additional_poly_check(ODDy, event_id, print_to_xl=T)
+  
+  return(ODDy)
+}
+
 
 additional_poly_check <- function(ODDy, i, print_to_xl=F){
   # Perform some checks on the polygons:
@@ -512,7 +586,7 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
             iso3_incl %<>% append(impacts_split[[j]]$iso3[k])
           }
         }
-        non_na_iso3 <- unique(ODDy$ISO3C)[which(!is.na(unique(ODDy$ISO3C)))]
+        non_na_iso3 <- unique(ODDy@ISO3C)[which(!is.na(unique(ODDy@ISO3C)))]
         iso3_missing <- non_na_iso3[which(!(non_na_iso3 %in% iso3_incl))]
         for (iso3_miss in iso3_missing){
           writeData(wb, sheet, iso3_miss, startCol = 1, startRow = row)
@@ -523,7 +597,7 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
       }
       
       #check if there are any pixels not covered by the polygons:
-      pixels_unallocated <- which(!is.na(ODDy$ISO3C))
+      pixels_unallocated <- which(!is.na(values(ODDy[['ISO3C']])))
       for (k in 1:NROW(impacts_split[[j]])){
         if (gadm_levels[k] == gadm_level)
           pixels_unallocated <- setdiff(pixels_unallocated, ODDy@polygons[[impacts_split[[j]]$polygon[k]]]$indexes)
@@ -551,19 +625,20 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
             r[2] <- substring(r[2], 2)
           }
           r_poly <- getGADM(r, level = gadm_level, country=iso3)
-          overlap <- (max(r_poly@bbox[1,]) >= ODDy@bbox[1] &
-                        min(r_poly@bbox[1,]) <= ODDy@bbox[3] &
-                        max(r_poly@bbox[2,]) >= ODDy@bbox[2] &
-                        min(r_poly@bbox[2,]) <= ODDy@bbox[4])
+          overlap <- (max(r_poly@bbox[1,]) >= ODDy@extent@xmin &
+                        min(r_poly@bbox[1,]) <= ODDy@extent@xmax &
+                        max(r_poly@bbox[2,]) >= ODDy@extent@ymin &
+                        min(r_poly@bbox[2,]) <= ODDy@extent@ymax)
           if (!overlap) next
           
           if (length(pixels_unallocated)==0) next
           
-          spdf_pixels_unallocated <- SpatialPointsDataFrame(coords=ODDy@coords[pixels_unallocated,, drop=F],
-                                                            data=ODDy@data[pixels_unallocated,1:2, drop=F], #this is arbitrary, function just seems to require data
-                                                            proj4string=r_poly@proj4string)
+          sf_pixels_unallocated <- st_as_sf(data.frame(xyFromCell(ODDy, pixels_unallocated)), coords = c("x", "y"), crs = crs(ODDy))
+          # spdf_pixels_unallocated <- SpatialPointsDataFrame(coords=ODDy@coords[pixels_unallocated,, drop=F],
+          #                                                   data=ODDy@data[pixels_unallocated,1:2, drop=F], #this is arbitrary, function just seems to require data
+          #                                                   proj4string=r_poly@proj4string)
           
-          contained <- c(st_contains(st_as_sf(spdf_pixels_unallocated), st_as_sf(r_poly), sparse=F)) #gContains(r_poly, spdf_pixels_unallocated, byid=T)
+          contained <- c(st_contains(sf_pixels_unallocated, st_as_sf(r_poly), sparse=F)) #gContains(r_poly, spdf_pixels_unallocated, byid=T)
           
           if (any(contained)){
             print(paste('Polygon', r, 'contains an unallocated pixel'))
@@ -582,7 +657,7 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
       }
     }
   }
-  if (print_to_xl & noteworthy){saveWorkbook(wb, paste0(folder_write, "Missing Regions/Event_",i,".xlsx"))}
+  if (print_to_xl & noteworthy){saveWorkbook(wb, paste0(dir, folder_write, "Missing Regions/Event_",i,".xlsx"))}
 }
 
 GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder_write='IIDIPUS_Input_Alternatives/Aug24/'){
@@ -635,7 +710,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     # lhazSDF <- GetDisaster(miniDamSimplified, bbox = c(160, -11.8, 163, -9.7))
     lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
     if(is.null(lhazSDF)) {
-      file_conn <- file(paste0(folder_write, 'ODD_creation_notes'), open = "a")
+      file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
       writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', lhazSDF not found.'), file_conn)
       close(file_conn) 
       next
@@ -644,19 +719,18 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     # Create the ODD object:
     ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified, agg_level=1),error=function(e) NULL)
     if(is.null(ODDy)) {
-      file_conn <- file(paste0(folder_write, 'ODD_creation_notes'), open = "a")
+      file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
       writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', ODD object not created.'), file_conn)
       close(file_conn) 
       next
     }
     
     
-    
     #Fetch building count data:
-    #ODDy_build <- tryCatch(AddBuildingCounts(ODDy, i, paste0(folder_write, 'Building_count_notes')), error=function(e) NULL)
-    ODDy_build <- tryCatch(getBingBuildingsGlobal(ODDy, i, paste0(folder_write, 'Building_count_notes')), error=function(e) NULL)
+    #ODDy_build <- tryCatch(AddBuildingCounts(ODDy, i, paste0(dir, folder_write, 'Building_count_notes')), error=function(e) NULL)
+    ODDy_build <- tryCatch(getBingBuildingsGlobal(ODDy, i, paste0(dir, folder_write, 'Building_count_notes')), error=function(e) NULL)
     if(is.null(ODDy_build)) {
-      file_conn <- file(paste0(folder_write, 'ODD_creation_notes'), open = "a")
+      file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
       writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', Building counts not added.'), file_conn)
       close(file_conn)
     } else {
@@ -664,7 +738,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
       rm(ODDy_build)
     }
     
-    iso3_ODDy <- unique(ODDy$ISO3C)
+    iso3_ODDy <- unique(ODDy@ISO3C)
     
     # Create a unique hazard event name
     namer<-paste0(ODDy@hazard,
@@ -679,7 +753,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     ODDy_with_impact <- tryCatch(updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1], i),error=function(e) NULL)
     
     if(is.null(ODDy_with_impact)) {
-      file_conn <- file(paste0(folder_write, 'ODD_creation_notes'), open = "a")
+      file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
       writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', impact not added.'), file_conn)
       close(file_conn)
       next
@@ -704,7 +778,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
       # Make building damage object BD
       BDy<- tryCatch(new("BD",Damage=miniDam,ODD=ODDy),error=function(e) NULL)
       if(is.null(BDy)) {
-        file_conn <- file(paste0(folder_write, 'ODD_creation_notes'), open = "a")
+        file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
         writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', BD object creation failed.'), file_conn)
         close(file_conn)
       }
@@ -755,58 +829,6 @@ moveTestData <- function(folder_in='IIDIPUS_Input'){
 #-------- For updating ODD objects rather than building them from scratch: -------
 # --------------------------------------------------------------------------------
 
-updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, event_id, subnat_file='EQ_SubNational.xlsx'){
-  # Update an existing ODD object (ODDy) using subnational data:
-  #   - Edit the 'impact' slot to include subnational data from the provided spreadsheet (default is EQ_subnational.xlsx)
-  #   - Edit the 'polygons' slot to identify the pixels belonging to each polygon for which we have impact data
-  
-  #SubNatData <- read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
-  SubNatData <- readSubNatData(subnat_file)
-  SubNatData <- SubNatData[which(!is.na(SubNatData$event_name)), ]
-  
-  SubNatData_match <- SubNatData %>% group_by(event_name, sdate) %>% filter(EventID==event_id) %>% group_split()
-  # Use event date and iso3 to identify the event in subnat data that correspond to the ODD object
-  # (note that all rows for the same event in SubNatData should have the same name and sdate!)
-  # SubNatData_match <- SubNatData %>% group_by(event_name, sdate) %>% filter(
-  #   length(intersect(trimws(unlist(strsplit(source_listed_iso3, ";"))),unique(ODDy@data$ISO3C)))>0,
-  #   sdate > (event_sdate - 1) &  fdate < (event_fdate + 1) #LOOSEEND: HAZDATES FOR EXISTING ODD OBJECTS ARE DODGEY
-  # ) %>% group_split()
-  
-  #if more than one matching event is found in subnat data then choose manually
-  id_chosen <- 1
-  if(length(SubNatData_match)>1){
-    cat(paste('Please select between the following',length(SubNatData_match),'events by typing the id of the chosen source and pressing return.\n'))
-    print('Desired Event:')
-    print(paste('Event Date:', event_sdate, 'Countries:', paste(unique(ODDy@data$ISO3C[!is.na(ODDy@data$ISO3C)], na.rm=TRUE), collapse=" ")))
-    for(i in 1:length(SubNatData_match)){
-      print(paste0('Option ', i,':'))
-      print(SubNatData_match[[i]][1, c('event_name', 'iso3', 'sdate', 'fdate', 'notes')])
-    }
-    id_chosen <- as.integer(readline(prompt='id selected: '))
-  }
-  SubNatEvent <- SubNatData_match[[id_chosen]]
-  
-  iso3_unique <- unique(ODDy$ISO3C)[which(!is.na(unique(ODDy$ISO3C)))]
-  if (length(iso3_unique)==1){
-    #replace 'TOTAL' with name of the country
-    SubNatEvent$iso3[which(SubNatEvent$iso3=='TOT')] = iso3_unique
-    SubNatEvent$country[which(SubNatEvent$country=='TOTAL')] = countrycode(iso3_unique, origin='iso3c', destination='country.name')
-  }
-  
-  SubNatImpact <- getSubNatImpact(SubNatEvent, subnational=TRUE) #populate the 'impact' slot in ODDy using the national and subnational data
-  
-  #remove overlapping polygons using SubNatImpact$impact and SubNatImpact$polygons_list
-  #find the polygons and complements we want to use for each impact type and add to ODDy@impact
-  
-  ODDy <- addODDPolygons(ODDy, SubNatImpact$polygons_list) #populate the 'polygons' slot in ODDy using the regions for which we have impact data
-  ODDy <- addODDImpact(ODDy, SubNatImpact$impact)
-  
-  ODDy <- pixel_weight_border_correction(ODDy)
-  
-  #additional_poly_check(ODDy, event_id, print_to_xl=T)
-  
-  return(ODDy)
-}
 
 updateAllODDSubNat <- function(dir, subnat_file='EQ_SubNational.xlsx'){
   # Takes all the ODD objects currently in IIDIPUS_Input/ODDobjects and updates them using the data from the subnational data spreadsheet

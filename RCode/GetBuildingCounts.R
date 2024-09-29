@@ -398,10 +398,9 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   # Note that if you choose to proceed with some missing quadkeys, the values in these pixels will be 0 rather than NA (making them indistinguishable from true 0s)
   # This could be addressed by determining the polygons of the missing quadkeys and assigning the intersecting pixels to NA, but haven't had time to implement this yet. 
   
-  bbox <- ODD@bbox
   zoom <- 9
   
-  tiles <- getMercantileTiles(bbox[1], bbox[2], bbox[3], bbox[4], 9)
+  tiles <- getMercantileTiles(ODD@extent@xmin, ODD@extent@ymin, ODD@extent@xmax, ODD@extent@ymax, 9)
   quad_keys <- list()
   for (i in 1:NROW(tiles)){
     quad_keys[[i]] <- getQuadKey(tiles[i,])
@@ -458,7 +457,7 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
       #stop(paste("QuadKey not found in dataset:", quad_key))
     }
   }
-  inside_bbox <- which(build_coords[,1] > bbox[1] & build_coords[,1] < bbox[3] & build_coords[,2] > bbox[2] & build_coords[,2] < bbox[4])
+  inside_bbox <- which(build_coords[,1] > ODD@extent@xmin & build_coords[,1] < ODD@extent@xmax & build_coords[,2] > ODD@extent@ymin & build_coords[,2] < ODD@extent@ymax)
   building_locs <- build_coords[inside_bbox,]
   
   if (!missing_quadkeys_flag){
@@ -473,14 +472,11 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   }
   
   colnames(building_locs) <- c('Longitude', 'Latitude')
-  len_fun <- function(x, na.rm=T){
-    if (na.rm) length(na.omit(x)) 
-    else (length(x))
-  }                                                
-  rastered_buildings <- rasterize(building_locs, raster(ODD), 1, fun='count', background=0)
-  rastered_buildings_spdf <- as(rastered_buildings, "SpatialPixelsDataFrame")
+                                           
+  ODD[['nBuildings']] <- rasterize(building_locs, ODD, 1, fun='count', background=0)
+  #rastered_buildings_spdf <- as(rastered_buildings, "SpatialPixelsDataFrame")
   
-  ODD@data <- merge_rastered_spdf(ODD, rastered_buildings_spdf, 'nBuildings')
+  #ODD@data <- merge_rastered_spdf(ODD, rastered_buildings_spdf, 'nBuildings')
   
   #sedacs2020 <- GetPopulationBbox(dir, ODD@bbox, yr=2020)
   #population2020 <- merge(ODD@coords, cbind(sedacs2020@coords, population2020=sedacs2020$Population), by=c('Longitude', 'Latitude'), all.x=T, sort=F)

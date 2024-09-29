@@ -12,7 +12,6 @@ AlgoResultsSMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Result
 AlgoResultsMCMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-08-19_075743_MCMC_RealAgg5_Trial_LR40_Rho0.975propCOVdiv12')
 
 
-
 AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-09-07_081752_alphaAdaptive_M100_Npart1000_Sim50by50_propCOVmult0.2')
 AlgoParams$cores <- 1
 AlgoParams$NestedCores <- 4
@@ -117,8 +116,24 @@ for (i in c(16,)){
 
 
 
+#MCMC:
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-09-26_222556_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive')
 
 
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-09-24_121551_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive_backup')
+Prior <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HLPriorSamples')
+prior_phys <- Prior
+for (i in 1:NROW(Prior)){
+  prior_phys[i, ] <- Proposed2Physical(Prior[i,] %>% relist(skeleton=Model$skeleton) %>% unlist(), Model) %>% unlist()
+}
+
+
+params <- c(15,16)
+plot(prior_phys[,params[1]], prior_phys[,params[2]])
+points(AlgoResults$Omega_sample_phys[params[1],1], AlgoResults$Omega_sample_phys[params[2],1], col='red', pch=19)
+lines(AlgoResults$Omega_sample_phys[params[1],], AlgoResults$Omega_sample_phys[params[2],], col='blue')
 
 
 #plot_df_postpredictive(df_postpredictive_sampled_true %>% filter(train_flag=='TEST'), 'mortality')

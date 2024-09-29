@@ -32,7 +32,7 @@ setClass("HAZARD",
                    USGS_id="character",
                    eventtime="character",
                    alertfull='list'),
-         contains = "SpatialPixelsDataFrame")
+         contains = "RasterBrick")
 
 setMethod(f="initialize", signature="HAZARD",
           # definition=function(.Object,bbox,hazSDF,dater=NULL,dir=directory,
@@ -58,28 +58,35 @@ setMethod(f="initialize", signature="HAZARD",
             if(!is.null(dater)) .Object@eventdate<-dater
             
             if(!is.null(obj)){
-              # find bbox of entries within I>I0 polygon and crop object
-              inI0<-obj@coords[!is.na(obj@data$mmi_mean) & obj@data$mmi_mean>.Object@I0,, drop=F]
-              # Take a bounding box a little larger than the I>I0 object but inside original (the 5 is obv. arbitrary)
-              bbox<-c(max(obj@bbox[1],min(inI0[,1])-5*obj@grid@cellsize[1]),
-                      max(obj@bbox[2],min(inI0[,2])-5*obj@grid@cellsize[2]),
-                      min(obj@bbox[3],max(inI0[,1])+5*obj@grid@cellsize[1]),
-                      min(obj@bbox[4],max(inI0[,2])+5*obj@grid@cellsize[2]))
-              # Crop that barnet!
-              e <- as(raster::extent(c(bbox[c(1,3,2,4)])), 'SpatialPolygons')
-              proj4string(e) <- "+proj=longlat +datum=WGS84 +ellps=WGS84"
-              obj%<>%raster::crop(e)
-              obj %<>% SpatialPixelsDataFrame(obj@data) #raster::crop() now seems to be returning a spatial points data frame
-              colnames(obj@coords) <- c('Longitude', 'Latitude')
-              # Allocate the spatial data from a SpatialPixelsDataFrame object
+
+              inI0<-xyFromCell(obj, which(values(!is.na(obj[['mmi_mean']]) & obj[['mmi_mean']]>.Object@I0)))
+              
+              # Take a bounding box a little larger than the I>I0 object but inside original (the 5 is arbitrary)
+              bbox<-c(max(obj@extent@xmin,min(inI0[,1])-5*res(obj)[1]),
+                      max(obj@extent@ymin,min(inI0[,2])-5*res(obj)[2]),
+                      min(obj@extent@xmax,max(inI0[,1])+5*res(obj)[1]),
+                      min(obj@extent@ymax,max(inI0[,2])+5*res(obj)[2]))
+              
+              # Crop
+              #e <- raster::extent(c(bbox[c(1,3,2,4)]))
+              #proj4string(e) <- "+proj=longlat +datum=WGS84 +ellps=WGS84"
+
+              obj%<>%raster::crop(raster::extent(c(bbox[c(1,3,2,4)])))
+              .Object@file <- obj@file
               .Object@data <- obj@data
-              .Object@coords.nrs <-obj@coords.nrs
-              .Object@grid <-obj@grid
-              .Object@grid.index <-obj@grid.index
-              .Object@coords <-obj@coords
-              .Object@bbox <-obj@bbox
+              .Object@legend <- obj@legend
+              .Object@title <- obj@title
+              .Object@extent <- obj@extent
+              .Object@rotated <- obj@rotated
+              .Object@rotation <- obj@rotation
+              .Object@ncols <- obj@ncols
+              .Object@nrows <- obj@nrows
+              .Object@crs <- obj@crs
+              .Object@srs <- obj@srs
+              .Object@history <- obj@history
+              .Object@z <- obj@z
             }
-            .Object@proj4string <-CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            #.Object@proj4string <-CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
             names(.Object)<-c("mean","sd")
             

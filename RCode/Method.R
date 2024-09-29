@@ -1470,6 +1470,8 @@ correlated_AMCMC <- function(AlgoParams, Model, propCOV = NULL, init_val_phys = 
     AlgoResults$mu_store[,s] = AlgoResults$mu_store[,s-1] + s^(-AlgoParams$lambda_rate) * (AlgoResults$Omega_sample[,s] - AlgoResults$mu_store[,s-1])
     AlgoResults$Sigma_store[,,s] = AlgoResults$Sigma_store[,,s-1] + s^(-AlgoParams$lambda_rate) * ((AlgoResults$Omega_sample[,s] - AlgoResults$mu_store[,s-1]) %*% t(AlgoResults$Omega_sample[,s] - AlgoResults$mu_store[,s-1])-AlgoResults$Sigma_store[,,s-1])
     
+    if (s < 100){propCOV = AlgoResults$lambda_store[s] * AlgoResults$Sigma_store[,,s]}
+    
     Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[,s-1], propPars=AlgoResults$lambda_store[s] * AlgoResults$Sigma_store[,,s]) #perturb the proposal
     Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
     epsilon <- rnorm(length(AlgoResults$u[,,,s-1]))
@@ -1503,6 +1505,280 @@ correlated_AMCMC <- function(AlgoParams, Model, propCOV = NULL, init_val_phys = 
       AlgoResults$u[,,,s] = u_prop
     }  
     plot(AlgoResults$Omega_sample_phys[2,])
+  }
+}
+
+###################################################################################
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+###################################################################################
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+#------------------ Accelerated scaling and shaping MCMC -------------------------#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+###################################################################################
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
+###################################################################################
+
+AlgoParams$N_steps <- 1000
+AlgoParams$learning_rate <- 40
+propCOV <- cbind(c(0.1,0), c(0, 0.1))
+AlgoParams$m_CRPS <- 100
+AlgoParams$rho <- 0.95
+AlgoParams$lambda_rate <- 0.9
+AlgoParams$alpha_star <- 0.234
+
+retrieve_UnfinishedAlgoResults_AMCMC2 <- function(dir, oldtag, AlgoResults){
+  AlgoResults_unfinished <- readRDS(paste0(dir,"IIDIPUS_Results/",oldtag))
+  s_finish = max(which(!is.na(AlgoResults_unfinished$Omega_sample[1,]))) #find last completed step
+  s_start <- s_finish
+  
+  # # carry out these steps in case s differs between the unfinished and current runs
+  AlgoResults$W[,1:s_finish] <- AlgoResults_unfinished$W[,1:s_finish]
+  AlgoResults$d[,,1:s_finish] <- AlgoResults_unfinished$d[,,1:s_finish]
+  
+  AlgoResults$Omega_sample[,1:s_finish] <- AlgoResults_unfinished$Omega_sample[,1:s_finish]
+  AlgoResults$Omega_sample_phys[,1:s_finish] <- AlgoResults_unfinished$Omega_sample_phys[,1:s_finish]
+  AlgoResults$loss[1:s_finish] = AlgoResults_unfinished$loss[1:s_finish] 
+  AlgoResults$u[,,,1:s_finish] = AlgoResults_unfinished$u[,,,1:s_finish] 
+  AlgoResults$tolerancestore[1:s_finish] <- AlgoResults_unfinished$tolerancestore[1:s_finish]
+  AlgoResults$essstore[1:s_finish] <- AlgoResults_unfinished$essstore[1:s_finish]
+  AlgoResults$lambda_store[1:s_finish] <- AlgoResults_unfinished$lambda_store[1:s_finish]
+  AlgoResults$mu_store[,1:s_finish] <- AlgoResults_unfinished$mu_store[,1:s_finish]
+  AlgoResults$Sigma_store[,,1:s_finish] <- AlgoResults_unfinished$Sigma_store[,,1:s_finish]
+  AlgoResults$accprob_store[1:s_finish] <- AlgoResults_unfinished$accprob_store[1:s_finish]
+  #AlgoResults$propCOV[,,1:s_finish] <- AlgoResults_unfinished$propCOV[,,1:s_finish]
+  #AlgoResults$propCOV_multiplier[1:s_finish] <- AlgoResults_unfinished$propCOV_multiplier[1:s_finish]
+  #AlgoResults$accrate_store[1:s_finish] <- AlgoResults_unfinished$accrate_store[1:s_finish]
+  AlgoResults$rel_weights <- AlgoResults_unfinished$rel_weights
+  AlgoResults$input_folder <- AlgoResults_unfinished$input_folder
+  
+  AlgoResults$lambda_start <- AlgoResults_unfinished$lambda_start
+  AlgoResults$s_restart <- AlgoResults_unfinished$s_restart
+
+  # s_start = s_finish + 1 #ifelse(n_finish==Npart, s_finish+1, s_finish) #identify the appropriate step from which to continue the algorithm
+  # #n_start = ifelse(n_finish==Npart, 1, n_finish + 1) #identify the appropriate particle from which to continue the algorithm
+  # 
+  return(list(
+    AlgoResults=AlgoResults,
+    s_start=s_start
+  ))
+}
+
+# prior_samples <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HLPriorSamples')
+# propCOV <- cov(prior_samples)
+# init_val_phys <- prior_samples[1,] %>% Array2Physical(Model) %>% unlist()
+
+# SampleImpact <- function(dir,Model, proposed,  AlgoParams){
+#   return(runif(1, 10,20))
+# }
+# 
+# CalcDist <- function(impact_sample, AlgoParams){
+#   return(impact_sample)
+# }
+
+correlated_AMCMC2 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys = NULL, unfinished=F, oldtag=NULL, tag_notes=NULL){
+  #Input: 
+  # - AlgoParams: Parameters describing the ABC-MCMC Algorithm (e.g. the ABC rejection threshold for higher level priors)
+  # - Model: Describes the data simulation and calculation of the distance measure 
+  # - Unfinished: If TRUE, then include oldtag - the tag (end of the filename) of an unfinished ABC-SMC run to be completed.
+  # Output:
+  # - 
+  # Details:
+  # - 
+  
+  n_x <- length(Model$par_lb) #n_x = number of parameters
+  tag<-gsub(gsub(Sys.time(),pattern = " ", replacement = "_"),pattern = ":",replacement = "")
+  tag<-ifelse(is.null(tag_notes), tag, paste0(tag, '_', tag_notes))
+  folderin<-paste0(dir,AlgoParams$input_folder, "ODDobjects/")
+  ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
+  n_events <- length(ufiles)
+  
+  c = 2.38^2 / n_x
+  A = pnorm(AlgoParams$a/2)
+  delta = (1-1/n_x)*(sqrt(2*pi)*exp(A^2/2)/(2*A)) + 1/(n_x*AlgoParams$a*(1-AlgoParams$a))
+  
+  iter_func = function(s){
+    return(floor(s/2))
+  }
+  
+  AlgoResults <- list(
+    #Omega_sample = array(NA, dim=c(AlgoParams$smc_Npart, n_x, AlgoParams$smc_steps)), #store sampled parameters on the transformed space
+    input_folder = AlgoParams$input_folder,
+    Omega_sample = array(NA, dim=c(n_x, AlgoParams$N_steps)),
+    Omega_sample_phys = array(NA, dim=c(n_x, AlgoParams$N_steps)), #store sampled parameters on the untransformed space
+    loss = array(Inf, dim=c( AlgoParams$N_steps)), #Distances
+    u = array(NA, dim=c(n_events, AlgoParams$m_CRPS, 3, AlgoParams$N_steps)),
+    lambda_store=array(NA, AlgoParams$N_steps), 
+    mu_store=array(NA, dim=c(n_x, AlgoParams$N_steps)), 
+    Sigma_store=array(NA, dim=c(n_x, n_x, AlgoParams$N_steps)),
+    accprob_store=array(NA, AlgoParams$N_steps),
+    sampled_full = NULL,
+    tolerancestore=array(NA, AlgoParams$smc_steps),
+    essstore=array(NA, AlgoParams$smc_steps),
+    accrate_store=array(NA, AlgoParams$smc_steps),
+    propCOV=array(NA, dim=c(n_x, n_x, AlgoParams$smc_steps)),
+    propCOV_multiplier=array(NA, AlgoParams$smc_steps),
+    s_restart = round(5/((AlgoParams$a)*(1-AlgoParams$a))),
+    lambda_start = 1
+  )
+  
+  if (is.null(propCOV)){
+    stop('Please provide initial covariance of perturbation kernel')
+  }
+  
+  if(unfinished==F){ 
+    #Initialize and perform sampling for s=1
+    if (is.null(init_val_phys)){
+      stop('Please provide initial value until we provide functionality to sample from prior')
+    }
+    # STEP 1:
+    AlgoResults$Omega_sample_phys[,1] = unlist(init_val_phys)
+    AlgoResults$Omega_sample[,1] = init_val_phys %>% Physical2Proposed(Model) %>% unlist()
+    AlgoResults$u[,,,1] = rnorm(length(AlgoResults$u[,,,1]))
+    proposed =  AlgoResults$Omega_sample_phys[,1] %>% relist(skeleton=Model$skeleton)
+    proposed$u = AlgoResults$u[,,,1]
+    impact_sample = SampleImpact(dir, Model, proposed %>% addTransfParams(), AlgoParams)
+    AlgoResults$loss[1] = CalcDist(impact_sample, AlgoParams)[1]
+    AlgoResults$lambda_store[1] = AlgoResults$lambda_start
+    AlgoResults$mu_store[,1] = AlgoResults$Omega_sample[,1]
+    AlgoResults$Sigma_store[,,1] = propCOV
+    AlgoResults$accprob_store[1] = AlgoParams$alpha_star
+    
+    # STEP 2:
+    Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[,1], propPars= c * AlgoResults$lambda_store[1] * AlgoResults$Sigma_store[,,1]) #perturb the proposal
+    Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
+    epsilon <- rnorm(length(AlgoResults$u[,,,1]))
+    u_prop <- AlgoParams$rho * c(AlgoResults$u[,,,1]) + sqrt(1-AlgoParams$rho^2) * epsilon
+    
+    HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
+    if (HP> AlgoParams$ABC & Model$higherpriors){
+      #REJECT DUE TO HIGHER LEVEL PRIOR
+      AlgoResults$accprob_store[2] = 0
+      AlgoResults$Omega_sample[,2] = AlgoResults$Omega_sample[,1]
+      AlgoResults$Omega_sample_phys[,2] = AlgoResults$Omega_sample_phys[,1]
+      AlgoResults$loss[2] = AlgoResults$loss[1]
+      AlgoResults$u[,,,2] = AlgoResults$u[,,,1]
+    }  else {
+      proposed = Omega_prop_phys %>% addTransfParams()
+      proposed$u = array(u_prop, dim=c(n_events, AlgoParams$m_CRPS, 3))
+      impact_sample <- SampleImpact(dir = dir,Model = Model,
+                                    proposed = proposed, 
+                                    AlgoParams = AlgoParams)
+      loss_prop <- CalcDist(impact_sample, AlgoParams)[1]
+      print(paste(s, loss_prop))
+      
+      #calculate the acceptance probability:
+      #print(modifyAcc(Omega_prop, Omega_sample_s[n,], Model))
+      min_loss <- min(AlgoParams$learning_rate * loss_prop, AlgoParams$learning_rate * AlgoResults$loss[1])
+      AlgoResults$accprob_store[2] <- min(1, exp(-AlgoParams$learning_rate * loss_prop + min_loss)/exp(-AlgoParams$learning_rate * AlgoResults$loss[1] + min_loss) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[,1], Model, AlgoResults$lambda_store[1] * AlgoResults$Sigma_store[,,1]))
+      
+      u <- runif(1)
+      if(u < AlgoResults$accprob_store[2]){
+        #ACCEPT
+        print('Accepted')
+        AlgoResults$Omega_sample[,2] = Omega_prop
+        AlgoResults$Omega_sample_phys[,2] = unlist(Omega_prop_phys)
+        AlgoResults$loss[2] = loss_prop
+        AlgoResults$u[,,,2] = u_prop
+      }  else {
+        #REJECT
+        AlgoResults$Omega_sample[,2] = AlgoResults$Omega_sample[,1]
+        AlgoResults$Omega_sample_phys[,2] = AlgoResults$Omega_sample_phys[,1]
+        AlgoResults$loss[2] = AlgoResults$loss[1]
+        AlgoResults$u[,,,2] = AlgoResults$u[,,,1]
+      }
+    }
+    
+    AlgoResults$mu_store[,2] = (AlgoResults$Omega_sample[,2] +  AlgoResults$Omega_sample[,1])/2
+    AlgoResults$Sigma_store[,,2] = 1 / (AlgoParams$v_0 + n_x + 3) * 
+      ((AlgoResults$mu_store[,2] %*% t(AlgoResults$mu_store[,2]) + AlgoResults$mu_store[,1] %*% t(AlgoResults$mu_store[,1])) - 
+         2*AlgoResults$mu_store[,2] %*% t(AlgoResults$mu_store[,2]) +
+         (AlgoParams$v_0 + n_x + 1)* AlgoResults$Sigma_store[,,1] )
+    AlgoResults$lambda_store[2] = max(AlgoParams$lambda_min, AlgoResults$lambda_store[1] * exp(delta / (2) * (AlgoResults$accprob_store[2]-AlgoParams$a)))
+    
+    saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/mcmc_",tag))  
+    
+    s_start = 3
+    
+  } else { 
+    #Collect relevant information from the unfinished sample
+    UnfinishedAlgoResults <- retrieve_UnfinishedAlgoResults_AMCMC2(dir, oldtag, AlgoResults)
+    AlgoResults <- UnfinishedAlgoResults$AlgoResults
+    s_start <- UnfinishedAlgoResults$s_start
+    saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/mcmc_",tag)) 
+  }
+  
+  for (s in s_start:AlgoParams$N_steps){
+    if (s %% 20 == 0) { 
+      saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/mcmc_",tag))
+    } else if(s %% 10 == 0){
+      saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/mcmc_",tag, "_backup"))
+    }
+    
+    Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[,s-1], propPars= c * AlgoResults$lambda_store[s-1] * AlgoResults$Sigma_store[,,s-1]) #perturb the proposal
+    Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
+    epsilon <- rnorm(length(AlgoResults$u[,,,s-1]))
+    u_prop <- AlgoParams$rho * c(AlgoResults$u[,,,s-1]) + sqrt(1-AlgoParams$rho^2) * epsilon
+    
+    HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
+    if (HP> AlgoParams$ABC & Model$higherpriors){
+      AlgoResults$accprob_store[s] = 0
+      AlgoResults$Omega_sample[,s] = AlgoResults$Omega_sample[,s-1]
+      AlgoResults$Omega_sample_phys[,s] = AlgoResults$Omega_sample_phys[,s-1]
+      AlgoResults$loss[s] = AlgoResults$loss[s-1]
+      AlgoResults$u[,,,s] = AlgoResults$u[,,,s-1]
+    } else {
+      proposed = Omega_prop_phys %>% addTransfParams()
+      proposed$u = array(u_prop, dim=c(n_events, AlgoParams$m_CRPS, 3))
+      impact_sample <- SampleImpact(dir = dir,Model = Model,
+                                    proposed = proposed, 
+                                    AlgoParams = AlgoParams)
+      loss_prop <- CalcDist(impact_sample, AlgoParams)[1]
+      print(paste(s, loss_prop))
+      
+      #calculate the acceptance probability:
+      #print(modifyAcc(Omega_prop, Omega_sample_s[n,], Model))
+      min_loss <- min(AlgoParams$learning_rate * loss_prop, AlgoParams$learning_rate * AlgoResults$loss[s-1])
+      AlgoResults$accprob_store[s] <- min(1, exp(-AlgoParams$learning_rate * loss_prop + min_loss)/exp(-AlgoParams$learning_rate * AlgoResults$loss[s-1] + min_loss) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[,s-1], Model, AlgoResults$lambda_store[s] * AlgoResults$Sigma_store[,,s]))
+      
+      u <- runif(1)
+      if(u < AlgoResults$accprob_store[s]){
+        print('Accepted')
+        AlgoResults$Omega_sample[,s] = Omega_prop
+        AlgoResults$Omega_sample_phys[,s] = unlist(Omega_prop_phys)
+        AlgoResults$loss[s] = loss_prop
+        AlgoResults$u[,,,s] = u_prop
+      }  else {
+        AlgoResults$Omega_sample[,s] = AlgoResults$Omega_sample[,s-1]
+        AlgoResults$Omega_sample_phys[,s] = AlgoResults$Omega_sample_phys[,s-1]
+        AlgoResults$loss[s] = AlgoResults$loss[s-1]
+        AlgoResults$u[,,,s] = AlgoResults$u[,,,s-1]
+      }
+    }
+    
+    plot(AlgoResults$Omega_sample_phys[2,])
+    
+    if (iter_func(s)==iter_func(s-1)){
+      AlgoResults$mu_store[,s] = (s - iter_func(s))/(s-iter_func(s)+1) *AlgoResults$mu_store[,s-1] + 1/(s-iter_func(s)+1) * AlgoResults$Omega_sample[,s]
+      AlgoResults$Sigma_store[,,s] = 1/(s-iter_func(s)+AlgoParams$v_0 + n_x + 2) * (
+        (s - iter_func(s) + AlgoParams$v_0+n_x+1)*AlgoResults$Sigma_store[,,s-1] + 
+        AlgoResults$Omega_sample[,s] %*% t(AlgoResults$Omega_sample[,s]) +
+        (s-iter_func(s)) * AlgoResults$mu_store[,s-1] %*% t(AlgoResults$mu_store[,s-1]) -
+        (s-iter_func(s)+1) * AlgoResults$mu_store[,s] %*% t(AlgoResults$mu_store[,s]))
+    } else {
+      AlgoResults$mu_store[,s] = AlgoResults$mu_store[,s-1] + 1/(s-iter_func(s)+1) * (AlgoResults$Omega_sample[,s]-AlgoResults$Omega_sample[,iter_func(s)-1])
+      AlgoResults$Sigma_store[,,s] = AlgoResults$Sigma_store[,,s-1] + 1/(s-iter_func(s) + AlgoParams$v_0 + n_x+2) * (
+                                      AlgoResults$Omega_sample[,s] %*% t(AlgoResults$Omega_sample[,s]) - 
+                                      AlgoResults$Omega_sample[,iter_func(s)-1] %*% t(AlgoResults$Omega_sample[,iter_func(s)-1]) +
+                                      (s-iter_func(s)+1) * (AlgoResults$mu_store[,s-1] %*% t(AlgoResults$mu_store[,s-1]) -  AlgoResults$mu_store[,s] %*% t(AlgoResults$mu_store[,s]))
+                                      )
+    }
+    
+    AlgoResults$lambda_store[s] = max(AlgoParams$lambda_min, AlgoResults$lambda_store[s-1] * exp(delta / (AlgoResults$s_restart + s) * (AlgoResults$accprob_store[s]-AlgoParams$a)))
+    if (abs(log(AlgoResults$lambda_store[s]) - log(AlgoResults$lambda_start))>log(3)){
+      AlgoResults$lambda_start = AlgoResults$lambda_store[s]
+      AlgoResults$s_restart <- 5/((AlgoParams$a)*(1-AlgoParams$a)) - s
+    }
+      
   }
 }
 

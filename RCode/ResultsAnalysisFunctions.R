@@ -209,6 +209,7 @@ plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
       ymin <- min(ymin, prior_samples[,pairings[p,2]]); ymax <- max(ymax, prior_samples[,pairings[p,2]])
     }
     
+    
     if (include_priors){
       plot(prior_samples[,pairings[p,1]], prior_samples[,pairings[p,2]], col='blue', 
            xlab=get_greek_titles(names(unlist(Model$skeleton))[pairings[p,1]]), xlim=c(xmin, xmax),
@@ -219,12 +220,16 @@ plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
            xlab=names(unlist(Model$skeleton))[pairings[p,1]], xlim=c(xmin, xmax),
            ylab=names(unlist(Model$skeleton))[pairings[p,2]], ylim=c(ymin, ymax))
     }
+  
     if (!is.null(Omega)){
-      points(unlist(Omega)[pairings[p,1]], unlist(Omega)[pairings[p,2]], col='red', pch=4, cex=2, lwd=2.5)
+      points(unlist(Omega)[pairings[p,1]], unlist(Omega)[pairings[p,2]], col='red', pch=4, cex=1.5, lwd=2.5)
     }
+    subfig_label <- c('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l')[p]
+    mtext(paste0('(', subfig_label, ')'), side = 3, line = 0, adj = -0.4, cex = 1, font = 1)
   }
   par(mfrow=c(1,1), mai=c(1,1,1,1))
 }
+
 
 plot_corr_posterior_vs_d = function(AlgoResults, include_priors=F, Omega=NULL,
                                       pairing=c(1,2), s_finish=NULL){

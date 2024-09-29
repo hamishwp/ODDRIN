@@ -13,16 +13,18 @@
 # Create an object of the required form from the USGS data
 formUSGSobject<-function(meanhaz,sdhaz,I0=NULL){
   
-  sgdf <- as(meanhaz, 'SpatialPixelsDataFrame') ; rm(meanhaz)
-  tmp<- as(sdhaz, 'SpatialPixelsDataFrame') ; rm(sdhaz)
-  sgdf$mmi_std<-tmp$mmi_std ; rm(tmp)
-  proj4string(sgdf)<-"+proj=longlat +datum=WGS84 +ellps=WGS84"
+  HazDat <- stack(meanhaz, sdhaz)
+  proj4string(HazDat)<-"+proj=longlat +datum=WGS84 +ellps=WGS84"
   
-  colnames(sgdf@coords)<-rownames(sgdf@bbox)<-c("Longitude","Latitude")
+  if (is.null(I0)){
+    return(HazDat)
+  }
+  cells_above_I0 <- xyFromCell(HazDat, which(values(HazDat[[1]] > I0)))
+  crop_extent <- c(min(cells_above_I0[,1]), max(cells_above_I0[,1]), min(cells_above_I0[,2]), max(cells_above_I0[,2]))
+  HazDat_cropped <- crop(HazDat, crop_extent, snap='out')
+  HazDat_cropped <- mask(HazDat_cropped, HazDat_cropped[[1]] > I0, maskvalue=F)
   
-  if(!is.null(I0)) sgdf<-sgdf[sgdf$mmi_mean>I0,]
-  
-  return(sgdf)
+  return(HazDat_cropped)
   
 }
 
@@ -41,9 +43,9 @@ ExtractUSGS<-function(url,namer,I0=NULL,plotty=F){
   unlink(temp)
   
   # Form a standard USGS object
-  sgdf<-formUSGSobject(meanhaz,sdhaz,I0) ; rm(meanhaz,sdhaz)
+  HazDat <-formUSGSobject(meanhaz,sdhaz,I0) ; rm(meanhaz,sdhaz)
   
-  return(sgdf)
+  return(HazDat)
   
 }
 
@@ -93,13 +95,13 @@ check_hazsdf<-function(hazsdf=NULL,minmag,bbox=NULL){
   if(is.null(hazsdf)) return(F)
   # Check if the bounding box of the hazard lies within the specified search area
   if(!is.null(bbox)){
-    if (all(hazsdf@bbox[c(1,3)]<bbox[1]) | all(hazsdf@bbox[c(1,3)]>bbox[3]) |
-        all(hazsdf@bbox[c(2,4)]<bbox[2]) | all(hazsdf@bbox[c(2,4)]>bbox[4])) {
+    if (all(c(hazsdf@extent@xmin, hazsdf@extent@xmax)<bbox[1]) | all(c(hazsdf@extent@xmin, hazsdf@extent@xmax)>bbox[3]) |
+        all(c(hazsdf@extent@ymin, hazsdf@extent@ymax)<bbox[2]) | all(c(hazsdf@extent@ymin, hazsdf@extent@ymax)>bbox[4])) {
       return(F)
     }
   }
   # Check that the maximum intensity of the earthquake is higher than our limit
-  if(max(hazsdf@data$mmi_mean)<minmag) return(F)
+  if(max(hazsdf[['mmi_mean']]@data@max)<minmag) return(F)
   return(T)
 }
 
@@ -282,7 +284,7 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     }
     
     #check to see if there are any identical events stored in USGS and remove if so
-    if (length(lhazdat) > 1){
+    if (length(lhazdat) > 1){ #COMEBACK
       duplicate <- F
       for (j in 2:length(lhazdat)){
         if(length(hazsdf$mmi_mean)==length(lhazdat[[j]]$mean)){
@@ -314,8 +316,8 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     # Add to the list of hazards
     lhazdat[[length(lhazdat)+1]]<-hazsdf
     # Extend the bounding box to account for this earthquake
-    tbbox[c(1,2)]<-apply(cbind(tbbox[c(1,2)],hazsdf@bbox[c(1,2)]),1,min,na.rm=T)
-    tbbox[c(3,4)]<-apply(cbind(tbbox[c(3,4)],hazsdf@bbox[c(3,4)]),1,max,na.rm=T)
+    tbbox[c(1,2)]<-apply(cbind(tbbox[c(1,2)],c(hazsdf@extent@xmin, hazsdf@extent@ymin)),1,min,na.rm=T)
+    tbbox[c(3,4)]<-apply(cbind(tbbox[c(3,4)],c(hazsdf@extent@xmax, hazsdf@extent@ymax)),1,max,na.rm=T)
     # Extract dates for each hazard event
     lhazdat$hazard_info$alertlevel%<>%c(hazsdf@alertlevel)
     lhazdat$hazard_info$eventdates%<>%c(as.character(hazsdf@eventdate))

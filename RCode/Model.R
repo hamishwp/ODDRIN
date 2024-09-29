@@ -187,11 +187,11 @@ Model$DestDam_modifiers <- c(1,1,1)
 # Linear predictor calculations (act to modify the expected damage values)
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
+GetLP<-function(ODD_df,Omega,Params,Sinc,notnans, split_GNI=T){
   #if (split_GNI){return(array(1, dim=c(NROW(ODD@data), 8)))}
   #else {return(rep(1, NROW(ODD@data)))}
   
-  LP_ij <- array(NA, dim=NROW(ODD@data))
+  LP_ij <- array(NA, dim=NROW(ODD_df))
   
   LP_ij[notnans] <- 0 #Omega$vuln_coeff_adj$Mag * (max(ODD@hazinfo$magnitudes) - Params$center$Mag$mean) / Params$center$Mag$sd # Omega$vuln_coeff_adj$itc #intercept term
   
@@ -200,22 +200,22 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
   #split(seq_along(ODD@data$SHDI), ODD@data$SHDI)
   
   #Population density term:
-  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$PDens * ((log(ODD@data$PDens[notnans]+0.1) - Params$center$PDens$mean)/Params$center$PDens$sd)
-  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$EQFreq * ((log(ODD@data$EQFreq[notnans]+1) - Params$center$EQFreq$mean)/Params$center$EQFreq$sd)
-  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$Vs30 * ((log(ODD@data$Vs30[notnans]) - Params$center$Vs30$mean)/Params$center$Vs30$sd)
+  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$PDens * ((log(ODD_df$PDens[notnans]+0.1) - Params$center$PDens$mean)/Params$center$PDens$sd)
+  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$EQFreq * ((log(ODD_df$EQFreq[notnans]+1) - Params$center$EQFreq$mean)/Params$center$EQFreq$sd)
+  LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj$Vs30 * ((log(ODD_df$Vs30[notnans]) - Params$center$Vs30$mean)/Params$center$Vs30$sd)
 
   for (vuln_term in names(Omega$vuln_coeff_adj)[!(names(Omega$vuln_coeff_adj) %in%  c('itc', 'PDens', 'GNIc', 'EQFreq', 'Mag', 'Vs30', 'FirstHaz', 'Night', 'FirstHaz.Night'))]){
     #All remaining terms except GNIc:
-    LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj[[vuln_term]] * ((ODD@data[notnans, vuln_term] - Params$center[[vuln_term]]$mean)/Params$center[[vuln_term]]$sd)
+    LP_ij[notnans] <- LP_ij[notnans] + Omega$vuln_coeff_adj[[vuln_term]] * ((ODD_df[notnans, vuln_term] - Params$center[[vuln_term]]$mean)/Params$center[[vuln_term]]$sd)
   }
   
   #GNIc:
   if (split_GNI==F){ #don't split into the eight GNIc deciles:  
-    LP_ij[notnans] <-  LP_ij[notnans] + Omega$vuln_coeff_adj$GNIc * log(ODD@data$GNIc[notnans])
+    LP_ij[notnans] <-  LP_ij[notnans] + Omega$vuln_coeff_adj$GNIc * log(ODD_df$GNIc[notnans])
     return(LP_ij)
   }
   
-  LP_ijs <- array(NA, dim=c(NROW(ODD@data),8))
+  LP_ijs <- array(NA, dim=c(NROW(ODD_df),8))
   
   # Slower:
   # get_GNIc_vuln <- function(ij){
@@ -224,7 +224,7 @@ GetLP<-function(ODD,Omega,Params,Sinc,notnans, split_GNI=T){
   # }
   # LP_ijs[notnans,] <- sweep(t(vapply(t(notnans), get_GNIc_vuln, numeric(8))), 1, LP_ij[notnans], '+')
 
-  GNIc_vuln <- Omega$vuln_coeff_adj$GNIc * (log(ODD@data$GNIc[notnans] * matrix(Sinc$value[unlist(split(seq_along(Sinc$iso3), Sinc$iso3)[ODD@data$ISO3C[notnans]])], ncol=8, byrow=T) * 12.5)- Params$center$GNIc$mean)/Params$center$GNIc$sd
+  GNIc_vuln <- Omega$vuln_coeff_adj$GNIc * (log(ODD_df$GNIc[notnans] * matrix(Sinc$value[unlist(split(seq_along(Sinc$iso3), Sinc$iso3)[ODD_df$ISO3C[notnans]])], ncol=8, byrow=T) * 12.5)- Params$center$GNIc$mean)/Params$center$GNIc$sd
   LP_ijs[notnans,] <- sweep(GNIc_vuln, 1, LP_ij[notnans], '+')
   
   return(LP_ijs)

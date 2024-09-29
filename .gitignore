@@ -13,6 +13,8 @@ IIDIPUS_Results
 
 IIDIPUS_Input/
 
+IIDIPUS_Input_Alternatives/
+
 IIDIPUS_Input_NonFinal/
 
 IIDIPUS_Input_full/
@@ -24,6 +26,8 @@ Hazard_Data/gdpga/
 Hazard_Data/global_vs30_tif/
 
 IIDIPUS_Results/
+
+Testing_Results/
 
 Unfinished/
 

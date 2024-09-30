@@ -97,7 +97,7 @@ AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/'
 df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
                                                            M=100, output='SampledTotal')
 
-df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/sampledBest18thSept')
+df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledBest18thSept')
 
 mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none")
 disp_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'displacement')  + guides(color="none")

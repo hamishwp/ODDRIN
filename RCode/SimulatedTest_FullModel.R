@@ -291,7 +291,7 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput'
 moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3')
 
 # Collect mortality, building damage, and displacement data for simulated data:
-ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3/ODDobjects/Train/", recursive=T))
+ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/Train/", recursive=T))
 df_SimImpact <- data.frame(observed=numeric(),
                            impact=character(),
                            polygon=integer(),
@@ -301,7 +301,7 @@ df_SimImpact <- data.frame(observed=numeric(),
 nHazSim <- c()
 maxIntSim <- c()
 for(i in 1:length(ODDsim_paths)){
-  ODDSim <- readRDS(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3/ODDobjects/Train/",ODDsim_paths[i]))
+  ODDSim <- readRDS(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/Train/",ODDsim_paths[i]))
   if (length(ODDSim@impact$impact)>0){
     nHazSim <- c(nHazSim, length(grep('hazMean', names(ODDSim@data))))
     maxIntSim <- c(maxIntSim, max(ODDSim@data[, grep('hazMean', colnames(ODDSim@data))],  na.rm=T))
@@ -402,18 +402,24 @@ legend <- get_plot_component(p_mort_obscount +
 
 # add the legend underneath the row we made earlier. Give it 10% of the height
 # of one plot (via rel_heights).
-p_1 <- plot_grid( plot_grid( p_mort_obsvals, p_disp_obsvals, p_bd_obsvals, align = 'vh', nrow = 1),legend, ncol = 1, rel_heights=c(1,0.1))
+# p_1 <- plot_grid( plot_grid( p_mort_obsvals, p_disp_obsvals, p_bd_obsvals, align = 'vh', nrow = 1),legend, ncol = 1, rel_heights=c(1,0.1))
+# 
+# p_2 <- plot_grid( plot_grid( p_mort_obscount + theme(legend.position="none"),
+#                              p_disp_obscount + theme(legend.position="none"), 
+#                              p_bd_obscount + theme(legend.position="none"), align = 'vh', nrow = 1), legend,ncol = 1, rel_heights=c(1,0.1))
+library(grid)
+p1 <- arrangeGrob(p_mort_obsvals, top = textGrob("(a)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
+p2 <- arrangeGrob(p_disp_obsvals, top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
+p3 <- arrangeGrob( p_bd_obsvals, top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
+p4 <- arrangeGrob(p_mort_obscount + theme(legend.position="none"), top = textGrob("(d)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
+p5 <- arrangeGrob(p_disp_obscount + theme(legend.position="none"), top = textGrob("(e)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
+p6 <- arrangeGrob(p_bd_obscount + theme(legend.position="none"), top = textGrob("(f)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
 
-p_2 <- plot_grid( plot_grid( p_mort_obscount + theme(legend.position="none"),
-                             p_disp_obscount + theme(legend.position="none"), 
-                             p_bd_obscount + theme(legend.position="none"), align = 'vh', nrow = 1), legend,ncol = 1, rel_heights=c(1,0.1))
 
-plot_grid(p_1, p_2, ncol=1)
-
-plot_grid(legend,plot_grid(p_mort_obsvals, p_disp_obsvals, p_bd_obsvals,
-          p_mort_obscount + theme(legend.position="none"),
-          p_disp_obscount + theme(legend.position="none"), 
-          p_bd_obscount + theme(legend.position="none"), align = 'vh'), ncol = 1, rel_heights=c(0.075,1))
+plot_grid(legend,plot_grid(p1, p2, p3,
+          p4 ,
+          p5 , 
+          p6, align = 'vh'), ncol = 1, rel_heights=c(0.075,1))
 
 #SimVsObs.pdf, 7 x 12 inches
 

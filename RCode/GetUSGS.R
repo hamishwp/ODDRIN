@@ -191,7 +191,7 @@ GetUSGSfeatures<-function(USGSid){
   depth <- tmp$properties$products$dyfi[[1]]$properties$depth
   lat <- as.numeric(tmp$properties$products$dyfi[[1]]$properties$latitude)
   long <- as.numeric(tmp$properties$products$dyfi[[1]]$properties$longitude)
-  alertlevel <- as.numeric(tmp$properties$alert)
+  alertlevel <- tmp$properties$alert
   
   if(is.null(eventdatetime)){
     eventdatetime <- tmp$properties$products$shakemap[[1]]$properties$eventtime

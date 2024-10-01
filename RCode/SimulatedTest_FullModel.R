@@ -291,7 +291,7 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput'
 moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput')
 
 # Collect mortality, building damage, and displacement data for simulated data:
-ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/Train/", recursive=T))
+ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/", recursive=T))
 df_SimImpact <- data.frame(observed=numeric(),
                            impact=character(),
                            polygon=integer(),
@@ -301,7 +301,7 @@ df_SimImpact <- data.frame(observed=numeric(),
 nHazSim <- c()
 maxIntSim <- c()
 for(i in 1:length(ODDsim_paths)){
-  ODDSim <- readRDS(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/Train/",ODDsim_paths[i]))
+  ODDSim <- readRDS(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/",ODDsim_paths[i]))
   if (length(ODDSim@impact$impact)>0){
     nHazSim <- c(nHazSim, length(grep('hazMean', names(ODDSim@data))))
     maxIntSim <- c(maxIntSim, max(ODDSim@data[, grep('hazMean', colnames(ODDSim@data))],  na.rm=T))
@@ -320,7 +320,7 @@ ggplot(df_SimImpact %>% filter(impact=='mortality'), aes(x=I_max, y=observed)) +
 # Collect mortality, building damage, and displacement data for real data:
 #ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/'
 
-ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/ODDobjects/Train/'
+ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/ODDobjects/'
 ODDpaths <-na.omit(list.files(path=ODDpath, recursive=T))
 df_Impact <- data.frame(observed=numeric(), impact=character(),
                         polygon=integer(), exposure=numeric(), event=integer(), I_max=numeric())
@@ -331,8 +331,13 @@ df_Impact <- data.frame(observed=numeric(), impact=character(),
 nHazReal <- c()
 maxIntReal <- c()
 
+map_data_df <- data.frame(lon=numeric(), lat=numeric(), max_mmi=numeric())
+
 for(i in 1:length(ODDpaths)){
   ODD <- readRDS(paste0(ODDpath,ODDpaths[i]))
+  loc_mmi <- c(ODD@coords[which(ODD@data[,grep('hazMean',names(ODD@data))]==max(ODD@data[,grep('hazMean', names(ODD@data))], na.rm=T), arr.ind=T)[1],],max(ODD@data[,grep('hazMean', names(ODD@data))], na.rm=T))
+  names(loc_mmi) <- c('lon', 'lat', 'max_mmi')
+  map_data_df[nrow(map_data_df)+1,] = loc_mmi
   #iso3 <- c(iso3, unique(ODD$ISO3C))
   if (length(ODD@impact$impact)>0){
     nHazReal <- c(nHazReal, length(grep('hazMean', names(ODD@data))))
@@ -346,6 +351,15 @@ for(i in 1:length(ODDpaths)){
     }
   }
 }
+
+ggplot() +
+  borders("world", colour = "gray80", fill = "gray80") +
+  geom_point(data = map_data_df, aes(x = lon, y = lat, color = max_mmi), 
+             size = 2.5, alpha = 0.8) +
+  scale_color_gradientn(colors = c("darkgreen", 'chartreuse3', "gold", 'orange', "red")) +
+  labs(x = "Longitude", y = "Latitude", col = "Max MMI") +
+  theme_minimal()
+#event_map.pdf, 5 x 8
 
 ggplot(df_Impact %>% filter(impact=='mortality'), aes(x=I_max, y=observed)) + geom_point()
 

@@ -920,40 +920,115 @@ gdacs_df = data.frame(gdacs_df)
 colnames(gdacs_df) <- c('event_id', 'gdacs')
 
 pager_compare <- function(df_poly_jitter, impact_type){
-  folderin_haz <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_wMaxMMIDiff/'
+  
+  df_poly_jitter <- df_postpredictive_sampled_best %>% filter(impact=='mortality' & train_flag=='TEST')
+  folderin_haz <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_PAGERfull/'
   ufiles_haz <- na.omit(list.files(path=folderin_haz,pattern=Model$haz,recursive = T,ignore.case = T))
-  df_poly_jitter$alertlevel <- ''
+  
+  df_poly_jitter <- add_landslide_flag(df_poly_jitter)
   df_poly_jitter$date <- as.Date('2010-01-01')
+  for (i in 1:NROW(df_poly_jitter)){
+    file_match <- grep(paste0("_", df_poly_jitter$event_id[i], "\\b"),  ufiles_haz, value = TRUE)
+    HAZy <- readRDS(paste0(folderin_haz, file_match ))
+    which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(x@data$mean)))
+    df_poly_jitter$date[i] <- HAZy$hazard_info$eventdates[which.max.mmi]
+  }
+  
+  df_poly_jitter$Landslide.Fatalities <- ifelse(is.na(df_poly_jitter$Landslide.Fatalities), 0, df_poly_jitter$Landslide.Fatalities)
+  df_poly_jitter$observed_LS_adj <- df_poly_jitter$observed - df_poly_jitter$Landslide.Fatalities
+  df_poly_jitter$alertlevel <- ''
+  
+  df_poly_jitter$obs_prob_pager <- NA
+  df_poly_jitter$obs_prob_oddrin <- NA
+  df_poly_jitter$oddrin_rps <- 0
+  df_poly_jitter$pager_rps <- 0
+  df_poly_jitter$oddrin_rps <- 0
+  df_poly_jitter$pager_brier <- 0
+  df_poly_jitter$oddrin_brier <- 0
   for(i in 1:NROW(df_poly_jitter)){
     file_match <- grep(paste0("_", df_poly_jitter$event_id[i], "\\b"),  ufiles_haz, value = TRUE)
     HAZy <- readRDS(paste0(folderin_haz, file_match ))
-    which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(x$mean)))
+    which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(x@data$mean)))
     df_poly_jitter$alertlevel[i] <- HAZy$hazard_info$alertlevel[which.max.mmi]
-    df_poly_jitter$date[i] <- HAZy$hazard_info$eventdates[which.max.mmi]
+    fatality_alert <- HAZy$hazard_info$alertfull[[which.max.mmi]]$alert_level
+    if (is.null(fatality_alert)){
+      df_poly_jitter$alertlevel[i] <- 'null'
+      next
+    }
+    df_poly_jitter$alertlevel[i] <- fatality_alert
     
+    if (length(HAZy$hazard_info$alertfull[[which.max.mmi]]$bins) == 0) next
+    prob_mult <- 1/sum(unlist(lapply(HAZy$hazard_info$alertfull[[which.max.mmi]]$bins, function(x) return(x$probability)))) # some sum to 1 and some to 100
+    cum_prob_oddrin <- 0
+    cum_prob_pager <- 0
+    cum_obs_oddrin <- 0
+    cum_obs_pager <- 0
+    if (length(HAZy$hazard_info$alertfull[[which.max.mmi]]$bins) != 7) warning(paste('Check alert bins for event id:',df_poly_jitter$event_id[i]))
+    for (j in 1:7){
+      oddrin_preds <- df_poly_jitter[i,grep('sampled.', names(df_poly_jitter))]
+      oddrin_prob = mean((oddrin_preds >= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$min) & (oddrin_preds <= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max))
+      df_poly_jitter$oddrin_brier[i] = df_poly_jitter$oddrin_brier[i] + (oddrin_prob - ifelse(df_poly_jitter$observed[i] >= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$min & df_poly_jitter$observed[i] <= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max, 1, 0))^2
+      df_poly_jitter$pager_brier[i] = df_poly_jitter$pager_brier[i] + (HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$probability * prob_mult - ifelse(df_poly_jitter$observed_LS_adj[i] >= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$min & df_poly_jitter$observed_LS_adj[i] <= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max, 1, 0))^2
+      #df_poly_jitter$oddrin_rps[i] = df_poly_jitter$oddrin_rps[i] + (oddrin_prob - ifelse(df_poly_jitter$observed[i] < HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max, 1, 0))^2
+      #df_poly_jitter$pager_rps[i] = df_poly_jitter$pager_rps[i] + (HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$probability * prob_mult - ifelse(df_poly_jitter$observed_LS_adj[i]  <= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max, 1, 0))^2
+      cum_prob_oddrin <- cum_prob_oddrin + oddrin_prob
+      cum_prob_pager <- cum_prob_pager + HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$probability * prob_mult
+      cum_obs_oddrin <- ifelse(df_poly_jitter$observed[i] >= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$min & df_poly_jitter$observed[i] <= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max, 1, cum_obs_oddrin)
+      cum_obs_pager <- ifelse(df_poly_jitter$observed[i] >= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$min & df_poly_jitter$observed[i] <= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max, 1, cum_obs_pager)
+      df_poly_jitter$oddrin_rps[i] = df_poly_jitter$oddrin_rps[i] + (cum_prob_oddrin - cum_obs_oddrin)^2
+      df_poly_jitter$pager_rps[i] = df_poly_jitter$pager_rps[i] + (cum_prob_pager - cum_obs_pager)^2
+      
+      if ((df_poly_jitter$observed[i] >= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$min) & (df_poly_jitter$observed[i] <= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max)){
+        
+        df_poly_jitter$obs_prob_pager[i] = -log2(HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$probability * prob_mult)#HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$probability * prob_mult
+        if(!is.finite(df_poly_jitter$obs_prob_pager[i])){ df_poly_jitter$obs_prob_pager[i] = -log2(0.01)}
+        df_poly_jitter$obs_prob_oddrin[i] = -log2(oddrin_prob)
+      }
+    }
   }
+  mean(df_poly_jitter$oddrin_rps)
+  mean(df_poly_jitter$pager_rps)
+  
+  plot(df_poly_jitter$oddrin_rps)
+  points(df_poly_jitter$pager_rps, col='red')
+  
+  plot(df_poly_jitter$oddrin_rps)
+  points(df_poly_jitter$pager_rps, col='red')
+  
+  mean(df_poly_jitter$oddrin_rps)
+  mean(df_poly_jitter$pager_rps)
+  sum(df_poly_jitter$oddrin_rps[order( df_poly_jitter$oddrin_rps - df_poly_jitter$pager_rps, decreasing=T)][1:51])
+  sum(df_poly_jitter$pager_rps[order(df_poly_jitter$oddrin_rps - df_poly_jitter$pager_rps , decreasing=T)][1:51])
+  
+  mean(df_poly_jitter$oddrin_brier)
+  mean(df_poly_jitter$pager_brier)
+  
+  mean(df_poly_jitter$oddrin_rps)
+  mean(df_poly_jitter$pager_rps)
+  sort(df_poly_jitter$oddrin_rps-df_poly_jitter$pager_rps)
+  
   df_poly_jitter %<>% filter(impact==impact_type)
-  df_poly_jitter <- add_landslide_flag(df_poly_jitter)
-  df_poly_jitter$Landslide.Fatalities <- ifelse(is.na(df_poly_jitter$Landslide.Fatalities), 0, df_poly_jitter$Landslide.Fatalities)
-  df_poly_jitter$means_sampled <- apply(df_poly_jitter[,grep("sampled",names(df_poly_jitter),value = T)], 1, median)
-  df_poly_jitter$oddrin_alert <- ifelse(df_poly_jitter$means_sampled>1000, 'red', 
-                                        ifelse(df_poly_jitter$means_sampled>100, 'orange', 
-                                               ifelse(df_poly_jitter$means_sampled>1, 'yellow', 'green')))
-  df_poly_jitter$real_alert <- ifelse(df_poly_jitter$observed>1000, 'red', 
-                                        ifelse(df_poly_jitter$observed>100, 'orange', 
-                                               ifelse(df_poly_jitter$observed>1, 'yellow', 'green')))
+  
+  
+  df_poly_jitter$median_sampled <- apply(df_poly_jitter[,grep("sampled",names(df_poly_jitter),value = T)], 1, median)
+  df_poly_jitter$oddrin_alert <- ifelse(df_poly_jitter$median_sampled>=1000, 'red', 
+                                        ifelse(df_poly_jitter$median_sampled>=100, 'orange', 
+                                               ifelse(df_poly_jitter$median_sampled>=1, 'yellow', 'green')))
+  df_poly_jitter$real_alert <- ifelse(df_poly_jitter$observed>=1000, 'red', 
+                                        ifelse(df_poly_jitter$observed>=100, 'orange', 
+                                               ifelse(df_poly_jitter$observed>=1, 'yellow', 'green')))
   
   sum(df_poly_jitter$alertlevel!= 'null')
   mean(df_poly_jitter$oddrin_alert[df_poly_jitter$alertlevel!= 'null']==df_poly_jitter$real_alert[df_poly_jitter$alertlevel!= 'null'])
   mean(df_poly_jitter$alertlevel[df_poly_jitter$alertlevel!= 'null']==df_poly_jitter$real_alert[df_poly_jitter$alertlevel!= 'null'])
   
-  df_poly_jitter[df_poly_jitter$alertlevel!= 'null',c('real_alert','alertlevel','oddrin_alert')]
+  df_poly_jitter[df_poly_jitter$alertlevel!= 'null',c('event_id','real_alert','observed', 'alertlevel','oddrin_alert', 'landslide_flag', 'Landslide.Fatalities', 'oddrin_rps', 'pager_rps')]
   
   df_poly_jitter <- merge(df_poly_jitter, gdacs_df, by='event_id')
-  df_poly_jitter$real_alert_gdacs <- ifelse(df_poly_jitter$observed>100, 'red', 
-                                             ifelse(df_poly_jitter$observed>10, 'orange', 'green'))
-  df_poly_jitter$alert_oddrin_gdacs <- ifelse(df_poly_jitter$means_sampled>100, 'red', 
-                                            ifelse(df_poly_jitter$means_sampled>10, 'orange', 'green'))
+  df_poly_jitter$real_alert_gdacs <- ifelse(df_poly_jitter$observed>=100, 'red', 
+                                             ifelse(df_poly_jitter$observed>=10, 'orange', 'green'))
+  df_poly_jitter$alert_oddrin_gdacs <- ifelse(df_poly_jitter$median_sampled>=100, 'red', 
+                                            ifelse(df_poly_jitter$median_sampled>=10, 'orange', 'green'))
   
   mean(df_poly_jitter$gdacs[df_poly_jitter$gdacs!= 'null']== df_poly_jitter$real_alert_gdacs[df_poly_jitter$gdacs!= 'null'])
   mean(df_poly_jitter$alert_oddrin_gdacs[df_poly_jitter$gdacs!= 'null']== df_poly_jitter$real_alert_gdacs[df_poly_jitter$gdacs!= 'null'])

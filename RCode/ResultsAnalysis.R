@@ -98,6 +98,19 @@ df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_p
 
 df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledBest18thSept')
 
+quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='mortality'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/101
+hist(quants)
+mean(quants>0.05 & quants < 0.95)
+quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='displacement'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/101
+hist(quants)
+mean(quants>0.05 & quants < 0.95)
+quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='buildDam'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/101
+hist(quants)
+mean(quants>0.05 & quants < 0.95)
+
+hist(quants/101)
+df_postpredictive_sampled_best[1,]
+
 library(grid)
 mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none") 
 disp_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'displacement')  + guides(color="none")

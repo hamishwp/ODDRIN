@@ -2,8 +2,14 @@
 # ODDyAgg <- prepareODD(iso3='MAR', sdate='2023-09-08')
 # PosteriorImpactPred(ODDyAgg)
 
-ODDyAgg <- prepareODD(iso3='AFG', sdate='2023-10-07')
-PosteriorImpactPred(ODDyAgg)
+ODDyAgg <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/ODDAggobjects/EQ20230908MAR_40_AggLevel5_WithImpact100')
+
+# ODDyAgg <- prepareODD(iso3='AFG', sdate='2023-10-07')
+# PosteriorImpactPred(ODDyAgg)
+# names(ODDyWithAggImpact@data)[which(names(ODDyWithAggImpact@data)=='mortality.mean')] = 'Mean Mortality'
+# plotODDy_GADM(ODDyWithAggImpact, var='Mean Mortality')
+# #MoroccoMort.pdf, 8 x 12
+
 
 prepareODD <- function(USGSid = NULL, iso3 = NULL, bbox = NULL, sdate = NULL, fdate=NULL, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/'){
   
@@ -423,7 +429,21 @@ addObsData_MAR20230908 <- function(ODDyWithAggImpact){
   
   impact_with_obs <- addObs(ODDyWithAggImpact, observed_data_MAR20230908, 'mortality', add_zeros=T )
   plot_AggImpacts(impact_with_obs)
+
+  #quants <- apply(impact_with_obs[,c(grep('observed', names(impact_with_obs)),grep('sampled.', names(impact_with_obs)))], 1, sample_quant)
+  #cbind(impact_with_obs$polygon_name, impact_with_obs$observed, quants)
+  # grep(',',impact_with_obs$polygon_name[2])
+  # sum(sapply(gregexpr(",", impact_with_obs$polygon_name), function(x) sum(x > 0))==2)
+  # 
+  # plot(as.numeric(ODDyWithAggImpact@impact[75,grep('sampled.', names(ODDyWithAggImpact@impact))]), as.numeric(ODDyWithAggImpact@impact[76,grep('sampled.', names(ODDyWithAggImpact@impact))]))
+  # 
+  # plot(log(as.numeric(ODDyWithAggImpact@impact[75,grep('sampled.', names(ODDyWithAggImpact@impact))])+10), log(as.numeric(ODDyWithAggImpact@impact[76,grep('sampled.', names(ODDyWithAggImpact@impact))])+10))
+  # points(log(146000+10),log(2960+10), col='red', pch=19)
   
+  # which(impact_with_obs$polygon==43 & impact_with_obs$impact=='mortality')
+  # which(impact_with_obs$polygon==34 & impact_with_obs$impact=='mortality')
+  # plot(as.numeric(impact_with_obs[42,grep('sampled.', names(impact_with_obs))]), as.numeric(impact_with_obs[30,grep('sampled.', names(impact_with_obs))]))
+  # points(impact_with_obs[42,grep('observed', names(impact_with_obs))], impact_with_obs[30,grep('observed', names(impact_with_obs))], col='red')
   # par(mfrow=c(5,5))
   # for (i in 2:7){
   #   for (j in 1:(i-1)){

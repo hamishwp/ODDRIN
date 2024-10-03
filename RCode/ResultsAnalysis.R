@@ -9,7 +9,7 @@ AlgoResults$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/'
 
 AlgoResultsSMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-08-18_204305_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
 
-AlgoResultsMCMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-08-19_075743_MCMC_RealAgg5_Trial_LR40_Rho0.975propCOVdiv12')
+AlgoResultsMCMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-09-30_223103_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive')
 
 
 
@@ -124,8 +124,14 @@ for (i in c(16,)){
 #plot_df_postpredictive(df_postpredictive_sampled_true %>% filter(train_flag=='TEST'), 'mortality')
 #plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'), 'mortality')
 
+AlgoResultsMCMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-09-30_223103_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive')
+plot(AlgoResultsMCMC$loss, type='l', ylim=c(2.2,2.7))
 
-plot(AlgoResultsMCMC$loss, type='l')
+par(mfrow=c(2,2))
+plot(AlgoResultsMCMC$Omega_sample_phys[7,4500:5500], AlgoResultsMCMC$Omega_sample_phys[8,4500:5500], type='l')
+
+plot(AlgoResultsMCMC$lambda_store * AlgoResultsMCMC$Sigma_store[9,9,], type='l')
+plot(AlgoResultsMCMC$lambda_store)
 
 plot(AlgoResultsSMC$Omega_sample_phys[,16,1], AlgoResultsSMC$Omega_sample_phys[,17,1], col='blue', xlab='SHDI.coef', ylab='GNIc.coef')
 points(AlgoResultsSMC$Omega_sample_phys[,16,163], AlgoResultsSMC$Omega_sample_phys[,17,163], pch=19)

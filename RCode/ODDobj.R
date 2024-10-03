@@ -1056,7 +1056,7 @@ plotODDy_GADM <- function(ODDy, zoomy=7,var="Population",breakings=NULL,bbox=NUL
   
 
   hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
-  for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+  for (variable in names(ODDy)[grepl("hazMean",names(ODDy))]){
     tmp<-ODDy[variable]
     tmp$hazard<-hazard
     hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))

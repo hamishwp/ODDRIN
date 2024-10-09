@@ -184,37 +184,34 @@
 # ----------------------------------------Aggregate by doubling/tripling/... size of every pixel -----------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------------
 
-aggregateISO3C <- function(cell_values, na.rm=F){
-  if (all(is.na(cell_values))) return(NA)
-  cell_values <- cell_values[!is.na(cell_values)] 
-  return(as.numeric(names(sort(-table(cell_values)))[1]))
-}
+# aggregateISO3C <- function(cell_values, na.rm=F){
+#   if (all(is.na(cell_values))) return(NA)
+#   cell_values <- cell_values[!is.na(cell_values)] 
+#   return(as.numeric(names(sort(-table(cell_values)))[1]))
+# }
 
-aggregateIndex <- function(cell_values, na.rm=T){
-  return(as.factor(paste(cell_values, collapse=' '))) #factor is annoying but aggregate function won't allow characters or arrays
-}
+# aggregateIndex <- function(cell_values, na.rm=T){
+#   return(as.factor(paste(cell_values, collapse=' '))) #factor is annoying but aggregate function won't allow characters or arrays
+# }
 
 aggregateODDbyX <- function(ODD, aggFactor){
   
-  ODD[['index']] = ODD[['Population']] 
-  values(ODD[['index']]) = 1:ncell(ODD)
-  
-  ODDAgg <- new('ODD')
-  ODDAggPop <- aggregate(ODD[['Population']], aggFactor, fun='sum')
-  ODDAggPop <- brick(stack(ODDAggPop, aggregate(ODD[['ISO3C']], aggFactor, fun='aggregateISO3C')))
-  ODDAgg@file <- ODDAggPop@file
-  ODDAgg@data <- ODDAggPop@data
-  ODDAgg@legend <- ODDAggPop@legend
-  ODDAgg@title <- ODDAggPop@title
-  ODDAgg@extent <-ODDAggPop@extent
-  ODDAgg@rotated <- ODDAggPop@rotated
-  ODDAgg@rotation <- ODDAggPop@rotation
-  ODDAgg@ncols <- ODDAggPop@ncols
-  ODDAgg@nrows <- ODDAggPop@nrows
-  ODDAgg@crs <- ODDAggPop@crs
-  ODDAgg@srs <- ODDAggPop@srs
-  ODDAgg@history <- ODDAggPop@history
-  ODDAgg@z <- ODDAggPop@z
+  #ODDAgg <- new('ODD')
+  ODDAgg <- aggregate(ODD[['Population']], aggFactor, fun='sum')
+  # ODDAggPop <- #brick(stack(ODDAggPop, aggregate(ODD[['ISO3C']], aggFactor, fun='aggregateISO3C')))
+  # ODDAgg@file <- ODDAggPop@file
+  # ODDAgg@data <- ODDAggPop@data
+  # ODDAgg@legend <- ODDAggPop@legend
+  # ODDAgg@title <- ODDAggPop@title
+  # ODDAgg@extent <-ODDAggPop@extent
+  # ODDAgg@rotated <- ODDAggPop@rotated
+  # ODDAgg@rotation <- ODDAggPop@rotation
+  # ODDAgg@ncols <- ODDAggPop@ncols
+  # ODDAgg@nrows <- ODDAggPop@nrows
+  # ODDAgg@crs <- ODDAggPop@crs
+  # ODDAgg@srs <- ODDAggPop@srs
+  # ODDAgg@history <- ODDAggPop@history
+  # ODDAgg@z <- ODDAggPop@z
   
   ODDAgg@impact = ODD@impact
   ODDAgg@polygons = ODD@polygons
@@ -230,20 +227,29 @@ aggregateODDbyX <- function(ODD, aggFactor){
     ODDAgg[[var_name]] <- aggregate(ODD[[var_name]], aggFactor, fun='sum')
   }
   for (var_name in names(ODD)){
-    if (var_name %in% sum_vars | var_name=='ISO3C' | var_name=='index') next
+    print(var_name)
+    if (var_name %in% sum_vars | var_name == 'Population' | var_name=='ISO3C') next
     ODDAgg[[var_name]] <- aggregate(ODD[[var_name]], aggFactor, fun='mean')
   }
   
-  index_agg <- aggregate(ODD[['index']],aggFactor, fun='aggregateIndex')
-  new_old_cell_ref <- list()
-  for (new_cell in levels(index_agg)[[1]]$ID){
-    old_cells <- strsplit(levels(index_agg)[[1]]$VALUE[new_cell], ' ')[[1]]
-    new_old_cell_ref[[new_cell]] = as.numeric(old_cells[old_cells != 'NaN'])
-  }
+  ODDAgg[['ISO3C']] <- aggregate(ODD[['ISO3C']], aggFactor, fun='modal', na.rm=T)
   
-  pop_values <- getValues(ODD[['Population']])
-  for (new_cell in 1:length(new_old_cell_ref)){
-    
+  #list with length = number of new cells, which each list element containing a vector of the corresponding old cells
+  pixels_as_poly <- as.polygons(ODDAgg, aggregate=F, na.rm=F)
+  coords_ODD <- vect(xyFromCell(ODD, 1:ncell(ODD)))
+  intersect_oldnew <- relate(coords_ODD, pixels_as_poly, 'intersects')
+  new_old_cell_ref <- apply(intersect_oldnew, 2, function(x) which(x)) 
+  
+  # index_agg <- aggregate(ODD[['index']],aggFactor, fun='aggregateIndex')
+  # new_old_cell_ref <- list()
+  # for (new_cell in levels(index_agg)[[1]]$ID){
+  #   old_cells <- strsplit(levels(index_agg)[[1]]$VALUE[new_cell], ' ')[[1]]
+  #   new_old_cell_ref[[new_cell]] = as.numeric(old_cells[old_cells != 'NaN'])
+  # }
+  
+  pop_values <- values(ODD[['Population']])
+  ncells = length(new_old_cell_ref)
+  for (new_cell in 1:ncells){
     pop_weights <- pop_values[new_old_cell_ref[[new_cell]]]/sum(pop_values[new_old_cell_ref[[new_cell]]], na.rm=T)
     pop_weights[is.na(pop_weights)] = 0
     
@@ -251,7 +257,7 @@ aggregateODDbyX <- function(ODD, aggFactor){
     match_mat_weights[which(is.na(match_mat_weights))] = 0
     
     if (NROW(match_mat_weights)>1){
-      #weight of new pixel for polygon = sum over (proportion of new pixel's population that lies in that old pixel x 
+      #weight of new pixel for polygon = sum over (proportion of new pixel's population that lies in that old pixel times
       #                                              old pixel's weight for that polygon)
       matched_weights <- rowSums(sweep(match_mat_weights, 2, pop_weights,'*'))
     } else {
@@ -259,11 +265,11 @@ aggregateODDbyX <- function(ODD, aggFactor){
     }
     
     for (p in which(matched_weights>0)){
-      ODDAgg@polygons[[p]]$indexes %<>% c(new_cell)
-      ODDAgg@polygons[[p]]$weights %<>% c(matched_weights[p])
+      ODDAgg@polygons[[p]]$indexes = c(ODDAgg@polygons[[p]]$indexes, new_cell)
+      ODDAgg@polygons[[p]]$weights = c(ODDAgg@polygons[[p]]$weights,matched_weights[p])
     }
   }
-  
+
   return(ODDAgg)
 }
 

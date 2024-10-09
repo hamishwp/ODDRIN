@@ -400,7 +400,7 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   
   zoom <- 9
   
-  tiles <- getMercantileTiles(ODD@extent@xmin, ODD@extent@ymin, ODD@extent@xmax, ODD@extent@ymax, 9)
+  tiles <- getMercantileTiles(ext(ODD)[1], ext(ODD)[3], ext(ODD)[2], ext(ODD)[4], 9)
   quad_keys <- list()
   for (i in 1:NROW(tiles)){
     quad_keys[[i]] <- getQuadKey(tiles[i,])
@@ -457,7 +457,7 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
       #stop(paste("QuadKey not found in dataset:", quad_key))
     }
   }
-  inside_bbox <- which(build_coords[,1] > ODD@extent@xmin & build_coords[,1] < ODD@extent@xmax & build_coords[,2] > ODD@extent@ymin & build_coords[,2] < ODD@extent@ymax)
+  inside_bbox <- which(build_coords[,1] > ext(ODD)[1] & build_coords[,1] < ext(ODD)[2] & build_coords[,2] > ext(ODD)[3] & build_coords[,2] < ext(ODD)[4])
   building_locs <- build_coords[inside_bbox,]
   
   if (!missing_quadkeys_flag){

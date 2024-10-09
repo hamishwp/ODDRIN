@@ -47,17 +47,18 @@ Genx0y0<-function(ODDobj){
 }
 
 setClass("BD", 
-         slots = c(hazard="character",
-                   #cIndies="data.frame",
+         slots = c(dir="character",
+                   hazard="character",
+                   buildingsfile='character',
+                   cIndies="data.frame",
                    #fIndies="list",
+                   alerts="data.frame",
                    I0="numeric",
                    hazdates="Date",
                    eventid="numeric",
-                   #coefs="numeric",
-                   buildingsfile="character",
-                   #modifier="list", 
+                   #modifier="list",
                    hazinfo="list"),
-         contains = "SpatialPointsDataFrame")
+         contains = "SpatVector")
 
 setMethod(f="initialize", signature="BD",
           definition=function(.Object,Damage=NULL,ODD=NULL) {
@@ -74,28 +75,34 @@ setMethod(f="initialize", signature="BD",
             
             .Object@buildingsfile<-paste0("./IIDIPUS_Input/OSM_Buildings_Objects/",unique(Damage$event)[1])
             
-            print("Forming SpatialPointsDataFrame from building damage data")
+            print("Forming SpatVect object from building damage data")
             data_var <- c('grading')
             if (!is.null(Damage$Confidence)) data_var %<>% c('Confidence')
             if (!is.null(Damage$source)) data_var %<>% c('source')
-            Damage<-SpatialPointsDataFrame(coords = Damage[,c("Longitude","Latitude")],
-                                        data = Damage[,data_var],
-                                        proj4string = ODD@proj4string) #crs("+proj=longlat +datum=WGS84 +ellps=WGS84"))
+            # Damage<-SpatialPointsDataFrame(coords = Damage[,c("Longitude","Latitude")],
+            #                             data = Damage[,data_var],
+            #                             proj4string = ODD@proj4string) #crs("+proj=longlat +datum=WGS84 +ellps=WGS84"))
             
-            .Object@data <- Damage@data
-            .Object@coords.nrs <-Damage@coords.nrs
-            .Object@coords <-Damage@coords
-            .Object@bbox <-Damage@bbox
-            .Object@proj4string <- ODD@proj4string #crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            BD_points <- vect(x = as.matrix(Damage[,c("Longitude","Latitude")]), type='points', 
+                 atts = Damage[,data_var], crs=crs(ODD))
+            
+            .Object@ptr <- BD_points@ptr
+            # .Object@data <- Damage@data
+            # .Object@coords.nrs <-Damage@coords.nrs
+            # .Object@coords <-Damage@coords
+            # .Object@bbox <-Damage@bbox
+            # .Object@proj4string <- ODD@proj4string #crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             rm(Damage)
             
             print("Interpolating population density, hazard & GDP-PPP data")
-            ODD$spatial_pixel <- 1:NROW(ODD)
+            ODD[['spatial_pixel']] <- 1:ncell(ODD)
             .Object%<>%BDinterpODD(ODD=ODD)
             
             print("Filter spatial data per country")
             # We could just copy Damage$iso3 directly, but I don't believe in anyone or anything...
-            .Object@data$ISO3C<-coords2country(.Object@coords)
+            .Object$ISO3C<-coords2country(crds(.Object))
+            
+            .Object@cIndies <- ODD@cIndies
             
             print("Accessing OSM to sample building height & area")
             # ExtractOSMbuildVol(.Object,ODD)
@@ -110,6 +117,27 @@ setMethod(f="initialize", signature="BD",
             return(.Object)
           }
 )
+
+saveBD <- function(BD, path){
+  BD_list = list()
+  slotnames = slotNames(BD)
+  for (slot in slotnames[slotnames!='ptr']){
+    BD_list[[slot]] = slot(BD, slot)
+  }
+  BD_list$spatvector <- wrap(BD)
+  saveRDS(BD_list, path)
+}
+
+readBD <- function(path){
+  .Object = new('BD')
+  BD_list = readRDS(path)
+  slotnames <- slotNames(.Object)
+  for (slot in slotnames[slotnames!='ptr']){
+    slot(.Object, slot) = BD_list[[slot]]
+  }
+  .Object@ptr = unwrap(BD_list$spatvector)@ptr
+  return(.Object)
+}
 
 ODDI0poly<-function(ODD,var){
   
@@ -152,6 +180,7 @@ setMethod("BDinterpODD", "BD", function(BD,ODD){
     stop("Number of hazard mean values is not equal to number of hazard SD values")
   
   if(ODD@hazard=="TC"){
+    stop('Not prepared for TC hazard type yet')
     for (var in names(ODD)){
       if(grepl("ISO3C",var)) next
       tmp<-ODD[var]%>%raster%>%raster::extract(BD@coords)%>%data.frame; colnames(tmp)<-var
@@ -167,51 +196,53 @@ setMethod("BDinterpODD", "BD", function(BD,ODD){
     for (var in names(ODD)){
       if(grepl("ISO3C",var)) next
       if(!grepl("haz",var)) {
-        tmp<-ODD[var]%>%raster%>%raster::extract(BD@coords)%>%data.frame; colnames(tmp)<-var
-        BD@data%<>%cbind(tmp)
+        tmp<-ODD[var]%>%extract(crds(BD))%>%data.frame; colnames(tmp)<-var
+        BD[[var]] <- tmp
         next
       }
-      if(grepl("hazSD",var)) {
-        # We deal with these later (just incase the ordering of ODD columns has been muddled about)
-        next
-      }
-      # Find polygons of I>=I0
-      pcontour<-ODDI0poly(ODD,var)
-      
-      insidepoly<-rep(F,nrow(BD))
-      if (length(unique(pcontour$id)) > 0){
-        for(p in 1:length(unique(pcontour$id))){
-          tcont<-filter(pcontour,id==p)
-          insidepoly<-insidepoly | sp::point.in.polygon(BD@coords[,1, drop=F],
-                                                        BD@coords[,2, drop=F],
-                                                        tcont$Longitude,
-                                                        tcont$Latitude)>0
-        }
-      }
-      
-      if(sum(insidepoly)==0) next
-      # Add the hazard to the building damage object
-      subBD<-ODD[var]%>%raster%>%raster::extract(BD@coords[insidepoly,, drop=F])
-      tmp<-rep(NA_real_,nrow(BD)); tmp[insidepoly]<-subBD; tmp%<>%data.frame; colnames(tmp)<-var
-      BD@data%<>%cbind(tmp)
-      polysave[,extractnumbers(var)]<-insidepoly
-      
     }
+  # unsure what the rest of this was for?:
+      # if(grepl("hazSD",var)) {
+      #   # We deal with these later (just incase the ordering of ODD columns has been muddled about)
+      #   next
+      # }
+      # # Find polygons of I>=I0
+      # pcontour<-ODDI0poly(ODD,var)
+      # 
+      # insidepoly<-rep(F,nrow(BD))
+      # if (length(unique(pcontour$id)) > 0){
+      #   for(p in 1:length(unique(pcontour$id))){
+      #     tcont<-filter(pcontour,id==p)
+      #     insidepoly<-insidepoly | sp::point.in.polygon(BD@coords[,1, drop=F],
+      #                                                   BD@coords[,2, drop=F],
+      #                                                   tcont$Longitude,
+      #                                                   tcont$Latitude)>0
+      #   }
+      # }
+      # 
+      # if(sum(insidepoly)==0) next
+      # # Add the hazard to the building damage object
+      # subBD<-ODD[var]%>%raster%>%raster::extract(BD@coords[insidepoly,, drop=F])
+      # tmp<-rep(NA_real_,nrow(BD)); tmp[insidepoly]<-subBD; tmp%<>%data.frame; colnames(tmp)<-var
+      # BD@data%<>%cbind(tmp)
+      # polysave[,extractnumbers(var)]<-insidepoly
+      
+    # }
     
     # Add the standard deviations of the hazard intensity
-    for (var in grep("hazSD",names(ODD),value = T)){
-      if(sum(polysave[,extractnumbers(var)])==0) next
-      subBD<-ODD[var]%>%raster%>%raster::extract(BD@coords[polysave[,extractnumbers(var)],, drop=F])
-      tmp<-rep(NA_real_,nrow(BD)); tmp[polysave[,extractnumbers(var)]]<-subBD; tmp%<>%data.frame; colnames(tmp)<-var
-      BD@data%<>%cbind(tmp)
-    }
-    
-    if(length(sum(rowSums(polysave)==0))>0){
-      print(paste0(sum(rowSums(polysave)==0)," building damage values were not exposed to a hazard... "))#,unique(miniDam$event)))
-      BD%<>%raster::subset(rowSums(polysave)!=0)
-    }
-  }
-  
+  #   for (var in grep("hazSD",names(ODD),value = T)){
+  #     if(sum(polysave[,extractnumbers(var)])==0) next
+  #     subBD<-ODD[var]%>%raster%>%raster::extract(BD@coords[polysave[,extractnumbers(var)],, drop=F])
+  #     tmp<-rep(NA_real_,nrow(BD)); tmp[polysave[,extractnumbers(var)]]<-subBD; tmp%<>%data.frame; colnames(tmp)<-var
+  #     BD@data%<>%cbind(tmp)
+  #   }
+  #   
+  #   if(length(sum(rowSums(polysave)==0))>0){
+  #     print(paste0(sum(rowSums(polysave)==0)," building damage values were not exposed to a hazard... "))#,unique(miniDam$event)))
+  #     BD%<>%raster::subset(rowSums(polysave)!=0)
+  #   }
+  # }
+  } 
   return(BD)
   
 })

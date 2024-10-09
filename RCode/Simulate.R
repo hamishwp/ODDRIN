@@ -42,23 +42,23 @@ setMethod(f="initialize", signature="ODDSim",
             
             ISO3C <- PopSim
             values(ISO3C) <- as.factor(coords2country(xyFromCell(ISO3C, 1:ncell(ISO3C))))
-            PopSim <- stack(PopSim, ISO3C)
+            PopSim <-c(PopSim, ISO3C)
             names(PopSim) <- c('Population', 'ISO3C')
             
-            obj<- brick(PopSim)
-            .Object@file <- obj@file
-            .Object@data <- obj@data
-            .Object@legend <- obj@legend
-            .Object@title <- obj@title
-            .Object@extent <- obj@extent
-            .Object@rotated <- obj@rotated
-            .Object@rotation <- obj@rotation
-            .Object@ncols <- obj@ncols
-            .Object@nrows <- obj@nrows
-            .Object@crs <- obj@crs
-            .Object@srs <- obj@srs
-            .Object@history <- obj@history
-            .Object@z <- obj@z # crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            .Object@ptr <- PopSim@ptr
+            # .Object@file <- obj@file
+            # .Object@data <- obj@data
+            # .Object@legend <- obj@legend
+            # .Object@title <- obj@title
+            # .Object@extent <- obj@extent
+            # .Object@rotated <- obj@rotated
+            # .Object@rotation <- obj@rotation
+            # .Object@ncols <- obj@ncols
+            # .Object@nrows <- obj@nrows
+            # .Object@crs <- obj@crs
+            # .Object@srs <- obj@srs
+            # .Object@history <- obj@history
+            # .Object@z <- obj@z # crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
             # Including minshake polygon per hazard event using getcontour from adehabitatMA package
             # LOOSEEND
@@ -68,13 +68,12 @@ setMethod(f="initialize", signature="ODDSim",
             # Extract empty indices to save time
             inds<-which(!is.na(values(.Object[['Population']])))
             if (length(inds)!= ncell(.Object)){
-              values(.Object[['ISO3C']])[-inds] <- NA
+              .Object[['ISO3C']][-inds] <- NA
             }
             
-            .Object[['GDP']] <- GDPSim
-            names(.Object)[length(names(.Object))] <- 'GDP'
+            .Object[['GDP']] <- as.data.frame(GDPSim)
             
-            iso3c_unique<-unique(levels(.Object[['ISO3C']])[[1]][[1]]$VALUE) 
+            iso3c_unique<-unique(.Object$ISO3C)$ISO3C
             iso3c_unique<-iso3c_unique[!is.na(iso3c_unique)]
           
             
@@ -281,8 +280,8 @@ setMethod(f="initialize", signature="ODDSim",
             #Add linear predictor data
             #need to tidy this up, not very reflective of real data to have this much variation within such a small region!
             ulist <- unique(GDPSim)
-            AveSchYrs_vals <- runif(length(ulist), 3, 18)
-            LifeExp_vals <- runif(length(ulist), 30, 85)
+            #AveSchYrs_vals <- runif(length(ulist), 3, 18)
+            #LifeExp_vals <- runif(length(ulist), 30, 85)
             GNIc_vals <- exp(runif(length(ulist), 6, 12))
             # Vs30_vals <- runif(length(ulist), 98, 2197)
             # EQFreq_vals <- runif(length(ulist), 1, 10)
@@ -301,7 +300,7 @@ setMethod(f="initialize", signature="ODDSim",
             .Object[['PDens']] <- .Object[['Population']] 
             .Object[['EQFreq']] <- EQFreqSim
             .Object[['Vs30']] <- Vs30Sim
- 
+            .Object[['GDP']] <- NULL
             
             print("Checking ODDSim values")
             checkODD(.Object)
@@ -395,9 +394,9 @@ simulateEvent <- function(r, I0 = 4.5){
   max_mmi = max(4.7, rnorm(1,6.5, 1.1))
    # rnorm(1, 1, 0.28)
   sigma = 0.2 * (max_mmi-4)^3 + runif(1,-0.5,0.5) + 1#0.7*(max_mmi - 4.5)^2.2 + (max_mmi - 6) + 2 + runif(1,-0.1,0.1) #runif(1, 3,8.5)
-  r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, s=r@nrows))
+  r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, s=nrow(r)))
   #r <- exp(r-min_mmi)
-  r <- r * ((max_mmi-min_mmi)/r@data@max) + min_mmi
+  r <- r * ((max_mmi-min_mmi)/max(values(r))) + min_mmi
  
   cells_above_I0 <- xyFromCell(r, which(values(r>4.5)))
   crop_extent <- c(min(cells_above_I0[,1]), max(cells_above_I0[,1]), min(cells_above_I0[,2]), max(cells_above_I0[,2]))
@@ -405,7 +404,7 @@ simulateEvent <- function(r, I0 = 4.5){
   #values(r)[values(r) < I0] = NA
   #r <- trim(r)
   #r <- (r - r@data@min) / (r@data@max-r@data@min) * (max_mmi-min_mmi) + min_mmi
-  sd <- setValues(r, runif(r@ncols*r@nrows, 0.8, 1.1))
+  sd <- setValues(r, runif(ncell(r), 0.8, 1.1))
   #r <- 4.51 + exp(r)
   names(r) <- 'mmi_mean'
   r$mmi_sd <- sd
@@ -413,7 +412,7 @@ simulateEvent <- function(r, I0 = 4.5){
   #hazsdf<-hazsdf[hazsdf$mmi_mean>I0,]
   #colnames(hazsdf@coords)<-rownames(hazsdf@bbox)<-c("Longitude","Latitude")
 
-  return(brick(r))
+  return(r)
 }
 
 simulatePopulation <- function(r){
@@ -426,7 +425,7 @@ simulatePopulation <- function(r){
   #   and is then scaled onto [0, maxPopDens] using the cumulative weibull distribution.
   
   maxPopDens = runif(1, 5000, 50000)
-  Field = as.data.frame(rasterToPoints(r))
+  Field = as.data.frame(xyFromCell(r, 1:ncell(r)))
   names(Field)=c('Longitude','Latitude')
   Pop_modelling=gstat(formula=Population~1, 
                       locations=~Latitude+Longitude,
@@ -453,7 +452,7 @@ simulateVs30 <- function(r){
   while(abs(diff(Vs30_range))<30){
     Vs30_range = runif(2, 180, 880)
   }
-  Field = as.data.frame(rasterToPoints(r))
+  Field = as.data.frame(xyFromCell(r, 1:ncell(r)))
   names(Field)=c('Longitude','Latitude')
   Vs30_modelling=gstat(formula=Population~1, 
                       locations=~Latitude+Longitude,
@@ -476,7 +475,7 @@ simulateEQFreq <- function(r){
   EQFreq_min = rnorm(1, 200, 50)
   EQFreq_max = EQFreq_min + rbeta(1, 0.5, 5) * 350
  
-  Field = as.data.frame(rasterToPoints(r))
+  Field = as.data.frame(xyFromCell(r, 1:ncell(r)))
   names(Field)=c('Longitude','Latitude')
   EQFreq_modelling=gstat(formula=Population~1, 
                        locations=~Latitude+Longitude,
@@ -502,9 +501,9 @@ simulateGDP <- function(r){
   #   boundaries present in the actual GDP data.
   
   nRegions = rpois(1, 5) + 1
-  regionPoints = cbind(runif(nRegions,r@extent@xmin, r@extent@xmax),runif(nRegions,r@extent@ymin, r@extent@ymax))
+  regionPoints = cbind(runif(nRegions,ext(r)[1], ext(r)[2]),runif(nRegions,ext(r)[3], ext(r)[4]))
   GDPperRegion = round(sort(runif(nRegions, 100, 100000)))
-  r_mat <- rasterToPoints(r)
+  r_mat <- xyFromCell(r, 1:ncell(r))
   GDP = array(0, NROW(r_mat))
   for (cell in 1:NROW(r_mat)){
     GDP[cell] = GDPperRegion[which.min(distmat(r_mat[cell,], regionPoints))]
@@ -528,12 +527,12 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
   xsize <- 25/12
   ysize <- 25/12
-  r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+xsize, ymn=ymn,ymx=ymn+ysize, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  r <- rast(ncol=50, nrow=50, xmin=xmn, xmax=xmn+xsize, ymin=ymn,ymax=ymn+ysize, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   
   while(mean(is.na(coords2country(xyFromCell(r, 1:ncell(r)))))>0.5){ #repeat until over a country
     xmn <- round(runif(1, -180, 179.5)/0.05)*0.05
     ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
-    r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+xsize, ymn=ymn,ymx=ymn+ysize, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+    r <- rast(ncol=50, nrow=50, xmin=xmn, xmax=xmn+xsize, ymin=ymn,ymax=ymn+ysize, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   }
   
   lenny = ifelse(runif(1)<0.5, rgeom(1, 0.6) + 1, 1) #generate number of events according to a geometric distribution
@@ -586,11 +585,11 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
     return(NULL)
   }
   
-  max_extent <- extent(lhazdat[[2]])
+  max_extent <- ext(lhazdat[[2]])
   if (lenny > 1){
     for (i in 2:lenny){
-      max_extent[c(1,3)] <- pmin(max_extent[c(1,3)], extent(lhazdat[[i]])[c(1,3)])
-      max_extent[c(2,4)] <- pmax(max_extent[c(2,4)], extent(lhazdat[[i]])[c(2,4)])
+      max_extent[c(1,3)] <- pmin(max_extent[c(1,3)], ext(lhazdat[[i]])[c(1,3)])
+      max_extent[c(2,4)] <- pmax(max_extent[c(2,4)], ext(lhazdat[[i]])[c(2,4)])
     }
   }
   

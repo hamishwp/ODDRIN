@@ -38,8 +38,8 @@
 
 checkODD<-function(object) {
   
-  if('Population' %in% names(ODDy)) if (any(values(ODDy[['Population']])<0,na.rm = T)) return(F) 
-  if('GDP' %in% names(ODDy)) if (any(values(ODDy[['GDP']]) <0,na.rm = T)) return(F) 
+  if('Population' %in% names(object)) if (any(values(object[['Population']])<0,na.rm = T)) return(F) 
+  if('GDP' %in% names(object)) if (any(values(object[['GDP']]) <0,na.rm = T)) return(F) 
   if(any(is.na(object@cIndies$value))) 
     print(paste0("WARNING: missing country indicator elements for ",object@cIndies$iso3[is.na(object@cIndies$value)]))
   
@@ -68,9 +68,8 @@ setClass("ODD",
                    predictDisp="data.frame",
                    #modifier="list",
                    polygons="list", 
-                   hazinfo="list",
-                   ISO3C='character'),
-         contains = "RasterBrick")
+                   hazinfo="list"),
+         contains = "SpatRaster")
 
 ExtractI0poly<-function(HazDat,ODD){
 
@@ -150,6 +149,40 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
   
 })
 
+readODD <- function(path){
+  .Object = new('ODD')
+  ODD_list = readRDS(path)
+  slotnames <- slotNames(.Object)
+  for (slot in slotnames[slotnames!='ptr']){
+    slot(.Object, slot) = ODD_list[[slot]]
+  }
+  .Object@ptr = unwrap(ODD_list$spatrast)@ptr
+  return(.Object)
+}
+
+saveODD <- function(ODD, path){
+  ODD_list = list()
+  slotnames = slotNames(ODD)
+  for (slot in slotnames[slotnames!='ptr']){
+    ODD_list[[slot]] = slot(ODD, slot)
+  }
+  ODD_list$spatrast <- wrap(ODD)
+  saveRDS(ODD_list, path)
+}
+
+# saveODD <- function(ODD, path){
+#   ODD_no_ptr <- ODD
+#   ODD_no_ptr$ptr <- NULL
+#   saveRDS(list(ODD_no_ptr, wrap(ODD)), path)
+# }
+# 
+# readODD <- function(path){
+#   ODD_read <- readRDS(path)
+#   ODDy_read[[1]]@ptr = unwrap(ODDy_read[[2]])@ptr
+#   return(ODDy_read[[1]])
+# }
+
+
 
 setMethod(f="initialize", signature="ODD",
           # definition=function(.Object,bbox,lhazSDF,dater=NULL,dir=directory,
@@ -198,19 +231,20 @@ setMethod(f="initialize", signature="ODD",
             print("Fetching population data")
             #obj <-GetPopulationBbox(.Object@dir,bbox=bbox)
             obj <- getWorldPop_ODD(.Object@dir, year, bbox, agg_level)
-            .Object@file <- obj@file
-            .Object@data <- obj@data
-            .Object@legend <- obj@legend
-            .Object@title <- obj@title
-            .Object@extent <- obj@extent
-            .Object@rotated <- obj@rotated
-            .Object@rotation <- obj@rotation
-            .Object@ncols <- obj@ncols
-            .Object@nrows <- obj@nrows
-            .Object@crs <- obj@crs
-            .Object@srs <- obj@srs
-            .Object@history <- obj@history
-            .Object@z <- obj@z
+            .Object@ptr <- obj@ptr
+            # .Object@file <- obj@file
+            # .Object@data <- obj@data
+            # .Object@legend <- obj@legend
+            # .Object@title <- obj@title
+            # .Object@extent <- obj@extent
+            # .Object@rotated <- obj@rotated
+            # .Object@rotation <- obj@rotation
+            # .Object@ncols <- obj@ncols
+            # .Object@nrows <- obj@nrows
+            # .Object@crs <- obj@crs
+            # .Object@srs <- obj@srs
+            # .Object@history <- obj@history
+            # .Object@z <- obj@z
             # .Object@proj4string <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
             #levels(pop[['ISO3C']])[[1]]$VALUE[values(pop[['ISO3C']])]
@@ -220,14 +254,12 @@ setMethod(f="initialize", signature="ODD",
             
             # Extract empty indices to save time
             inds<-which(!is.na(values(.Object[['Population']])))
-            values(.Object[['ISO3C']])[-inds] <- NA
+            .Object[['ISO3C']][-inds] <- NA
             #levels(pop[['ISO3C']])[[1]]$VALUE[values(pop[['ISO3C']])]
             
             print("Filter spatial data per country")
             #.Object@data$ISO3C<-NA_character_
             #.Object@data$ISO3C[inds]<-coords2country(.Object@coords[inds,])
-            iso3c<-unique(levels(.Object[['ISO3C']])[[1]][[1]]$VALUE) 
-            iso3c<-iso3c[!is.na(iso3c)]
             
             
             #print("Interpolate population values")
@@ -245,7 +277,7 @@ setMethod(f="initialize", signature="ODD",
             if(year==AsYear(Sys.Date())) year<-AsYear(Sys.Date())-1
             print("Extract country indicators - WID:")
             
-            WID<-GetWID_perc(Model$WID_perc,iso3c,year)
+            WID<-GetWID_perc(Model$WID_perc,unique(.Object[['ISO3C']])$ISO3C,year)
             
             
             #stop("Add the full variables to the cIndies data.frame")
@@ -254,7 +286,7 @@ setMethod(f="initialize", signature="ODD",
             .Object@cIndies$value[which(.Object@cIndies$value==0)] = 0.0001 # 0 values cause issues when applying log transform to GNIc
             
             # Here we add the vulnerabilities used in the linear predictor
-            .Object@ISO3C <- levels(.Object[['ISO3C']])[[1]][[1]]$VALUE
+            #.Object@ISO3C <- levels(.Object[['ISO3C']])[[1]][[1]]$VALUE
             
             .Object%<>%AddVuln()
             
@@ -352,8 +384,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
   Sinc<-ExtractCIndy(ODD,var = SincN)
   
-  ODD_df <- data.frame(rasterToPoints(ODD))
-  ODD_df$ISO3C <- levels(ODD[['ISO3C']])[[1]][[1]]$VALUE[ODD_df$ISO3C]
+  ODD_df <- as.data.frame(ODD)
+  #ODD_df$ISO3C <- levels(ODD[['ISO3C']])[[1]]$VALUE[ODD_df$ISO3C]
   
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
   notnans<-which(!(is.na(ODD_df$Population) | is.na(ODD_df$ISO3C) | is.na(ODD_df$SHDI)))
@@ -1026,6 +1058,38 @@ plotODDy_GADM <- function(ODDy, zoomy=7,var="Population",breakings=NULL,bbox=NUL
                     alpha=0.8,breaks = c(6.0),colour="red")
   
   
+}
+
+plotODDPolygons <-function(ODDy,admin_level=2, bbox=NULL){
+
+  #if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
+  
+  if(is.null(bbox)) bbox<-as.numeric(c(ext(ODDy)[1], ext(ODDy)[3], ext(ODDy)[2], ext(ODDy)[4]))
+
+  poly_match <- rep(NA, ncell(ODDy))
+  match_polygon <- function(index){
+    matches <- unlist(lapply(ODDy@polygons, function(x){
+      if(str_count(x$name, ',') != admin_level) return(c())
+      poly_match <- which(x$indexes==index)
+      if (length(poly_match)==0) return(c())
+      if (x$weights[poly_match]>0.5){
+        return(x$name)
+      } else {
+        return(c())
+      }
+    } ))
+    return(ifelse(length(matches)>0,matches,NA))
+  }
+  
+  for (i in 1:length(poly_match)){
+    if (i %% 100==0){print(paste('Identifying poly of pixel', i))}
+    poly_match[i] <- match_polygon(i)
+  }
+  
+  ODDy[['poly_match']] = poly_match
+  p <- plot(ODDy[['poly_match']])
+  
+  return(p)
 }
 
 plotODDyAgg <- function(ODDyAgg, ODDy=NULL, zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7,map="terrain", gadm_level=2){

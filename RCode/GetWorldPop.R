@@ -193,7 +193,12 @@ getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demograph
           assigned this way when obtaining values.')
   }
   
-  return(brick(pop))
+  # return(brick(pop))
+  
+  terra_stack <- c(terra::rast(spat_agg), terra::rast(rastered_iso3))
+  names(terra_stack) <- c('Population', 'ISO3C')
+
+  return(terra_stack)
   
 }
 

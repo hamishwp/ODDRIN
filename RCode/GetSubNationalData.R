@@ -222,16 +222,17 @@ getSubNatImpact <- function(SubNatEvent, subnational=TRUE){
 
 pixelsInPoly <- function(poly, ODDy){
   #returns the indexes of the ODDy pixels are inside the polygon 'poly'
-  
+    
   poly_sp <- SpatialPolygons(poly)
-  proj4string(poly_sp)<- proj4string(ODDy)
+  proj4string(poly_sp)<- crs(ODDy)
   poly_sf <- st_as_sf(poly_sp)
   
   indexes_rast <- ODDy[['Population']]
   values(indexes_rast) <- 1:ncell(ODDy)
+  if (is.null(intersect(extent(ext(indexes_rast)[1], ext(indexes_rast)[2], ext(indexes_rast)[3], ext(indexes_rast)[4]), extent(poly_sf)))){return(c())}
   indexes_rast <- crop(indexes_rast, extent(poly_sf), snap='out')
   pixels_as_poly <- as.polygons(rast(indexes_rast),aggregate=F)
-  intersects <- as.matrix(st_intersects(st_as_sf(pixels_as_poly), poly_sf))
+  intersects <- as.matrix(st_intersects(st_make_valid(st_as_sf(pixels_as_poly)), st_make_valid(poly_sf)))
   return(values(indexes_rast)[which(intersects)])
   
   # insidepoly<-rep(FALSE,ncell(ODDy))
@@ -301,6 +302,10 @@ reweight_pixels <- function(polygons_indexes, polygons_list, ODDy){
   lon_cellsize <- res(ODDy)[1]
   lat_cellsize <- res(ODDy)[2]
   
+  indexes_rast <- ODDy[['Population']]
+  values(indexes_rast) <- 1:ncell(ODDy)
+  pixels_as_poly <- as.polygons(indexes_rast,aggregate=F)
+  
   for(i in 2:length(polygons_indexes)){
     for(j in 1:(i-1)){
       if (length(polygons_indexes[[i]]$indexes) == 0 | length(polygons_indexes[[j]]$indexes) == 0) next
@@ -314,6 +319,7 @@ reweight_pixels <- function(polygons_indexes, polygons_list, ODDy){
         next
       } 
       
+      
       #polygons_intersect <- gIntersects(polygons_list[[i]]$sf_polygon, polygons_list[[j]]$sf_polygon)
       #polygons_touch <- gTouches(polygons_list[[i]]$sf_polygon, polygons_list[[j]]$sf_polygon)
       indexes_intersect <- intersect(polygons_indexes[[i]]$indexes, polygons_indexes[[j]]$indexes)
@@ -323,22 +329,30 @@ reweight_pixels <- function(polygons_indexes, polygons_list, ODDy){
         print(paste('intersecting polys',polygons_indexes[[i]]$name,polygons_indexes[[j]]$name))
         for (index in indexes_intersect){
           #to allocate a weight to the pixel based on how much of the polygon it contains
-          pixel_sf <- sfheaders::sf_polygon(data.frame(longitude = c(coords[index,1]-lon_cellsize/2, 
-                                                                     coords[index,1]-lon_cellsize/2,
-                                                                     coords[index,1]+lon_cellsize/2, 
-                                                                     coords[index,1]+lon_cellsize/2, 
-                                                                     coords[index,1]-lon_cellsize/2), 
-                                                       latitude = c(coords[index,2]-lat_cellsize/2, 
-                                                                    coords[index,2]+lat_cellsize/2,
-                                                                    coords[index,2]+lat_cellsize/2, 
-                                                                    coords[index,2]-lat_cellsize/2,
-                                                                    coords[index,2]-lat_cellsize/2)), x='longitude',y='latitude')
-          sf::st_crs(pixel_sf) = proj4string(ODDy)
-          pixel_sp <- as(pixel_sf, 'Spatial')
-          intersection_i <- intersect(pixel_sp,polygons_list[[i]]$sf_polygon)
-          intersection_j <- intersect(pixel_sp,polygons_list[[j]]$sf_polygon)
-          polygons_indexes[[i]]$weights[which(polygons_indexes[[i]]$indexes==index)] <- ifelse(is.null(intersection_i), 0, area(intersection_i)) / area(pixel_sp)
-          polygons_indexes[[j]]$weights[which(polygons_indexes[[j]]$indexes==index)] <- ifelse(is.null(intersection_j), 0, area(intersection_j)) / area(pixel_sp)
+          # pixel_sf <- sfheaders::sf_polygon(data.frame(longitude = c(coords[index,1]-lon_cellsize/2, 
+          #                                                            coords[index,1]-lon_cellsize/2,
+          #                                                            coords[index,1]+lon_cellsize/2, 
+          #                                                            coords[index,1]+lon_cellsize/2, 
+          #                                                            coords[index,1]-lon_cellsize/2), 
+          #                                              latitude = c(coords[index,2]-lat_cellsize/2, 
+          #                                                           coords[index,2]+lat_cellsize/2,
+          #                                                           coords[index,2]+lat_cellsize/2, 
+          #                                                           coords[index,2]-lat_cellsize/2,
+          #                                                           coords[index,2]-lat_cellsize/2)), x='longitude',y='latitude')
+
+          pixel <- pixels_as_poly[which(values(pixels_as_poly)==index),]
+          
+          #expanse(intersect(pixels_as_poly[index,], vect(polygons_list[[i]]$sf_polygon)))
+
+          intersection_i <- expanse(intersect(pixel,vect(polygons_list[[i]]$sf_polygon)), unit='km')
+          intersection_j <- expanse(intersect(pixel,vect(polygons_list[[j]]$sf_polygon)), unit='km')
+          if (length(intersection_i)==0) intersection_i=0
+          if (length(intersection_j)==0) intersection_j=0
+          #combined_area = intersection_i + intersection_j
+          polygons_indexes[[i]]$weights[which(polygons_indexes[[i]]$indexes==index)] <- intersection_i / expanse(pixel, unit='km')
+          polygons_indexes[[j]]$weights[which(polygons_indexes[[j]]$indexes==index)] <- intersection_j / expanse(pixel, unit='km')
+          #polygons_indexes[[i]]$weights[which(polygons_indexes[[i]]$indexes==index)] <- ifelse(is.null(intersection_i), 0, area(intersection_i)) / area(pixel_sp)
+          #polygons_indexes[[j]]$weights[which(polygons_indexes[[j]]$indexes==index)] <- ifelse(is.null(intersection_j), 0, area(intersection_j)) / area(pixel_sp)
         }
         
         #to simply allocate to the closest polygon:
@@ -419,14 +433,20 @@ addODDPolygons <- function(ODDy, polygons_list){
         } else {
           iso3 <- countrycode(polygons_list[[i]]$polygon_name, origin='country.name', destination='iso3c')
         }
-        inPolyInds <- which(values(ODDy[['ISO3C']]) == which(levels(ODDy[['ISO3C']])[[1]][[1]]$VALUE==iso3))
+        inPolyInds <- which(values(ODDy[['ISO3C']]) == which(levels(ODDy[['ISO3C']])[[1]]$VALUE==iso3))
         polygons_indexes[[i]] <- list(name=polygons_list[[i]]$polygon_name, indexes = inPolyInds)
       }
     } else {
       if(!is.null(polygons_list[[i]]$sf_polygon)){
         #inPolyInds <- intersect(which(inPoly((polygons_list[[i]]$sf_polygon)@polygons[[1]], pop = ODDy@coords)$indies), which(ODDy@data$ISO3C==iso3))
         inPolyInds <- intersect(pixelsInPoly((polygons_list[[i]]$sf_polygon)@polygons, ODDy), which(!is.na(values(ODDy[['ISO3C']]))))
-        if(length(inPolyInds)==0) warning(paste('Region not found in impacted area. Polygon name: ', polygons_list[[i]]$polygon_name))
+        if(length(inPolyInds)==0){
+          warning(paste('Region not found in impacted area. Polygon name: ', polygons_list[[i]]$polygon_name))
+          file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
+          #writeLines(paste("Region:", ODDy@polygons[[polygon_matches[[g]][1,1]]]$name, "Event Date:", ODDy@hazdates[1], '. Sum of pixel weights for a polygon is larger than 1'), file_conn)
+          print(paste('Region not found in impacted area. Polygon name: ', polygons_list[[i]]$polygon_name), file_conn)
+          close(file_conn)
+        }
         polygons_indexes[[i]] <- list(name=polygons_list[[i]]$polygon_name, indexes = inPolyInds)
       }
     }
@@ -444,7 +464,7 @@ addODDImpact <- function(ODDy, impact){
   ODDy@impact <- impact
   
   #if polygon is 'TOTAL' but only one country is exposed, can rename the 'TOTAL' polygon with the country
-  unique_iso3 <- unique(ODDy@ISO3C)[!is.na(unique(ODDy@ISO3C))]
+  unique_iso3 <- unique(ODDy$ISO3C)$ISO3C[!is.na(unique(ODDy$ISO3C)$ISO3C)]
   if (length(unique_iso3)==1){
     i_TOTAL <- which(sapply(ODDy@polygons, function(poly){ifelse(poly$name=='TOTAL', T, F)}))
     i_iso3 <- which(sapply(ODDy@polygons, function(poly){ifelse(grepl(",",poly$name), F, T)}))
@@ -504,7 +524,7 @@ updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, event_id, subna
   if(length(SubNatData_match)>1){
     cat(paste('Please select between the following',length(SubNatData_match),'events by typing the id of the chosen source and pressing return.\n'))
     print('Desired Event:')
-    print(paste('Event Date:', event_sdate, 'Countries:', paste(unique(ODDy@ISO3C[!is.na(ODDy@ISO3C)], na.rm=TRUE), collapse=" ")))
+    print(paste('Event Date:', event_sdate, 'Countries:', paste(unique(ODDy$ISO3C)$ISO3C[!is.na(unique(ODDy$ISO3C)$ISO3C)], collapse=" ")))
     for(i in 1:length(SubNatData_match)){
       print(paste0('Option ', i,':'))
       print(SubNatData_match[[i]][1, c('event_name', 'iso3', 'sdate', 'fdate', 'notes')])
@@ -513,7 +533,7 @@ updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, event_id, subna
   }
   SubNatEvent <- SubNatData_match[[id_chosen]]
   
-  iso3_unique <- unique(ODDy@ISO3C)[which(!is.na(unique(ODDy@ISO3C)))]
+  iso3_unique <- unique(ODDy$ISO3C)$ISO3C[which(!is.na(unique(ODDy$ISO3C)$ISO3C))]
   if (length(iso3_unique)==1){
     #replace 'TOTAL' with name of the country
     SubNatEvent$iso3[which(SubNatEvent$iso3=='TOT')] = iso3_unique
@@ -586,7 +606,7 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
             iso3_incl %<>% append(impacts_split[[j]]$iso3[k])
           }
         }
-        non_na_iso3 <- unique(ODDy@ISO3C)[which(!is.na(unique(ODDy@ISO3C)))]
+        non_na_iso3 <-unique(ODDy$ISO3C)$ISO3C[which(!is.na(unique(ODDy$ISO3C)$ISO3C))]
         iso3_missing <- non_na_iso3[which(!(non_na_iso3 %in% iso3_incl))]
         for (iso3_miss in iso3_missing){
           writeData(wb, sheet, iso3_miss, startCol = 1, startRow = row)
@@ -625,10 +645,10 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
             r[2] <- substring(r[2], 2)
           }
           r_poly <- getGADM(r, level = gadm_level, country=iso3)
-          overlap <- (max(r_poly@bbox[1,]) >= ODDy@extent@xmin &
-                        min(r_poly@bbox[1,]) <= ODDy@extent@xmax &
-                        max(r_poly@bbox[2,]) >= ODDy@extent@ymin &
-                        min(r_poly@bbox[2,]) <= ODDy@extent@ymax)
+          overlap <- (max(r_poly@bbox[1,]) >= ext(ODDy)[1] &
+                        min(r_poly@bbox[1,]) <= ext(ODDy)[2] &
+                        max(r_poly@bbox[2,]) >= ext(ODDy)[3] &
+                        min(r_poly@bbox[2,]) <= ext(ODDy)[4])
           if (!overlap) next
           
           if (length(pixels_unallocated)==0) next
@@ -738,7 +758,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
       rm(ODDy_build)
     }
     
-    iso3_ODDy <- unique(ODDy@ISO3C)
+    iso3_ODDy <- unique(ODDy$ISO3C)$ISO3C
     
     # Create a unique hazard event name
     namer<-paste0(ODDy@hazard,
@@ -746,7 +766,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
                   unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
                   "_",i)
     HAZARDpath<-paste0(dir,folder_write, "HAZARDobjects/",namer)
-    saveRDS(lhazSDF,HAZARDpath)
+    saveHAZ(lhazSDF,HAZARDpath)
     rm(lhazSDF)
     
     
@@ -760,12 +780,13 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     }
     
     ODDy <- ODDy_with_impact
+      
     rm(ODDy_with_impact)
     
     
     # Save out objects to save on RAM
     ODDpath<-paste0(dir, folder_write, "ODDobjects/",namer)
-    saveRDS(ODDy,ODDpath)
+    saveODD(ODDy,ODDpath)
     
     additional_poly_check(ODDy, i, print_to_xl=T)
     
@@ -784,7 +805,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
       }
       BDpath <-paste0(dir, folder_write, "BDobjects/",namer)
       # Save it out!
-      saveRDS(BDy, BDpath)
+      saveBD(BDy, BDpath)
       rm(BDy)
     }
     

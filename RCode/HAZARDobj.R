@@ -32,7 +32,38 @@ setClass("HAZARD",
                    USGS_id="character",
                    eventtime="character",
                    alertfull='list'),
-         contains = "RasterBrick")
+         contains = "SpatRaster")
+
+saveHAZ <- function(lhazSDF, path){
+  for (i in 1:length(lhazSDF)){
+    if(class(lhazSDF[[i]])=='HAZARD'){
+      haz_list = list()
+      slotnames = slotNames(lhazSDF[[i]])
+      for (slot in slotnames[slotnames!='ptr']){
+        haz_list[[slot]] = slot(lhazSDF[[i]], slot)
+      }
+      haz_list$spatrast <- wrap(lhazSDF[[i]])
+      lhazSDF[[i]] = haz_list
+    }
+  }
+  saveRDS(lhazSDF, path)
+}
+
+readHAZ <- function(path){
+  lhazSDF <- readRDS(path)
+  for (i in 1:length(lhazSDF)){
+    if(!is.null(lhazSDF[[i]]$spatrast)){
+      .Object <- new('HAZARD')
+      slotnames <- slotNames(lhazSDF[[i]])
+      for (slot in slotnames[slotnames!='ptr']){
+        slot(.Object, slot) = lhazSDF[[i]][[slot]]
+      }
+      .Object@ptr = unwrap(lhazSDF[[i]]$spatrast)@ptr
+      lhazSDF[[i]] <- .Object
+    }
+  }
+  return(lhazSDF)
+}
 
 setMethod(f="initialize", signature="HAZARD",
           # definition=function(.Object,bbox,hazSDF,dater=NULL,dir=directory,
@@ -62,29 +93,30 @@ setMethod(f="initialize", signature="HAZARD",
               inI0<-xyFromCell(obj, which(values(!is.na(obj[['mmi_mean']]) & obj[['mmi_mean']]>.Object@I0)))
               
               # Take a bounding box a little larger than the I>I0 object but inside original (the 5 is arbitrary)
-              bbox<-c(max(obj@extent@xmin,min(inI0[,1])-5*res(obj)[1]),
-                      max(obj@extent@ymin,min(inI0[,2])-5*res(obj)[2]),
-                      min(obj@extent@xmax,max(inI0[,1])+5*res(obj)[1]),
-                      min(obj@extent@ymax,max(inI0[,2])+5*res(obj)[2]))
+              bbox<-c(max(ext(obj)[1],min(inI0[,1])-5*res(obj)[1]),
+                      max(ext(obj)[3],min(inI0[,2])-5*res(obj)[2]),
+                      min(ext(obj)[2],max(inI0[,1])+5*res(obj)[1]),
+                      min(ext(obj)[4],max(inI0[,2])+5*res(obj)[2]))
               
               # Crop
               #e <- raster::extent(c(bbox[c(1,3,2,4)]))
               #proj4string(e) <- "+proj=longlat +datum=WGS84 +ellps=WGS84"
 
-              obj%<>%raster::crop(raster::extent(c(bbox[c(1,3,2,4)])))
-              .Object@file <- obj@file
-              .Object@data <- obj@data
-              .Object@legend <- obj@legend
-              .Object@title <- obj@title
-              .Object@extent <- obj@extent
-              .Object@rotated <- obj@rotated
-              .Object@rotation <- obj@rotation
-              .Object@ncols <- obj@ncols
-              .Object@nrows <- obj@nrows
-              .Object@crs <- obj@crs
-              .Object@srs <- obj@srs
-              .Object@history <- obj@history
-              .Object@z <- obj@z
+              obj%<>%terra::crop(extent(c(bbox[c(1,3,2,4)])))
+              .Object@ptr <- obj@ptr
+              # .Object@file <- obj@file
+              # .Object@data <- obj@data
+              # .Object@legend <- obj@legend
+              # .Object@title <- obj@title
+              # .Object@extent <- obj@extent
+              # .Object@rotated <- obj@rotated
+              # .Object@rotation <- obj@rotation
+              # .Object@ncols <- obj@ncols
+              # .Object@nrows <- obj@nrows
+              # .Object@crs <- obj@crs
+              # .Object@srs <- obj@srs
+              # .Object@history <- obj@history
+              # .Object@z <- obj@z
             }
             #.Object@proj4string <-CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
             

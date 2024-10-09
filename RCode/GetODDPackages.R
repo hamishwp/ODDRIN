@@ -69,6 +69,7 @@ LoadLibraries<-function(packred, loadRmpi=F){
   library(usethis)
   library(LaplacesDemon)
   library(cowplot)
+  library(terra) 
   if (loadRmpi){library(Rmpi)}
   
   if(!packred) {
@@ -79,7 +80,6 @@ LoadLibraries<-function(packred, loadRmpi=F){
     library(lutz)
     library(xml2)
     library(gstat)
-    library(terra) 
     library(wid)
     library(geojsonio)
     library(jsonlite)

@@ -135,11 +135,38 @@ for (i in c(16,)){
 
 
 
+#SMC:
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-10-01_223810_alphaAdaptivePropCOV0.2_M100_Npart1000SimInput')
+
 #MCMC:
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-09-30_223103_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive')
 
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-09-26_222556_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive')
+AlgoResults2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-10-08_213516_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive')
+plot(AlgoResults2$loss, type='l', ylim=c(2.2, 5))
+points(AlgoResults$loss, type='l', col='red')
+
+par(mfrow=c(2,2))
+params <- c(7,8)
+xlim=range(AlgoResults2$Omega_sample_phys[params[1],], AlgoResults$Omega_sample_phys[params[1],],na.rm=T)
+ylim=range(AlgoResults2$Omega_sample_phys[params[2],], AlgoResults$Omega_sample_phys[params[2],], na.rm=T)
+plot(AlgoResults2$Omega_sample_phys[params[1],], AlgoResults2$Omega_sample_phys[params[2],], xlim=xlim, ylim=ylim,type='l')
+points(AlgoResults$Omega_sample_phys[params[1],1:6000], AlgoResults$Omega_sample_phys[params[2],1:6000], type='l', col='red')
+xlim=range(AlgoResults2$Omega_sample[params[1],], AlgoResults$Omega_sample[params[1],],na.rm=T)
+ylim=range(AlgoResults2$Omega_sample[params[2],], AlgoResults$Omega_sample[params[2],], na.rm=T)
+plot(AlgoResults2$Omega_sample[params[1],], AlgoResults2$Omega_sample[params[2],], xlim=xlim, ylim=ylim,type='l')
+points(AlgoResults$Omega_sample[params[1],1:6000], AlgoResults$Omega_sample[params[2],1:6000], type='l', col='red')
+plot(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[params[1],params[1],],type='l', ylim=c(0,0.3))
+lines(AlgoResults$lambda_store * AlgoResults$Sigma_store[params[1],params[1],],type='l', col='red')
 
 
+plot(AlgoResults$lambda_store)
+points(AlgoResults2$lambda_store, col='red')
+
+par(mfrow=c(2,1))
+plot(AlgoResults$lambda_store * AlgoResults$Sigma_store[1,1,])
+points(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[1,1,], col='red')
+plot(AlgoResults$lambda_store * AlgoResults$Sigma_store[7,7,])
+points(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[7,7,], col='red')
 
 AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-09-24_121551_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive_backup')
 Prior <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HLPriorSamples')

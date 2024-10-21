@@ -195,11 +195,10 @@ setMethod("BDinterpODD", "BD", function(BD,ODD){
     
     for (var in names(ODD)){
       if(grepl("ISO3C",var)) next
-      if(!grepl("haz",var)) {
-        tmp<-ODD[var]%>%extract(crds(BD))%>%data.frame; colnames(tmp)<-var
-        BD[[var]] <- tmp
-        next
-      }
+      #if(!grepl("haz",var)) {
+      tmp<-ODD[[var]]%>%extract(crds(BD))%>%data.frame; colnames(tmp)<-var
+      BD[[var]] <- tmp
+      #}
     }
   # unsure what the rest of this was for?:
       # if(grepl("hazSD",var)) {
@@ -372,7 +371,7 @@ setGeneric("BDX", function(BD,Omega,Model,Method, output='LL')
 setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8), output='LL'){
   # Only calculate buildings with all key parameters
   
-  LL_cap <- -40
+  #LL_cap <- -40
   hrange<-grep("hazMean",names(BD),value = T)
   
   elapsed_time <- c()

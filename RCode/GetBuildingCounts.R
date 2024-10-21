@@ -394,7 +394,7 @@ getQuadKey <- function(Tile) {
 }
 
 
-getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Building_count_notes'){
+getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Building_count_notes', aggregate=T){
   # Note that if you choose to proceed with some missing quadkeys, the values in these pixels will be 0 rather than NA (making them indistinguishable from true 0s)
   # This could be addressed by determining the polygons of the missing quadkeys and assigning the intersecting pixels to NA, but haven't had time to implement this yet. 
   
@@ -472,6 +472,8 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   }
   
   colnames(building_locs) <- c('Longitude', 'Latitude')
+  
+  if (!aggregate){return(building_locs)}
                                            
   ODD[['nBuildings']] <- rasterize(building_locs, ODD, 1, fun='count', background=0)
   #rastered_buildings_spdf <- as(rastered_buildings, "SpatialPixelsDataFrame")

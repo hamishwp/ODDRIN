@@ -384,8 +384,10 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
   Sinc<-ExtractCIndy(ODD,var = SincN)
   
-  ODD_df <- as.data.frame(ODD)
+  ODD_df <- as.data.frame(ODD, na.rm=F)
+  
   #ODD_df$ISO3C <- levels(ODD[['ISO3C']])[[1]]$VALUE[ODD_df$ISO3C]
+  names(ODD_df)[which(names(ODD_df)=='VALUE')] = 'ISO3C' #sometimes error reading in factor layer
   
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
   notnans<-which(!(is.na(ODD_df$Population) | is.na(ODD_df$ISO3C) | is.na(ODD_df$SHDI)))

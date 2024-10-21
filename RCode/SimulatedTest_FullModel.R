@@ -235,7 +235,7 @@ AlgoParams$smc_Npart <- 50
 AlgoParams$n_nodes <- 1
 AlgoParams$smc_steps <- 100
 AlgoParams$rel_weightings <- c(1,1)
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/'
+AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Aug24Agg/'
 
 tag_notes <- paste0('alpha', AlgoParams$smc_alpha, 'test_ucorr')
 AlgoResults <- delmoral_parallel_corr(AlgoParams, Model, unfinished = F,tag_notes=tag_notes)

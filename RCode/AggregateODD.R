@@ -235,11 +235,41 @@ aggregateODDbyX <- function(ODD, aggFactor){
   ODDAgg[['ISO3C']] <- aggregate(ODD[['ISO3C']], aggFactor, fun='modal', na.rm=T)
   
   #list with length = number of new cells, which each list element containing a vector of the corresponding old cells
-  pixels_as_poly <- as.polygons(ODDAgg, aggregate=F, na.rm=F)
-  coords_ODD <- vect(xyFromCell(ODD, 1:ncell(ODD)))
-  intersect_oldnew <- relate(coords_ODD, pixels_as_poly, 'intersects')
-  new_old_cell_ref <- apply(intersect_oldnew, 2, function(x) which(x)) 
+  #pixels_as_poly <- as.polygons(ODDAgg, aggregate=F, na.rm=F)
+  #coords_ODD <- vect(xyFromCell(ODD, 1:ncell(ODD)))
+  #intersect_oldnew <- relate(coords_ODD, pixels_as_poly, 'intersects')
   
+  coords_ODD <- as.data.frame(crds(ODD, na.rm=F))
+  coords_ODD$indexes <- 1:NROW(coords_ODD)
+  coords_ODDAgg <- crds(ODDAgg, na.rm=F)
+  half_xres = xres(ODDAgg) / 2
+  half_yres = yres(ODDAgg) / 2
+  new_old_cell_ref <- list()
+  for (i in 1:NROW(coords_ODDAgg)){
+    matched_indexes <- which(coords_ODD[,1] > (coords_ODDAgg[i,1] - half_xres) & 
+                                     coords_ODD[,1] < (coords_ODDAgg[i,1] + half_xres) &  
+                                     coords_ODD[,2] > (coords_ODDAgg[i,2] - half_yres) & 
+                                     coords_ODD[,2] < (coords_ODDAgg[i,2] + half_yres)) 
+    new_old_cell_ref[[i]] <- coords_ODD$indexes[matched_indexes]
+    coords_ODD <- coords_ODD[-matched_indexes,]
+  }
+
+  # new_old_cell_ref <- list()
+  # for (i in 1:NCOL(intersect_oldnew)){
+  #   if (NROW(intersect_oldnew)<100000){
+  #     new_old_cell_ref[[i]] <- which(intersect_oldnew[,i])
+  #   } else {
+  #     new_old_cell_ref[[i]] <- which(intersect_oldnew[1:100000,i])
+  #     for (j in 1:floor(NROW(intersect_oldnew)/100000)){
+  #       if (j == floor(NROW(intersect_oldnew)/100000)){
+  #         new_old_cell_ref[[i]] <- c(new_old_cell_ref[[i]], which(intersect_oldnew[(j*10000+1):NROW(intersect_oldnew),i]))
+  #       } else {
+  #         new_old_cell_ref[[i]] <- c(new_old_cell_ref[[i]], which(intersect_oldnew[(j*10000+1):((j+1)*10000),i]))
+  #       }
+  #     }
+  #   }
+  # }
+  # 
   # index_agg <- aggregate(ODD[['index']],aggFactor, fun='aggregateIndex')
   # new_old_cell_ref <- list()
   # for (new_cell in levels(index_agg)[[1]]$ID){
@@ -269,25 +299,29 @@ aggregateODDbyX <- function(ODD, aggFactor){
       ODDAgg@polygons[[p]]$weights = c(ODDAgg@polygons[[p]]$weights,matched_weights[p])
     }
   }
-
+  rm(ODD)
+  #rm(intersect_old_new)
+  rm(new_old_cell_ref)
   return(ODDAgg)
 }
 
 
-increaseAggregation_all <- function(folder_in='IIDIPUS_Input'){
-  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects_RealFull/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_RealFullAgg5/')
+increaseAggregation_all <- function(folder_in='IIDIPUS_Input_Alternatives/Aug24'){
+  ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
+  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_Agg5/')
   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-  for (file in ufiles[1:length(ufiles)]){
+  for (file in ufiles[c(39)]){
     event_id <- as.numeric(strsplit(file, "_")[[1]][2])
     print(event_id)
-    ODDy <- readRDS(paste0(ODD_folderin, file))
+    ODDy <- readODD(paste0(ODD_folderin, file))
     ODDyAgg <- tryCatch(aggregateODDbyX(ODDy, 5),error=function(e) NULL)
     if(is.null(ODDyAgg)){
       print(paste('FAIL', event_id))
       next
     }
-    saveRDS(ODDyAgg, paste0(ODD_folderout, file))
+    saveODD(ODDyAgg, paste0(ODD_folderout, file))
+    rm(ODDy)
+    rm(ODDyAgg)
   }
 }
 

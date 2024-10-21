@@ -142,6 +142,8 @@ AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/H
 AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-09-30_223103_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive')
 
 AlgoResults2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-10-08_213516_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive')
+
+AlgoResults2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-10-12_222810_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive')
 plot(AlgoResults2$loss, type='l', ylim=c(2.2, 5))
 points(AlgoResults$loss, type='l', col='red')
 
@@ -149,15 +151,21 @@ par(mfrow=c(2,2))
 params <- c(7,8)
 xlim=range(AlgoResults2$Omega_sample_phys[params[1],], AlgoResults$Omega_sample_phys[params[1],],na.rm=T)
 ylim=range(AlgoResults2$Omega_sample_phys[params[2],], AlgoResults$Omega_sample_phys[params[2],], na.rm=T)
-plot(AlgoResults2$Omega_sample_phys[params[1],], AlgoResults2$Omega_sample_phys[params[2],], xlim=xlim, ylim=ylim,type='l')
+plot(AlgoResults2$Omega_sample_phys[params[1],10000:12000], AlgoResults2$Omega_sample_phys[params[2],10000:12000], xlim=xlim, ylim=ylim,type='l')
 points(AlgoResults$Omega_sample_phys[params[1],1:6000], AlgoResults$Omega_sample_phys[params[2],1:6000], type='l', col='red')
 xlim=range(AlgoResults2$Omega_sample[params[1],], AlgoResults$Omega_sample[params[1],],na.rm=T)
 ylim=range(AlgoResults2$Omega_sample[params[2],], AlgoResults$Omega_sample[params[2],], na.rm=T)
 plot(AlgoResults2$Omega_sample[params[1],], AlgoResults2$Omega_sample[params[2],], xlim=xlim, ylim=ylim,type='l')
 points(AlgoResults$Omega_sample[params[1],1:6000], AlgoResults$Omega_sample[params[2],1:6000], type='l', col='red')
-plot(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[params[1],params[1],],type='l', ylim=c(0,0.3))
+plot(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[params[1],params[1],],type='l', ylim=c(0,0.5))
 lines(AlgoResults$lambda_store * AlgoResults$Sigma_store[params[1],params[1],],type='l', col='red')
 
+
+params <- c(22,23)
+xlim=range(AlgoResults2$Omega_sample_phys[params[1],], AlgoResults$Omega_sample_phys[params[1],],na.rm=T)
+ylim=range(AlgoResults2$Omega_sample_phys[params[2],], AlgoResults$Omega_sample_phys[params[2],], na.rm=T)
+plot(AlgoResults2$Omega_sample_phys[params[1],10000:14000], AlgoResults2$Omega_sample_phys[params[2],10000:14000], xlim=xlim, ylim=ylim,type='l')
+points(unlist(Omega)[params[1]], unlist(Omega)[params[2]], col='red', pch=19)
 
 plot(AlgoResults$lambda_store)
 points(AlgoResults2$lambda_store, col='red')

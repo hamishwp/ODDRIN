@@ -504,7 +504,7 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
   
   tmpFn<-function(filer){
     # Extract the ODD object
-    ODDy<-readRDS(paste0(folderin,filer))
+    ODDy<-readODD(paste0(folderin,filer))
     
     # Backdated version control: old IIDIPUS depended on ODDy$fIndies values and gmax different format
     #ODDy@fIndies<-Model$fIndies

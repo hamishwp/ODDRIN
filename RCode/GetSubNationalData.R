@@ -658,7 +658,7 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
           #                                                   data=ODDy@data[pixels_unallocated,1:2, drop=F], #this is arbitrary, function just seems to require data
           #                                                   proj4string=r_poly@proj4string)
           
-          contained <- c(st_contains(sf_pixels_unallocated, st_as_sf(r_poly), sparse=F)) #gContains(r_poly, spdf_pixels_unallocated, byid=T)
+          contained <- c(st_contains(sf_pixels_unallocated, st_make_valid(st_as_sf(r_poly)), sparse=F)) #gContains(r_poly, spdf_pixels_unallocated, byid=T)
           
           if (any(contained)){
             print(paste('Polygon', r, 'contains an unallocated pixel'))
@@ -677,7 +677,18 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
       }
     }
   }
-  if (print_to_xl & noteworthy){saveWorkbook(wb, paste0(dir, folder_write, "Missing Regions/Event_",i,".xlsx"))}
+  
+  if (print_to_xl & noteworthy) {
+    file_path <- paste0(dir, folder_write, "Missing Regions/Event_", i, ".xlsx")
+    
+    # Check if the file exists and delete it if so
+    if (file.exists(file_path)) {
+      file.remove(file_path)
+    }
+    
+    # Save the new workbook
+    saveWorkbook(wb, file_path)
+  }
 }
 
 GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder_write='IIDIPUS_Input_Alternatives/Aug24/'){
@@ -695,9 +706,10 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
   
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
-  for (i in 1:length(SubNatDataByEvent)){
+  options(timeout = 300)
+  for (i in 31){#c(31,73,75,83,91,109,121,122)){#1:169){#c(89, 119, 122, 127, 133, 139, 150,151,152,164,165,166,167, 168,169)){#c(7,8,9,11,12,13,14,48,49,67,68,73,74,75,85,88,92,93,98,99,100,104,114, 128:163)){
     print(i)
-    
+    if (i==126) next
     # Subset displacement and disaster database objects
     SubNatDataByEvent[[i]] <- SubNatDataByEvent[[i]][rowSums(is.na(SubNatDataByEvent[[i]][,-1])) != ncol(SubNatDataByEvent[[i]])-1, ]
     miniDam<-SubNatDataByEvent[[i]]
@@ -730,6 +742,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     # lhazSDF <- GetDisaster(miniDamSimplified, bbox = c(160, -11.8, 163, -9.7))
     lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
     if(is.null(lhazSDF)) {
+      #stop()
       file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
       writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', lhazSDF not found.'), file_conn)
       close(file_conn) 
@@ -739,6 +752,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     # Create the ODD object:
     ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified, agg_level=1),error=function(e) NULL)
     if(is.null(ODDy)) {
+      #stop()
       file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
       writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', ODD object not created.'), file_conn)
       close(file_conn) 
@@ -750,6 +764,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     #ODDy_build <- tryCatch(AddBuildingCounts(ODDy, i, paste0(dir, folder_write, 'Building_count_notes')), error=function(e) NULL)
     ODDy_build <- tryCatch(getBingBuildingsGlobal(ODDy, i, paste0(dir, folder_write, 'Building_count_notes')), error=function(e) NULL)
     if(is.null(ODDy_build)) {
+      #stop()
       file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
       writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', Building counts not added.'), file_conn)
       close(file_conn)
@@ -773,6 +788,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     ODDy_with_impact <- tryCatch(updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1], i),error=function(e) NULL)
     
     if(is.null(ODDy_with_impact)) {
+      #stop()
       file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
       writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', impact not added.'), file_conn)
       close(file_conn)
@@ -816,7 +832,29 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
   return(path)
 }
 
-rast <- rast('/home/manderso/Downloads/GEM-GSHM_PGA-475y-rock_v2023/v2023_1_pga_475_rock_3min.tif')
+# fill_missing_EQFreq <- function(ODD){
+#   ODD$EQFreq <- focal(ODD$EQFreq, fun="modal", na.policy="only")
+#   missing <- which(is.na(values(ODD$EQFreq)) & !is.na(values(ODD$Population)))
+#   if (length(missing) > 0){
+#     ODD$indexes <- 1:ncell(ODD)
+#     dists <- terra::distance(crds(ODD, na.rm=F)[missing,, drop=F], crds(ODD, na.rm=F)[!is.na(values(ODD$EQFreq)),])
+#     ODD$EQFreq[missing] = ODD$EQFreq[ODD$indexes[!is.na(values(ODD$EQFreq))][apply(dists,1, which.min),1]]
+#     ODD$indexes <- NULL
+#   }
+#   return(ODD)
+# }
+# 
+# input_folder <- 'IIDIPUS_Input_Alternatives/Aug24Agg/ODDobjects/'
+# output_folder <- 'IIDIPUS_Input_Alternatives/Aug24Agg/ODDobjects_EQFreqFull/'
+# fill_missing_EQFreq_all <- function(input_folder, output_folder){
+#   ufiles<-list.files(path=paste0(dir, input_folder),pattern=Model$haz,recursive = T,ignore.case = T)
+#   for (file in ufiles){
+#     ODDy <- readODD(paste0(dir,input_folder, file))
+#     ODDy %<>% fill_missing_EQFreq
+#     saveODD(ODDy, paste0(dir,output_folder, file))
+#   }
+# }
+
 
 
 

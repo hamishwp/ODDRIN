@@ -153,17 +153,21 @@ readODD <- function(path){
   .Object = new('ODD')
   ODD_list = readRDS(path)
   slotnames <- slotNames(.Object)
-  for (slot in slotnames[slotnames!='ptr']){
+  pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', 'pnt')
+  for (slot in slotnames[slotnames!=pointer_slot]){
     slot(.Object, slot) = ODD_list[[slot]]
   }
-  .Object@ptr = unwrap(ODD_list$spatrast)@ptr
+  slot(.Object, pointer_slot) <- slot(unwrap(ODD_list$spatrast), pointer_slot)
+  #.Object@ptr = unwrap(ODD_list$spatrast)@ptr
+  names(.Object)[which(names(.Object)=='VALUE')] = 'ISO3C' #sometimes error reading in factor layer
   return(.Object)
 }
 
 saveODD <- function(ODD, path){
   ODD_list = list()
   slotnames = slotNames(ODD)
-  for (slot in slotnames[slotnames!='ptr']){
+  pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', 'pnt')
+  for (slot in slotnames[slotnames!=pointer_slot]){
     ODD_list[[slot]] = slot(ODD, slot)
   }
   ODD_list$spatrast <- wrap(ODD)
@@ -387,8 +391,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   ODD_df <- as.data.frame(ODD, na.rm=F)
   
   #ODD_df$ISO3C <- levels(ODD[['ISO3C']])[[1]]$VALUE[ODD_df$ISO3C]
-  names(ODD_df)[which(names(ODD_df)=='VALUE')] = 'ISO3C' #sometimes error reading in factor layer
-  
+ 
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
   notnans<-which(!(is.na(ODD_df$Population) | is.na(ODD_df$ISO3C) | is.na(ODD_df$SHDI)))
 
@@ -427,6 +430,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   } else {
     eps_event <-  chol(covar_matrix) %*% t(Omega$u[event_i,,])
   }
+  
+  
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
 
@@ -662,13 +667,9 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   }
   
   if (output == 'ODDwithSampled'){ #usually used for generating simulated data
-    stop('Update for raster ODD object type')
-    ODD[['Disp']]<-Dam[,1,1]  
-    names(ODD)[length(names(ODD))] <- 'Disp'
-    ODD[['Mort']]<-Dam[,1,2]  
-    names(ODD)[length(names(ODD))] <- 'Mort'
-    ODD[['BuildDam']]<-Dam[,1,3]  
-    names(ODD)[length(names(ODD))] <- 'BuildDam'
+    ODD[['Disp']]<- Dam[,1,1]  
+    ODD[['Mort']]<- Dam[,1,2]
+    ODD[['BuildDam']] <- Dam[,1,3]  
     ODD@predictDisp<-funcy(1) 
     return(ODD)
   }

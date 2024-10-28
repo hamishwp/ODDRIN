@@ -95,7 +95,7 @@ diag(cov(samples))
 
 
 set.seed(1)
-simulateDataSet(167, Omega, Model, dir, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3/')
+simulateDataSet(167, Omega, Model, dir, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/')
 
 
 AlgoParams$smc_steps <- 2

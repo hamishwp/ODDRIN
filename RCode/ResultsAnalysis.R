@@ -89,8 +89,16 @@ plot_df_postpredictive_compare(df_postpredictive_sampled_true %>% filter(train_f
 # Real data results:
 
 AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
-plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
-#RealPosteriors.pdf, 7 x 9 inches
+plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(9,23)))#, c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
+#RealPosteriors.pdf, 5 x 10 inches
+
+
+#plot_vuln(AlgoResults)#, c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
+#RealPosteriors.pdf, 5 x 10 inches
+
+plot_vuln_posteriors(AlgoResults)
+#VulnPosteriors.pdf, 6.5 x 12 inches
+
 
 AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/'
 df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
@@ -133,7 +141,10 @@ for (i in c(16,)){
   print(paste('Post. prob of greater than 0:', sum(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish]>0)/length(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish])))
 }
 
+#MCMC Single:
 
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-10-21_120105_MCMC_RealAgg5_LR40_Rho0.9_adaptive')
+plot(AlgoResults$loss[100:which(!is.finite(AlgoResults$loss))[1]], type='l')
 
 #SMC:
 AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-10-01_223810_alphaAdaptivePropCOV0.2_M100_Npart1000SimInput')

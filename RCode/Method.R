@@ -1664,7 +1664,7 @@ correlated_AMCMC2 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
                                     proposed = proposed, 
                                     AlgoParams = AlgoParams)
       loss_prop <- CalcDist(impact_sample, AlgoParams)[1]
-      print(paste(s, loss_prop))
+      print(paste(2, loss_prop))
       
       #calculate the acceptance probability:
       #print(modifyAcc(Omega_prop, Omega_sample_s[n,], Model))
@@ -1812,7 +1812,8 @@ retrieve_UnfinishedAlgoResults_AMCMC3 <- function(dir, oldtag, AlgoResults){
   AlgoResults$Omega_sample[,1:s_finish] <- AlgoResults_unfinished$Omega_sample[,1:s_finish]
   AlgoResults$Omega_sample_phys[,1:s_finish] <- AlgoResults_unfinished$Omega_sample_phys[,1:s_finish]
   AlgoResults$loss[1:s_finish] = AlgoResults_unfinished$loss[1:s_finish] 
-  AlgoResults$u[,,,1:s_finish] = AlgoResults_unfinished$u[,,,1:s_finish] 
+  AlgoResults$u = AlgoResults_unfinished$u
+  AlgoResults$u_selected[,1:s_finish] = AlgoResults_unfinished$u_selected[,1:s_finish] 
   AlgoResults$tolerancestore[1:s_finish] <- AlgoResults_unfinished$tolerancestore[1:s_finish]
   AlgoResults$essstore[1:s_finish] <- AlgoResults_unfinished$essstore[1:s_finish]
   AlgoResults$lambda_store[1:s_finish] <- AlgoResults_unfinished$lambda_store[1:s_finish]
@@ -1941,7 +1942,7 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
                                     proposed = proposed, 
                                     AlgoParams = AlgoParams)
       loss_prop <- CalcDist(impact_sample, AlgoParams)[1]
-      print(paste(s, loss_prop))
+      print(paste(2, loss_prop))
       
       #calculate the acceptance probability:
       #print(modifyAcc(Omega_prop, Omega_sample_s[n,], Model))
@@ -1955,8 +1956,8 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
         AlgoResults$Omega_sample[,2] = Omega_prop
         AlgoResults$Omega_sample_phys[,2] = unlist(Omega_prop_phys)
         AlgoResults$loss[2] = loss_prop
-        AlgoResults$u[,,,2] = u_prop
-        AlgoResults$u_selected[,2] = c(u_prop[1,1,1],u_prop[2,2,2],u_prop[3,3,3])
+        AlgoResults$u[,,,2] = proposed$u
+        AlgoResults$u_selected[,2] = c(proposed$u[1,1,1],proposed$u[2,2,2],proposed$u[3,3,3])
       }  else {
         #REJECT
         AlgoResults$Omega_sample[,2] = AlgoResults$Omega_sample[,1]
@@ -1995,7 +1996,7 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     
     Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[,s-1], propPars= c * AlgoResults$lambda_store[s-1] * AlgoResults$Sigma_store[,,s-1]) #perturb the proposal
     Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
-    epsilon <- rnorm(length(AlgoResults$u[,,,s-1]))
+    epsilon <- rnorm(length(AlgoResults$u[,,,ifelse((s-1) %% 3==0, 3, (s-1)%%3)]))
     u_prop <- AlgoParams$rho * c(AlgoResults$u[,,,ifelse((s-1) %% 3==0, 3, (s-1)%%3)]) + sqrt(1-AlgoParams$rho^2) * epsilon
     
     HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
@@ -2026,8 +2027,8 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
         AlgoResults$Omega_sample[,s] = Omega_prop
         AlgoResults$Omega_sample_phys[,s] = unlist(Omega_prop_phys)
         AlgoResults$loss[s] = loss_prop
-        AlgoResults$u[,,,ifelse(s %% 3==0, 3, s%%3)] = u_prop
-        AlgoResults$u_selected[,s] =  c(u_prop[1,1,1],u_prop[2,2,2],u_prop[3,3,3])
+        AlgoResults$u[,,,ifelse(s %% 3==0, 3, s%%3)] = proposed$u
+        AlgoResults$u_selected[,s] =  c(proposed$u[1,1,1],proposed$u[2,2,2],proposed$u[3,3,3])
       }  else {
         AlgoResults$Omega_sample[,s] = AlgoResults$Omega_sample[,s-1]
         AlgoResults$Omega_sample_phys[,s] = AlgoResults$Omega_sample_phys[,s-1]

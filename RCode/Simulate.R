@@ -320,22 +320,24 @@ setMethod(f="initialize", signature="BDSim",
             .Object@I0<-ODD@I0
             .Object@hazdates<-ODD@hazdates
             .Object@eventid<-ODD@eventid
+            .Object@hazinfo<-ODD@hazinfo
+            
             #.Object@fIndies<-ODD@fIndies
             
             .Object@buildingsfile<-paste0("./IIDIPUS_Input/OSM_Buildings_Objects/",unique(ODD@eventid)[1])
             
             Damage = data.frame(Latitude=double(),Longitude=double(), grading=character(), Confidence=character())
-            cells_with_sat <- sample(1:NROW(ODD@coords), runif(1,3,20))
+            cells_with_sat <- sample(1:nrow(crds(ODD)), min(runif(1,3,20), nrow(crds(ODD))))
             
             for (ij in cells_with_sat){
-              lonmin <- ODD@coords[ij,'Longitude']-ODD@grid@cellsize['Longitude']/2
-              latmin <- ODD@coords[ij,'Latitude']-ODD@grid@cellsize['Latitude']/2
-              lonmax <- ODD@coords[ij,'Longitude']+ODD@grid@cellsize['Longitude']/2
-              latmax <- ODD@coords[ij,'Latitude']+ODD@grid@cellsize['Latitude']/2
+              lonmin <- crds(ODD)[ij,1]-res(ODD)[1]/2
+              latmin <- crds(ODD)[ij,2]-res(ODD)[2]/2
+              lonmax <- crds(ODD)[ij,1]+res(ODD)[1]/2
+              latmax <- crds(ODD)[ij,2]+res(ODD)[2]/2
               if(ODD$nBuildings[ij] == 0){
                 next
               }
-              for (k in 1:min(20, ODD$nBuildings[ij])){ #avoid having more than 20 buildings per grid in simulated data
+              for (k in 1:min(100, as.numeric(ODD$nBuildings[ij]))){ #avoid having more than 200 buildings per grid in simulated data
                                                         #to keep the computational requirements low
                 Damage %<>% add_row(
                   Longitude = runif(1,lonmin, lonmax),
@@ -347,26 +349,33 @@ setMethod(f="initialize", signature="BDSim",
             }
             
             print("Forming SpatialPointsDataFrame from building damage data")
-            Damage<-SpatialPointsDataFrame(coords = Damage[,c("Longitude","Latitude")],
-                                           data = Damage[,c("grading","Confidence")],
-                                           proj4string = ODD@proj4string)
+            # Damage<-SpatialPointsDataFrame(coords = Damage[,c("Longitude","Latitude")],
+            #                                data = Damage[,c("grading","Confidence")],
+            #                                proj4string = ODD@proj4string)
             
-            .Object@data <- Damage@data
-            .Object@coords.nrs <-Damage@coords.nrs
-            .Object@coords <-Damage@coords
-            .Object@bbox <-Damage@bbox
-            .Object@proj4string <-Damage@proj4string #crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            Damage <- vect(x=as.matrix(Damage[,c('Longitude', 'Latitude')]), type='points',
+                           atts = Damage[, c('grading', 'Confidence')], crs=crs(ODD))
+            
+            .Object@ptr <- Damage@ptr
+           
+            # .Object@data <- Damage@data
+            # .Object@coords.nrs <-Damage@coords.nrs
+            # .Object@coords <-Damage@coords
+            # .Object@bbox <-Damage@bbox
+            # .Object@proj4string <-Damage@proj4string #crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             rm(Damage)
             
             print("Interpolating population density, hazard & GDP-PPP data")
-            ODD$spatial_pixel <- 1:NROW(ODD)
+            ODD[['spatial_pixel']] <- 1:ncell(ODD)
             .Object%<>%BDinterpODD(ODD=ODD)
             
             print("Filter spatial data per country")
             # We could just copy Damage$iso3 directly, but I don't believe in anyone or anything...
-            if(NROW(.Object@data)>0) .Object@data$ISO3C<-coords2country(.Object@coords)
+            .Object$ISO3C<-coords2country(crds(.Object))
             
-            print("Accessing OSM to sample building height & area")
+            .Object@cIndies <- ODD@cIndies
+            
+            #print("Accessing OSM to sample building height & area")
             # ExtractOSMbuildVol(.Object,ODD)
             
             # linp<-rep(list(0.),length(unique(ODD@cIndies$iso3)))
@@ -649,10 +658,16 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
                   "_",ODDSim@eventid)
     # Save out objects to save on RAM
     ODDpath<-paste0(dir,folder_write, "ODDobjects/",namer)
-    saveRDS(ODDSim,ODDpath)
+    saveODD(ODDSim,ODDpath)
     
-    #BDpath<-paste0(dir,folder_write,"BDobjects/",namer) 
-    #saveRDS(BDSim,BDpath)
+    if (runif(1) < 0.2){ #create BD object with 20% probability
+      BDSim <- new('BDSim', ODDSim)
+      
+      BDpath<-paste0(dir,folder_write,"BDobjects/",namer) 
+      saveBD(BDSim,BDpath)
+    }
+   
+    
     print(paste0('Saved simulated hazard to ', namer))
   }
   
@@ -665,8 +680,8 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   intensities <- c() #store eq intensities
   #now loop through each event and simulate the displacement, mortality, and building destruction using DispX()
   for(i in 1:length(ODDpaths)){
-    ODDSim <- readRDS(paste0(folder_write,"ODDobjects/",ODDpaths[i]))
-    intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
+    ODDSim <- readODD(paste0(folder_write,"ODDobjects/",ODDpaths[i]))
+    intensities <- append(intensities, max(values(ODDSim[[grep('hazMean', names(ODDSim))]]), na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
     ODDSim %<>% DispX(Omega %>% addTransfParams(), Model$center, output='ODDwithSampled',
                       Method=list(Np=1,cores=1, NestedCores=1))
@@ -676,7 +691,8 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     ODDSim@impact %<>% dplyr::select(-sampled)
     
     #overwrite ODDSim with the updated
-    saveRDS(ODDSim, paste0(folder_write, "ODDobjects/",ODDpaths[i]))
+    saveODD(ODDSim, paste0(folder_write, "ODDobjects/",ODDpaths[i]))
+    
     # if (i < 100){
     #   saveRDS(ODDSim, paste0("IIDIPUS_Input/ODDobjects/Train/",ODDpaths[i]))
     # } else {
@@ -684,21 +700,21 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     # }
     
   }
-  # for (i in 1:length(BDpaths)){
-  #   BDSim <- readRDS(paste0(folder_write,"BDobjects/", BDpaths[i]))
-  #   BDSim %<>% BDX(Omega %>% addTransfParams(), Model, Method=list(Np=1,cores=1), output='sim')
-  #   #take these simulations as the actual values
-  #   BDSim@data$grading <- BDSim@data$ClassPred
-  #   #switch those affected to 'Damaged' with probability 0.5
-  #   affected <- which(BDSim@data$grading != 'notaffected')
-  #   for (j in affected){
-  #     BDSim@data$grading[j] = ifelse(runif(1)>0.5, BDSim@data$grading[j], 'Damaged')
-  #   }
-  #   if(NROW(BDSim@data)>100){
-  #     BDSim@data <- BDSim@data[1:100,]
-  #   }
-  #   saveRDS(BDSim,paste0(folder_write, "BDobjects/",BDpaths[i]))
-  # }
+  for (i in 1:length(BDpaths)){
+    BDSim <- readBD(paste0(folder_write,"BDobjects/", BDpaths[i]))
+    BDSim %<>% BDX(Omega %>% addTransfParams(), Model, Method=list(Np=1,cores=1), output='sim')
+    #take these simulations as the actual values
+    #BDSim@data$grading <- BDSim@data$ClassPred
+    #switch those affected to 'Damaged' with probability 0.5
+    # affected <- which(BDSim@data$grading != 'notaffected')
+    # for (j in affected){
+    #   BDSim@data$grading[j] = ifelse(runif(1)>0.5, BDSim@data$grading[j], 'Damaged')
+    # }
+    # if(NROW(BDSim@data)>100){
+    #   BDSim@data <- BDSim@data[1:100,]
+    # }
+    saveBD(BDSim,paste0(folder_write, "BDobjects/",BDpaths[i]))
+  }
   
   if (outliers){
     #double the impact of the highest intensity earthquake

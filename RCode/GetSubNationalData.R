@@ -566,6 +566,9 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
   
   if(print_to_xl){wb <- createWorkbook()}
   
+  haz_max <- apply(as.data.frame(ODDy[[grep('hazMean', names(ODDy))]], na.rm=F), 1, max, na.rm=T)
+  exposed_cells <-which(haz_max > 4.5)
+  
   for (j in 1:length(impacts_split)){
     print(j)
     if(print_to_xl){sheet <- addWorksheet(wb, impacts_split[[j]]$impact[1])}
@@ -606,10 +609,14 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
             iso3_incl %<>% append(impacts_split[[j]]$iso3[k])
           }
         }
-        non_na_iso3 <-unique(ODDy$ISO3C)$ISO3C[which(!is.na(unique(ODDy$ISO3C)$ISO3C))]
+
+        non_na_iso3 <-unique(ODDy$ISO3C[exposed_cells])$ISO3C[which(!is.na(unique(ODDy$ISO3C[exposed_cells])$ISO3C))]
         iso3_missing <- non_na_iso3[which(!(non_na_iso3 %in% iso3_incl))]
         for (iso3_miss in iso3_missing){
+          max_exposed_int = max(haz_max[which(values(ODDy[['ISO3C']]==iso3_miss))], na.rm=T)
           writeData(wb, sheet, iso3_miss, startCol = 1, startRow = row)
+          writeData(wb, sheet, max_exposed_int, startCol = 2, startRow = row)
+          writeData(wb, sheet, length(which(values(ODDy[['ISO3C']]==iso3_miss)[exposed_cells])), startCol = 3, startRow = row)
           row = row + 1
           noteworthy=T
         }
@@ -617,10 +624,11 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
       }
       
       #check if there are any pixels not covered by the polygons:
-      pixels_unallocated <- which(!is.na(values(ODDy[['ISO3C']])))
+      pixels_unallocated <- intersect(which(values(!is.na(ODDy[['ISO3C']]))), exposed_cells)
       for (k in 1:NROW(impacts_split[[j]])){
         if (gadm_levels[k] == gadm_level)
-          pixels_unallocated <- setdiff(pixels_unallocated, ODDy@polygons[[impacts_split[[j]]$polygon[k]]]$indexes)
+          pixels_in_poly <- ODDy@polygons[[impacts_split[[j]]$polygon[k]]]$indexes
+          pixels_unallocated <- setdiff(pixels_unallocated, pixels_in_poly)
       }
       if (length(pixels_unallocated) == 0){
         next
@@ -658,10 +666,11 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
           #                                                   data=ODDy@data[pixels_unallocated,1:2, drop=F], #this is arbitrary, function just seems to require data
           #                                                   proj4string=r_poly@proj4string)
           
-          contained <- c(st_contains(sf_pixels_unallocated, st_make_valid(st_as_sf(r_poly)), sparse=F)) #gContains(r_poly, spdf_pixels_unallocated, byid=T)
-          
+          contained <- c(st_intersects(sf_pixels_unallocated, st_make_valid(st_as_sf(r_poly)), sparse=F)) #gContains(r_poly, spdf_pixels_unallocated, byid=T)
           if (any(contained)){
             print(paste('Polygon', r, 'contains an unallocated pixel'))
+            max_exposed_int <- max(haz_max[pixels_unallocated[which(contained)]], na.rm=T)
+            n_pixels <- length(which(contained))
             pixels_unallocated <- pixels_unallocated[-which(contained)]
             if(print_to_xl){ 
               r <- rev(r)
@@ -669,6 +678,8 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
               for (ll in 1:length(r)){
                 writeData(wb, sheet, r[ll], startCol = ll+1, startRow = row)
               }
+              writeData(wb, sheet, max_exposed_int, startCol = ll+2, startRow = row)
+              writeData(wb, sheet, n_pixels, startCol = ll+3, startRow = row)
               row = row + 1
               noteworthy=T
             }
@@ -679,7 +690,7 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
   }
   
   if (print_to_xl & noteworthy) {
-    file_path <- paste0(dir, folder_write, "Missing Regions/Event_", i, ".xlsx")
+    file_path <- paste0(dir, folder_write, "MissingRegions2/Event_", i, ".xlsx")
     
     # Check if the file exists and delete it if so
     if (file.exists(file_path)) {
@@ -832,6 +843,29 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
   return(path)
 }
 
+additional_poly_check_all <- function(input_folder='IIDIPUS_Input_Alternatives/Aug24/ODDobjects/'){
+  ufiles<-list.files(path=paste0(dir, input_folder),pattern=Model$haz,recursive = T,ignore.case = T)
+  for (file in ufiles){
+     print(file)
+     i <- as.numeric(regmatches(file, gregexpr("[0-9]+", file))[[1]][2])
+     #if (!(i %in% c(1,16,22,68, 70, 89, 127, 138, 149))){
+     if (!(i %in% c(16))){
+       next
+     }
+     ODDy <- readODD(paste0(dir,input_folder, file))
+     ODDy_with_impact <- tryCatch(updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1], i),error=function(e) NULL)
+     if (is.null(ODDy_with_impact)) stop()
+     
+     ODDy <- ODDy_with_impact
+     
+     additional_poly_check(ODDy, i, print_to_xl=T)
+     
+     saveODD(ODDy, paste0(dir, input_folder, file, '_MAR'))
+  }
+}
+
+
+
 # fill_missing_EQFreq <- function(ODD){
 #   ODD$EQFreq <- focal(ODD$EQFreq, fun="modal", na.policy="only")
 #   missing <- which(is.na(values(ODD$EQFreq)) & !is.na(values(ODD$Population)))
@@ -858,29 +892,30 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
 
 
 
-moveTestData <- function(folder_in='IIDIPUS_Input'){
-  ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
-  ODD_foldertest<-paste0(dir, folder_in, '/ODDobjects/Test/')
-  ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
-  i <- 0
-  for (file in ufiles){
-    i <- i + 1
-    if (i %%3 != 0){next}
-    file.copy(from = paste0(ODD_folderall, file),
-              to = paste0(ODD_foldertest, file))
-    file.remove(from = paste0(ODD_folderall, file))
-  }
-  BD_folderall<-paste0(dir, folder_in, '/BDobjects/')
-  BD_foldertest<-paste0(dir, folder_in, '/BDobjects/Test/')
-  ufiles<-list.files(path=BD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
-  i <- 0
-  for (file in ufiles){
-    i <- i + 1
-    if (i %%3 != 0){next}
-    file.copy(from = paste0(BD_folderall, file),
-              to = paste0(BD_foldertest, file))
-    file.remove(from = paste0(BD_folderall, file))
-  }
+moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/Aug24Agg/'){
+    ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
+    ODD_foldertest<-paste0(dir, folder_in, '/ODDobjects/Test/')
+    ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
+    ufiles <- ufiles[order(ufiles)] # sort by date
+    i <- 0
+    for (file in ufiles){
+      i <- i + 1
+      if (i %%3 != 0){next}
+      file.copy(from = paste0(ODD_folderall, file),
+                to = paste0(ODD_foldertest, file))
+      file.remove(from = paste0(ODD_folderall, file))
+    }
+  # BD_folderall<-paste0(dir, folder_in, '/BDobjects/')
+  # BD_foldertest<-paste0(dir, folder_in, '/BDobjects/Test/')
+  # ufiles<-list.files(path=BD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
+  # i <- 0
+  # for (file in ufiles){
+  #   i <- i + 1
+  #   if (i %%3 != 0){next}
+  #   file.copy(from = paste0(BD_folderall, file),
+  #             to = paste0(BD_foldertest, file))
+  #   file.remove(from = paste0(BD_folderall, file))
+  # }
 }
 
 

@@ -200,7 +200,15 @@ plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
   post_samples <- AlgoResults$Omega_sample_phys[,,AlgoResults$s_finish]
   if (include_priors) prior_samples <- AlgoResults$Omega_sample_phys[,,1]
   
-  par(mfrow=c(3,4), mai = c(0.6, 0.7, 0.2, 0.1))
+
+  if(NROW(pairings)>7){
+    par(mfrow=c(3,4), mai = c(0.6, 0.7, 0.2, 0.1), family='Liberation Serif', cex.lab=1.25)
+    subfig_title_adj = -0.4
+  }
+  else {
+    par(mfrow=c(2,4), mai = c(0.6, 0.7, 0.2, 0.1), family='Liberation Serif', cex.lab =1.25)
+    subfig_title_adj = -0.4
+  }
   for (p in 1:NROW(pairings)){
     xmin= min(post_samples[,pairings[p,1]]); xmax= max(post_samples[,pairings[p,1]])
     ymin= min(post_samples[,pairings[p,2]]); ymax= max(post_samples[,pairings[p,2]])
@@ -225,9 +233,72 @@ plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
       points(unlist(Omega)[pairings[p,1]], unlist(Omega)[pairings[p,2]], col='red', pch=4, cex=1.5, lwd=2.5)
     }
     subfig_label <- c('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l')[p]
-    mtext(paste0('(', subfig_label, ')'), side = 3, line = 0, adj = -0.4, cex = 1, font = 1)
+    mtext(paste0('(', subfig_label, ')'), side = 3, line = 0, adj = subfig_title_adj, cex = 1, font = 1)
   }
   par(mfrow=c(1,1), mai=c(1,1,1,1))
+}
+
+plot_vuln_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
+                                      pairings=rbind(c(1,2), c(3,4), c(5,6), c(7,8), c(9,10), c(11,12)), s_finish=NULL){
+  
+  AlgoResults %<>% addAlgoParams(s_finish)
+  post_samples <- AlgoResults$Omega_sample_phys[,,AlgoResults$s_finish]
+  if (include_priors) prior_samples <- AlgoResults$Omega_sample_phys[,,1]
+  
+  vuln_var <- grep('vuln', names(unlist(Model$skeleton)))
+
+  vuln_var <- vuln_var[c(4,1,2,3,5,6,7,8)]
+  plot_list <- list()
+  
+  # Define subfigure labels (a), (b), (c), ...
+  subfig_labels <- letters[1:8]
+  
+  # Loop through the variables and generate each plot
+  for (i in seq_along(vuln_var)) {
+    var <- vuln_var[i]
+    
+    p_H_given_y = sum(post_samples[,var]>0)/length(post_samples[,var])
+    p_H = sum(prior_samples[,var]>0)/length(prior_samples[,var])
+    print(paste('Bayes factor for', names(unlist(Model$skeleton))[var], ':', round(p_H_given_y * (1-p_H)/((1-p_H_given_y)*p_H), 3)))
+    
+    
+    # Create each plot and store it in the plot_list
+    plot <- ggplot() +
+      # Add the histogram from the posterior samples
+      geom_histogram(aes(x = post_samples[, var], y = ..density..), 
+                     bins = 30, fill = "lightgrey", color='black', lwd=0.5) +
+      geom_density(aes(x = prior_samples[, var]), color = "blue", size = 0.7) +
+      geom_vline(xintercept = 0, color = "red", linetype = "dashed", size = 0.7) +
+      scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+      labs(x = get_greek_titles(names(unlist(Model$skeleton))[var])) +
+      xlim(c(-0.5, 0.5)) +
+      theme_minimal() +
+      theme(
+        axis.title.y = element_blank(),  # Change y-axis title font
+        axis.text.x = element_text(family = "Times New Roman", size = 12),   # Change x-axis text font
+        axis.text.y = element_blank(),  # Remove y-axis text (numbers)
+        axis.ticks.y = element_blank(), # Remove y-axis ticks
+        axis.title.x = element_text(family = "Times New Roman", size = 12),  # Change x-axis title font
+        plot.title = element_text(family = "Times New Roman", size = 14),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+        plot.margin = unit(c(0, 20, 0, 15), "pt")
+      )
+    
+    # Add subfigure label to each plot
+    plot_with_label <- arrangeGrob(plot, #padding = unit(c(0, 20), "pt"),
+                                   top = textGrob(paste0("(", subfig_labels[i], ")"),
+                                                  x = unit(0.0, "npc"), y = unit(1, "npc"), just = c("left", "top"),
+                                                  gp = gpar(fontsize = 14, fontfamily = "Times New Roman"))
+    )
+    
+    # Store the labeled plot in the list
+    plot_list[[i]] <- plot_with_label
+  }
+  
+  # Arrange all 8 plots in a 2x4 grid
+  grid.arrange(grobs = plot_list, ncol = 4, nrow = 2)
+  
+
 }
 
 

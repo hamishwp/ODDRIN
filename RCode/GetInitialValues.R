@@ -63,9 +63,11 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   # }
   # mean(EQfreqs)
   # sd(EQfreqs)
-  
-  EQFreq_mean <- 2.787371 # mean(EQfreqs) #2.568421 #mean(log(pga_vals+1)[which(pga_vals > 0.01)]) 5.411167 # mean(pga$PGA, na.rm=T) 
-  EQFreq_sd <- 1.573848 # sd(EQfreqs) #1.860136 #sd(log(pga_vals+1)[which(pga_vals > 0.01)]) 2.918439 # sd(pga$PGA, na.rm=T)
+  #pga <- rast(paste0(dir,"Hazard_Data/GEM-GSHM_PGA-475y-rock_v2023/v2023_1_pga_475_rock_3min.tif"))
+  #pga_vals <- values(pga)
+  pga_vals_nonzero <- pga_vals[pga_vals>0]
+  EQFreq_mean <- -3.123102 #mean(log(pga_vals_nonzero+0.001), na.rm=T) # mean(EQfreqs) #2.568421 #mean(log(pga_vals+1)[which(pga_vals > 0.01)]) 5.411167 # mean(pga$PGA, na.rm=T) 
+  EQFreq_sd <- 1.223276 #sd(log(pga_vals_nonzero+0.001), na.rm=T) # sd(EQfreqs) #1.860136 #sd(log(pga_vals+1)[which(pga_vals > 0.01)]) 2.918439 # sd(pga$PGA, na.rm=T)
   
   #mean and sd of magnitudes in data (max magnitude taken from each event)
   Mag_mean <- 6.187425

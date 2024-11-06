@@ -594,22 +594,34 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     df_SampledTot <- list()
     impact_types <- unique(ODD@impact$impact)
     
+    for (impact_type in impact_types){
+      polygon_names <- unlist(lapply(ODD@polygons[ODD@impact$polygon], function(x) x$name))
+      if (any(tolower(polygon_names[which(ODD@impact$impact==impact_type)]) %in% c('tot', 'total'))){
+        nonmatch <- which(!tolower(polygon_names[which(ODD@impact$impact==impact_type)]) %in% c('tot', 'total'))
+        if (length(nonmatch)>0){
+          ODD@impact <- ODD@impact[-which(ODD@impact$impact==impact_type)[nonmatch],] # in the case of total and subnational data, remove the subnational
+        }
+      }
+    }
+    
     #Many ODD objects don't contain 'total' impact values (to avoid double counting), so we need to obtain these. 
     #We combine the polygons with observations so long as the proportion of overlapping pixels is less than 10%
     #and the total coverage of the exposed area is greater than 90%. Then sum the observations across these polygons.
     observed_total=rep(NA, length(impact_types))
+    exposed_haz <- which(apply(ODD_df[,grep('hazMean', names(ODD_df)), drop=F], 1, function(row) any(!is.na(row))) & !is.na(ODD_df$ISO3C))
     get_overlap_coverage <- function(impact_type){
       indexes_list <- lapply(ODD@polygons[ODD@impact$polygon[which(ODD@impact$impact==impact_type)]], function(x) x$indexes)
       universal_set <- Reduce(union, indexes_list)
       overlap <- Reduce(intersect, indexes_list)
+      overlap <- intersect(overlap, exposed_haz)
       prop_overlap <- ifelse(length(indexes_list)>1,length(overlap)/length(universal_set),0)
-      prop_coverage <- length(unique(universal_set))/sum(!is.na(ODD_df$ISO3C))
+      prop_coverage <- length(intersect(unique(universal_set), exposed_haz))/length(exposed_haz)#sum(!is.na(ODD_df$ISO3C))
       return(c(prop_overlap, prop_coverage))
     }
     
     overlap_coverage <- sapply( impact_types,get_overlap_coverage)
-    
-    for (i in 1:length(observed_total)){
+      
+    for (i in 1:length(impact_types)){
       observed_total[i] = sum(ODD@impact$observed[which(ODD@impact$impact==impact_types[i])])
     }
   

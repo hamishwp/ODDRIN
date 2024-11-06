@@ -197,7 +197,7 @@
 aggregateODDbyX <- function(ODD, aggFactor){
   
   #ODDAgg <- new('ODD')
-  ODDAgg <- aggregate(ODD[['Population']], aggFactor, fun='sum')
+  ODDAgg <- aggregate(ODD[['Population']], aggFactor, fun='sum', na.rm=T)
   # ODDAggPop <- #brick(stack(ODDAggPop, aggregate(ODD[['ISO3C']], aggFactor, fun='aggregateISO3C')))
   # ODDAgg@file <- ODDAggPop@file
   # ODDAgg@data <- ODDAggPop@data
@@ -224,12 +224,12 @@ aggregateODDbyX <- function(ODD, aggFactor){
   if ('nBuildings' %in% names(ODD)) sum_vars <- c(sum_vars, 'nBuildings')
   
   for (var_name in sum_vars){
-    ODDAgg[[var_name]] <- aggregate(ODD[[var_name]], aggFactor, fun='sum')
+    ODDAgg[[var_name]] <- aggregate(ODD[[var_name]], aggFactor, fun='sum', na.rm=T)
   }
   for (var_name in names(ODD)){
     print(var_name)
     if (var_name %in% sum_vars | var_name == 'Population' | var_name=='ISO3C') next
-    ODDAgg[[var_name]] <- aggregate(ODD[[var_name]], aggFactor, fun='mean')
+    ODDAgg[[var_name]] <- aggregate(ODD[[var_name]], aggFactor, fun='mean', na.rm=T)
   }
   
   ODDAgg[['ISO3C']] <- aggregate(ODD[['ISO3C']], aggFactor, fun='modal', na.rm=T)
@@ -310,8 +310,9 @@ increaseAggregation_all <- function(folder_in='IIDIPUS_Input_Alternatives/Aug24'
   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
   ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_Agg5/')
   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-  for (file in ufiles[c(39)]){
+  for (file in ufiles){
     event_id <- as.numeric(strsplit(file, "_")[[1]][2])
+    if (!(event_id %in% c(1,2, 16,22,23,31, 59, 68,70,89,94,98,101,106,117,124,127,135,136,138,140,149))) next
     print(event_id)
     ODDy <- readODD(paste0(ODD_folderin, file))
     ODDyAgg <- tryCatch(aggregateODDbyX(ODDy, 5),error=function(e) NULL)

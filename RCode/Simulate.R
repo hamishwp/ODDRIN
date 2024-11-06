@@ -124,11 +124,11 @@ setMethod(f="initialize", signature="ODDSim",
               }
               ncol <- NCOL(indexes_matrix); nrow=NROW(indexes_matrix)
               
-              break.pts_col <- sort(sample(1:ncol, n_col_groups - 1, replace = FALSE))
+              break.pts_col <- sort(sample(1:(ncol-1), n_col_groups - 1, replace = FALSE))
               break.len_col <- diff(c(0, break.pts_col, ncol))
               groups_col <- rep(1:n_col_groups, times = break.len_col)
               
-              break.pts_row <- sort(sample(1:nrow, n_row_groups - 1, replace = FALSE))
+              break.pts_row <- sort(sample(1:(nrow-1), n_row_groups - 1, replace = FALSE))
               break.len_row <- diff(c(0, break.pts_row, nrow))
               groups_row <- rep(1:n_row_groups, times = break.len_row)
               for (i in 1:n_polygons){
@@ -327,7 +327,7 @@ setMethod(f="initialize", signature="BDSim",
             .Object@buildingsfile<-paste0("./IIDIPUS_Input/OSM_Buildings_Objects/",unique(ODD@eventid)[1])
             
             Damage = data.frame(Latitude=double(),Longitude=double(), grading=character(), Confidence=character())
-            cells_with_sat <- sample(1:nrow(crds(ODD)), min(runif(1,3,20), nrow(crds(ODD))))
+            cells_with_sat <- sample(1:nrow(crds(ODD)), min(runif(1,30,500), nrow(crds(ODD))))
             
             for (ij in cells_with_sat){
               lonmin <- crds(ODD)[ij,1]-res(ODD)[1]/2
@@ -337,15 +337,14 @@ setMethod(f="initialize", signature="BDSim",
               if(ODD$nBuildings[ij] == 0){
                 next
               }
-              for (k in 1:min(100, as.numeric(ODD$nBuildings[ij]))){ #avoid having more than 200 buildings per grid in simulated data
-                                                        #to keep the computational requirements low
-                Damage %<>% add_row(
-                  Longitude = runif(1,lonmin, lonmax),
-                  Latitude = runif(1, latmin, latmax),
-                  grading = NA, 
-                  Confidence = NA
-                )
-              }
+              k <- min(250,ceiling(as.numeric(ODD$nBuildings[ij])/8)) #avoid having more than 250 buildings per grid in simulated data
+                                                                     #to keep the computational requirements low
+              Damage %<>% add_row(
+                Longitude = runif(k,lonmin, lonmax),
+                Latitude = runif(k, latmin, latmax),
+                grading = NA, 
+                Confidence = NA
+              )
             }
             
             print("Forming SpatialPointsDataFrame from building damage data")
@@ -660,7 +659,8 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     ODDpath<-paste0(dir,folder_write, "ODDobjects/",namer)
     saveODD(ODDSim,ODDpath)
     
-    if (runif(1) < 0.2){ #create BD object with 20% probability
+    max_haz <- max(values(ODDSim[[grep('hazMean', names(ODDSim))]]), na.rm=T)
+    if (runif(1) < 0.2 & max_haz > 6 & max_haz < 9){ #create BD object with 20% probability
       BDSim <- new('BDSim', ODDSim)
       
       BDpath<-paste0(dir,folder_write,"BDobjects/",namer) 
@@ -728,6 +728,19 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     saveRDS(ODDSim, paste0(folder_write, "ODDobjects/",ODDpaths[i]))
   }
   return(Model$center)
+}
+
+remakeBDSim <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/', folder_out='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/'){
+  
+  ufiles<-list.files(path=paste0(dir, folder_in, 'BDobjects/'),pattern=Model$haz,recursive = T,ignore.case = T) 
+  
+  for (file in ufiles){
+    ODDSim <- readODD(paste0(dir, folder_in, 'ODDobjects/', file))
+    BDSim <- new('BDSim', ODDSim)
+    BDpath<-paste0(dir,folder_out,"BDobjects/",file) 
+    saveBD(BDSim,BDpath)
+  }
+  
 }
 
 perturb_impacts <- function(d=1900, AlgoParams){
@@ -917,37 +930,125 @@ plotODDy_sim <- function(ODDy, zoomy=7,var="Population",breakings=NULL,bbox=NULL
   
 }
 
-plot_sim_event <- function(ODDy){
-  #ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput2/ODDobjects/Train/EQ20120115ABC_1')
-  # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130409ABC_-3')
-  # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130416ABC_-4')
-  # 
-  plot_with_haz_legend <- plotODDy_sim(ODDy, var='Population', haz_legend=T, var_legend=F) + coord_fixed()+
-    theme(legend.position="bottom", legend.key.size = unit(15, 'pt'),
-          legend.key.width= unit(30, 'pt'),
-          legend.text = element_text(margin = margin(t=2, r = 10)))
-  haz_legend <- get_plot_component(plot_with_haz_legend, 'guide-box', return_all=T)[[3]]
-  
-  plots_all <- plot_grid( plotODDy_sim(ODDy, var='Population') + coord_fixed(),
-                          plotODDy_sim(ODDy, var='nBuildings') + coord_fixed(), 
-                          plotODDy_sim(ODDy, var='SHDI') + coord_fixed(), 
-                          plotODDy_sim(ODDy, var='Vs30') + coord_fixed(), 
-                          plotODDy_sim(ODDy, var='BuildDam') + coord_fixed(),
-                          plotODDy_sim(ODDy, var='BuildDamAgg', discrete=T) + coord_fixed(), 
-                          nrow=2, rel_heights=c(1,1), align='v', labels = c('(a)', '(b)', '(c)', '(d)', '(e)', '(f)'),
-                          label_fontface = "plain")
-  
-  plots_with_legend <- plot_grid(plots_all, haz_legend, nrow=2, rel_heights=c(1,0.1))
-  plots_with_legend
-}
+#Spatial pixels data frame:
+# plot_sim_event <- function(ODDy){
+#   #ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput2/ODDobjects/Train/EQ20120115ABC_1')
+#   # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130409ABC_-3')
+#   # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130416ABC_-4')
+#   # 
+#   plot_with_haz_legend <- plotODDy_sim(ODDy, var='Population', haz_legend=T, var_legend=F) + coord_fixed()+
+#     theme(legend.position="bottom", legend.key.size = unit(15, 'pt'),
+#           legend.key.width= unit(30, 'pt'),
+#           legend.text = element_text(margin = margin(t=2, r = 10)))
+#   haz_legend <- get_plot_component(plot_with_haz_legend, 'guide-box', return_all=T)[[3]]
+#   
+#   plots_all <- plot_grid( plotODDy_sim(ODDy, var='Population') + coord_fixed(),
+#                           plotODDy_sim(ODDy, var='nBuildings') + coord_fixed(), 
+#                           plotODDy_sim(ODDy, var='SHDI') + coord_fixed(), 
+#                           plotODDy_sim(ODDy, var='Vs30') + coord_fixed(), 
+#                           plotODDy_sim(ODDy, var='BuildDam') + coord_fixed(),
+#                           plotODDy_sim(ODDy, var='BuildDamAgg', discrete=T) + coord_fixed(), 
+#                           nrow=2, rel_heights=c(1,1), align='v', labels = c('(a)', '(b)', '(c)', '(d)', '(e)', '(f)'),
+#                           label_fontface = "plain")
+#   
+#   plots_with_legend <- plot_grid(plots_all, haz_legend, nrow=2, rel_heights=c(1,0.1))
+#   plots_with_legend
+# }
 
 # ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3/ODDobjects/Train/EQ20200502ABC_118')
 # ODDy$BuildDamAgg = NA
 # ODDy$BuildDamAgg[ODDy@polygons[[1]]$indexes] <- ODDy@impact$observed[1]
 # ODDy$BuildDamAgg[ODDy@polygons[[2]]$indexes] <- ODDy@impact$observed[4]
 # ODDy$BuildDamAgg <- as.factor(ODDy$BuildDamAgg)
-# plot_sim_event(ODDy)
+# 
+
+
+plotODDy_sim <- function(ODDy, var, haz_legend=F, var_legend=T, var_discrete=F){
+  plot_df <- as.data.frame(ODDy, xy=T, na.rm=F)
+  names(plot_df)[which(names(plot_df)=='x')] = 'Longitude'
+  names(plot_df)[which(names(plot_df)=='y')] = 'Latitude'
+  p <- ggplot(plot_df) + 
+    geom_raster(aes(x=Longitude, y=Latitude, fill=!!sym(var))) +   
+    coord_equal() +
+    scale_x_continuous(expand=c(0,0)) + scale_y_continuous(expand=c(0,0)) +
+    theme_minimal() + 
+    theme(
+      axis.title = element_text(family = "Liberation Serif", size=12),  
+      legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
+      legend.title = element_text(family = "Liberation Serif", size=12)
+    ) + 
+    geom_contour(aes(Longitude,Latitude,z=hazMean1,colour=..level..),
+                   alpha=0.7, lwd=0.8) +
+    scale_color_gradientn(colors = c("transparent","#fc9272", "#ef3b2c"))
+  if (haz_legend){
+    p <- p + scale_color_gradientn(colors = c("transparent","#fc9272", "#ef3b2c")) + labs(colour = "Hazard Intensity      ")
+  } else {
+    p <- p + scale_color_gradientn(colors = c("transparent","#fc9272", "#ef3b2c"), guide='none')
+  }
+  if (var_discrete){
+    p <- p + scale_fill_viridis_d()
+  } else {
+    if (var_legend){
+      p <- p + scale_fill_viridis_c()
+    } else {
+      p <- p + scale_fill_viridis_c(guide='none')
+    }
+  }
+  return(p)
+}
+
+plot_sim_event <- function(ODDy){
+  #ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput2/ODDobjects/Train/EQ20120115ABC_1')
+  # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130409ABC_-3')
+  # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130416ABC_-4')
+  #
+  plot_with_haz_legend <- plotODDy_sim(ODDy, var='Population', haz_legend=T, var_legend=F) + coord_fixed()+
+    theme(legend.position="bottom", legend.key.size = unit(15, 'pt'),
+          legend.key.width= unit(30, 'pt'),
+          legend.text = element_text(margin = margin(t=2, r = 10)))
+  haz_legend <- get_plot_component(plot_with_haz_legend, 'guide-box', return_all=T)[[3]]
+  
+  names(ODDy)[which(names(ODDy)=='Disp')] = 'Displacement'
+  names(ODDy)[which(names(ODDy)=='nBuildings')] = 'Building Count'
+  plots_all <- plot_grid( plotODDy_sim(ODDy, var='Population') + coord_fixed(),
+                          plotODDy_sim(ODDy, var='Building Count') + coord_fixed(),
+                          plotODDy_sim(ODDy, var='SHDI') + coord_fixed(),
+                          plotODDy_sim(ODDy, var='Vs30') + coord_fixed(),
+                          plotODDy_sim(ODDy, var='BuildDam') + coord_fixed(),
+                          plotODDy_sim(ODDy, var='BuildDamAgg', var_discrete=T) + coord_fixed(),
+                          nrow=2, rel_heights=c(1,1), align='v', labels = c('(a)', '(b)', '(c)', '(d)', '(e)', '(f)'),
+                          label_fontface = "plain",
+                          label_fontfamily = "Liberation Serif")
+  
+
+  plots_with_legend <- plot_grid(plots_all, haz_legend, nrow=2, rel_heights=c(1,0.1))
+  plots_with_legend
+}
+ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/ODDobjects/EQ20191028ABC_113')
+ODDy$BuildDamAgg <- ODDy$BuildDam
+values(ODDy$BuildDamAgg)[ODDy@polygons[[1]]$indexes] <- ODDy@impact$observed[1]
+values(ODDy$BuildDamAgg)[ODDy@polygons[[2]]$indexes] <- ODDy@impact$observed[4]
+ODDy$BuildDamAgg %<>% as.factor()
+plot_sim_event(ODDy)
+
+#SimEvent.odf, 6 x 12 inches
+
+#plot(ODDy)
+# ODDy$BuildDamAgg = NA
+# ODDy$BuildDamAgg[ODDy@polygons[[1]]$indexes] <- ODDy@impact$observed[1]
+# ODDy$BuildDamAgg[ODDy@polygons[[2]]$indexes] <- ODDy@impact$observed[4]
+# ODDy$BuildDamAgg <- as.factor(ODDy$BuildDamAgg)
+
 #SimEvent.pdf , 6 x 12 inches
+# 
+# ufiles <- list.files(path=paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/ODDobjects/'),pattern=Model$haz,recursive = T,ignore.case = T)
+# for (file in ufiles[100:150]){
+#   print(file)
+#   ODDy <- readODD(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/ODDobjects/', file))
+#   plot(ODDy)
+#   print(ODDy@impact)
+#   readline(prompt = "Press [Enter] to continue to the next file...")
+# }
 
 
 # grid.arrange(plotODDy(ODDSim, var='Population') + coord_fixed(),

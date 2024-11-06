@@ -734,6 +734,120 @@ create_df_postpredictive <- function(AlgoResults, single_particle = F, Omega = N
   df_poly[which(abs(log(df_poly$sampled.1+1)-log(df_poly$observed+1)) >7),] %>% filter(impact==impact_type)
 }
 
+create_df_postpredictive_MCMC <- function(AlgoResults, single_particle = F, Omega = NULL, particle_best=T, 
+                                          M=50, output='SampledAgg'){
+  # If single_particle == T:
+  #       If Omega = NULL, finds the parameters that produced the smallest distance and samples using only these parameters
+  #       If Omega is given, samples uses Omega
+  # If single_particle == F, samples from the full posterior
+  
+  if (single_particle){
+    if(is.null(Omega)){
+      if (particle_best){ # best particle at final step
+        particle_i <- which(AlgoResults$loss == min(AlgoResults$loss))
+      } else { # worst particle at final step (get a sense for how well we're doing at s_finish in the worst case)
+        stop()
+        #particle_i <- which(AlgoResults$d[,,AlgoResults$s_finish] == max(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
+      }
+      Omega <- AlgoResults$Omega_sample_phys[,particle_i[1]] %>% relist(skeleton=Model$skeleton)
+    }
+  } 
+  #get AlgoResults into ABC-SMC form
+  AlgoResults$s_finish <- 1
+  AlgoResults$W <- matrix(1/1000, nrow=1000, ncol=2)
+  Omega_sample_phys_new <- array(0, dim=c(1000, nrow(AlgoResults$Omega_sample_phys), 2))
+  stop_point <- which(is.na(AlgoResults$Omega_sample_phys[1,]))[1] -1
+  Omega_sample_phys_new[,,1] <- t(AlgoResults$Omega_sample_phys[,(stop_point-999):stop_point])
+  AlgoResults$Omega_sample_phys <- Omega_sample_phys_new
+  AlgoResults$Npart <- 1000
+  
+  
+  df_poly_train <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat='Train', single_particle=single_particle, Omega = Omega, output=output) #T, particle=particle_min.d[1])
+  df_poly_test <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat='Test', single_particle=single_particle, Omega = Omega, output=output) #T, particle=particle_min.d[1])
+  #df_poly_jitter <- SampleImpact(dir, Model, Omega_min.d %>% addTransfParams(), AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), M) %>% replace(which(names(AlgoParams)==c('Np')), 1))
+  
+  # finish_time <- Sys.time()
+  # finish_time-start_time
+  
+  if (M > 1){
+    df_poly <- rbind(df_poly_train, df_poly_test)
+    if (length(which(is.na(df_poly$sampled.1))) > 0){
+      df_poly <- df_poly[-which(is.na(df_poly$sampled.1)),]
+    }
+    return(df_poly)
+    # jitter_val <- function(x){
+    #   return_arr <- c()
+    #   for (x_i in x){
+    #     if(x_i==0){return_arr <- c(return_arr, runif(1,0.2, 0.3))}
+    #     else {return_arr <- c(return_arr, runif(1, x_i-0.5, x+0.5))}
+    #   }
+    #   return(return_arr)
+    # }
+    # #df_poly_jitter[which(df_poly_jitter==0, arr.ind=T)] = 0.1
+    # df_poly_jitter$observed <- sapply(df_poly_jitter$observed, jitter_val)
+    # df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1:2,jitter_val)
+    #df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- t(apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1,sort))
+    
+    #return(df_poly_jitter)
+    
+    M_lower <- round(quantile(1:M, 0.05))
+    M_lower <- ifelse(M_lower==0, 1, M_lower)
+    M_median <- round(quantile(1:M, 0.5))
+    M_upper <- round(quantile(1:M, 0.95))
+    
+    impact_type='displacement'
+    ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+      geom_errorbar() + geom_point(aes(col=train_flag)) + 
+      scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+      scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+      #geom_pointrange(aes(col=train_flag)) + 
+      geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
+      ylab(paste('Sampled', impact_type)) + xlab(paste('Observed', impact_type)) + scale_color_manual(values = c('red', 'blue'))
+    
+    
+    data_filt <- df_poly_test %>% filter(impact==impact_type)
+    data_filt$sampled_median <- apply(data_filt[,grep('sampled', names(data_filt))],1,median)
+    cor(data_filt$observed,data_filt$sampled_median)
+    k <- 10
+    cor(log(data_filt$observed+k),log(data_filt$sampled_median+k))
+    
+    SS_res_raw = sum((data_filt$observed-data_filt$sampled_median)^2)
+    SS_tot_raw = sum((data_filt$observed-mean(data_filt$observed))^2)
+    R_squared_raw = 1-SS_res_raw/SS_tot_raw
+    R_squared_raw
+    
+    SS_res_log = sum((log(data_filt$observed+k)-log(data_filt$sampled_median+k))^2)
+    SS_tot_log = sum((log(data_filt$observed+k)-mean(log(data_filt$observed+k)))^2)
+    R_squared_log = 1-SS_res_log/SS_tot_log
+    R_squared_log
+    
+    ggplot(df_poly_jitter %>% filter(impact=='buildDam'), mapping=aes(x=log(observed_jitter+1), y=log(get(paste0('sampled.', M_median))+1), ymin=log(get(paste0('sampled.', M_lower))+1), ymax=log(get(paste0('sampled.', M_upper))+1))) + 
+      geom_errorbar(position = position_dodge(width = 0.1)) +
+      geom_point(aes(col=inferred), position = position_dodge(width = 0.1)) + geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
+      ylab('log(Sampled Impact+1)') + xlab('log(Observed Impact+1)')+ scale_color_manual(values = c('red', 'blue'))
+    
+    ggplot(df_poly_jitter %>% filter(impact=='displacement'), mapping=aes(x=log(observed_jitter+1), y=log(get(paste0('sampled.', M_median))+1), ymin=log(get(paste0('sampled.', M_lower))+1), ymax=log(get(paste0('sampled.', M_upper))+1))) + 
+      geom_errorbar(position = position_dodge(width = 0.1)) +
+      geom_point(aes(col=train_flag), position = position_dodge(width = 0.1)) + geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
+      ylab('log(Sampled Impact+1)') + xlab('log(Observed Impact+1)')+ scale_color_manual(values = c('red', 'blue'))
+    
+    quants <- (apply(df_poly_jitter[,c(grep('observed', names(df_poly_jitter)),grep('sampled', names(df_poly_jitter)))], 1, sample_quant)-runif(NROW(df_poly_jitter),0,1))/(length(grep('sampled', names(df_poly_jitter)))+1)
+    hist(quants[impact_type=='mortality'])
+  }
+  
+  impact_type <- 'mortality'
+  k <- 1
+  ix_train <- which(df_poly_train$impact==impact_type)
+  df_poly <- rbind(df_poly_train, df_poly_test)
+  ix <- which(df_poly$impact==impact_type)
+  cols = c(rep('black', length(ix_train)), rep('red', length(ix)-length(ix_train)))
+  plot(log(df_poly$observed[ix]+k), log(df_poly$sampled.1[ix]+k), xlab=paste0('log(observed+',k,')'), ylab=paste0('log(sampled+',k,')'), col=cols)
+  abline(0,1)
+  
+  #large_discrepancies
+  df_poly[which(abs(log(df_poly$sampled.1+1)-log(df_poly$observed+1)) >7),] %>% filter(impact==impact_type)
+}
+
 flattenImpactSample <- function(impact_sample){
   df <- data.frame(event_id = impact_sample$poly[[1]]$event_id,
                    iso3 = impact_sample$poly[[1]]$iso3,
@@ -813,14 +927,19 @@ plot_df_postpredictive <- function(df_poly_jitter, impact_type){
   print(paste('R squared log', R_squared_log))
 
   
-  ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+  ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), 
+                                                                     ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
   #ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
     geom_errorbar() + geom_point(aes(col=train_flag)) + 
     scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
     scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
     #geom_pointrange(aes(col=train_flag)) + 
     geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
-    ylab(paste('Sampled', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + xlab(paste('Observed', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + scale_color_manual(values = c('red', 'blue')) + theme_bw()
+    ylab(paste('Sampled', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + xlab(paste('Observed', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + scale_color_manual(values = c('red', 'blue')) + 
+    theme_bw() +
+    theme(axis.title = element_text(family = "Liberation Serif", size=12),  
+                legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
+                legend.title = element_text(family = "Liberation Serif", size=12))
 }
 
 plot_df_postpredictive_compare <- function(df_poly1, df_poly2, impact_type){
@@ -880,7 +999,10 @@ plot_df_postpredictive_compare <- function(df_poly1, df_poly2, impact_type){
     scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
     #geom_pointrange(aes(col=train_flag)) + 
     geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
-    ylab(paste('Sampled', impact_type)) + xlab(paste('Observed', impact_type)) + scale_color_manual(values = c('black', 'red')) + theme_bw()  + labs(color='Median and 90% Credible Interval') 
+    ylab(paste('Sampled', impact_type)) + xlab(paste('Observed', impact_type)) + scale_color_manual(values = c('black', 'red')) + theme_bw()  + labs(color='Median and 90% Credible Interval') +
+    theme(axis.title = element_text(family = "Liberation Serif", size=12),  
+          legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
+          legend.title = element_text(family = "Liberation Serif", size=12))
   
 }
 
@@ -993,7 +1115,7 @@ colnames(gdacs_df) <- c('event_id', 'gdacs')
 pager_compare <- function(df_poly_jitter, impact_type){
   
   df_poly_jitter <- df_postpredictive_sampled_best %>% filter(impact=='mortality' & train_flag=='TEST')
-  folderin_haz <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_PAGERfull/'
+  folderin_haz <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/Aug24/HAZARDobjects/'
   ufiles_haz <- na.omit(list.files(path=folderin_haz,pattern=Model$haz,recursive = T,ignore.case = T))
   
   df_poly_jitter <- add_landslide_flag(df_poly_jitter)
@@ -1001,7 +1123,7 @@ pager_compare <- function(df_poly_jitter, impact_type){
   for (i in 1:NROW(df_poly_jitter)){
     file_match <- grep(paste0("_", df_poly_jitter$event_id[i], "\\b"),  ufiles_haz, value = TRUE)
     HAZy <- readRDS(paste0(folderin_haz, file_match ))
-    which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(x@data$mean)))
+    which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(values(unwrap(x$spatrast)$mean), na.rm=T)))
     df_poly_jitter$date[i] <- HAZy$hazard_info$eventdates[which.max.mmi]
   }
   
@@ -1019,7 +1141,7 @@ pager_compare <- function(df_poly_jitter, impact_type){
   for(i in 1:NROW(df_poly_jitter)){
     file_match <- grep(paste0("_", df_poly_jitter$event_id[i], "\\b"),  ufiles_haz, value = TRUE)
     HAZy <- readRDS(paste0(folderin_haz, file_match ))
-    which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(x@data$mean)))
+    which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(values(unwrap(x$spatrast)$mean), na.rm=T)))
     df_poly_jitter$alertlevel[i] <- HAZy$hazard_info$alertlevel[which.max.mmi]
     fatality_alert <- HAZy$hazard_info$alertfull[[which.max.mmi]]$alert_level
     if (is.null(fatality_alert)){
@@ -1060,7 +1182,7 @@ pager_compare <- function(df_poly_jitter, impact_type){
   mean(df_poly_jitter$oddrin_rps)
   mean(df_poly_jitter$pager_rps)
   
-  plot(df_poly_jitter$oddrin_rps)
+  plot(df_poly_jitter$oddrin_rps, ylim=c(0,3))
   points(df_poly_jitter$pager_rps, col='red')
   
   plot(df_poly_jitter$oddrin_rps)

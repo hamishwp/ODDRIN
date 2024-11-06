@@ -381,7 +381,12 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
   #pga <- raster(paste0(dir,"Hazard_Data/gdpga/pga_475y.tif"))
   #pga_vals <- values(pga)
   ##min_EQFreq <- 0; max_EQFreq <- 949.4231 #range(pga_vals)
-  min_EQFreq <- 0; max_EQFreq <- 270.9737 #quantile(pga_vals, c(0.01, 0.99))
+  
+  #pga <- rast(paste0(dir,"Hazard_Data/GEM-GSHM_PGA-475y-rock_v2023/v2023_1_pga_475_rock_3min.tif"))
+  #pga_vals <- values(pga)
+  min_EQFreq <- log(0+0.001); max_EQFreq <- log(0.5613953+0.001) #quantile(pga_vals, probs=c(0.01, 0.99), na.rm=T)
+  #min_EQFreq <- Model$center$EQFreq$mean; max_EQFreq <- Model$center$EQFreq$mean
+  
   
   min_FirstHaz <- 0; max_FirstHaz <- 1 #two possible values
   min_Night <- 0; max_Night <- 1 #two possible values

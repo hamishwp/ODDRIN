@@ -61,6 +61,7 @@ plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6),
 plot_d_vs_step(AlgoResults, ymax=6)
 points(AlgoResults$tolerancestore, pch=20, col='red')
 #DvsStep.pdf, 6 x 9 inches
+
 df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
                                                            M=100, output='SampledAgg')
 
@@ -95,7 +96,7 @@ plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6),
 
 #plot_vuln(AlgoResults)#, c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
 #RealPosteriors.pdf, 5 x 10 inches
-
+library(grid)
 plot_vuln_posteriors(AlgoResults)
 #VulnPosteriors.pdf, 6.5 x 12 inches
 
@@ -126,9 +127,9 @@ buildDam_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filte
                       scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma, limits=c(50,100000))
   
 
-p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
-p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
-p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 14)))
+p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
 
 grid.arrange(p1, p2, p3, ncol=3)
 #PostPredReal.pdf, 4 x 12.1 inches
@@ -140,6 +141,44 @@ for (i in c(16,)){
   print(paste('Bayes factor for', names(unlist(Omega))[i], ':', round(p_H_given_y * (1-p_H)/((1-p_H_given_y)*p_H), 3)))
   print(paste('Post. prob of greater than 0:', sum(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish]>0)/length(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish])))
 }
+
+#MCMC:
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-03_191919_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_backup')
+#plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(9,23)))#, c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
+#RealPosteriors.pdf, 5 x 10 inches
+
+
+#plot_vuln(AlgoResults)#, c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
+#RealPosteriors.pdf, 5 x 10 inches
+#library(grid)
+#plot_vuln_posteriors(AlgoResults)
+#VulnPosteriors.pdf, 6.5 x 12 inches
+
+
+df_postpredictive_sampled_best <- create_df_postpredictive_MCMC(AlgoResults, single_particle=F, Omega=NULL, particle_best=F,
+                                                           M=3, output='SampledTotal')
+
+df_postpredictive_sampled_best_old <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledBest18thSept')
+
+#hist(quants/101)
+#df_postpredictive_sampled_best[1,]
+
+library(grid)
+mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none") 
+disp_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'displacement')  + guides(color="none")
+buildDam_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'buildDam')  + guides(color="none") + 
+  scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma, limits=c(50,100000))
+
+
+p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+
+mort_test
+disp_test
+buildDam_test
+
 
 #MCMC Single:
 
@@ -279,3 +318,71 @@ plot_df_postpredictive_PAGER_coloured(df_postpredictive_sampled_best, 'mortality
 # obs_sampled <- as.numeric(df_postpredictive_sampled_best[106,c(grep('observed',names(df_postpredictive_sampled_best)),grep('sampled',names(df_postpredictive_sampled_best)))])
 # plot(obs_sampled, col=c('red',rep('blue', length(obs_sampled)-1)), pch=19)
 
+
+
+#MCMC compare:
+AlgoResults1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-05_101020_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_backup')
+AlgoResults2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-03_191937_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP')
+
+plot(AlgoResults1$loss, type='l', ylim=c(3.7, 5), xlim=c(0,5000))
+points(AlgoResults2$loss, type='l', col='red')
+
+par(mfrow=c(2,2))
+params <- c(23,24)
+xlim=range(AlgoResults1$Omega_sample_phys[params[1],], AlgoResults2$Omega_sample_phys[params[1],],na.rm=T)
+ylim=range(AlgoResults1$Omega_sample_phys[params[2],], AlgoResults2$Omega_sample_phys[params[2],], na.rm=T)
+plot(AlgoResults1$Omega_sample_phys[params[1],], AlgoResults1$Omega_sample_phys[params[2],], xlim=xlim, ylim=ylim,type='l',
+     xlab = names(unlist(Omega))[params[1]], ylab = names(unlist(Omega))[params[2]] )
+points(AlgoResults1$Omega_sample_phys[params[1],1], AlgoResults1$Omega_sample_phys[params[2],1], xlim=xlim, ylim=ylim,pch=19, col='red')
+points(AlgoResults2$Omega_sample_phys[params[1],], AlgoResults2$Omega_sample_phys[params[2],], type='l', col='red')
+points(AlgoResults2$Omega_sample_phys[params[1],1], AlgoResults2$Omega_sample_phys[params[2],1], col='red', pch=19)
+stop <- which(is.na(AlgoResults1$Omega_sample_phys[params[1],]))[1]-1
+points(AlgoResults1$Omega_sample_phys[params[1],stop], AlgoResults1$Omega_sample_phys[params[2],stop], xlim=xlim, ylim=ylim,pch=19, col='blue')
+
+
+xlim=range(AlgoResults1$Omega_sample[params[1],], AlgoResults2$Omega_sample[params[1],],na.rm=T)
+ylim=range(AlgoResults1$Omega_sample[params[2],], AlgoResults2$Omega_sample[params[2],], na.rm=T)
+plot(AlgoResults1$Omega_sample[params[1],3500:4500], AlgoResults1$Omega_sample[params[2],3500:4500], xlim=xlim, ylim=ylim,type='l')
+points(AlgoResults2$Omega_sample[params[1],], AlgoResults2$Omega_sample[params[2],], type='l', col='red')
+points(AlgoResults1$Omega_sample[params[1],stop], AlgoResults1$Omega_sample[params[2],stop], xlim=xlim, ylim=ylim,pch=19, col='blue')
+
+HLPrior_sample <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/HLPriorSamples')
+param <- 16
+plot(seq(1,3600, length.out=500), HLPrior_sample[,param], ylab='SHDI Coefficient (untransformed)')
+lines(AlgoResults1$Omega_sample[param,], col='red', type='l')
+
+
+plot(AlgoResults1$loss, type='l', ylim=c(3.8, 4.5), xlim=c(0,2500))
+lines(AlgoResults2$loss, type='l', col='red')
+AlgoResults1$loss 
+plot(AlgoResults1$lambda_store * AlgoResults1$Sigma_store[23,23,], type='l', ylim=c(0,3.5))
+points(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[23,23,], col='red', type='l')
+
+mean(AlgoResults1$accprob_store[1:500], na.rm=T)
+
+par(mfrow=c(2,1))
+plot(log(AlgoResults1$lambda_store), xlim=c(0,2500), ylim=c(-2.5,0))
+#plot(log(AlgoResults1$lambda_store), xlim=c(0,2000))
+abline(h=-log(2.5))
+#abline(h=-log(3))
+abline(h=-2*log(2.5))
+abline(v=125)
+lines(log(AlgoResults2$lambda_store), col='red')
+accprob_mean <- cumsum(AlgoResults1$accprob_store)/seq_along(AlgoResults1$accprob_store)
+plot(rollmean(AlgoResults1$accprob_store, 21, fill=NA, align='center'), xlim=c(0, 4000), type='l', ylab='Rolling Mean of Acceptance Probability')
+abline(h=0.234)
+
+plot(AlgoResults1$lambda_store * AlgoResults1$Sigma_store[23,23,])
+#plot(log(AlgoResults1$lambda_store), xlim=c(0,2000))
+lines(AlgoResults2$lambda_store* AlgoResults2$Sigma_store[23,23,], col='red')
+
+plot(log(AlgoResults2$lambda_store))
+
+HLP_vals <- c()
+for (i in 1:3000){
+  HLP_vals <- c(HLP_vals,Model$HighLevelPriors(AlgoResults1$Omega_sample_phys[,i] %>% 
+                                      relist(skeleton=Model$skeleton) %>% 
+                                      addTransfParams(),
+                                    Model))
+}
+plot(HLP_vals, type='l')

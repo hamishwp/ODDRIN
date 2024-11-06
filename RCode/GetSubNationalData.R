@@ -15,7 +15,7 @@
 
 
 # Where would we like to log error messages?
-folder_write <- 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_Sept26/'
+#folder_write <- 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_Sept26/'
 
 readSubNatData <- function(subnat_file){
   # Clean data from xlsx file by converting data to the appropriate formats/data types
@@ -377,7 +377,7 @@ reweight_pixels <- function(polygons_indexes, polygons_list, ODDy){
   
 }
 
-pixel_weight_border_correction <- function(ODDy){
+pixel_weight_border_correction <- function(ODDy, folder_write){
   # If a pixel has a total weight less than 1 across all polygons (for a specific administrative level), 
   # then either part of the pixel lies in the water or in a region for which we do not have impact data. 
   # We assume the former, and scale the weights so that they sum to one. 
@@ -399,7 +399,7 @@ pixel_weight_border_correction <- function(ODDy){
       if (is.null(polygon_matches[[g]])) next
       if(round(weight_sum[g],3) > 1.1){
         file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
-        #writeLines(paste("Region:", ODDy@polygons[[polygon_matches[[g]][1,1]]]$name, "Event Date:", ODDy@hazdates[1], '. Sum of pixel weights for a polygon is larger than 1'), file_conn)
+        writeLines(paste("Region:", ODDy@polygons[[polygon_matches[[g]][1,1]]]$name, "Event Date:", ODDy@hazdates[1], '. Sum of pixel weights for a polygon is larger than 1'), file_conn)
         print(paste("Region:", paste(unlist(lapply(ODDy@polygons[polygon_matches[[g]][,1]], function(x) x$name)), collapse=' and '), "Event Date:", ODDy@hazdates[1],'. Sum of pixel weights for a polygon is', round(weight_sum[g],3), ' (larger than 1.1)'), file_conn)
         
         close(file_conn)
@@ -502,7 +502,7 @@ addODDImpact <- function(ODDy, impact){
 }
 
 
-updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, event_id, subnat_file='EQ_SubNational.xlsx'){
+updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, event_id, folder_write, subnat_file='EQ_SubNational.xlsx'){
   # Update an existing ODD object (ODDy) using subnational data:
   #   - Edit the 'impact' slot to include subnational data from the provided spreadsheet (default is EQ_subnational.xlsx)
   #   - Edit the 'polygons' slot to identify the pixels belonging to each polygon for which we have impact data
@@ -548,7 +548,7 @@ updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, event_id, subna
   ODDy <- addODDPolygons(ODDy, SubNatImpact$polygons_list) #populate the 'polygons' slot in ODDy using the regions for which we have impact data
   ODDy <- addODDImpact(ODDy, SubNatImpact$impact)
   
-  ODDy <- pixel_weight_border_correction(ODDy)
+  ODDy <- pixel_weight_border_correction(ODDy, folder_write)
   
   #additional_poly_check(ODDy, event_id, print_to_xl=T)
   
@@ -556,7 +556,7 @@ updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, event_id, subna
 }
 
 
-additional_poly_check <- function(ODDy, i, print_to_xl=F){
+additional_poly_check <- function(ODDy, i, folder_write, print_to_xl=F){
   # Perform some checks on the polygons:
   #   - For each impact type, are all the observations at the same GADM level?
   #   - Are there any exposed pixels that haven't been allocated to a polygon? If so, what GADM region do they belong to.
@@ -566,7 +566,7 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
   
   if(print_to_xl){wb <- createWorkbook()}
   
-  haz_max <- apply(as.data.frame(ODDy[[grep('hazMean', names(ODDy))]], na.rm=F), 1, max, na.rm=T)
+  haz_max <- apply(as.data.frame(ODDy[[grep('hazMean', names(ODDy))]], na.rm=F), 1, function(row){ if(all(is.na(row))) return(0) else return(max(row, na.rm=T))})
   exposed_cells <-which(haz_max > 4.5)
   
   for (j in 1:length(impacts_split)){
@@ -626,9 +626,10 @@ additional_poly_check <- function(ODDy, i, print_to_xl=F){
       #check if there are any pixels not covered by the polygons:
       pixels_unallocated <- intersect(which(values(!is.na(ODDy[['ISO3C']]))), exposed_cells)
       for (k in 1:NROW(impacts_split[[j]])){
-        if (gadm_levels[k] == gadm_level)
+        if (gadm_levels[k] == gadm_level){
           pixels_in_poly <- ODDy@polygons[[impacts_split[[j]]$polygon[k]]]$indexes
           pixels_unallocated <- setdiff(pixels_unallocated, pixels_in_poly)
+        }
       }
       if (length(pixels_unallocated) == 0){
         next
@@ -718,7 +719,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
   options(timeout = 300)
-  for (i in 31){#c(31,73,75,83,91,109,121,122)){#1:169){#c(89, 119, 122, 127, 133, 139, 150,151,152,164,165,166,167, 168,169)){#c(7,8,9,11,12,13,14,48,49,67,68,73,74,75,85,88,92,93,98,99,100,104,114, 128:163)){
+  for (i in c(35, 68)){#31,73,75,83,91,109,121,122)){#1:169){#c(89, 119, 122, 127, 133, 139, 150,151,152,164,165,166,167, 168,169)){#c(7,8,9,11,12,13,14,48,49,67,68,73,74,75,85,88,92,93,98,99,100,104,114, 128:163)){
     print(i)
     if (i==126) next
     # Subset displacement and disaster database objects
@@ -796,7 +797,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     rm(lhazSDF)
     
     
-    ODDy_with_impact <- tryCatch(updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1], i),error=function(e) NULL)
+    ODDy_with_impact <- tryCatch(updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1], i, folder_write),error=function(e) NULL)
     
     if(is.null(ODDy_with_impact)) {
       #stop()
@@ -815,8 +816,9 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     ODDpath<-paste0(dir, folder_write, "ODDobjects/",namer)
     saveODD(ODDy,ODDpath)
     
-    additional_poly_check(ODDy, i, print_to_xl=T)
+    additional_poly_check(ODDy, i, folder_write, print_to_xl=T)
     
+    next
     # Building damage subset
     miniDam<-Damage%>%filter(iso3%in%unique(miniDamSimplified$iso3) & 
                                sdate<mindate & sdate>maxdate)
@@ -843,26 +845,26 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
   return(path)
 }
 
-additional_poly_check_all <- function(input_folder='IIDIPUS_Input_Alternatives/Aug24/ODDobjects/'){
-  ufiles<-list.files(path=paste0(dir, input_folder),pattern=Model$haz,recursive = T,ignore.case = T)
-  for (file in ufiles){
-     print(file)
-     i <- as.numeric(regmatches(file, gregexpr("[0-9]+", file))[[1]][2])
-     #if (!(i %in% c(1,16,22,68, 70, 89, 127, 138, 149))){
-     if (!(i %in% c(16))){
-       next
-     }
-     ODDy <- readODD(paste0(dir,input_folder, file))
-     ODDy_with_impact <- tryCatch(updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1], i),error=function(e) NULL)
-     if (is.null(ODDy_with_impact)) stop()
-     
-     ODDy <- ODDy_with_impact
-     
-     additional_poly_check(ODDy, i, print_to_xl=T)
-     
-     saveODD(ODDy, paste0(dir, input_folder, file, '_MAR'))
-  }
-}
+# additional_poly_check_all <- function(input_folder='IIDIPUS_Input_Alternatives/Aug24/ODDobjects/', folder_write='IIDIPUS_Input_Alternatives/Aug24/'){
+#   ufiles<-list.files(path=paste0(dir, input_folder),pattern=Model$haz,recursive = T,ignore.case = T)
+#   for (file in ufiles){
+#      print(file)
+#      i <- as.numeric(regmatches(file, gregexpr("[0-9]+", file))[[1]][2])
+#      if (!(i %in% c(1,16,22,68, 70, 89, 127, 138, 149))){
+#      #if (!(i %in% c(16))){
+#        next
+#      }
+#      ODDy <- readODD(paste0(dir,input_folder, file))
+#      #ODDy_with_impact <- tryCatch(updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1], i,folder_write),error=function(e) NULL)
+#      #if (is.null(ODDy_with_impact)) stop()
+#      
+#      #ODDy <- ODDy_with_impact
+#      
+#      additional_poly_check(ODDy, i, folder_write, print_to_xl=T)
+#      
+#      #saveODD(ODDy, paste0(dir, input_folder, file, '_MAR'))
+#   }
+# }
 
 
 
@@ -896,14 +898,34 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/Aug24Agg/'){
     ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
     ODD_foldertest<-paste0(dir, folder_in, '/ODDobjects/Test/')
     ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
-    ufiles <- ufiles[order(ufiles)] # sort by date
+    total_mortalities <- c()
+    #sort by maximum intensity
+    for (file in ufiles){
+      #if (file == "EQ20180418IDN_84"){ max_intensities <- c(max_intensities, 4.5); next}
+      #if (file == "EQ20191126ALB_133"){ max_intensities <- c(max_intensities, 4.5); next}
+      #if (file == "EQ20200813PAK_148"){ max_intensities <- c(max_intensities, 4.5); next}
+      ODD <- readODD(paste0(ODD_folderall, file))
+      polygon_names <- unlist(lapply(ODD@polygons[ODD@impact$polygon], function(x) x$name))
+      if (any(tolower(polygon_names[which(ODD@impact$impact=='mortality')]) %in% c('tot', 'total'))){
+        nonmatch <- which(!tolower(polygon_names[which(ODD@impact$impact=='mortality')]) %in% c('tot', 'total'))
+        if (length(nonmatch)>0){
+          ODD@impact <- ODD@impact[-which(ODD@impact$impact=='mortality')[nonmatch],] # in the case of total and subnational data, remove the subnational
+        }
+      }
+      total_mortality <- sum(ODD@impact$observed[which(ODD@impact$impact=='mortality')])
+      #if (is.infinite(max_intensity)) stop()
+      total_mortalities <- c(total_mortalities, total_mortality)
+    }
+    ufiles <- ufiles[order(max_intensities)] # sort by date
     i <- 0
     for (file in ufiles){
       i <- i + 1
       if (i %%3 != 0){next}
+      options(warn = 2)
       file.copy(from = paste0(ODD_folderall, file),
                 to = paste0(ODD_foldertest, file))
       file.remove(from = paste0(ODD_folderall, file))
+      options(warn = 1)
     }
   # BD_folderall<-paste0(dir, folder_in, '/BDobjects/')
   # BD_foldertest<-paste0(dir, folder_in, '/BDobjects/Test/')
@@ -924,7 +946,7 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/Aug24Agg/'){
 # --------------------------------------------------------------------------------
 
 
-updateAllODDSubNat <- function(dir, subnat_file='EQ_SubNational.xlsx'){
+updateAllODDSubNat <- function(dir, folder_write='IIDIPUS_Input/', subnat_file='EQ_SubNational.xlsx'){
   # Takes all the ODD objects currently in IIDIPUS_Input/ODDobjects and updates them using the data from the subnational data spreadsheet
   
   folderin<- paste0(dir, 'IIDIPUS_Input/ODDobjects/') #"/home/manderso/Documents/GitHub/IIDIPUS_InputRealwithMort/ODDobjects/"
@@ -932,7 +954,7 @@ updateAllODDSubNat <- function(dir, subnat_file='EQ_SubNational.xlsx'){
   for (ODD_file in ufiles){
     event_date <- as.Date(substr(ODD_file, 3, 10), "%Y%m%d") #seems to be some issues with ODD@hazdate
     ODDy <- readRDS(paste0(folderin, ODD_file))
-    ODDy <- updateODDSubNat(dir, ODDy, event_date, subnat_file)
+    ODDy <- updateODDSubNat(dir, ODDy, event_date, folder_write, subnat_file)
     #saveRDS(ODDy, paste0(folderin, ufiles[i])) 
   }
 }

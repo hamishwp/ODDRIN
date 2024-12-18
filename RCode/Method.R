@@ -1881,7 +1881,7 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     Omega_sample = array(NA, dim=c(n_x, AlgoParams$N_steps)),
     Omega_sample_phys = array(NA, dim=c(n_x, AlgoParams$N_steps)), #store sampled parameters on the untransformed space
     loss = array(Inf, dim=c( AlgoParams$N_steps)), #Distances
-    u = array(NA, dim=c(n_events, AlgoParams$m_CRPS, 3, 3)),
+    u = array(NA, dim=c(n_events, AlgoParams$m_CRPS*AlgoParams$Np, 3, 3)),
     u_selected = array(NA, dim=c(3, AlgoParams$N_steps)),
     lambda_store=array(NA, AlgoParams$N_steps), 
     mu_store=array(NA, dim=c(n_x, AlgoParams$N_steps)), 
@@ -1913,6 +1913,7 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     proposed =  AlgoResults$Omega_sample_phys[,1] %>% relist(skeleton=Model$skeleton)
     proposed$u = AlgoResults$u[,,,1]
     impact_sample = SampleImpact(dir, Model, proposed %>% addTransfParams(), AlgoParams)
+    print(impact_sample)
     AlgoResults$loss[1] = CalcDist(impact_sample, AlgoParams)[1]
     AlgoResults$lambda_store[1] = AlgoResults$lambda_start
     AlgoResults$mu_store[,1] = AlgoResults$Omega_sample[,1]
@@ -1937,7 +1938,7 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
       AlgoResults$u_selected[,2] = AlgoResults$u_selected[,1]
     }  else {
       proposed = Omega_prop_phys %>% addTransfParams()
-      proposed$u = array(u_prop, dim=c(n_events, AlgoParams$m_CRPS, 3))
+      proposed$u = array(u_prop, dim=c(n_events, AlgoParams$m_CRPS*AlgoParams$Np, 3))
       impact_sample <- SampleImpact(dir = dir,Model = Model,
                                     proposed = proposed, 
                                     AlgoParams = AlgoParams)
@@ -2009,7 +2010,7 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
       AlgoResults$u_selected[,s] = AlgoResults$u_selected[,s-1]
     } else {
       proposed = Omega_prop_phys %>% addTransfParams()
-      proposed$u = array(u_prop, dim=c(n_events, AlgoParams$m_CRPS, 3))
+      proposed$u = array(u_prop, dim=c(n_events, AlgoParams$m_CRPS*AlgoParams$Np, 3))
       impact_sample <- SampleImpact(dir = dir,Model = Model,
                                     proposed = proposed, 
                                     AlgoParams = AlgoParams)

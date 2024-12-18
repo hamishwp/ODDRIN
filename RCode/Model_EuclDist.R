@@ -315,7 +315,7 @@ D_MortDisp_calc <- function(Damage, Omega, stoch_event=rbind(0,0)){
   D_Mort_and_Disp <- pnorm(Damage + stoch_event[2,], mean = Omega$Lambda1$loc, sd = Omega$Lambda1$scale)
   D_Mort <- pnorm(Damage + stoch_event[1,], mean = Omega$Lambda2$loc, sd = Omega$Lambda2$scale)
   D_Disp <- D_Mort_and_Disp - D_Mort
-  D_Disp <- ifelse(D_Disp<0, 10^(-60), D_Disp)
+  D_Disp <- ifelse(D_Disp<0, 0, D_Disp)
   return(rbind(D_Mort, D_Disp))
 }
 
@@ -670,6 +670,8 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
   event_id <- impact_sample_poly[[1]]$event_id
   grouped_events <- split(seq_along(event_id), event_id)
   
+  eucl_dist_store <- c()
+  
   for(n in 1:AlgoParams$Np){
 
     samples_allocated <- ((n-1)*AlgoParams$m_CRPS+1):(n*AlgoParams$m_CRPS)
@@ -688,6 +690,9 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
       obs <- log(observed[grouped_events[[i]]]+AlgoParams$log_offset) *impact_weightings[grouped_events[[i]]]
       sims <- log(samples_combined[grouped_events[[i]],]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]
       
+      es_store <- c(es_store, sqrt(sum((obs- sims)^2)))
+      next
+      
       if (length(grouped_events[[i]])==1){
         #crps is the univariate case of the energy score, so use when dimension is 1. 
         es_store<- c(es_store, crps_sample(obs, sims))
@@ -702,7 +707,8 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
 
     }
     dist_poly[n,1] <- mean(es_store) #mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$impact_weights['mortality'])
-    dist_poly[n,2] <- mean(vs_store)
+    eucl_dist_store <- c(eucl_dist_store, mean(es_store))
+    dist_poly[n,2] <- 0#mean(vs_store)
     dist_poly[n,3] <- 0
     
     ## Ways to assess uniformity of quantiles:
@@ -716,7 +722,7 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
     dist_poly[n,7] <- 0 #0.2*(1 - AndersonDarlingTest(ranks_std_mst, null='punif')$p.value)
     
   }
-  
+  return(mean(eucl_dist_store))
   return(dist_poly)
   
 }

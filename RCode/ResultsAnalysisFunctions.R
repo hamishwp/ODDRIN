@@ -194,20 +194,18 @@ get_greek_titles = function(var_name){
 }
 
 plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
-                                      pairings=rbind(c(1,2), c(3,4), c(5,6), c(7,8), c(9,10), c(11,12)), s_finish=NULL){
+                                      pairings=rbind(c(1,2), c(3,4), c(5,6), c(7,8), c(9,10), c(11,12)), s_finish=NULL,
+                                      AlgoResultsMCMC=NULL, subfig_title_adj=-0.4){
   
   AlgoResults %<>% addAlgoParams(s_finish)
-  post_samples <- AlgoResults$Omega_sample_phys[,,AlgoResults$s_finish]
+  post_samples <- AlgoResults$Omega_sample_phys[which(AlgoResults$W[,AlgoResults$s_finish]>0),,AlgoResults$s_finish]
   if (include_priors) prior_samples <- AlgoResults$Omega_sample_phys[,,1]
   
 
   if(NROW(pairings)>7){
     par(mfrow=c(3,4), mai = c(0.6, 0.7, 0.2, 0.1), family='Liberation Serif', cex.lab=1.25)
-    subfig_title_adj = -0.4
-  }
-  else {
+  } else {
     par(mfrow=c(2,4), mai = c(0.6, 0.7, 0.2, 0.1), family='Liberation Serif', cex.lab =1.25)
-    subfig_title_adj = -0.4
   }
   for (p in 1:NROW(pairings)){
     xmin= min(post_samples[,pairings[p,1]]); xmax= max(post_samples[,pairings[p,1]])
@@ -222,7 +220,21 @@ plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
       plot(prior_samples[,pairings[p,1]], prior_samples[,pairings[p,2]], col='blue', 
            xlab=get_greek_titles(names(unlist(Model$skeleton))[pairings[p,1]]), xlim=c(xmin, xmax),
            ylab=get_greek_titles(names(unlist(Model$skeleton))[pairings[p,2]]), ylim=c(ymin, ymax), cex=0.75)
-      points(post_samples[,pairings[p,1]], post_samples[,pairings[p,2]], cex=0.75)
+      if (!is.null(AlgoResultsMCMC) & p < 7){
+        MCMC_s_finish <- which(is.infinite(AlgoResultsMCMC$loss))[1]-1
+        post_s <- ceil(MCMC_s_finish/2):MCMC_s_finish
+        post_s <- post_s[which(AlgoResultsMCMC$HLP_vals[post_s]==0 & !is.na(AlgoResultsMCMC$HLP_vals[post_s]))]
+        MCMC_samples <- post_s[round(seq(1, length(post_s), length.out=NROW(AlgoResults$Omega_sample_phys[,1,1])))] #round(seq(MCMC_s_finish/2, MCMC_s_finish, length.out=NROW(AlgoResults$Omega_sample_phys[,1,1])))
+        points(AlgoResultsMCMC$Omega_sample_phys[pairings[p,1],MCMC_samples], AlgoResultsMCMC$Omega_sample_phys[pairings[p,2],MCMC_samples], col='red')
+      }
+      points(post_samples[,pairings[p,1]], post_samples[,pairings[p,2]], cex=0.75,col='black')
+      if (!is.null(AlgoResultsMCMC) & p >= 7){
+        MCMC_s_finish <- which(is.infinite(AlgoResultsMCMC$loss))[1]-1
+        post_s <- ceil(MCMC_s_finish/2):MCMC_s_finish
+        post_s <- post_s[which(AlgoResultsMCMC$HLP_vals[post_s]==0 & !is.na(AlgoResultsMCMC$HLP_vals[post_s]))]
+        MCMC_samples <- post_s[round(seq(1, length(post_s), length.out=NROW(AlgoResults$Omega_sample_phys[,1,1])))] #round(seq(MCMC_s_finish/2, MCMC_s_finish, length.out=NROW(AlgoResults$Omega_sample_phys[,1,1])))
+        points(AlgoResultsMCMC$Omega_sample_phys[pairings[p,1],MCMC_samples], AlgoResultsMCMC$Omega_sample_phys[pairings[p,2],MCMC_samples], col=alpha('red', 0.3))
+      }
     } else {
       plot(post_samples[,pairings[p,1]], post_samples[,pairings[p,2]], 
            xlab=names(unlist(Model$skeleton))[pairings[p,1]], xlim=c(xmin, xmax),
@@ -237,6 +249,7 @@ plot_correlated_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
   }
   par(mfrow=c(1,1), mai=c(1,1,1,1))
 }
+
 
 plot_vuln_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
                                       pairings=rbind(c(1,2), c(3,4), c(5,6), c(7,8), c(9,10), c(11,12)), s_finish=NULL){
@@ -257,10 +270,13 @@ plot_vuln_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
   for (i in seq_along(vuln_var)) {
     var <- vuln_var[i]
     
+    
     p_H_given_y = sum(post_samples[,var]>0)/length(post_samples[,var])
     p_H = sum(prior_samples[,var]>0)/length(prior_samples[,var])
+    print(paste('Post Weight Positive', names(unlist(Model$skeleton))[var], ':', round(p_H_given_y, 3)))
     print(paste('Bayes factor for', names(unlist(Model$skeleton))[var], ':', round(p_H_given_y * (1-p_H)/((1-p_H_given_y)*p_H), 3)))
     
+    post_median = median(post_samples[,var])
     
     # Create each plot and store it in the plot_list
     plot <- ggplot() +
@@ -268,10 +284,11 @@ plot_vuln_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
       geom_histogram(aes(x = post_samples[, var], y = ..density..), 
                      bins = 30, fill = "lightgrey", color='black', lwd=0.5) +
       geom_density(aes(x = prior_samples[, var]), color = "blue", size = 0.7) +
-      geom_vline(xintercept = 0, color = "red", linetype = "dashed", size = 0.7) +
+      geom_vline(xintercept = 0, color = "blue", linetype = "dashed", size = 0.7) +
+      geom_vline(xintercept = post_median, color = "black", linetype = "dashed", size = 0.7) +
       scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
       labs(x = get_greek_titles(names(unlist(Model$skeleton))[var])) +
-      xlim(c(-0.5, 0.5)) +
+      xlim(c(-1, 1)) +
       theme_minimal() +
       theme(
         axis.title.y = element_blank(),  # Change y-axis title font
@@ -959,31 +976,31 @@ plot_df_postpredictive_compare <- function(df_poly1, df_poly2, impact_type){
   df_poly2_jitter = df_poly2 %>% filter(impact==impact_type)
   
   #jitter
-  for (repeat_jitter in 1:5){
-    for (i in 1:NROW(df_poly1_jitter)){
-      for (j in 1:NROW(df_poly1_jitter)){
-        if (i == j) next
-        # if ((df_poly1_jitter$observed[i] <= 2) | (df_poly2_jitter$observed[j] <= 2)){
-        #   if(abs(df_poly1_jitter$observed[i] - df_poly2_jitter$observed[j])<2){
-        #     stop()
-        #     k <- c(i,j)[which.max(c(i,j))][1]
-        #     print(paste(df_poly2_jitter$observed[k],  df_poly1_jitter$observed[k] + df_poly2_jitter$observed[k]/5))
-        #     df_poly1_jitter$observed[k] = df_poly1_jitter$observed[k] + df_poly2_jitter$observed[k]/5
-        #     df_poly2_jitter$observed[k] = df_poly2_jitter$observed[k] + df_poly2_jitter$observed[k]/5
-        #   }
-        #   next
-        # }
-        if(abs(df_poly1_jitter$observed[i]/20 - df_poly2_jitter$observed[j]/20)<2){
-          k <- c(i,j)[which.max(c(i,j))][1]
-          #print(paste(df_poly2_jitter$observed[k],  df_poly1_jitter$observed[k] + df_poly2_jitter$observed[k]/5))
-          df_poly1_jitter$observed[k] = df_poly1_jitter$observed[k] + df_poly2_jitter$observed[k]/10
-          df_poly2_jitter$observed[k] = df_poly2_jitter$observed[k] + df_poly2_jitter$observed[k]/10
-        }
-      }
-    }
-  }
-  df_poly1_jitter %<>% filter(observed > 1)
-  df_poly2_jitter %<>% filter(observed > 1)
+  # for (repeat_jitter in 1:5){
+  #   for (i in 1:NROW(df_poly1_jitter)){
+  #     for (j in 1:NROW(df_poly1_jitter)){
+  #       if (i == j) next
+  #       # if ((df_poly1_jitter$observed[i] <= 2) | (df_poly2_jitter$observed[j] <= 2)){
+  #       #   if(abs(df_poly1_jitter$observed[i] - df_poly2_jitter$observed[j])<2){
+  #       #     stop()
+  #       #     k <- c(i,j)[which.max(c(i,j))][1]
+  #       #     print(paste(df_poly2_jitter$observed[k],  df_poly1_jitter$observed[k] + df_poly2_jitter$observed[k]/5))
+  #       #     df_poly1_jitter$observed[k] = df_poly1_jitter$observed[k] + df_poly2_jitter$observed[k]/5
+  #       #     df_poly2_jitter$observed[k] = df_poly2_jitter$observed[k] + df_poly2_jitter$observed[k]/5
+  #       #   }
+  #       #   next
+  #       # }
+  #       if(abs(df_poly1_jitter$observed[i]/20 - df_poly2_jitter$observed[j]/20)<2){
+  #         k <- c(i,j)[which.max(c(i,j))][1]
+  #         #print(paste(df_poly2_jitter$observed[k],  df_poly1_jitter$observed[k] + df_poly2_jitter$observed[k]/5))
+  #         df_poly1_jitter$observed[k] = df_poly1_jitter$observed[k] + df_poly2_jitter$observed[k]/10
+  #         df_poly2_jitter$observed[k] = df_poly2_jitter$observed[k] + df_poly2_jitter$observed[k]/10
+  #       }
+  #     }
+  #   }
+  # }
+  # df_poly1_jitter %<>% filter(observed > 1)
+  # df_poly2_jitter %<>% filter(observed > 1)
   
   #df_poly1_jitter <- df_poly1_jitter[order(df_poly1_jitter$observed),][1:(NROW(df_poly1_jitter)/2)*2,]
   #df_poly2_jitter <- df_poly2_jitter[order(df_poly2_jitter$observed),][1:(NROW(df_poly2_jitter)/2)*2,]
@@ -1111,6 +1128,64 @@ gdacs_df <- rbind(
   c(10, 'green'))
 gdacs_df = data.frame(gdacs_df)
 colnames(gdacs_df) <- c('event_id', 'gdacs')
+
+gdacs_df <- rbind(
+  c(169, 'red', 'TUR', '2023-02-06'),
+  c(7, 'green', 'IRN', '2013-04-16'),
+  c(67, 'orange', 'MEX', '2017-09-07'),
+  c(54, 'green', 'CHL', '2016-12-25'),
+  c(81, 'red', 'PNG', '2018-02-26'),
+  c(14, 'red', 'PAK', '2013-09-24'),
+  c(145, 'green', 'MEX', '2020-06-23'),
+  c(107, 'orange', 'PNG', '2019-05-07'),
+  c(150, 'orange', 'TUR', '2020-10-30'),
+  c(133, 'orange', 'ALB', '2019-11-26'),
+  c(16, 'red', 'PHL', '2013-10-15'),
+  c(64, 'orange', 'GTM', '2017-06-14'),
+  c(78, 'green', 'PER', '2018-01-14'),
+  c(38, 'green', 'JPN', '2016-04-14'),
+  c(15, 'green', 'PER', '2013-09-25'),
+  c(40, 'orange', 'ECU', '2016-05-18'),
+  c(23, 'null', 'GTM', '2014-07-07'),
+  c(26, 'green', 'IRN', '2014-08-18'),
+  c(130, 'orange', 'PHL', '2019-11-18'),
+  c(118, 'green', 'IDN', '2019-07-14'),
+  c(3, 'null', 'UZB', '2011-07-20'),
+  c(63, 'green', 'GRC', '2017-06-12'),
+  c(62, 'orange', 'IDN', '2017-05-29'),
+  c(165, 'red', 'AFG', '2022-06-22'),
+  c(56, 'orange', 'PHL', '2017-02-10'),
+  c(37, 'null', 'TWN', '2016-02-06'),
+  c(154, 'orange', 'PHL', '2021-02-07'),
+  c(47, 'green', 'JPN', '2016-10-21'),
+  c(12, 'green', 'CHN', '2013-07-22'),
+  c(100, 'green', 'CHN', '2018-12-16'),
+  c(71, 'green', 'CRI', '2017-11-12'),
+  c(79, 'green', 'TWN', '2018-02-04'),
+  c(55, 'green', 'BGD', '2017-01-03'),
+  c(147, 'green', 'USA', '2020-08-09'),
+  c(77, 'green', 'MMR', '2018-01-12'),
+  c(57, 'green', 'ZMB', '2017-02-24'),
+  c(58, 'orange', 'PHL', '2017-04-08'),
+  c(119, 'green', 'TUR', '2019-08-08'),
+  c(115, 'green', 'IRN', '2019-07-08'),
+  c(18, 'green', 'GRC', '2014-01-26'),
+  c(117, 'green', 'PHL', '2019-07-13'),
+  c(4, 'green', 'BGR', '2012-05-22'),
+  c(132, 'green', 'CHN', '2019-11-25'),
+  c(82, 'orange', 'MOZ', '2018-03-08'),
+  c(72, 'green', 'KOR', '2017-11-15'),
+  c(146, 'green', 'DZA', '2020-08-07'),
+  c(110, 'green', 'ALB', '2019-06-01'),
+  c(60, 'green', 'CHN', '2017-05-11'),
+  c(86, 'green', 'SLV', '2018-05-06'),
+  c(103, 'green', 'AZE', '2019-02-05'),
+  c(102, 'green', 'ITA', '2018-12-26'),
+  c(30, 'green', 'CYP', '2015-04-15'),
+  c(84, 'green', 'IDN', '2018-04-18')
+)
+gdacs_df = data.frame(gdacs_df)
+colnames(gdacs_df) <- c('event_id', 'gdacs', 'iso3c', 'date')
 
 pager_compare <- function(df_poly_jitter, impact_type){
   

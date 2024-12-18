@@ -24,41 +24,41 @@
 # }
 # 
 # 
-# removeWeights <- function(ODD){
-#   pixels_of_interest <- which(!is.na(ODD$ISO3C))
-#   for (i in pixels_of_interest){
-#     weight_sum = c(0, 0, 0)
-#     polygon_matches = list(c(), c(), c())
-#     for (p in 1:length(ODD@polygons)){
-#       poly <- ODD@polygons[[p]]
-#       match_i <- which(poly$indexes == i)
-#       if (length(match_i) > 0){
-#         gadm_level <- str_count(poly$name, ',')
-#         polygon_matches[[gadm_level+1]] %<>% rbind(c(p, match_i))
-#         weight_sum[gadm_level+1] <- weight_sum[gadm_level+1] + poly$weights[match_i]
-#       }
-#     }
-#     for (g in 2:3){
-#       if (is.null(polygon_matches[[g]])) next
-#       if (NROW(polygon_matches[[g]])==1) next
-#       if (round(weight_sum[g],3)>1) stop()
-#       weights <- rep(0, NROW(polygon_matches[[g]]))
-#       for (j in 1:NROW(polygon_matches[[g]])){
-#         weights[j] <- ODD@polygons[[polygon_matches[[g]][j,1]]]$weights[polygon_matches[[g]][j,2]]
-#       }
-#       j_max_weight <- which.max(weights)
-#       for (j in 1:NROW(polygon_matches[[g]])){
-#         if (j == j_max_weight){
-#           ODD@polygons[[polygon_matches[[g]][j,1]]]$weights[polygon_matches[[g]][j,2]] = 1
-#         } else {
-#           ODD@polygons[[polygon_matches[[g]][j,1]]]$indexes <- ODD@polygons[[polygon_matches[[g]][j,1]]]$indexes[-polygon_matches[[g]][j,2]]
-#           ODD@polygons[[polygon_matches[[g]][j,1]]]$weights <- ODD@polygons[[polygon_matches[[g]][j,1]]]$weights[-polygon_matches[[g]][j,2]]
-#         }
-#       }
-#     }
-#   }
-#   return(ODD)
-# }
+removeWeights <- function(ODD){
+  pixels_of_interest <- which(!is.na(values(ODD$ISO3C)))
+  for (i in pixels_of_interest){
+    weight_sum = c(0, 0, 0)
+    polygon_matches = list(c(), c(), c())
+    for (p in 1:length(ODD@polygons)){
+      poly <- ODD@polygons[[p]]
+      match_i <- which(poly$indexes == i)
+      if (length(match_i) > 0){
+        gadm_level <- str_count(poly$name, ',')
+        polygon_matches[[gadm_level+1]] %<>% rbind(c(p, match_i))
+        weight_sum[gadm_level+1] <- weight_sum[gadm_level+1] + poly$weights[match_i]
+      }
+    }
+    for (g in 2:3){
+      if (is.null(polygon_matches[[g]])) next
+      if (NROW(polygon_matches[[g]])==1) next
+      if (round(weight_sum[g],3)>1.2) stop('Sum of weights for pixel larger than 1')
+      weights <- rep(0, NROW(polygon_matches[[g]]))
+      for (j in 1:NROW(polygon_matches[[g]])){
+        weights[j] <- ODD@polygons[[polygon_matches[[g]][j,1]]]$weights[polygon_matches[[g]][j,2]]
+      }
+      j_max_weight <- which.max(weights)
+      for (j in 1:NROW(polygon_matches[[g]])){
+        if (j == j_max_weight){
+          ODD@polygons[[polygon_matches[[g]][j,1]]]$weights[polygon_matches[[g]][j,2]] = 1
+        } else {
+          ODD@polygons[[polygon_matches[[g]][j,1]]]$indexes <- ODD@polygons[[polygon_matches[[g]][j,1]]]$indexes[-polygon_matches[[g]][j,2]]
+          ODD@polygons[[polygon_matches[[g]][j,1]]]$weights <- ODD@polygons[[polygon_matches[[g]][j,1]]]$weights[-polygon_matches[[g]][j,2]]
+        }
+      }
+    }
+  }
+  return(ODD)
+}
 # 
 # increaseAggregation <- function(ODD){
 #   ODD$PDens <- exp(round(log(ODD$PDens)))
@@ -308,11 +308,10 @@ aggregateODDbyX <- function(ODD, aggFactor){
 
 increaseAggregation_all <- function(folder_in='IIDIPUS_Input_Alternatives/Aug24'){
   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_Agg5/')
+  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_Agg5_Nov/')
   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
   for (file in ufiles){
     event_id <- as.numeric(strsplit(file, "_")[[1]][2])
-    if (!(event_id %in% c(1,2, 16,22,23,31, 59, 68,70,89,94,98,101,106,117,124,127,135,136,138,140,149))) next
     print(event_id)
     ODDy <- readODD(paste0(ODD_folderin, file))
     ODDyAgg <- tryCatch(aggregateODDbyX(ODDy, 5),error=function(e) NULL)

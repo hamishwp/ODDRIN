@@ -1008,10 +1008,82 @@ plotODDy <-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha
   
 }
 
-plotODDy_GADM <- function(ODDy, zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7, gadm_level=2){
-  #Plots background as GADM regions rather than terrain:
+# plotODDy_GADM <- function(ODDy, zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha=0.7, gadm_level=2){
+#   #Plots background as GADM regions rather than terrain:
+#   
+#   bbox <- ODDy@bbox
+#   #gadm_iso <- getData("GADM", country="NZL", level=2)
+#   iso3_unique <- unique(ODDy$ISO3C)
+#   iso3_unique <- iso3_unique[!is.na(iso3_unique)]
+#   gadm_iso <- as(geodata::gadm(country=iso3_unique[1], level=gadm_level, path=paste0(dir, 'Demography_Data/GADM/')), 'Spatial')
+#   if (length(iso3_unique) > 1){
+#     for (i in 2:length(iso3_unique)){
+#       gadm_iso %<>% rbind(as(geodata::gadm(country=iso3_unique[i], level=gadm_level, path=paste0(dir, 'Demography_Data/GADM/')), 'Spatial'))
+#     }
+#   }
+#   #gadm_iso <- gSimplify(gadm_iso, 0.01)
+#   gadm_iso <- intersect(gadm_iso, bbox)
+#   gadm_map <- fortify(gadm_iso)
+#   
+#   gg <- ggplot()  p <- gg + xlab("Longitude") + ylab("Latitude")#+ theme(legend.position = "none")
+#   
+#   gg <- gg + geom_map(map=gadm_map, data=gadm_map, aes(x=long, y=lat, map_id=id, group=id)) + xlim(bbox[1,1],bbox[1,2]) + ylim(bbox[2,1], bbox[2,2])
+#   gg <- gg + coord_map() + geom_polygon(data=gadm_map, aes(x=long, y=lat, group=group), fill='white', color='black')
+#   p <- gg + xlab("Longitude") + ylab("Latitude")#+ theme(legend.position = "none")
+#   
+# 
+#   hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
+#   for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+#     tmp<-ODDy[variable]
+#     tmp$hazard<-hazard
+#     hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+#   }
+#   ODDy@data$hazard<-hazard
+#   brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
+#   
+#   if(var!="hazard")  {
+#     ODDy@data[is.na(ODDy@data$ISO3C),var]<-NA
+#     
+#     p <- p+geom_tile(data = as.data.frame(ODDy),
+#                      mapping = aes(Longitude,Latitude,fill=ODDy@data[[var]]+0.1),alpha=0.8, width=ODDy@grid@cellsize[1]*5,
+#                      height=ODDy@grid@cellsize[2]*5) + scale_fill_viridis( trans = "log10", labels = function(x) sprintf("%.0f", x)) + labs(fill = ifelse(GetVarName(var)=='NULL', var, GetVarName(var)))
+#     
+#     p<-p+geom_contour(data = as.data.frame(ODDy),
+#                       mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
+#                       alpha=1.0,breaks = brks, lwd=0.8) +
+#       scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent") + 
+#       labs(colour = "Hazard Intensity")
+#     
+#     # p+geom_contour_filled(data = as.data.frame(ODDy),
+#     #                       mapping = aes(Longitude,Latitude,z=1-ODDy@data$tmp),
+#     #                       fill="green",alpha=alpha)+ 
+#     #   labs(fill = "Hazard>5")
+#     
+#     return(p)
+#   }
+#   
+#   ODDy@data$hazard[ODDy@data$hazard==0]<-NA
+#   
+#   p<-p+geom_contour_filled(data = as.data.frame(ODDy),
+#                            mapping = aes(Longitude,Latitude,z=hazard),
+#                            alpha=alpha,breaks = brks) +
+#     # scale_fill_discrete(low = "transparent",high = "red",na.value = "transparent") + 
+#     labs(fill = "Hazard Intensity")
+#   p<-p+geom_contour(data = as.data.frame(ODDy),
+#                     mapping = aes(Longitude,Latitude,z=hazard),
+#                     alpha=0.8,breaks = c(6.0),colour="red")
+#   
+#   
+# }
+
+plotODDy_GADM <- function(ODDy, var, gadm_level=2, haz_legend=F, var_legend=T, var_discrete=F, log_legend=F){
   
-  bbox <- ODDy@bbox
+  plot_df <- as.data.frame(ODDy, xy=T, na.rm=F)
+  plot_df[which(is.na(plot_df$ISO3C)), var] <- NA
+  names(plot_df)[which(names(plot_df)=='x')] = 'Longitude'
+  names(plot_df)[which(names(plot_df)=='y')] = 'Latitude'
+  
+  bbox <- matrix(ODDy@hazinfo$bbox, nrow=2)
   #gadm_iso <- getData("GADM", country="NZL", level=2)
   iso3_unique <- unique(ODDy$ISO3C)
   iso3_unique <- iso3_unique[!is.na(iso3_unique)]
@@ -1025,54 +1097,59 @@ plotODDy_GADM <- function(ODDy, zoomy=7,var="Population",breakings=NULL,bbox=NUL
   gadm_iso <- intersect(gadm_iso, bbox)
   gadm_map <- fortify(gadm_iso)
   
-  gg <- ggplot()
-  gg <- gg + geom_map(map=gadm_map, data=gadm_map, aes(x=long, y=lat, map_id=id, group=id)) + xlim(bbox[1,1],bbox[1,2]) + ylim(bbox[2,1], bbox[2,2])
-  gg <- gg + coord_map() + geom_polygon(data=gadm_map, aes(x=long, y=lat, group=group), fill='white', color='black')
-  p <- gg + xlab("Longitude") + ylab("Latitude")#+ theme(legend.position = "none")
+  p <- ggplot() + xlab("Longitude") + ylab("Latitude")#+ theme(legend.position = "none")
   
-
-  hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
-  for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
-    tmp<-ODDy[variable]
-    tmp$hazard<-hazard
-    hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+  p <- p + geom_map(map=gadm_map, data=gadm_map, aes(map_id=id, group=id)) + xlim(bbox[1,1],bbox[1,2]) + ylim(bbox[2,1], bbox[2,2])
+  p <- p + coord_map() + geom_polygon(data=gadm_map, aes(x=long, y=lat, group=group), fill='white', color='black')
+  
+  # if (log_legend){
+  #   p <- p + geom_raster(dat=plot_df, aes(x=Longitude, y=Latitude, fill=!!sym(var)+0.1), alpha=0.75) # quick fix but must be a better way to do log scale with 0s
+  # } else {
+  #   p <- p + geom_raster(dat=plot_df, aes(x=Longitude, y=Latitude, fill=!!sym(var)), alpha=0.75)
+  # }
+  p <- p + geom_raster(dat=plot_df, aes(x=Longitude, y=Latitude, fill=!!sym(var)), alpha=0.75)
+  p <- p + coord_equal() +
+    scale_x_continuous(expand=c(0,0)) + scale_y_continuous(expand=c(0,0)) +
+    theme_minimal() + 
+    theme(
+      axis.title = element_text(family = "Liberation Serif", size=12),  
+      legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
+      legend.title = element_text(family = "Liberation Serif", size=12)
+    ) + 
+    geom_contour(dat=plot_df, aes(Longitude,Latitude,z=hazMean1,colour=..level..),
+                 alpha=0.7, lwd=0.8) +
+    scale_color_gradientn(colors = c("transparent","#fc9272", "#ef3b2c"))
+  if (haz_legend){
+    p <- p + scale_color_gradientn(colors = c("transparent","#fc9272", "#ef3b2c")) + labs(colour = "Hazard Intensity      ")
+  } else {
+    p <- p + scale_color_gradientn(colors = c("transparent","#fc9272", "#ef3b2c"), guide='none')
   }
-  ODDy@data$hazard<-hazard
-  brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
-  
-  if(var!="hazard")  {
-    ODDy@data[is.na(ODDy@data$ISO3C),var]<-NA
-    
-    p <- p+geom_tile(data = as.data.frame(ODDy),
-                     mapping = aes(Longitude,Latitude,fill=ODDy@data[[var]]+0.1),alpha=0.8, width=ODDy@grid@cellsize[1]*5,
-                     height=ODDy@grid@cellsize[2]*5) + scale_fill_viridis( trans = "log10", labels = function(x) sprintf("%.0f", x)) + labs(fill = ifelse(GetVarName(var)=='NULL', var, GetVarName(var)))
-    
-    p<-p+geom_contour(data = as.data.frame(ODDy),
-                      mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
-                      alpha=1.0,breaks = brks, lwd=0.8) +
-      scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent") + 
-      labs(colour = "Hazard Intensity")
-    
-    # p+geom_contour_filled(data = as.data.frame(ODDy),
-    #                       mapping = aes(Longitude,Latitude,z=1-ODDy@data$tmp),
-    #                       fill="green",alpha=alpha)+ 
-    #   labs(fill = "Hazard>5")
-    
-    return(p)
+  if (var_discrete){
+    p <- p + scale_fill_viridis_d()
+  } else {
+    if (var_legend){
+      if (log_legend){
+        if (max(plot_df[,var], na.rm=T)> 100000){
+          breakings = c(0, 1000, 10000, 100000, 1000000)
+        } else {
+          breakings = c(0, 1000, 10000, 100000)
+        }
+        p <- p + scale_fill_viridis( trans = scales::pseudo_log_trans(base = 10, sigma = 100), 
+                                     breaks=breakings, labels = function(x) scales::comma(x))
+      }
+      else {
+        if (all(plot_df[, var]==0, na.rm=T)){
+          p <- p + scale_fill_viridis_c( limits = c(0, 1),breaks=c(0,1), labels=c(0,1))
+        } else {
+          p <- p + scale_fill_viridis_c()
+        }
+        
+      }
+    } else {
+      p <- p + scale_fill_viridis_c(guide='none')
+    }
   }
-  
-  ODDy@data$hazard[ODDy@data$hazard==0]<-NA
-  
-  p<-p+geom_contour_filled(data = as.data.frame(ODDy),
-                           mapping = aes(Longitude,Latitude,z=hazard),
-                           alpha=alpha,breaks = brks) +
-    # scale_fill_discrete(low = "transparent",high = "red",na.value = "transparent") + 
-    labs(fill = "Hazard Intensity")
-  p<-p+geom_contour(data = as.data.frame(ODDy),
-                    mapping = aes(Longitude,Latitude,z=hazard),
-                    alpha=0.8,breaks = c(6.0),colour="red")
-  
-  
+  return(p)
 }
 
 plotODDPolygons <-function(ODDy,admin_level=2, bbox=NULL){

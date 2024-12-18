@@ -408,7 +408,7 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   
   cat(sprintf("The input area spans %d tiles: %s\n", length(quad_keys), paste(quad_keys, collapse = ", ")))
   
-  df <- read.csv("https://minedbuildings.blob.core.windows.net/global-buildings/dataset-links.csv")
+  df <- read.csv("https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv")
   
   # Download the GeoJSON files for each tile that intersects the input geometry
   build_coords <- array(dim=c(0,2))

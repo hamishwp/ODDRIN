@@ -55,6 +55,26 @@ readSubNatData <- function(subnat_file){
   SubNatData$Region <- ifelse(trimws(SubNatData$Region) == "", NA, SubNatData$Region)
   SubNatData$Subregion <- ifelse(trimws(SubNatData$Subregion) == "", NA, SubNatData$Subregion)
   
+  SubNatData %<>% combineDamagedDestroyedBuildings()
+  return(SubNatData)
+}
+
+combineDamagedDestroyedBuildings <- function(SubNatData){
+  # We treat 'Damaged Buildings' as Damaged + Destroyed buildings, but in the spreadsheet they are separated into
+  # columns for Damaged only, Destroyed only or (Damaged + Destroyed) depending on what data is available
+  for (i in 1:NROW(SubNatData)){
+     if (!is.na(SubNatData$buildDamDest[i])){
+       #if buildDamDest is available use that
+       SubNatData$buildDam[i] = SubNatData$buildDamDest[i]
+       SubNatData$buildDamInferred[i] = SubNatData$buildDamDestInferred[i]
+       SubNatData$buildDam_qualifier[i] = SubNatData$buildDamDest_qualifier[i]
+     } else if (!is.na(SubNatData$buildDam[i])){
+         #otherwise sum over buildDam and buildDest
+         SubNatData$buildDam[i]=sum(SubNatData$buildDam[i], SubNatData$buildDest[i], na.rm=T)
+         SubNatData$buildDamInferred[i] = any(SubNatData$buildDamInferred[i], ifelse(is.na(SubNatData$buildDestInferred[i]), F, SubNatData$buildDestInferred[i]))
+         SubNatData$buildDam_qualifier[i] = SubNatData$buildDam_qualifier[i]
+      }
+  }
   return(SubNatData)
 }
 
@@ -718,8 +738,8 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
   
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
-  options(timeout = 300)
-  for (i in c(35, 68)){#31,73,75,83,91,109,121,122)){#1:169){#c(89, 119, 122, 127, 133, 139, 150,151,152,164,165,166,167, 168,169)){#c(7,8,9,11,12,13,14,48,49,67,68,73,74,75,85,88,92,93,98,99,100,104,114, 128:163)){
+  options(timeout = 500)
+  for (i in c(68)){#31,73,75,83,91,109,121,122)){#1:169){#c(89, 119, 122, 127, 133, 139, 150,151,152,164,165,166,167, 168,169)){#c(7,8,9,11,12,13,14,48,49,67,68,73,74,75,85,88,92,93,98,99,100,104,114, 128:163)){
     print(i)
     if (i==126) next
     # Subset displacement and disaster database objects
@@ -894,33 +914,32 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
 
 
 
-moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/Aug24Agg/'){
+moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/Nov24Agg'){
     ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
     ODD_foldertest<-paste0(dir, folder_in, '/ODDobjects/Test/')
     ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
+    #set.seed(1)
+    #ufiles <- ufiles[sample(1:length(ufiles), length(ufiles), replace=F)]
     total_mortalities <- c()
-    #sort by maximum intensity
+    #sort by mortality
     for (file in ufiles){
-      #if (file == "EQ20180418IDN_84"){ max_intensities <- c(max_intensities, 4.5); next}
-      #if (file == "EQ20191126ALB_133"){ max_intensities <- c(max_intensities, 4.5); next}
-      #if (file == "EQ20200813PAK_148"){ max_intensities <- c(max_intensities, 4.5); next}
       ODD <- readODD(paste0(ODD_folderall, file))
-      polygon_names <- unlist(lapply(ODD@polygons[ODD@impact$polygon], function(x) x$name))
-      if (any(tolower(polygon_names[which(ODD@impact$impact=='mortality')]) %in% c('tot', 'total'))){
-        nonmatch <- which(!tolower(polygon_names[which(ODD@impact$impact=='mortality')]) %in% c('tot', 'total'))
-        if (length(nonmatch)>0){
-          ODD@impact <- ODD@impact[-which(ODD@impact$impact=='mortality')[nonmatch],] # in the case of total and subnational data, remove the subnational
-        }
-      }
-      total_mortality <- sum(ODD@impact$observed[which(ODD@impact$impact=='mortality')])
-      #if (is.infinite(max_intensity)) stop()
-      total_mortalities <- c(total_mortalities, total_mortality)
+      total_mortalities <- c(total_mortalities, max(values(ODD[[grep('hazMean', names(ODD))]])[values(!is.na(ODD$Population) & ODD$Population > 0),], na.rm=t))
+      # polygon_names <- unlist(lapply(ODD@polygons[ODD@impact$polygon], function(x) x$name))
+      # if (any(tolower(polygon_names[which(ODD@impact$impact=='mortality')]) %in% c('tot', 'total'))){
+      #   nonmatch <- which(!tolower(polygon_names[which(ODD@impact$impact=='mortality')]) %in% c('tot', 'total'))
+      #   if (length(nonmatch)>0){
+      #     ODD@impact <- ODD@impact[-which(ODD@impact$impact=='mortality')[nonmatch],] # in the case of total and subnational data, remove the subnational
+      #   }
+      # }
+      # total_mortality <- sum(ODD@impact$observed[which(ODD@impact$impact=='mortality')])
+      # total_mortalities <- c(total_mortalities, total_mortality)
     }
-    ufiles <- ufiles[order(max_intensities)] # sort by date
-    i <- 0
-    for (file in ufiles){
-      i <- i + 1
-      if (i %%3 != 0){next}
+    ufiles <- ufiles[order(total_mortalities, decreasing=T)] # sort by date
+
+    for (i in 1:length(ufiles)){
+      file <- ufiles[i]
+      if (i %%3 != 1){next}
       options(warn = 2)
       file.copy(from = paste0(ODD_folderall, file),
                 to = paste0(ODD_foldertest, file))

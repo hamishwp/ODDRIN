@@ -890,8 +890,11 @@ for (i in 1:nSamps) {
   bd_df_int_real[[col_name]] <- numeric()
 }
 
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-10-31_164512_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP')
+#AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-10-31_164512_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP')
+#AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
 #AlgoResults$s_finish <- 160
+#AlgoResults$Omega_sample_phys <- AlgoResults$Omega_sample_phys[,c(1:6, 10:22),]
+AlgoResults <-  readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-12-10_060355_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2')
 
 set.seed(1)
 for (i in 1:length(ufiles_BD)){
@@ -899,14 +902,16 @@ for (i in 1:length(ufiles_BD)){
   if (file == "EQ20210814HTI_164") next
   BDy <- readBD(paste0(input_folder, file))
   
-  Omega <- relist(AlgoResults$Omega_sample_phys[,sample(950:1250,1)], skeleton=Model$skeleton)
+  Omega <- relist(AlgoResults$Omega_sample_phys[sample(1:1000,1),,163], skeleton=Model$skeleton)
+  #Omega <- relist(AlgoResults$Omega_sample_phys[,sample(1500:2000,1)], skeleton=Model$skeleton)
   pDamSamp <- BDX(BDy,Omega %>% addTransfParams(),Model,Method = list(Np = 1, cores=2), output='results_analysis')
   pDamSamp$intensity <- apply(pDamSamp[,grep('hazMean', names(pDamSamp))], 1, max, na.rm=T)
   pDamSamp <- pDamSamp[, !names(pDamSamp) %in% c('LP', 'spatial_pixel', 'spatial_pixel_id', grep('hazMean', names(pDamSamp), value = TRUE))]
   pDamSamp$event_name = file
   
   for (j in 2:nSamps){
-    Omega <- relist(AlgoResults$Omega_sample_phys[,sample(950:1250,1)], skeleton=Model$skeleton)
+    Omega <- relist(AlgoResults$Omega_sample_phys[sample(1:1000,1),,163], skeleton=Model$skeleton)
+    #Omega <- relist(AlgoResults$Omega_sample_phys[,sample(1500:2000,1)], skeleton=Model$skeleton)
     pDamSamp_j <- BDX(BDy,Omega %>% addTransfParams(),Model,Method = list(Np = 1, cores=2), output='results_analysis')
     pDamSamp %<>% add_column(!!paste0('pDamSamp.', j) := pDamSamp_j$pDamSamp.1)
   }
@@ -1062,7 +1067,7 @@ Prec_Recall <- data.frame(threshold=numeric(),
                           FPR = numeric(),
                           TPR = numeric())
 
-for(threshold in seq(0,1,0.0001)){
+for(threshold in exp(seq(-100, 0, 0.02))){
   # ROC_calc$p_samp_bd <- ifelse(ROC_calc$pDamMedian >threshold, 1, 0)
   # TP = sum(ROC_calc$p_samp_bd * ROC_calc$obs_bd)
   # FP = sum(ROC_calc$p_samp_bd * (ROC_calc$tot_obs-ROC_calc$obs_bd))
@@ -1103,12 +1108,12 @@ for (i in 1:nSamps) {
 Omega <- Omega_true <- list(Lambda1 = list(nu=8.75, kappa=0.6),
                             Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
                             Lambda3 = list(nu=9.55, kappa=0.68),
-                            Lambda4 = list(nu=9.9, kappa=1.6),
-                            theta= list(theta1=0.6),
+                            #Lambda4 = list(nu=9.9, kappa=1.6),
+                            #theta= list(theta1=0.6),
                             eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
                             #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                            vuln_coeff = list(PDens=0, SHDI=-0.08, GNIc=-0.02, Vs30=0.01, EQFreq=-0.02, FirstHaz=0.01, Night=0, FirstHaz.Night=0.05),
-                            check = list(check=0.5))
+                            vuln_coeff = list(PDens=0, SHDI=-0.08, GNIc=-0.02, Vs30=0.01, EQFreq=-0.02, FirstHaz=0.01, Night=0, FirstHaz.Night=0.05))
+                            #check = list(check=0.5))
 
 for (i in 1:length(ufiles_BD)){
   file <- ufiles_BD[i]
@@ -1150,7 +1155,14 @@ Prec_Recall2 <- data.frame(threshold=numeric(),
                            Recall=numeric(), 
                            TPR=numeric(),
                            FPR=numeric())
-for(threshold in exp(seq(-80, 0, 0.02))){
+Prec_Recall2 %<>% add_row(
+  threshold=0,
+  Precision = NA,
+  Recall = NA,
+  TPR = 1,
+  FPR = 1,
+)
+for(threshold in exp(seq(-200, 0, 0.02))){
   # ROC_calc$p_samp_bd <- ifelse(ROC_calc$pDamMedian >threshold, 1, 0)
   # TP = sum(ROC_calc$p_samp_bd * ROC_calc$obs_bd)
   # FP = sum(ROC_calc$p_samp_bd * (ROC_calc$tot_obs-ROC_calc$obs_bd))
@@ -1195,6 +1207,9 @@ ggplot() +
 plot(Prec_Recall$FPR, Prec_Recall$TPR, type='l', col='black', xlab='False Positive Rate', ylab='True Positive Rate')
 lines(Prec_Recall2$FPR, Prec_Recall2$TPR, type='l',col='blue', xlab='False Positive Rate', ylab='True Positive Rate')
 abline(a=0, b=1, col='red')
+
+AUC_Real <-sum(abs(Prec_Recall$TPR[2:NROW(Prec_Recall)]*(Prec_Recall$FPR[2:NROW(Prec_Recall)] - Prec_Recall$FPR[1:(NROW(Prec_Recall)-1)])))
+AUC_Sim <-sum(abs(Prec_Recall2$TPR[2:NROW(Prec_Recall2)]*(Prec_Recall2$FPR[2:NROW(Prec_Recall2)] - Prec_Recall2$FPR[1:(NROW(Prec_Recall2)-1)])))
 
 #ROCcurves.pdf, 4 x 6 inches
 

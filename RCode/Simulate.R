@@ -1024,12 +1024,12 @@ plot_sim_event <- function(ODDy){
   plots_with_legend <- plot_grid(plots_all, haz_legend, nrow=2, rel_heights=c(1,0.1))
   plots_with_legend
 }
-ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/ODDobjects/EQ20191028ABC_113')
-ODDy$BuildDamAgg <- ODDy$BuildDam
-values(ODDy$BuildDamAgg)[ODDy@polygons[[1]]$indexes] <- ODDy@impact$observed[1]
-values(ODDy$BuildDamAgg)[ODDy@polygons[[2]]$indexes] <- ODDy@impact$observed[4]
-ODDy$BuildDamAgg %<>% as.factor()
-plot_sim_event(ODDy)
+# ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/ODDobjects/EQ20191028ABC_113')
+# ODDy$BuildDamAgg <- ODDy$BuildDam
+# values(ODDy$BuildDamAgg)[ODDy@polygons[[1]]$indexes] <- ODDy@impact$observed[1]
+# values(ODDy$BuildDamAgg)[ODDy@polygons[[2]]$indexes] <- ODDy@impact$observed[4]
+# ODDy$BuildDamAgg %<>% as.factor()
+# plot_sim_event(ODDy)
 
 #SimEvent.odf, 6 x 12 inches
 

@@ -1,9 +1,14 @@
 # Example:
-# ODDyAgg <- prepareODD(iso3='MAR', sdate='2023-09-08')
-# PosteriorImpactPred(ODDyAgg)
-
-ODDyAgg <- prepareODD(iso3='AFG', sdate='2023-10-07')
+#ODDyAgg <- prepareODD(iso3='MAR', sdate='2023-09-08')
+ODDyAgg <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/ODDAggobjects/EQ20230908MAR_-1_AggLevel5')
 PosteriorImpactPred(ODDyAgg)
+
+# ODDyAgg <- prepareODD(iso3='AFG', sdate='2023-10-07')
+# PosteriorImpactPred(ODDyAgg)
+# 
+# 
+# ODDyAgg <- prepareODD(iso3='PHL', sdate='2013-10-15')
+# PosteriorImpactPred(ODDyAgg)
 
 prepareODD <- function(USGSid = NULL, iso3 = NULL, bbox = NULL, sdate = NULL, fdate=NULL, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/'){
   
@@ -19,20 +24,20 @@ prepareODD <- function(USGSid = NULL, iso3 = NULL, bbox = NULL, sdate = NULL, fd
     iso3 = na.omit(names(sort(table(coords2country(lhazSDF[[2]]@coords)), decreasing=T)))[1]
   }
   namer<-paste0(lhazSDF$hazard_info$hazard, str_remove_all(as.character.Date(min(lhazSDF$hazard_info$eventdates)),"-"),iso3, "_-1")
-  saveRDS(lhazSDF, paste0(dir, folder_write, 'HAZARDobjects/', namer))
+  saveHAZ(lhazSDF, paste0(dir, folder_write, 'HAZARDobjects/', namer))
   
   #create ODD object:
   ODDy <- createODD(lhazSDF)
-  saveRDS(ODDy, paste0(dir, folder_write, 'ODDobjects/', namer))
+  saveODD(ODDy, paste0(dir, folder_write, 'ODDobjects/', namer))
   
   #add polygons for each administrative region
   gadm_regions <- find_subnat_regions(ODDy, -1)
   polygons_list <- create_polygons_list(gadm_regions)
   saveRDS(list(gadm_regions=gadm_regions, polygons_list=polygons_list), paste0(dir, folder_write, 'tmp/', namer, 'polygons')) # save intermediary objects just in case something crashes
   ODDy <- addODDPolygons(ODDy, polygons_list)
-  saveRDS(ODDy, paste0(dir, folder_write, 'ODDobjects/', namer)) # again, save frequently just in case something crashes
+  saveODD(ODDy, paste0(dir, folder_write, 'ODDobjects/', namer)) # again, save frequently just in case something crashes
   ODDy <- addPolygonsToImpact(ODDy)
-  saveRDS(ODDy, paste0(dir, folder_write, 'ODDobjects/', namer))
+  savODD(ODDy, paste0(dir, folder_write, 'ODDobjects/', namer))
   
   #plot to make sure all is ok:
   plotODDy(ODDy)
@@ -43,20 +48,22 @@ prepareODD <- function(USGSid = NULL, iso3 = NULL, bbox = NULL, sdate = NULL, fd
   ODDyAgg <- aggregateODDbyX(ODDy, AggLevel)
   
   namer<-paste0(namer, '_AggLevel', AggLevel)
-  saveRDS(ODDyAgg, paste0(dir, folder_write, "ODDAggobjects/",namer))
+  saveODD(ODDyAgg, paste0(dir, folder_write, "ODDAggobjects/",namer))
 }
 
-PosteriorImpactPred <- function(ODDy, AlgoResultsFilename='HPC/abcsmc_2024-07-10_192933_alpha0.9_M60_Npart1000RealAgg5'){
+PosteriorImpactPred <- function(ODDy, AlgoResultsFilename='HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2',
+                                folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/'){#AlgoResultsFilename='HPC/abcsmc_2024-07-10_192933_alpha0.9_M60_Npart1000RealAgg5'){
   #aggregation of ODD object should match that of the ODD objects used to fit AlgoResults
   
-  AlgoResults <- paste0(dir, 'IIDIPUS_Results/', AlgoResultsFilename)
+  AlgoResults <- readRDS(paste0(dir, 'IIDIPUS_Results/', AlgoResultsFilename))
+  #AlgoResults$Omega_sample_phys <- AlgoResults$Omega_sample_phys[, c(1:6, 10:22),]
   ODDyWithImpact <- sampleImpactODD(ODDy, AlgoResults)
   
-  plotODDy(ODDyWithImpact, var='mortality.mean') # doesn't show up on map very well. Try to improve plot
+  plotODDy_GADM(ODDyWithImpact, var='mortality.mean') # doesn't show up on map very well. Try to improve plot
   plotODDy(ODDyWithImpact, var='displacement.mean')
   
   ODDyWithAggImpact <- aggregateSampledImpact(ODDyWithImpact)
-  saveRDS(ODDyWithAggImpact, paste0(dir, folder_write, "ODDAggobjects/",namer, '_WithImpact100'))
+  saveODD(ODDyWithAggImpact, paste0(dir, folder_write, "ODDAggobjects/",namer, '_WithImpact100'))
 }
 
 extractHAZARD <- function(USGSid = NULL, iso3 = NULL, bbox = NULL, sdate = NULL, fdate=NULL){
@@ -139,11 +146,11 @@ find_subnat_regions <- function(ODDy, eventid, gadm_levels=c(1,2), print_to_xl=F
   # Find the subnational regions at the provided administrative levels (gadm level 1 or 2)
   # that are exposed to the hazard
   # Find the pixels in the ODD object that are in each region. 
-  iso3_unique <- unique(ODDy$ISO3C)[which(!is.na(unique(ODDy$ISO3C)))]
+  iso3_unique <- unique(ODDy$ISO3C)$ISO3C[!is.na(unique(ODDy$ISO3C)$ISO3C)]
   gadm_regions_1 <- data.frame('Country'=character(), 'Region'=character(), 'Subregion'=character())
   gadm_regions_2 <- data.frame('Country'=character(), 'Region'=character(), 'Subregion'=character())
   for (gadm_level in gadm_levels){
-    pixels_unallocated <- which(!is.na(ODDy$ISO3C))
+    pixels_unallocated <- which(values(!is.na(ODDy$ISO3C)))
     for (iso3 in iso3_unique){
       regions_gadm_level <- tryCatch(getGADM(level=gadm_level, country=iso3),error=function(e) NULL)
       if(is_null(regions_gadm_level)){
@@ -163,19 +170,25 @@ find_subnat_regions <- function(ODDy, eventid, gadm_levels=c(1,2), print_to_xl=F
           print(paste('No polygon data found for', r))
           next
         }
-        overlap <- (max(r_poly@bbox[1,]) >= ODDy@bbox[1] &
-                      min(r_poly@bbox[1,]) <= ODDy@bbox[3] &
-                      max(r_poly@bbox[2,]) >= ODDy@bbox[2] &
-                      min(r_poly@bbox[2,]) <= ODDy@bbox[4])
+        overlap <- (max(r_poly@bbox[1,]) >= ODDy@hazinfo$bbox[1] &
+                      min(r_poly@bbox[1,]) <= ODDy@hazinfo$bbox[3] &
+                      max(r_poly@bbox[2,]) >= ODDy@hazinfo$bbox[2] &
+                      min(r_poly@bbox[2,]) <= ODDy@hazinfo$bbox[4])
         if (!overlap) next
         
         if (length(pixels_unallocated)==0) next
         
-        spdf_pixels_unallocated <- SpatialPointsDataFrame(coords=ODDy@coords[pixels_unallocated,, drop=F],
-                                                          data=ODDy@data[pixels_unallocated,1:2, drop=F], #this is arbitrary, function just seems to require data
-                                                          proj4string=r_poly@proj4string)
-        spdf_pixels_unallocated$id = 1:length(pixels_unallocated)
-        contained <- tryCatch(terra::intersect(r_poly, spdf_pixels_unallocated)$id, error=function(e) c())
+        crds <- crds(ODDy, na.rm=F)
+        
+        # spdf_pixels_unallocated <- SpatialPointsDataFrame(coords=crds[pixels_unallocated,, drop=F],
+        #                                                   data=ODDy@data[pixels_unallocated,1:2, drop=F], #this is arbitrary, function just seems to require data
+        #                                                   proj4string=r_poly@proj4string)
+        # spdf_pixels_unallocated$id = 1:length(pixels_unallocated)
+        # contained <- tryCatch(terra::intersect(r_poly, spdf_pixels_unallocated)$id, error=function(e) c())
+        
+        sf_pixels_unallocated <- st_as_sf(data.frame(xyFromCell(ODDy, pixels_unallocated)), coords = c("x", "y"), crs = crs(ODDy))
+        contained <- c(st_intersects(sf_pixels_unallocated, st_make_valid(st_as_sf(r_poly)), sparse=F)) 
+        
         if (length(contained)>0){
           #print(paste('Polygon', r, 'contains an unallocated pixel'))
           pixels_unallocated <- pixels_unallocated[-contained]
@@ -225,7 +238,7 @@ addPolygonsToImpact <- function(ODDy){
   # with the observed impact left blank
   ODDy@impact <- data.frame()
   impact_types <- c('mortality', 'displacement')
-  if (!is.null(ODDy$nBuildings)){impact_types <- c(impact_types, 'buildDam')}
+  if ('nBuildings' %in% names(ODDy)){impact_types <- c(impact_types, 'buildDam')}
   for (i in 1:length(ODDy@polygons)){
     ODDy@impact %<>% rbind(data.frame(iso3=ifelse(length(grep(',',ODDy@polygons[[i]]$name))>0, 
                                                                      countrycode::countrycode(sourcevar = trimws(substring(ODDy@polygons[[i]]$name, max(unlist(gregexpr(",", ODDy@polygons[[i]]$name))) + 1)),
@@ -243,7 +256,7 @@ addPolygonsToImpact <- function(ODDy){
                                                          inferred=F))
   }
   
-  iso3_unique <- unique(ODDy$ISO3C)[which(!is.na(unique(ODDy$ISO3C)))]
+  iso3_unique <- unique(ODDy$ISO3C)$ISO3C[!is.na(unique(ODDy$ISO3C)$ISO3C)]
   if (length(iso3_unique) == 1){
     tot_poly <- length(ODDy@polygons) + 1
     ODDy@impact %<>% rbind(data.frame(iso3=iso3_unique,
@@ -255,7 +268,7 @@ addPolygonsToImpact <- function(ODDy){
                               polygon=tot_poly,
                               inferred=F))
     ODDy@polygons[[tot_poly]] = list(name=countrycode::countrycode(sourcevar = iso3_unique,origin = "iso3c",destination = "country.name"), 
-                                                 indexes=1:NROW(ODDy@data), weights=rep(1, NROW(ODDy@data)))
+                                                 indexes=1:ncell(ODDy), weights=rep(1, ncell(ODDy)))
   } else {
     for (j in 1:length(iso3_unique)){
       #Add rows for national impact:
@@ -269,7 +282,7 @@ addPolygonsToImpact <- function(ODDy){
                                 polygon=added_poly,
                                 inferred=F))
       ODDy@polygons[[added_poly]] = list(name=countrycode::countrycode(sourcevar = iso3_unique[j],origin = "iso3c",destination = "country.name"),
-                                       indexes=which(ODDy$ISO3C==iso3_unique[j]), weights=rep(1, sum(ODDy$ISO3C==iso3_unique[j],na.rm=T)))
+                                       indexes=which(values(ODDy$ISO3C==iso3_unique[j])), weights=rep(1, sum(values(ODDy$ISO3C==iso3_unique[j]),na.rm=T)))
     }
     #Add rows for total impact:
     tot_poly <- length(ODDy@polygons) + 1
@@ -281,7 +294,7 @@ addPolygonsToImpact <- function(ODDy){
                               build_type=NA,
                               polygon=tot_poly,
                               inferred=F))
-    ODDy@polygons[[tot_poly]] = list(name='TOTAL',indexes=1:NROW(ODDy@data), weights=rep(1, NROW(ODDy@data)))
+    ODDy@polygons[[tot_poly]] = list(name='TOTAL',indexes=1:ncell(ODDy), weights=rep(1, ncell(ODDy)))
   }
   return(ODDy)
 }
@@ -289,19 +302,21 @@ addPolygonsToImpact <- function(ODDy){
 sampleImpactODD <- function(ODDy, AlgoResults, N_samples = 100){
   #Sample from the posterior predictive distribution for the event's impact
   AlgoResults %<>% addAlgoParams()
-  AlgoParamsPostPredict <- list(Np = 1, m_CRPS=1, cores=1)
+  AlgoParamsPostPredict <- list(Np = 1, m_CRPS=1, cores=1, NestedCores=1)
   params_sampled <- rep(NA, N_samples)
-  sampled <- array(NA, dim=c(NROW(ODDy@data),3, N_samples))
+  sampled <- array(NA, dim=c(ncell(ODDy),3, N_samples))
   for (i in 1:N_samples){
     print(paste('Sample', i))
+    #param_sample <- sample(1:2000,1) #MCMC
     param_sample <- sample(1:AlgoResults$Npart, 1, replace=T, prob=AlgoResults$W[,AlgoResults$s_finish])
     params_sampled[i] <- param_sample
+    #proposed = AlgoResults$Omega_sample_phys[,which(is.na(AlgoResults$Omega_sample_phys[1,]))[1]-param_sample] %>% relist(skeleton=Model$skeleton) %>% addTransfParams() #MCMC
     proposed = AlgoResults$Omega_sample_phys[param_sample,,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton) %>% addTransfParams()
     impact <- DispX(ODDy, proposed, Model$center, Method = AlgoParamsPostPredict, output='SampledFull')
     sampled[,,i] <- impact
   }
   
-  for (i in 1:ifelse(is.null(ODDy$nBuildings), 2,3)){
+  for (i in 1:ifelse('nBuildings' %in% names(ODDy), 3,2)){
     # i = 1: Displacement; i = 2: Mortality; i = 3: BuildDam. 
     # Add a column to ODDy@data for each posterior predictive impact sample, the mean, median, and the 5th and 95th percentiles
     impact_types = c('displacement', 'mortality', 'buildDam')
@@ -312,7 +327,9 @@ sampleImpactODD <- function(ODDy, AlgoResults, N_samples = 100){
     impact_sampled[,paste0(impact_types[i], '.median')] = apply(sampled[,i,], 1, median )
     impact_sampled[,paste0(impact_types[i], '.q05')] = apply(sampled[,i,], 1, quantile,0.05 )
     impact_sampled[,paste0(impact_types[i], '.q95')] = apply(sampled[,i,], 1, quantile, 0.95 )
-    ODDy@data %<>% cbind(impact_sampled)
+    impact_sampled[,paste0(impact_types[i], '.q1')] = apply(sampled[,i,], 1, quantile,0.1 )
+    impact_sampled[,paste0(impact_types[i], '.q9')] = apply(sampled[,i,], 1, quantile, 0.9 )
+    ODDy[[names(impact_sampled)]] = impact_sampled
   } 
   return(ODDy)
 }
@@ -320,14 +337,14 @@ sampleImpactODD <- function(ODDy, AlgoResults, N_samples = 100){
 aggregateSampledImpact <- function(ODDyWithImpact){
   #Aggregate the sampled impact to add posterior predictive samples to ODDy@impact:
   
-  n_samples <- length(grep(paste0('mortality', '.s'),colnames(ODDyWithImpact@data)))
+  n_samples <- length(grep(paste0('mortality', '.s'),names(ODDyWithImpact)))
   sampled_df <- data.frame(polygon=integer(), impact=character())
   for (i in 1:n_samples){ sampled_df[,paste0('sampled.', i)] = integer()}
   
   # i = 1: Displacement; i = 2: Mortality; i = 3: BuildDam
   impact_types = c('displacement', 'mortality', 'buildDam')
-  for (i in 1:ifelse(is.null(ODDyWithImpact$nBuildings), 2,3)){
-    impact_sampled <-ODDyWithImpact@data[,grep(paste0(impact_types[i], '.s'),colnames(ODDyWithImpact@data))]
+  for (i in 1:ifelse('nBuildings' %in% names(ODDyWithImpact), 3,2)){
+    impact_sampled <-as.data.frame(ODDyWithImpact[[names(ODDyWithImpact)[grep(paste0(impact_types[i], '.s'),names(ODDyWithImpact))]]], na.rm=F)
     for (j in 1:length(ODDyWithImpact@polygons)){
         sampled_df[nrow(sampled_df)+1,] = c(j, impact_types[i], colSums(impact_sampled[ODDyWithImpact@polygons[[j]]$indexes,]))
     }
@@ -391,6 +408,38 @@ plot_AggImpacts <- function(impact_with_obs, regions=NULL){
   do.call(grid.arrange,plots_list)
 }
 
+MAR_plots <- function(ODDyWithAggImpact){
+  p1 <- plotODDy_GADM(ODDyWithAggImpact, var='mortality.mean', haz_legend=F, var_legend=T) + labs(fill = "Mortality Mean")
+  p2 <- plotODDy_GADM(ODDyWithAggImpact, var='mortality.q05', haz_legend=F, var_legend=T) + labs(fill = "Mortality 5%")
+  p3 <- plotODDy_GADM(ODDyWithAggImpact, var='mortality.q95', haz_legend=F, var_legend=T ) + labs(fill = "Mortality 95%")
+  p4 <- plotODDy_GADM(ODDyWithAggImpact, var='displacement.mean', haz_legend=F, var_legend=T, log_legend=T) + labs(fill = "Displacement Mean")
+  p5 <- plotODDy_GADM(ODDyWithAggImpact, var='displacement.q05', haz_legend=F, var_legend=T) + labs(fill = "Displacement 5%")
+  p6 <- plotODDy_GADM(ODDyWithAggImpact, var='displacement.q95', haz_legend=F, var_legend=T, log_legend=T) + labs(fill = "Displacement 95%")
+  
+  plot_with_haz_legend <- plotODDy_GADM(ODDyWithAggImpact, var='mortality.mean', haz_legend=T, var_legend=F) +
+                            theme(legend.position="bottom", legend.key.size = unit(15, 'pt'),
+                                  legend.key.width= unit(30, 'pt'),
+                                  legend.text = element_text(margin = margin(t=2, r = 10)))
+  haz_legend <- get_plot_component(plot_with_haz_legend, 'guide-box', return_all=T)[[3]]
+  
+  plots_all <- plot_grid( p1, p4, nrow=1,  align='v', labels = c('(a)', '(b)'),
+                          label_fontface = "plain",
+                          label_fontfamily = "Liberation Serif")
+  plots_with_legend_mean <- plot_grid(plots_all, haz_legend, nrow=2, rel_heights=c(1,0.1))
+  plots_with_legend_mean
+  
+  #MAR_Mean.pdf, 5 x 12
+  
+  plots_all <- plot_grid( p2, p3,p5, p6, nrow=2,  align='v', labels = c('(a)', '(b)', '(c)', '(d)'),
+                          label_fontface = "plain",
+                          label_fontfamily = "Liberation Serif")
+  plots_with_legend <- plot_grid(plots_all, haz_legend, nrow=2, rel_heights=c(1,0.1))
+  plots_with_legend
+  #MAR_quantiles.pdf, 10 x 12
+ 
+  #plotODDy_GADM(ODDyWithAggImpact, var='buildDam.mean', haz_legend=T, var_legend=T) + labs(fill = "Building Damage Mean")
+}
+
 plot_correlated_impacts <- function(impact_with_obs, i, j, impact_type='mortality', baseR=F){
   # ODDyWithAggImpact is output of aggregateSampledImpact(sampleImpactODD(ODDy, AlgoResults))
   
@@ -422,7 +471,14 @@ addObsData_MAR20230908 <- function(ODDyWithAggImpact){
   observed_data_MAR20230908 %<>% add_row(name='TOTAL', impact='mortality', observed = 2946)
   
   impact_with_obs <- addObs(ODDyWithAggImpact, observed_data_MAR20230908, 'mortality', add_zeros=T )
+  
   plot_AggImpacts(impact_with_obs)
+  
+  sampled_cols <- grep('sampled.', names(impact_with_obs ))
+  impact_with_obs$sampled.median = apply(impact_with_obs[,sampled_cols ], 1, function(x) median(as.numeric(x)))
+  impact_with_obs$sampled.q05 = apply(impact_with_obs[,sampled_cols ], 1, function(x) quantile(as.numeric(x), 0.025))
+  impact_with_obs$sampled.q95 = apply(impact_with_obs[,sampled_cols ], 1, function(x) quantile(as.numeric(x), 0.975))
+  impact_with_obs[impact_with_obs$sampled.q95>0, c('polygon_name', 'observed', 'sampled.q05', 'sampled.median', 'sampled.q95')]
   
   # par(mfrow=c(5,5))
   # for (i in 2:7){

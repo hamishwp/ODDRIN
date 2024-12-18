@@ -33,12 +33,12 @@ source('RCode/Simulate.R')
 Omega <- Omega_true <- list(Lambda1 = list(nu=8.75, kappa=0.6),
                             Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
                             Lambda3 = list(nu=9.55, kappa=0.68),
-                            Lambda4 = list(nu=9.9, kappa=1.6),
-                            theta= list(theta1=0.6),
+                            #Lambda4 = list(nu=9.9, kappa=1.6),
+                            #theta= list(theta1=0.6),
                             eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
                             #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                            vuln_coeff = list(PDens=0, SHDI=-0.08, GNIc=-0.02, Vs30=0.01, EQFreq=-0.02, FirstHaz=0.01, Night=0, FirstHaz.Night=0.05),
-                            check = list(check=0.5))
+                            vuln_coeff = list(PDens=0, SHDI=-0.08, GNIc=-0.02, Vs30=0.01, EQFreq=-0.02, FirstHaz=0.01, Night=0, FirstHaz.Night=0.05))
+                            #check = list(check=0.5))
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 plot_S_curves(Omega_true)
@@ -230,12 +230,12 @@ AlgoResults <- delmoral_parallel(AlgoParams, Model, unfinished = F, tag_notes=ta
 AlgoParams$cores <- 1
 AlgoParams$NestedCores <- 4
 AlgoParams$Np <- 1
-AlgoParams$m_CRPS <- 60
+AlgoParams$m_CRPS <- 5
 AlgoParams$smc_Npart <- 50
 AlgoParams$n_nodes <- 1
 AlgoParams$smc_steps <- 100
 AlgoParams$rel_weightings <- c(1,1)
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Aug24Agg/'
+AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Nov24Agg/'
 
 tag_notes <- paste0('alpha', AlgoParams$smc_alpha, 'test_ucorr')
 AlgoResults <- delmoral_parallel_corr(AlgoParams, Model, unfinished = F,tag_notes=tag_notes)
@@ -373,14 +373,15 @@ library(cowplot)
 library(scales)
 plot_true_vs_simulated_obsvals <- function(impact_type){
   p <- ggplot()  + 
-    scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
+    scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 3, 10, 30, 100, 300, 1000), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
     scale_x_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000, 10000, 100000, 1000000), labels=function(x) {ifelse(x==0, "0", ifelse(x==10, "10",parse(text=gsub("[+]", "", gsub("1e", "10^", scientific_format()(x))))))}, expand = expand_scale(mult = c(0,0.1))) +
     geom_histogram(data=df_SimImpact %>% filter(impact==impact_type), aes(x=observed,y=after_stat(count)), alpha=0.4, col="blue", lwd=0.2, fill="blue") +
     geom_histogram(data=df_Impact %>% filter(impact==impact_type), aes(x=observed,y=after_stat(count)), alpha=0.4, col='red', lwd=0.2, fill='red') +
     theme_bw() + ylab('Count') + xlab('Oberved') +
     theme(axis.title = element_text(family = "Liberation Serif", size=12),  
           legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
-          legend.title = element_text(family = "Liberation Serif", size=12))
+          legend.title = element_text(family = "Liberation Serif", size=12),
+          panel.grid.minor = element_blank())
   return(p)
 }
 plot_true_vs_simulated_obscount <- function(impact_type){
@@ -392,7 +393,7 @@ plot_true_vs_simulated_obscount <- function(impact_type){
     
     p <- ggplot() +
       scale_x_continuous(expand = expand_scale(add = c(2.5,7.5))) + 
-      scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 1, 10, 100), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
+      scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 1, 3, 10, 30, 100, 300), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
       geom_histogram(data=df_sim_tally, aes(x=n, y=after_stat(count),fill='Simulated Data', col='Simulated Data'), binwidth=4, center=3,alpha=0.3, col='blue', lwd=0.2) + 
       geom_histogram(data=df_real_tally, aes(x=n, y=after_stat(count),fill='Real Data', col='Real Data'), binwidth=4, center=3, alpha=0.3, col='red', lwd=0.2) +
       ylab('Count') + xlab('Number of Observations per event') + theme_bw() +
@@ -400,20 +401,22 @@ plot_true_vs_simulated_obscount <- function(impact_type){
       guides(fill = guide_legend(override.aes = list(color = NULL))) +
       theme(axis.title = element_text(family = "Liberation Serif", size=12),  
             legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
-            legend.title = element_text(family = "Liberation Serif", size=12))
+            legend.title = element_text(family = "Liberation Serif", size=12),
+            panel.grid.minor = element_blank())
     p
   } else {
     p <- ggplot() +
       scale_x_continuous(expand = expand_scale(mult = c(0,0.1))) + 
-      scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 1, 10, 100), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
-      geom_histogram(data=df_sim_tally, aes(x=n, y=after_stat(count),fill='Simulated Data', col='Simulated Data'),alpha=0.3, col='blue', lwd=0.2) + 
-      geom_histogram(data=df_real_tally, aes(x=n, y=after_stat(count),fill='Real Data', col='Real Data'), alpha=0.3, col='red', lwd=0.2) +
+      scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 1, 3, 10, 30, 100, 300), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
+      geom_histogram(data=df_sim_tally, aes(x=n, y=after_stat(count),fill='Simulated Data', col='Simulated Data'), binwidth=1, center=0,alpha=0.3, col='blue', lwd=0.2) + 
+      geom_histogram(data=df_real_tally, aes(x=n, y=after_stat(count),fill='Real Data', col='Real Data'), binwidth=1, center=0, alpha=0.3, col='red', lwd=0.2) +
       ylab('Count') + xlab('Number of Observations per event') + theme_bw() +
       scale_fill_manual(values = c("Real Data" = "red", "Simulated Data" = "blue"))+ labs(fill = "") +
       guides(fill = guide_legend(override.aes = list(color = NULL))) +
       theme(axis.title = element_text(family = "Liberation Serif", size=12),  
             legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
-            legend.title = element_text(family = "Liberation Serif", size=12))
+            legend.title = element_text(family = "Liberation Serif", size=12),
+            panel.grid.minor = element_blank())
   }
   p
   return(p)

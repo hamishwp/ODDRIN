@@ -1913,7 +1913,7 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     proposed =  AlgoResults$Omega_sample_phys[,1] %>% relist(skeleton=Model$skeleton)
     proposed$u = AlgoResults$u[,,,1]
     impact_sample = SampleImpact(dir, Model, proposed %>% addTransfParams(), AlgoParams)
-    print(impact_sample)
+    #print(impact_sample)
     AlgoResults$loss[1] = CalcDist(impact_sample, AlgoParams)[1]
     AlgoResults$lambda_store[1] = AlgoResults$lambda_start
     AlgoResults$mu_store[,1] = AlgoResults$Omega_sample[,1]

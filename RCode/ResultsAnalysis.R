@@ -855,3 +855,64 @@ plot_distance_measure_exp <- function(){
   
 }
 
+#Scoring rule with and without variogram score
+SR1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180047_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat2')
+SR2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180050_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat1_backup')
+SR_vs <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-01-10_181501_MCMC_VariogramScore_M100_Npart1000NovAgg5_propCOVmult0.2')
+
+plot_mcmc_compare = function(SR1, SR2, SR_vs, xlim=c(1, 10000)){
+  
+  # Define subfigure labels (a), (b), (c), ...
+  subfig_labels <- letters[1:16]
+  plot_list <- list()
+  var_plot <- 12:19
+  # Loop through the variables and generate each plot
+  for (i in seq_along(var_plot)){#seq_along(vuln_var)) {
+    #var <- vuln_var[i]
+    var <- var_plot[i]
+    
+    post_samples <- data.frame(
+      x=(xlim[1]:xlim[2])-xlim[1],
+      SR1_param <- SR1$Omega_sample_phys[var,xlim[1]:xlim[2]],
+      SR2_param <-SR2$Omega_sample_phys[var,xlim[1]:xlim[2]],
+      SRvs_param <-SR_vs$Omega_sample_phys[var,xlim[1]:xlim[2]])
+    
+    post_samples_long <- post_samples %>%
+      pivot_longer(cols = -x, names_to = "Parameter", values_to = "Value")
+    
+    # Plot the lines
+    plot <- ggplot(data = post_samples_long, aes(x = x, y = Value, color = Parameter)) +
+      labs(y = get_greek_titles(names(unlist(Model$skeleton))[var]),
+           x= 'Post warmup iteration') +
+      scale_y_continuous(limits = c(-1,1), expand = c(0.01, 0.01)) +
+      #scale_y_continuous(limits = c(Model$par_lb[var], Model$par_ub[var]), expand = c(0.01, 0.01)) +
+      geom_line(alpha=0.8) +
+      theme_minimal() +
+      scale_color_viridis(discrete = TRUE) +
+      theme(
+        axis.title.y = element_text(family = "Times New Roman", size = 12),  # Change y-axis title font
+        axis.text.x = element_text(family = "Times New Roman", size = 12),   # Change x-axis text font
+        axis.text.y = element_text(family = "Times New Roman", size = 12),  # Remove y-axis text (numbers)
+        axis.ticks.y = element_blank(), # Remove y-axis ticks
+        axis.title.x = element_text(family = "Times New Roman", size = 12),  # Change x-axis title font
+        plot.title = element_text(family = "Times New Roman", size = 14),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+        plot.margin = unit(c(0, 20, 0, 15), "pt"),
+        legend.position = "none"
+      )
+    
+    # Add subfigure label to each plot
+    plot_with_label <- arrangeGrob(plot, #padding = unit(c(0, 20), "pt"),
+                                   top = textGrob(paste0("(", subfig_labels[i], ")"),
+                                                  x = unit(0.0, "npc"), y = unit(1, "npc"), just = c("left", "top"),
+                                                  gp = gpar(fontsize = 14, fontfamily = "Times New Roman"))
+    )
+    
+    # Store the labeled plot in the list
+    plot_list[[i]] <- plot_with_label
+  }
+  
+  # Arrange all 8 plots in a 2x4 grid
+  grid.arrange(grobs = plot_list, ncol = 4, nrow = 2)
+  #Trace_EuclDist.pdf, 12 x 9 (or 13 x 3 for single row)
+}

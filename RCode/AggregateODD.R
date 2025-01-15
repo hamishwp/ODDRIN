@@ -26,6 +26,15 @@
 # 
 removeWeights <- function(ODD){
   pixels_of_interest <- which(!is.na(values(ODD$ISO3C)))
+  ODD_df <- as.data.frame(ODD, na.rm=F)
+  haz_vals <- ODD_df[,grep('hazMean', names(ODD_df))]
+  if (is.null(dim(haz_vals))){
+    pixels_of_interest <- intersect(pixels_of_interest, which(!is.na(haz_vals)))
+  } else {
+    pixels_of_interest <- intersect(pixels_of_interest, which(apply(haz_vals, 1, function(x) any(!is.na(x)))))
+  }
+  country_names <- countrycode(ODD$ISO3C[1:ncell(ODD)]$ISO3C, origin='iso3c', destination='country.name')
+  country_names[which(values(ODD$ISO3C=='KOS'))] = 'Kosovo'
   for (i in pixels_of_interest){
     weight_sum = c(0, 0, 0)
     polygon_matches = list(c(), c(), c())
@@ -36,6 +45,22 @@ removeWeights <- function(ODD){
         gadm_level <- str_count(poly$name, ',')
         polygon_matches[[gadm_level+1]] %<>% rbind(c(p, match_i))
         weight_sum[gadm_level+1] <- weight_sum[gadm_level+1] + poly$weights[match_i]
+      }
+    }
+    for (g in 1){
+      if (is.null(polygon_matches[[g]])) next
+      if (NROW(polygon_matches[[g]])==1) next
+      for (j in 1:NROW(polygon_matches[[g]])){
+        iso3_name = ODD@polygons[[polygon_matches[[g]][j,1]]]$name
+        if(tolower(iso3_name) == 'total'){
+          next
+        }
+        if (iso3_name==country_names[i]){
+          ODD@polygons[[polygon_matches[[g]][j,1]]]$weights[polygon_matches[[g]][j,2]] = 1
+        } else {
+          ODD@polygons[[polygon_matches[[g]][j,1]]]$indexes <- ODD@polygons[[polygon_matches[[g]][j,1]]]$indexes[-polygon_matches[[g]][j,2]]
+          ODD@polygons[[polygon_matches[[g]][j,1]]]$weights <- ODD@polygons[[polygon_matches[[g]][j,1]]]$weights[-polygon_matches[[g]][j,2]]
+        }
       }
     }
     for (g in 2:3){

@@ -2437,7 +2437,6 @@ compare2Pager <- function(AlgoResults, s_finish=NULL){
 
 #Plot impact histogram for a single event:
 
-
 plot_total_impact <- function(ODD_with_impact){
   tot_impact <- colSums(ODD_with_impact@data[,grep('displacement.s', names(ODD_with_impact@data))])
   ggplot(data.frame(value = tot_impact), aes(x = value)) +
@@ -2446,3 +2445,108 @@ plot_total_impact <- function(ODD_with_impact){
     labs(x = "Posterior Predictive Total Displacement (Morocco Earthquake)", y = "")
 }
 
+# Check correlation structure
+plot_joint <- function(event_ids=c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135, 139, 164, 170), AlgoParams){
+  folderin<-paste0(dir,AlgoParams$input_folder, "ODDobjects/")
+  ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
+  
+  event_ids_all <- as.numeric(sub(".*_(\\d+)$", "\\1", ufiles))
+  #Selecting events:
+  # for (file in ufiles){
+  #   ODD <- readODD(paste0(folderin, file))
+  #   impact_filt <- ODD@impact %>% filter(impact=='mortality')
+  #   print(paste('Event:', file, '.Non-zero mortality observations:', sum(impact_filt$observed != 0)))
+  # }
+  AlgoResults_vs <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-01-10_181501_MCMC_VariogramScore_M100_Npart1000NovAgg5_propCOVmult0.2')
+  Omega_i <- which(AlgoResults_vs$Omega_sample_phys[7,] <0.5 & AlgoResults_vs$Omega_sample_phys[8,] >0.5)
+  Omega <- AlgoResults_vs$Omega_sample_phys[,Omega_i[Omega_i > 2000][1]] %>% relist(skeleton=Model$skeleton)
+  
+  AlgoResults_es <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180047_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat2')
+  Omega_i <- which(AlgoResults_es$Omega_sample_phys[7,] <0.5 & AlgoResults_es$Omega_sample_phys[8,] >0.8)
+  Omega <- AlgoResults_es$Omega_sample_phys[,Omega_i[Omega_i > 5000][1]] %>% relist(skeleton=Model$skeleton)
+  
+  Omega_i <- which(AlgoResults_es$Omega_sample_phys[11,] >0.6)
+  Omega <- AlgoResults_es$Omega_sample_phys[,Omega_i[Omega_i > 5000][1]] %>% relist(skeleton=Model$skeleton)
+  
+  i = 70
+  for (i in 70){
+    ODD <- readODD(paste0(folderin, ufiles[which(event_ids_all==i)]))
+    
+    #plot: 
+    #grid.arrange(plotODDy_GADM(ODD, 'ISO3C', gadm_level=2, haz_legend=T, var_legend=T, var_discrete=T),plotODDy_GADM(ODD, 'Population', gadm_level=2, haz_legend=T, var_legend=T, var_discrete=F, log_legend=T), ncol=2)
+    
+    ODD@impact %<>% rbind(data.frame(iso3=c('IRN', 'IRQ'),
+                                     sdate= ODD@impact$sdate[1],
+                                     impact='mortality',
+                                     observed=c(620, 10),
+                                     qualifier=NA,
+                                     inferred=F,
+                                     build_type=NA, 
+                                     polygon=c(99, 100)))
+    
+    sampled_out <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+                           replace(which(names(AlgoParams)==c('Np')), 50), 
+                         output='SampledAgg')
+    
+    #ordered_obs <- which(sampled_out[[1]]$impact=='mortality')[order(sampled_out[[1]]$observed[which(sampled_out[[1]]$impact=='mortality')], decreasing=T)]
+    ordered_obs <- c(1,2,3, 8)
+    par(mfrow=c(2,4))
+    polygon_names <- unlist(lapply(ODD@polygons[sampled_out[[1]]$polygon], function(x) x$name))
+    polygon_names[which(polygon_names=='n.a. (03), Kermanshah, Iran')] = "Salas Babajani, Kermanshah, Iran" 
+    for (obs1 in 1:4){
+      for (obs2 in obs1:4){
+        if (obs1==obs2 ) next
+        obs_plot <- ordered_obs[c(obs1,obs2)]
+        obs_sampled <- sampled_out[[1]]$observed[obs_plot]
+        for (j in 1:length(sampled_out)){
+          obs_sampled %<>% rbind(sampled_out[[j]]$sampled[obs_plot])
+        }
+        plot(obs_sampled[2:nrow(obs_sampled),], xlim=range(obs_sampled[,1]), ylim=range(obs_sampled[,2]),
+             xlab = paste(polygon_names[obs_plot[1]], sampled_out[[j]]$impact[obs_plot[1]]), 
+             ylab = paste(polygon_names[obs_plot[2]], sampled_out[[j]]$impact[obs_plot[2]]))
+        points(t(obs_sampled[1,]), col='red', pch=3)
+      }
+    }
+    more_obs_plot <- rbind(c(4,7), c(5,6))
+    for (obs_plot_i in 1:nrow(more_obs_plot)){
+      obs_plot <- more_obs_plot[obs_plot_i,]
+      obs_sampled <- sampled_out[[1]]$observed[obs_plot]
+      for (j in 1:length(sampled_out)){
+        obs_sampled %<>% rbind(sampled_out[[j]]$sampled[obs_plot])
+      }
+      plot(obs_sampled[2:nrow(obs_sampled),], xlim=range(obs_sampled[,1]), ylim=range(obs_sampled[,2]),
+           xlab = paste(polygon_names[obs_plot[1]], sampled_out[[j]]$impact[obs_plot[1]]), 
+           ylab = paste(polygon_names[obs_plot[2]], sampled_out[[j]]$impact[obs_plot[2]]))
+      points(t(obs_sampled[1,]), col='red', pch=3)
+    }
+  }
+  
+  
+  for (i in event_ids){
+    ODD <- readODD(paste0(folderin, ufiles[which(event_ids_all==i)]))
+    
+    sampled_out <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+                                                    replace(which(names(AlgoParams)==c('Np')), 50), 
+          output='SampledAgg')
+    
+    #ordered_obs <- which(sampled_out[[1]]$impact=='mortality')[order(sampled_out[[1]]$observed[which(sampled_out[[1]]$impact=='mortality')], decreasing=T)]
+    ordered_obs <- c(1,2,3,4)
+    par(mfrow=c(4,4))
+    polygon_names <- unlist(lapply(ODD@polygons[sampled_out[[1]]$polygon], function(x) x$name))
+    if (i == 70) polygon_names[4] = "Salas Babajani, Kermanshah, Iran" 
+    for (obs1 in 1:4){
+      for (obs2 in obs1:4){
+        if (obs1==obs2 ) next
+        obs_plot <- ordered_obs[c(obs1,obs2)]
+        obs_sampled <- sampled_out[[1]]$observed[obs_plot]
+        for (j in 1:length(sampled_out)){
+          obs_sampled %<>% rbind(sampled_out[[j]]$sampled[obs_plot])
+        }
+        plot(obs_sampled[2:nrow(obs_sampled),], xlim=range(obs_sampled[,1]), ylim=range(obs_sampled[,2]),
+             xlab = paste(polygon_names[obs_plot[1]], sampled_out[[j]]$impact[obs_plot[1]]), 
+             ylab = paste(polygon_names[obs_plot[2]], sampled_out[[j]]$impact[obs_plot[2]]))
+        points(t(obs_sampled[1,]), col='red', pch=3)
+      }
+    }
+  }
+}

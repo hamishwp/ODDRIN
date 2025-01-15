@@ -257,6 +257,8 @@ end_time <- Sys.time()
 execution_time <- end_time - start_time
 execution_time
 
+HLPrior_sample <- saveRDS(readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-12-10_060355_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2_further')$Omega_sample[,,170], '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/HLPriorSamples_SMCOut')
+
 
 #------------------------------------------------------------------------------------------------
 #----------------------------------- PLOT SIMULATED DATA ----------------------------------------

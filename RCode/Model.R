@@ -78,10 +78,10 @@ Model$Priors <- list( #All uniform so currently not included in the acceptance p
   Lambda3=list(nu=list(dist='unif', min=6.5, max=10), 
                kappa=list(dist='unif', min=0.25, max=3)),
   eps=list(local=list(dist='unif', min=0, max=2),
-           hazard_mort=list(dist='unif', min=0, max=1.5),
-           hazard_disp=list(dist='unif', min=0, max=1.5),
-           hazard_bd=list(dist='unif', min=0, max=1.5),
-           hazard_cor=list(dist='unif', min=0, max=1)),
+           hazard_mort=list(dist='unif', min=0.2, max=1.5),
+           hazard_disp=list(dist='unif', min=0.2, max=1.5),
+           hazard_bd=list(dist='unif', min=0.2, max=1.5),
+           hazard_cor=list(dist='unif', min=0.2, max=1)),
   vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.2), # 0.35
                   SHDI=list(dist='laplace', location=0, scale=0.2),
                   GNIc=list(dist='laplace', location=0, scale=0.2),
@@ -497,6 +497,9 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
     ufiles <- grep('^Test/' , ufiles, value = TRUE)
   }
   
+  x <- file.info(paste0(folderin,ufiles))
+  ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
+  
   #For Continuous Ranked Probability Score / Energy Score need multiple samples per particle
   AlgoParams$Np <- AlgoParams$Np * AlgoParams$m_CRPS
   
@@ -519,6 +522,7 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
     
     # Apply DispX
     impact_sample_event <- DispX(ODD = ODDy,Omega = proposed,center = Model$center, Method = AlgoParams, output=output, event_i=event_i)
+    
     if (NROW(impact_sample_event[[1]]) > 0){
       train_flag = sub("/.*", "", filer)
       impact_sample_event <- lapply(impact_sample_event, function(x){x$train_flag = train_flag; return(x)})  
@@ -529,8 +533,6 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
   
   if (AlgoParams$AllParallel){
     # When using task parallelisation, put the heaviest files first for optimisation reasons
-    x <- file.info(paste0(folderin,ufiles))
-    ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
     
     return(pmap(mclapply(X = ufiles,FUN = tmpFn,mc.cores = AlgoParams$cores), rbind))
     
@@ -646,17 +648,44 @@ get_average_rank_single <- function(df, log=F){
 
 
 #To use spantree function:
-#install.packages('vegan')
-#library(vegan)
-get_mst_rank_single <- function(df, log=F){
+get_mst_rank_single <- function(df, log=F, noise=NA){
+  # Calculates the minimum spanning tree pre-rank of the observation within the set of simulations.
+  # Can correlate the noise between current step and proposal to reduce effect of randomness in how ties are broken.
   pre_ranks <- c()
   for (j in 1:NCOL(df)){
-    pre_ranks <- c(pre_ranks, sum(spantree(dist(t(df[,-j])))$dist))
+    if (NROW(df)>1){
+      pre_ranks <- c(pre_ranks, sum(spantree(dist(t(df[,-j])))$dist))
+    } else {
+      pre_ranks <- c(pre_ranks, sum(spantree(dist(df[,-j]))$dist))
+    }
+  }
+  if (all(!is.na(noise))){
+    pre_ranks = pre_ranks + noise * min(abs(diff(unique(pre_ranks))))/2
   }
   return(rank(pre_ranks, ties.method ='random')[1])
 }
 
-CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
+get_banddepth_rank_single <- function(mat, noise = NA){
+  # Calculates the band depth pre-rank of the observation within the set of simulations.
+  # Can correlate the noise between current step and proposal to reduce effect of randomness in how ties are broken.
+  m <- NCOL(mat)
+  d <- NROW(mat)
+  pre_ranks <- c()
+  for (j in 1:m){
+    sum <- 0
+    for (k in 1:d){
+      rank_k <- sum(mat[k,j] <= mat[k,])
+      sum <- sum + rank_k * (m - rank_k) + (rank_k-1) * sum(mat[d,j]==mat[k,])
+    }
+    pre_ranks <- c(pre_ranks, sum /d)
+  }
+  if (all(!is.na(noise))){
+    pre_ranks = pre_ranks + noise / d
+  }
+  return(rank(pre_ranks,  ties.method ='random')[1])
+}
+
+CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams, corr_noise = NA, corr_noise2 = NA){
   #Calculate the mean energy score from impact_sample
   # Note that dist_poly has length 7, however, only the first element is currently used when calculating 
   # the distance. It has been kept with length greater than 1 in case we want to store up to 6 other values 
@@ -664,6 +693,7 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
   # elements are not actually currently used when calculating the distance. 
   
   observed <- impact_sample_poly[[1]]$observed
+
   dist_poly <- array(NA, dim=c(AlgoParams$Np,7))
   impact_type <- impact_sample_poly[[1]]$impact
   impact_weightings <- unlist(AlgoParams$impact_weights[impact_type])
@@ -679,6 +709,7 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
     
     es_store <- c()
     vs_store <- c()
+    pre_ranks <- c()
     #pre_ranks_average <- c() #can also assess quantiles for uniformity based on the average pre-rank function
     #pre_ranks_mst <- c() #can also assess quantiles for uniformity based on the minimum spanning tree pre-rank function
     
@@ -686,11 +717,21 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
       #For each event, compute the energy score of the observed data vs the 'prediction' (simulated data)
       #Each impact type is weighted differently, simply multiplying the observation and the simulations by this weight performs the weighting
       obs <- log(observed[grouped_events[[i]]]+AlgoParams$log_offset) *impact_weightings[grouped_events[[i]]]
-      sims <- log(samples_combined[grouped_events[[i]],]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]
+      sims <- log(samples_combined[grouped_events[[i]],, drop=F]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]
+      
+      obs_rh <- log(observed[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]+AlgoParams$log_offset) *impact_weightings[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]
+      sims_rh <- log(samples_combined[intersect(grouped_events[[i]], which(impact_type!='buildDam')),,drop=F]+AlgoParams$log_offset) * impact_weightings[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]
+      # get_mst_rank_single(cbind(obs_mst, sims_mst))
+      
+      #pre_ranks_mst <- c(pre_ranks_mst, get_mst_rank_single(cbind(obs_mst, sims_mst)))
+      pre_ranks <- c(pre_ranks, get_banddepth_rank_single(cbind(obs_rh, sims_rh), noise=corr_noise[i,]))
+      #pre_ranks <- c(pre_ranks, get_mst_rank_single(cbind(obs_rh, sims_rh), noise=corr_noise[i,]))
+
       
       if (length(grouped_events[[i]])==1){
         #crps is the univariate case of the energy score, so use when dimension is 1. 
         es_store<- c(es_store, crps_sample(obs, sims))
+        vs_store<- c(vs_store, 0)
         next
       } 
       es_store<- c(es_store, es_sample(obs, sims))
@@ -701,8 +742,12 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams){
       #pre_ranks_mst <- c(pre_ranks_mst, get_mst_rank_single(cbind(obs,sims)))
 
     }
+    
+    ranks_std <- (pre_ranks-runif(length(pre_ranks),0,1))/(AlgoParams$m_CRPS + 1)
+    #ranks_std <- (pre_ranks-corr_noise2)/(AlgoParams$m_CRPS + 1) #can also correlate the noise added here
+  
     dist_poly[n,1] <- mean(es_store) #mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$impact_weights['mortality'])
-    dist_poly[n,2] <- mean(vs_store)
+    dist_poly[n,2] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_std, null='punif')$statistic) #3*mean(vs_store) #mean(vs_store)/5
     dist_poly[n,3] <- 0
     
     ## Ways to assess uniformity of quantiles:
@@ -756,9 +801,9 @@ CalcDistPoint <- function(impact_sample_point, AlgoParams){
   return(dist_tot)
 }
 
-CalcDist <- function(impact_sample, AlgoParams){
+CalcDist <- function(impact_sample, AlgoParams, corr_noise = NA, corr_noise2 = NA){
   if (AlgoParams$kernel == 'energy_score'){
-    dist_poly <- CalcDistPoly_EnergyScore(impact_sample$poly, AlgoParams)
+    dist_poly <- CalcDistPoly_EnergyScore(impact_sample$poly, AlgoParams, corr_noise = corr_noise, corr_noise2 = corr_noise2)
     dist_point <- 0 #CalcDistPoint(impact_sample$point, AlgoParams)
     dist_tot <- cbind(dist_poly, dist_point)
   } else {
@@ -1318,3 +1363,4 @@ vulnerabilityVars<-function(DispData,Model){
 # xgr <- c(1,3,5,8,10)
 # plot(xgr, c(1, 1/5, 1/13, 1/33, 1/50), type='l')
 # lines(xgr,1/xgr, col='red')
+

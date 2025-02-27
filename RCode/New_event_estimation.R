@@ -1,14 +1,21 @@
-# Example:
-#ODDyAgg <- prepareODD(iso3='MAR', sdate='2023-09-08')
-ODDyAgg <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/ODDAggobjects/EQ20230908MAR_-1_AggLevel5')
-PosteriorImpactPred(ODDyAgg)
+#
+# -------------- New_event_estimation.R ----------------------------
+#
+# Generates ODD objects for new events and issues impact predictions
+# Main Functions:
+# -- prepareODD() takes USGS id OR country and date and creates an ODD object for the event
+# -- posteriorImpactPred() takes the resulting ODD object and posterior parameter samples to issue predictions
 
+# Examples:
+# ODDyAgg <- prepareODD(iso3='MAR', sdate='2023-09-08') #readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/ODDAggobjects/EQ20230908MAR_-1_AggLevel5')
+# PosteriorImpactPred(ODDyAgg)
+#
 # ODDyAgg <- prepareODD(iso3='AFG', sdate='2023-10-07')
 # PosteriorImpactPred(ODDyAgg)
 # 
-# 
 # ODDyAgg <- prepareODD(iso3='PHL', sdate='2013-10-15')
 # PosteriorImpactPred(ODDyAgg)
+
 
 prepareODD <- function(USGSid = NULL, iso3 = NULL, bbox = NULL, sdate = NULL, fdate=NULL, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/'){
   
@@ -51,9 +58,12 @@ prepareODD <- function(USGSid = NULL, iso3 = NULL, bbox = NULL, sdate = NULL, fd
   saveODD(ODDyAgg, paste0(dir, folder_write, "ODDAggobjects/",namer))
 }
 
-PosteriorImpactPred <- function(ODDy, AlgoResultsFilename='HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2',
-                                folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/'){#AlgoResultsFilename='HPC/abcsmc_2024-07-10_192933_alpha0.9_M60_Npart1000RealAgg5'){
-  #aggregation of ODD object should match that of the ODD objects used to fit AlgoResults
+PosteriorImpactPred <- function(ODDy, 
+                                AlgoResultsFilename='HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2',
+                                folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/'){
+  #AlgoResultsFilename should direct to a file within .../IIDIPUS_Results/ that contains an AlgoResults object
+  #The AlgoResults object must have been be fitted using the same model as the one currently used to issue predictions 
+  #The aggregation of ODD objects used here should also match that of the ODD objects used to fit AlgoResults
   
   AlgoResults <- readRDS(paste0(dir, 'IIDIPUS_Results/', AlgoResultsFilename))
   #AlgoResults$Omega_sample_phys <- AlgoResults$Omega_sample_phys[, c(1:6, 10:22),]
@@ -69,7 +79,7 @@ PosteriorImpactPred <- function(ODDy, AlgoResultsFilename='HPC/abcsmc_2024-08-20
 extractHAZARD <- function(USGSid = NULL, iso3 = NULL, bbox = NULL, sdate = NULL, fdate=NULL){
   #Need to specify either:
   #      - GDACS_id
-  #      - iso3, sdate, fdate (can further specify bbox to constrain)
+  #      - iso3, sdate (can further specify bbox to constrain)
   if (is.null(USGSid) & any(is.null(iso3), (is.null(sdate)))) stop('Specify either USGSid or iso3 and sdate')
   
   haz="EQ"; EQparams=list(I0=4.3, minmag=5)

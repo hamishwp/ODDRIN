@@ -442,7 +442,7 @@ addODDPolygons <- function(ODDy, polygons_list){
   polygons_indexes <- list()
   
   for (i in 1:length(polygons_list)){
-    print(i)
+    #print(i)
     if(!grepl(',', polygons_list[[i]]$polygon_name, fixed = TRUE)){ #check if subnational by searching for comma in polygon name
       if (polygons_list[[i]]$polygon_name=='TOTAL'){ #if 'TOTAL' then add all pixels to the polygon
         inPolyInds <- which(!is.na(values(ODDy[['ISO3C']])))
@@ -742,7 +742,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
   for (i in c(68)){#31,73,75,83,91,109,121,122)){#1:169){#c(89, 119, 122, 127, 133, 139, 150,151,152,164,165,166,167, 168,169)){#c(7,8,9,11,12,13,14,48,49,67,68,73,74,75,85,88,92,93,98,99,100,104,114, 128:163)){
     print(i)
     if (i==126) next
-    # Subset displacement and disaster database objects
+    # Subset displacement and disaster database objects to not all NA
     SubNatDataByEvent[[i]] <- SubNatDataByEvent[[i]][rowSums(is.na(SubNatDataByEvent[[i]][,-1])) != ncol(SubNatDataByEvent[[i]])-1, ]
     miniDam<-SubNatDataByEvent[[i]]
     
@@ -1084,3 +1084,5 @@ updateAllODDSubNat <- function(dir, folder_write='IIDIPUS_Input/', subnat_file='
     #saveRDS(ODDy, paste0(folderin, ufiles[i])) 
   }
 }
+
+

@@ -70,6 +70,7 @@ LoadLibraries<-function(packred, loadRmpi=F){
   library(LaplacesDemon)
   library(cowplot)
   library(terra) 
+  library(DescTools)
   if (loadRmpi){library(Rmpi)}
   
   if(!packred) {
@@ -118,10 +119,8 @@ GetODDPackages<-function(packred, loadRmpi=F){
   list.of.packages <- c('tidyverse', 'magrittr', 'pracma', 'parallel',
                         'mvtnorm', 'abind', 'countrycode', 'raster', 'scoringRules',
                         'viridis', 'gridExtra', 'devtools', 'shiny', 'usethis',
-                        'LaplacesDemon', 'cowplot')
+                        'LaplacesDemon', 'cowplot', 'DescTools')
   if (loadRmpi){ list.of.packages <- c(list.of.packages,'Rmpi')}
-  
-  
   
   if(!packred) list.of.packages<-c(list.of.packages,
                                    'sf', 'geojsonR', 'geosphere', 'rworldmap', 'lutz',

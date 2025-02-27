@@ -136,7 +136,7 @@ CalcLL <-function(dir,Model,proposed,AlgoParams, latent_var, dat='Train', LL_old
   x <- file.info(paste0(folderin,ufiles))
   ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
   
-  ufiles <- ufiles[2]
+  ufiles <- ufiles[3]
   
   #For Continuous Ranked Probability Score / Energy Score need multiple samples per particle
   AlgoParams$Np <- 1
@@ -199,7 +199,7 @@ init_latent_var <- function(AlgoParams, dat='Train'){
   } else if (tolower(dat)=='test'){
     ufiles <- grep('^Test/' , ufiles, value = TRUE)
   }
-  ufiles <- ufiles[2]
+  ufiles <- ufiles[3]
   
   latent_var <- list()
   latent_var$eps_event <- matrix(rnorm(length(ufiles)*3), ncol=3)
@@ -327,7 +327,7 @@ move_latent_obs <- function(obs, AlgoParams, dat='Train'){
     ufiles <- grep('^Test/' , ufiles, value = TRUE)
   }
   
-  ufiles <- ufiles[2]
+  ufiles <- ufiles[3]
   
   seed <- round(runif(1, 0, 100000))
   print(seed)
@@ -400,10 +400,10 @@ move_latent_obs <- function(obs, AlgoParams, dat='Train'){
           
           #sample 1/10th of the current obs:
           current_people = current_allocs[unlist(lapply(1:length(current_allocs), function(x) rep(x, current_obs[x])))]
-          if (length(current_people)==ceil(length(current_people)/20)){
+          if (length(current_people)==ceil(length(current_people)/100)){
             moved_people = current_people
           } else {
-            moved_people = sample(current_people, ceil(length(current_people)/20), replace=F)
+            moved_people = sample(current_people, ceil(length(current_people)/100), replace=F)
           }
           
           # select where the moved people go:
@@ -876,6 +876,8 @@ correlated_AMCMC_LL <- function(AlgoParams, Model, propCOV = NULL, init_val_phys
                                          split(latent_var_loc_prop, rep(1:length(latent_var_local_dim), sapply(latent_var_local_dim, prod))), 
                                          latent_var_local_dim, 
                                          SIMPLIFY = FALSE)
+      latent_var_prop$eps_local <- latent_var$eps_local #REMOVE
+      latent_var_prop$eps_event <- latent_var$eps_event #REMOVE
       latent_var_prop$obs <- move_latent_obs(latent_var$obs, AlgoParams)
     }
     
@@ -924,7 +926,7 @@ correlated_AMCMC_LL <- function(AlgoParams, Model, propCOV = NULL, init_val_phys
       }
     }
     
-    plot(AlgoResults$Omega_sample_phys[2,])
+    plot(AlgoResults$Omega_sample_phys[3,])
     
     if (iter_func(s)==iter_func(s-1)){
       AlgoResults$mu_store[,s] = (s - iter_func(s))/(s-iter_func(s)+1) *AlgoResults$mu_store[,s-1] + 1/(s-iter_func(s)+1) * AlgoResults$Omega_sample[,s]
@@ -952,7 +954,7 @@ correlated_AMCMC_LL <- function(AlgoParams, Model, propCOV = NULL, init_val_phys
 }
 
 #plot results:
-latent_obs_store <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/latent_obs_2025-01-13_151216.484825')
+latent_obs_store <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/latent_obs_2025-01-16_162110.15832')
 latent_obs_final <- latent_obs_store[[1]][,,,dim(latent_obs_store[[1]])[4]]
 
 folderin<-paste0(dir,AlgoParams$input_folder, "ODDobjects_Unweighted/")
@@ -961,13 +963,22 @@ ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.
 ufiles <- grep('^Train/' , ufiles, value = TRUE)
 x <- file.info(paste0(folderin,ufiles))
 ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
-ODDy<-readODD(paste0(folderin,ufiles[2]))
+ODDy<-readODD(paste0(folderin,ufiles[3]))
 plot(ODDy)
 ODDy$mortality <- latent_obs_final[,1]
 ODDy$displacement <- latent_obs_final[,2]  
 ODDy$buildDam <- latent_obs_final[,3]
 plot(ODDy)
 ODD_df <- as.data.frame(ODDy, na.rm=F)
+
+plot(ODD_df$hazMean1[ODDy@polygons[[1]]$indexes], ODD_df$mortality[ODDy@polygons[[1]]$indexes])
+plot(ODD_df$hazMean1[ODDy@polygons[[1]]$indexes], ODD_df$Population[ODDy@polygons[[1]]$indexes])
+points(ODD_df$hazMean1[ODDy@polygons[[1]]$indexes], ODD_df$Population[ODDy@polygons[[1]]$indexes], 
+       col=ODD_df$mortality[ODDy@polygons[[1]]$indexes])
+
+df_subset <- ODD_df[ODDy@polygons[[1]]$indexes, ]
+df_subset <- df_subset[!is.na(df_subset$hazMean1) & !is.na(df_subset$Population) & !is.infinite(df_subset$hazMean1) & !is.infinite(df_subset$Population), ]
+ggplot(df_subset, aes(x=hazMean1, y=Population, col=as.factor(mortality))) + geom_point()
 
 # df_subset <- ODD_df[ODDy@polygons[[158]]$indexes, ]
 # df_subset <- df_subset[!is.na(df_subset$hazMean1) & !is.na(df_subset$Population) & !is.infinite(df_subset$hazMean1) & !is.infinite(df_subset$Population), ]

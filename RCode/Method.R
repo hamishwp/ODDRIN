@@ -35,8 +35,8 @@ AlgoParams<-list(Np=1, # Number of Monte Carlo particles
                  rel_weightings = c(1,1), #weightings of the mean vs the variance components of the distance function
                  log_offset = 10,
                  propCOV_multiplier = 0.2, #mutiplied by `optimal' covariance obtained using Filippi et al. 
-                 input_folder = 'IIDIPUS_Input/' #Allows you to vary between simulated input, aggregated input, etc.
-                 )
+                 input_folder = 'IIDIPUS_Input/', #Allows you to vary between simulated input, aggregated input, etc.
+                 W_rankhist = 0.05)
 		 
 if(is.null(AlgoParams$AllParallel)){
   if(AlgoParams$cores>4) { AlgoParams$AllParallel<-T
@@ -1820,6 +1820,12 @@ retrieve_UnfinishedAlgoResults_AMCMC3 <- function(dir, oldtag, AlgoResults){
   AlgoResults$mu_store[,1:s_finish] <- AlgoResults_unfinished$mu_store[,1:s_finish]
   AlgoResults$Sigma_store[,,1:s_finish] <- AlgoResults_unfinished$Sigma_store[,,1:s_finish]
   AlgoResults$accprob_store[1:s_finish] <- AlgoResults_unfinished$accprob_store[1:s_finish]
+  AlgoResults$es_score[1:s_finish] <- AlgoResults_unfinished$es_score[1:s_finish]
+  AlgoResults$rh_score[1:s_finish] <- AlgoResults_unfinished$rh_score[1:s_finish]
+  #AlgoResults$u_rh <- AlgoResults_unfinished$u_rh
+  #AlgoResults$u_rh2 <- AlgoResults_unfinished$u_rh2
+  AlgoResults$RF_current <- AlgoResults_unfinished$RF_current
+
   #AlgoResults$propCOV[,,1:s_finish] <- AlgoResults_unfinished$propCOV[,,1:s_finish]
   #AlgoResults$propCOV_multiplier[1:s_finish] <- AlgoResults_unfinished$propCOV_multiplier[1:s_finish]
   #AlgoResults$accrate_store[1:s_finish] <- AlgoResults_unfinished$accrate_store[1:s_finish]
@@ -1849,6 +1855,11 @@ retrieve_UnfinishedAlgoResults_AMCMC3 <- function(dir, oldtag, AlgoResults){
 # CalcDist <- function(impact_sample, AlgoParams){
 #   return(impact_sample)
 # }
+
+# AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Nov24Agg/'
+# prior_samples <- t(readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-02-13_114747.170477_MCMC_ESscore_M100_Npart1000NovAgg5_RandomFieldThree')$Omega_sample)
+# propCOV <- cov(prior_samples)
+# init_val_phys <- prior_samples[1,] %>% Array2Physical(Model) %>% unlist()
 
 correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys = NULL, unfinished=F, oldtag=NULL, tag_notes=NULL){
   #Input: 
@@ -1881,6 +1892,8 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     Omega_sample = array(NA, dim=c(n_x, AlgoParams$N_steps)),
     Omega_sample_phys = array(NA, dim=c(n_x, AlgoParams$N_steps)), #store sampled parameters on the untransformed space
     loss = array(Inf, dim=c( AlgoParams$N_steps)), #Distances
+    es_score = array(Inf, dim=c( AlgoParams$N_steps)),
+    rh_score = array(Inf, dim=c( AlgoParams$N_steps)),
     u = array(NA, dim=c(n_events, AlgoParams$m_CRPS*AlgoParams$Np, 3, 3)),
     u_selected = array(NA, dim=c(3, AlgoParams$N_steps)),
     lambda_store=array(NA, AlgoParams$N_steps), 
@@ -1897,6 +1910,79 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     lambda_start = 1
   )
   
+  # RF_store = list()
+  
+  #------------
+  # initialize the random fields, and store ODD object extents and resolutions
+  #------------
+  folderin<-paste0(dir,AlgoParams$input_folder, "ODDobjects/")
+  ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
+  ufiles <- grep('^Train/' , ufiles, value = TRUE)
+  x <- file.info(paste0(folderin,ufiles))
+  ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
+  AlgoResults$RF_current <- list()
+  ODD<-readODD(paste0(folderin,ufiles[1]))
+  crs_all <- crs(ODD)
+  res_all <- res(ODD)
+  
+  #----- OLD UNPARALLELISED -----------
+  # ext_all <- list()
+  # for (filer in ufiles){
+  #   ODD<-readODD(paste0(folderin,filer))
+  #   event_i = which(ufiles==filer)
+  #   
+  #   ext_all[[event_i]] = ext(ODD)
+  #   r <- rast(crs=crs_all, extent=ext_all[[event_i]], resolution=res_all)
+  #   grid <- as.data.frame(crds(r))
+  #   names(grid) <- c("x", "y")  # Name the columns
+  #   vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+  #   gstat_mod = gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+  #   RF_local <- array(as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS*3)[, 3:(2+AlgoParams$Np * AlgoParams$m_CRPS*3)]), dim=c(ncell(ODD), AlgoParams$Np * AlgoParams$m_CRPS, 3))
+  #   AlgoResults$RF_current[[event_i]] =  RF_local
+  # }
+  #RF_store <- AlgoResults$RF_current
+  
+  #----- NEW PARALLELISED -----------
+  
+  ext_all <- list()
+  for (filer in ufiles){
+     ODD<-readODD(paste0(folderin,filer))
+     event_i = which(ufiles==filer)
+     
+     ext_all[[event_i]] = ext(ODD)
+  }
+  
+  initialise_random_fields <- function(filer) {
+
+    event_i <- which(ufiles == filer)
+    
+    ext_i <- ext_all[[event_i]]
+    r <- rast(crs = crs_all, extent = ext_i, resolution = res_all)
+    grid <- as.data.frame(crds(r))
+    names(grid) <- c("x", "y")  # Name the columns
+    
+    vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+    gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+    
+    RF_local <- array(
+        as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+        dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+      )
+    
+    return(list(event_i = event_i, RF_local = RF_local))
+  }
+  
+  # Use mclapply for parallel processing
+  results_list <- mclapply(ufiles, initialise_random_fields, mc.cores = AlgoParams$cores)
+  AlgoResults$RF_current <- vector("list", length(ufiles))
+  for (event in results_list) {
+    AlgoResults$RF_current[[event$event_i]] <- event$RF_local
+  }
+  
+  
+  #------------
+  #------------
+  
   if (is.null(propCOV)){
     stop('Please provide initial covariance of perturbation kernel')
   }
@@ -1912,9 +1998,14 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     AlgoResults$u[,,,1] = rnorm(length(AlgoResults$u[,,,1]))
     proposed =  AlgoResults$Omega_sample_phys[,1] %>% relist(skeleton=Model$skeleton)
     proposed$u = AlgoResults$u[,,,1]
+    proposed$u_local = AlgoResults$RF_current
     impact_sample = SampleImpact(dir, Model, proposed %>% addTransfParams(), AlgoParams)
     #print(impact_sample)
-    AlgoResults$loss[1] = CalcDist(impact_sample, AlgoParams)[1]
+    #AlgoResults$u_rh = array(NA, dim=c(NROW(impact_sample$poly[[1]]), 1+AlgoParams$m_CRPS))
+    #AlgoResults$u_rh[,] = rnorm(length(AlgoResults$u_rh))
+    #AlgoResults$u_rh2 = rnorm(length(unique(impact_sample$poly[[1]]$event_id)))
+    loss_prop_all = CalcDist(impact_sample, AlgoParams) #, corr_noise = pnorm(AlgoResults$u_rh), corr_noise2 = pnorm(AlgoResults$u_rh2))
+    AlgoResults$loss[1] = sum(loss_prop_all)
     AlgoResults$lambda_store[1] = AlgoResults$lambda_start
     AlgoResults$mu_store[,1] = AlgoResults$Omega_sample[,1]
     AlgoResults$Sigma_store[,,1] = propCOV
@@ -1926,6 +2017,47 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
     epsilon <- rnorm(length(AlgoResults$u[,,,1]))
     u_prop <- AlgoParams$rho * c(AlgoResults$u[,,,1]) + sqrt(1-AlgoParams$rho^2) * epsilon
+    #u_rh_prop <- AlgoParams$rho * AlgoResults$u_rh + sqrt(1-AlgoParams$rho^2) * rnorm(length(AlgoResults$u_rh))
+    #u_rh2_prop <- AlgoParams$rho * AlgoResults$u_rh2 + sqrt(1-AlgoParams$rho^2) * rnorm(length(AlgoResults$u_rh2))
+    #------- OLD PERTURBATION------------
+    # RF_prop = list()
+    # for (event_i in 1:length(ext_all)){
+    #   r <- rast(crs=crs_all, extent=ext_all[[event_i]], resolution=res_all)
+    #   grid <- as.data.frame(crds(r))
+    #   names(grid) <- c("x", "y")  # Name the columns
+    #   vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+    #   gstat_mod = gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+    #   #RF_local <- as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS)[, 3:(2+AlgoParams$Np * AlgoParams$m_CRPS)])
+    #   RF_local <- array(as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS*3)[, 3:(2+AlgoParams$Np * AlgoParams$m_CRPS*3)]), dim=c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3))
+    #   RF_prop[[event_i]] =  AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1-AlgoParams$rho_local^2) * RF_local
+    # }
+    #------------------------------------
+    #----------- NEW PERTURBATION-----------
+    
+    perturbate_random_field <- function(event_i) {
+      # Create raster grid
+      r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
+      grid <- as.data.frame(crds(r))
+      names(grid) <- c("x", "y")  
+      
+      # Define variogram model
+      vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+      gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+      
+      # Generate random field perturbation
+      RF_local <- array(
+          as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+          dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+        )
+      
+      RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
+      return(RF_perturbed)
+      
+    }
+    
+    RF_prop <- mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores)
+    
+    #----------------------------------
     
     HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
     if (HP> AlgoParams$ABC & Model$higherpriors){
@@ -1939,10 +2071,12 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     }  else {
       proposed = Omega_prop_phys %>% addTransfParams()
       proposed$u = array(u_prop, dim=c(n_events, AlgoParams$m_CRPS*AlgoParams$Np, 3))
+      proposed$u_local = RF_prop
       impact_sample <- SampleImpact(dir = dir,Model = Model,
                                     proposed = proposed, 
                                     AlgoParams = AlgoParams)
-      loss_prop <- CalcDist(impact_sample, AlgoParams)[1]
+      loss_prop_all <- CalcDist(impact_sample, AlgoParams)#, corr_noise = pnorm(u_rh_prop), corr_noise2 = pnorm(u_rh2_prop))
+      loss_prop <- sum(loss_prop_all)
       print(paste(2, loss_prop))
       
       #calculate the acceptance probability:
@@ -1959,6 +2093,9 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
         AlgoResults$loss[2] = loss_prop
         AlgoResults$u[,,,2] = proposed$u
         AlgoResults$u_selected[,2] = c(proposed$u[1,1,1],proposed$u[2,2,2],proposed$u[3,3,3])
+        AlgoResults$RF_current = RF_prop
+        #AlgoResults$u_rh = u_rh_prop
+        #AlgoResults$u_rh2 = u_rh2_prop
       }  else {
         #REJECT
         AlgoResults$Omega_sample[,2] = AlgoResults$Omega_sample[,1]
@@ -1994,11 +2131,58 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     } else if(s %% 10 == 0){
       saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/mcmc_",tag, "_backup"))
     }
+    # if (s %% 100 == 0){
+    #   for (event_i in 1:length(RF_store)){
+    #     RF_store[[event_i]] = abind(RF_store[[event_i]], AlgoResults$RF_current[[event_i]], along=3)
+    #   }
+    #   saveRDS(RF_store, paste0(dir,"IIDIPUS_Results/RandomFieldStore_",tag))
+    # } else if (s %% 200 == 0){
+    #   for (event_i in 1:length(RF_store)){
+    #     RF_store[[event_i]] = abind(RF_store[[event_i]], AlgoResults$RF_current[[event_i]], along=3)
+    #   }
+    #   saveRDS(RF_store, paste0(dir,"IIDIPUS_Results/RandomFieldStore_",tag, '_backup'))
+    # }
     
     Omega_prop <- multvarNormProp(xt=AlgoResults$Omega_sample[,s-1], propPars= c * AlgoResults$lambda_store[s-1] * AlgoResults$Sigma_store[,,s-1]) #perturb the proposal
     Omega_prop_phys <- Omega_prop %>% relist(skeleton=Model$skeleton) %>% unlist()%>% Proposed2Physical(Model)
     epsilon <- rnorm(length(AlgoResults$u[,,,ifelse((s-1) %% 3==0, 3, (s-1)%%3)]))
     u_prop <- AlgoParams$rho * c(AlgoResults$u[,,,ifelse((s-1) %% 3==0, 3, (s-1)%%3)]) + sqrt(1-AlgoParams$rho^2) * epsilon
+    #u_rh_prop <- AlgoParams$rho * AlgoResults$u_rh + sqrt(1-AlgoParams$rho^2) * rnorm(length(AlgoResults$u_rh))
+    #u_rh2_prop <- AlgoParams$rho * AlgoResults$u_rh2 + sqrt(1-AlgoParams$rho^2) * rnorm(length(AlgoResults$u_rh2))
+    
+    #------------- OLD PERTURBATION----------------
+    # RF_prop = list()
+    # for (event_i in 1:length(ext_all)){
+    #   r <- rast(crs=crs_all, extent=ext_all[[event_i]], resolution=res_all)
+    #   grid <- as.data.frame(crds(r))
+    #   names(grid) <- c("x", "y")  # Name the columns
+    #   vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+    #   gstat_mod = gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+    #   # RF_local <- as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS)[, 3:(2+AlgoParams$Np * AlgoParams$m_CRPS)])
+    #   RF_local <- array(as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS*3)[, 3:(2+AlgoParams$Np * AlgoParams$m_CRPS*3)]), dim=c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3))
+    #   RF_prop[[event_i]] =  AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1-AlgoParams$rho_local^2) * RF_local
+    # }
+    #------------- NEW PERTURBATION----------------
+    perturbate_random_field <- function(event_i) {
+      # Create raster grid
+      r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
+      grid <- as.data.frame(crds(r))
+      names(grid) <- c("x", "y")  
+      
+      # Define variogram model
+      vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+      gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+      
+      # Generate random field perturbation
+      RF_local <- array(
+        as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+        dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+      )
+      
+      RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
+      return(RF_perturbed)
+    }
+    RF_prop <- mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores)
     
     HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
     if (HP> AlgoParams$ABC & Model$higherpriors){
@@ -2011,10 +2195,12 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     } else {
       proposed = Omega_prop_phys %>% addTransfParams()
       proposed$u = array(u_prop, dim=c(n_events, AlgoParams$m_CRPS*AlgoParams$Np, 3))
+      proposed$u_local = RF_prop
       impact_sample <- SampleImpact(dir = dir,Model = Model,
                                     proposed = proposed, 
                                     AlgoParams = AlgoParams)
-      loss_prop <- CalcDist(impact_sample, AlgoParams)[1]
+      loss_all_prop <- CalcDist(impact_sample, AlgoParams) #, corr_noise = pnorm(u_rh_prop), corr_noise2 = pnorm(u_rh2_prop))
+      loss_prop <- sum(loss_all_prop)
       print(paste(s, loss_prop))
       
       #calculate the acceptance probability:
@@ -2028,11 +2214,18 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
         AlgoResults$Omega_sample[,s] = Omega_prop
         AlgoResults$Omega_sample_phys[,s] = unlist(Omega_prop_phys)
         AlgoResults$loss[s] = loss_prop
+        AlgoResults$es_score[s] = loss_all_prop[1]
+        AlgoResults$rh_score[s] = loss_all_prop[2]
         AlgoResults$u[,,,ifelse(s %% 3==0, 3, s%%3)] = proposed$u
         AlgoResults$u_selected[,s] =  c(proposed$u[1,1,1],proposed$u[2,2,2],proposed$u[3,3,3])
+        AlgoResults$RF_current = RF_prop
+        #AlgoResults$u_rh = u_rh_prop 
+        #AlgoResults$u_rh2 = u_rh2_prop 
       }  else {
         AlgoResults$Omega_sample[,s] = AlgoResults$Omega_sample[,s-1]
         AlgoResults$Omega_sample_phys[,s] = AlgoResults$Omega_sample_phys[,s-1]
+        AlgoResults$es_score[s] = AlgoResults$es_score[s-1]
+        AlgoResults$rh_score[s] = AlgoResults$rh_score[s-1]
         AlgoResults$loss[s] = AlgoResults$loss[s-1]
         AlgoResults$u[,,,ifelse(s %% 3==0, 3, s%%3)] = AlgoResults$u[,,,ifelse((s-1) %% 3==0, 3, (s-1)%%3)]
         AlgoResults$u_selected[,s] = AlgoResults$u_selected[,s-1]

@@ -905,17 +905,17 @@ create_df_postpredictive_from_impact_sample = function(impact_sample){
 
 plot_df_postpredictive <- function(df_poly_jitter, impact_type){
   
-  jitter_val <- function(x){
-    return_arr <- c()
-    for (x_i in x){
-      if(x_i==0){return_arr <- c(return_arr, runif(1,0.2, 0.3))}
-      else {return_arr <- c(return_arr, runif(1, x_i-0.5, x+0.5))}
-    }
-    return(return_arr)
-  }
+  # jitter_val <- function(x){
+  #   return_arr <- c()
+  #   for (x_i in x){
+  #     if(x_i==0){return_arr <- c(return_arr, runif(1,0.2, 0.3))}
+  #     else {return_arr <- c(return_arr, runif(1, x_i-0.5, x+0.5))}
+  #   }
+  #   return(return_arr)
+  # }
   #df_poly_jitter[which(df_poly_jitter==0, arr.ind=T)] = 0.1
-  df_poly_jitter$observed <- sapply(df_poly_jitter$observed, jitter_val)
-  df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1:2,jitter_val)
+  # df_poly_jitter$observed <- sapply(df_poly_jitter$observed, jitter_val)
+  # df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1:2,jitter_val)
   
   
   df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- t(apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1,sort))
@@ -949,7 +949,11 @@ plot_df_postpredictive <- function(df_poly_jitter, impact_type){
   #ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
     geom_errorbar() + geom_point(aes(col=train_flag)) + 
     scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
-    scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+    scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) +
+    #scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+    #scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+    #scale_x_continuous(trans=scales::pseudo_log_trans(sigma=5,base = 10), breaks = c(0,10,100,1000, 10000, 100000), labels= scales::comma_format(),  minor_breaks =NULL) + 
+    #scale_y_continuous(trans=scales::pseudo_log_trans(sigma=5,base = 10), breaks = c(0,10,100,1000, 10000, 100000), labels= scales::comma_format(),  minor_breaks =NULL) + 
     #geom_pointrange(aes(col=train_flag)) + 
     geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
     ylab(paste('Sampled', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + xlab(paste('Observed', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + scale_color_manual(values = c('red', 'blue')) + 
@@ -2447,6 +2451,7 @@ plot_total_impact <- function(ODD_with_impact){
 
 # Check correlation structure
 plot_joint <- function(event_ids=c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135, 139, 164, 170), AlgoParams){
+  #AlgoParams$input_folder <- "IIDIPUS_Input_Alternatives/Nov24Agg/"
   folderin<-paste0(dir,AlgoParams$input_folder, "ODDobjects/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
   
@@ -2465,8 +2470,16 @@ plot_joint <- function(event_ids=c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135
   Omega_i <- which(AlgoResults_es$Omega_sample_phys[7,] <0.5 & AlgoResults_es$Omega_sample_phys[8,] >0.8)
   Omega <- AlgoResults_es$Omega_sample_phys[,Omega_i[Omega_i > 5000][1]] %>% relist(skeleton=Model$skeleton)
   
-  Omega_i <- which(AlgoResults_es$Omega_sample_phys[11,] >0.6)
-  Omega <- AlgoResults_es$Omega_sample_phys[,Omega_i[Omega_i > 5000][1]] %>% relist(skeleton=Model$skeleton)
+  
+  
+  Omega_i <- which(AlgoResults_rf$Omega_sample_phys[7,] >0.8)
+  Omega <- AlgoResults_rf$Omega_sample_phys[,Omega_i[Omega_i > 600][1]] %>% relist(skeleton=Model$skeleton)
+  # Omega$eps$local <- 1.4
+  # Omega$eps$hazard_mort <- 1
+  # Omega$eps$hazard_disp <- 1.4
+  # Omega$eps$hazard_bd <- 1.2
+  Omega$eps$hazard_disp <- 1.5
+  Omega$eps$hazard_bd <- 1
   
   i = 70
   for (i in 70){
@@ -2475,14 +2488,14 @@ plot_joint <- function(event_ids=c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135
     #plot: 
     #grid.arrange(plotODDy_GADM(ODD, 'ISO3C', gadm_level=2, haz_legend=T, var_legend=T, var_discrete=T),plotODDy_GADM(ODD, 'Population', gadm_level=2, haz_legend=T, var_legend=T, var_discrete=F, log_legend=T), ncol=2)
     
-    ODD@impact %<>% rbind(data.frame(iso3=c('IRN', 'IRQ'),
-                                     sdate= ODD@impact$sdate[1],
-                                     impact='mortality',
-                                     observed=c(620, 10),
-                                     qualifier=NA,
-                                     inferred=F,
-                                     build_type=NA, 
-                                     polygon=c(99, 100)))
+    # ODD@impact %<>% rbind(data.frame(iso3=c('IRN', 'IRQ'),
+    #                                  sdate= ODD@impact$sdate[1],
+    #                                  impact='mortality',
+    #                                  observed=c(620, 10),
+    #                                  qualifier=NA,
+    #                                  inferred=F,
+    #                                  build_type=NA, 
+    #                                  polygon=c(99, 100)))
     
     sampled_out <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
                            replace(which(names(AlgoParams)==c('Np')), 50), 
@@ -2504,7 +2517,7 @@ plot_joint <- function(event_ids=c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135
         plot(obs_sampled[2:nrow(obs_sampled),], xlim=range(obs_sampled[,1]), ylim=range(obs_sampled[,2]),
              xlab = paste(polygon_names[obs_plot[1]], sampled_out[[j]]$impact[obs_plot[1]]), 
              ylab = paste(polygon_names[obs_plot[2]], sampled_out[[j]]$impact[obs_plot[2]]))
-        points(t(obs_sampled[1,]), col='red', pch=3)
+        points(t(obs_sampled[1,]), col='red', pch=3, lwd=2)
       }
     }
     more_obs_plot <- rbind(c(4,7), c(5,6))
@@ -2521,21 +2534,129 @@ plot_joint <- function(event_ids=c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135
     }
   }
   
+  for (i in 70){
+    ODD <- readODD(paste0(folderin, ufiles[which(event_ids_all==i)]))
+    
+    #plot: 
+    #grid.arrange(plotODDy_GADM(ODD, 'ISO3C', gadm_level=2, haz_legend=T, var_legend=T, var_discrete=T),plotODDy_GADM(ODD, 'Population', gadm_level=2, haz_legend=T, var_legend=T, var_discrete=F, log_legend=T), ncol=2)
+    
+    ODD@impact %<>% rbind(data.frame(iso3=c('IRN', 'IRQ'),
+                                     sdate= ODD@impact$sdate[1],
+                                     impact='mortality',
+                                     observed=c(620, 10),
+                                     qualifier=NA,
+                                     inferred=F,
+                                     build_type=NA, 
+                                     polygon=c(99, 100)))
+    
+    sampled_out <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+                           replace(which(names(AlgoParams)==c('Np')), 500), 
+                         output='SampledAgg')
+    
+    #ordered_obs <- which(sampled_out[[1]]$impact=='mortality')[order(sampled_out[[1]]$observed[which(sampled_out[[1]]$impact=='mortality')], decreasing=T)]
+    ordered_obs <- c(1,2,3, 8)
+    par(mfrow=c(2,4))
+    polygon_names <- unlist(lapply(ODD@polygons[sampled_out[[1]]$polygon], function(x) x$name))
+    polygon_names[which(polygon_names=='n.a. (03), Kermanshah, Iran')] = "Salas Babajani, Kermanshah, Iran" 
+    for (obs1 in 1:4){
+      for (obs2 in obs1:4){
+        if (obs1==obs2 ) next
+        obs_plot <- ordered_obs[c(obs1,obs2)]
+        obs_sampled <- sampled_out[[1]]$observed[obs_plot]
+        for (j in 1:length(sampled_out)){
+          obs_sampled %<>% rbind(sampled_out[[j]]$sampled[obs_plot])
+        }
+        plot(obs_sampled[2:nrow(obs_sampled),], xlim=range(obs_sampled[,1]), ylim=range(obs_sampled[,2]),
+             xlab = paste(polygon_names[obs_plot[1]], sampled_out[[j]]$impact[obs_plot[1]]), 
+             ylab = paste(polygon_names[obs_plot[2]], sampled_out[[j]]$impact[obs_plot[2]]))
+        points(t(obs_sampled[1,]), col='red', pch=3, lwd=2)
+      }
+    }
+    more_obs_plot <- rbind(c(4,7), c(5,6))
+    for (obs_plot_i in 1:nrow(more_obs_plot)){
+      obs_plot <- more_obs_plot[obs_plot_i,]
+      obs_sampled <- sampled_out[[1]]$observed[obs_plot]
+      for (j in 1:length(sampled_out)){
+        obs_sampled %<>% rbind(sampled_out[[j]]$sampled[obs_plot])
+      }
+      plot(obs_sampled[2:nrow(obs_sampled),], xlim=range(obs_sampled[,1]), ylim=range(obs_sampled[,2]),
+           xlab = paste(polygon_names[obs_plot[1]], sampled_out[[j]]$impact[obs_plot[1]]), 
+           ylab = paste(polygon_names[obs_plot[2]], sampled_out[[j]]$impact[obs_plot[2]]))
+      points(t(obs_sampled[1,]), col='red', pch=3, lwd=2)
+    }
+    
+    impact_sampled <- data.frame(sampled_id = 1:length(sampled_out),
+                            iran_mort = unlist(lapply(sampled_out, function(x) x$sampled[3])),
+                            iraq_mort  = unlist(lapply(sampled_out, function(x) x$sampled[8])),
+                            iran_disp = unlist(lapply(sampled_out, function(x) x$sampled[1])),
+                            iraq_disp = unlist(lapply(sampled_out, function(x) x$sampled[2])))
+    
+    g1 <- ggplot(impact_sampled, aes(x=iran_mort)) + 
+      geom_histogram(aes(y=..density..), colour='black', fill='#33638DFF', alpha=0.8) + 
+      geom_vline(xintercept=sampled_out[[1]]$observed[3], col='red') + 
+      xlab('Iran Mortality') + 
+      ylab('Probability Density') +
+      theme_minimal() #+ 
+      #geom_density(data=impact_sampled %>% filter(iraq_mort < 20), 
+      #             aes(x=iran_mort), alpha=.2, fill="#FF6666") 
+    
+    g2 <- ggplot(impact_sampled, aes(x=iraq_mort)) + 
+      geom_histogram(aes(y=..density..), colour='black', fill='#238A8DFF', alpha=0.8) + 
+      geom_vline(xintercept=sampled_out[[1]]$observed[8], col='red') + 
+      xlab('Iraq Mortality') + 
+      ylab('Probability Density') +
+      theme_minimal() #+ 
+      #geom_density(data=impact_sampled %>% filter(iran_mort>500), 
+      #             aes(x=iraq_mort), alpha=.2, fill="#2D708EFF")+ theme_minimal()
+    
+    g3 <- ggplot(impact_sampled %>% filter(iran_mort>500), aes(x=iraq_mort)) + 
+      geom_histogram(aes(y=..density..), colour='black', fill='#238A8DFF', alpha=0.8) + 
+      geom_vline(xintercept=sampled_out[[1]]$observed[8], col='red') + 
+      xlab('Iraq Mortality given Iran Mortality > 500') + 
+      ylab('Probability Density') +
+      theme_minimal() 
+    
+    grid.arrange(g1, g2, g3,nrow=3)
+    
+    g4 <- ggplot(impact_sampled, aes(x=iran_disp)) + 
+      geom_histogram(aes(y=..density..), colour='black', fill='#33638DFF', alpha=0.8) + 
+      geom_vline(xintercept=sampled_out[[1]]$observed[1], col='red') + 
+      xlab('log(Iran Displacement)') + 
+      ylab('Probability Density') +
+      scale_x_log10() +
+      theme_minimal()
+    
+    g5 <- ggplot(impact_sampled %>% filter(iran_mort > 500), aes(x=iran_disp)) + 
+      geom_histogram(aes(y=..density..), colour='black', fill='#33638DFF', alpha=0.8) + 
+      geom_vline(xintercept=sampled_out[[1]]$observed[1], col='red') + 
+      xlab('log(Iran Displacement)') + 
+      ylab('Probability Density') +
+      scale_x_log10() +
+      theme_minimal()
+    
+    grid.arrange(g1, g4, g5,nrow=3)
+    
+  }
   
   for (i in event_ids){
     ODD <- readODD(paste0(folderin, ufiles[which(event_ids_all==i)]))
     
     sampled_out <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
-                                                    replace(which(names(AlgoParams)==c('Np')), 50), 
+                                                    replace(which(names(AlgoParams)==c('Np')), 100), 
           output='SampledAgg')
     
-    #ordered_obs <- which(sampled_out[[1]]$impact=='mortality')[order(sampled_out[[1]]$observed[which(sampled_out[[1]]$impact=='mortality')], decreasing=T)]
-    ordered_obs <- c(1,2,3,4)
+    #ordered_obs_mort <- which(sampled_out[[1]]$impact=='mortality')[order(sampled_out[[1]]$observed[which(sampled_out[[1]]$impact=='mortality')], decreasing=T)]
+    #ordered_obs_disp <- which(sampled_out[[1]]$impact=='displacement')[order(sampled_out[[1]]$observed[which(sampled_out[[1]]$impact=='displacement')], decreasing=T)]
+    #ordered_obs_bd <- which(sampled_out[[1]]$impact=='buildDam')[order(sampled_out[[1]]$observed[which(sampled_out[[1]]$impact=='buildDam')], decreasing=T)]
+    
+    #ordered_obs <- ordered_obs_mort #c(ordered_obs_mort[1:min(2, length(ordered_obs_mort))], ordered_obs_disp[1:min(2, length(ordered_obs_disp))], ordered_obs_bd[1:min(2, length(ordered_obs_bd))])
+    ordered_obs <- which(sampled_out[[1]]$impact=='displacement') 
+    #ordered_obs <- 1:min(6, nrow(sampled_out[[1]]))
     par(mfrow=c(4,4))
     polygon_names <- unlist(lapply(ODD@polygons[sampled_out[[1]]$polygon], function(x) x$name))
     if (i == 70) polygon_names[4] = "Salas Babajani, Kermanshah, Iran" 
-    for (obs1 in 1:4){
-      for (obs2 in obs1:4){
+    for (obs1 in 1:min(5, length(ordered_obs))){
+      for (obs2 in obs1:min(6, length(ordered_obs))){
         if (obs1==obs2 ) next
         obs_plot <- ordered_obs[c(obs1,obs2)]
         obs_sampled <- sampled_out[[1]]$observed[obs_plot]

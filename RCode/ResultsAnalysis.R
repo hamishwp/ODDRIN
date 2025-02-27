@@ -916,3 +916,9 @@ plot_mcmc_compare = function(SR1, SR2, SR_vs, xlim=c(1, 10000)){
   grid.arrange(grobs = plot_list, ncol = 4, nrow = 2)
   #Trace_EuclDist.pdf, 12 x 9 (or 13 x 3 for single row)
 }
+
+# AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-01-25_125459_MCMC_VariogramScore_M100_Npart1000NovAgg5_RandomField_backup')
+# HLPrior_samples <- t(AlgoResults$Omega_sample[,300:900])
+# cov(HLPrior_samples)
+# Proposed2Physical(HLPrior_samples[300,] %>% relist(skeleton=Model$skeleton) %>% unlist(), Model)
+# saveRDS(HLPrior_samples, paste0(dir, 'IIDIPUS_Input/HLPriorSamples_MCMCOut'))

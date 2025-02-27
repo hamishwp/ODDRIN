@@ -40,6 +40,13 @@ Omega <- Omega_true <- list(Lambda1 = list(nu=8.75, kappa=0.6),
                             vuln_coeff = list(PDens=0, SHDI=-0.08, GNIc=-0.02, Vs30=0.01, EQFreq=-0.02, FirstHaz=0.01, Night=0, FirstHaz.Night=0.05))
                             #check = list(check=0.5))
 
+
+HLPrior_samples <- readRDS(paste0(dir, 'IIDIPUS_Input/HLPriorSamples_MCMCOut'))
+propCOV <- cov(HLPrior_samples)/5
+init_val_phys <- Proposed2Physical(HLPrior_samples[1,] %>% relist(skeleton=Model$skeleton) %>% unlist(), Model)
+xx <- SampleImpact(dir, Model, init_val_phys %>% addTransfParams(), AlgoParams)
+
+
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 plot_S_curves(Omega_true)
 

@@ -11,7 +11,6 @@
 #   - Start date (could be evacuation initialisations)
 #   - Per Iso3 extract and store indicators
 #   - Displacement total data
-#   - Displacement date data
 # METHODS:
 #   - Sample hazard intensity (mean,sd) truncated normal distribution
 #   - plotGDP, plotPop, plotHaz
@@ -153,7 +152,7 @@ readODD <- function(path){
   .Object = new('ODD')
   ODD_list = readRDS(path)
   slotnames <- slotNames(.Object)
-  pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', 'pnt')
+  pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', ifelse('pnt' %in% slotnames, 'pnt', 'pntr'))
   for (slot in slotnames[slotnames!=pointer_slot]){
     slot(.Object, slot) = ODD_list[[slot]]
   }
@@ -166,7 +165,7 @@ readODD <- function(path){
 saveODD <- function(ODD, path){
   ODD_list = list()
   slotnames = slotNames(ODD)
-  pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', 'pnt')
+  pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', ifelse('pnt' %in% slotnames, 'pnt', 'pntr'))
   for (slot in slotnames[slotnames!=pointer_slot]){
     ODD_list[[slot]] = slot(ODD, slot)
   }
@@ -388,15 +387,73 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
   Sinc<-ExtractCIndy(ODD,var = SincN)
   
+  #------------------------- GAUSSIAN PROCESS OVER ERRORS:
+  
+  # local_errors_all <- matrix(NA, nrow=ncell(ODD), ncol=Method$Np)
+  # for (sim in 1:Method$Np){
+  #   grid<- list( x= seq( 0,5,length.out=nrow(ODD)), y= seq(0,5,length.out=ncol(ODD))) 
+  #   obj<-matern.image.cov( grid=grid, theta=.5, setup=TRUE, aRange=1, smoothness=1)
+  #   local_errors <- sim.rf( obj)
+  #   local_errors_all[,sim] <- c(t(local_errors))
+  # }
+  # #image.plot(grid$x, grid$y, local_errors)
+  # local_errors2 <-  sim.rf( obj)
+  # local_errors3 <-  local_errors + 0.2 * local_errors2
+  # cor(c(local_errors3), c(local_errors2))
+  # image.plot(grid$x, grid$y, local_errors + local_errors2)
+  # 
+  #-------------------------- ATTEMPT WITH GSTAT:
+  
+  #r <- rast(ODD)
+  if(is.na(event_i)){
+    grid <- as.data.frame(xyFromCell(ODD, 1:ncell(ODD)))  # Extract grid coordinates
+    names(grid) <- c("x", "y")  # Name the columns
+    vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+    gstat_mod = gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+    
+    # set.seed(1)
+    #RF_local <- as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
+    
+    RF_mort <- Omega$eps$local * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
+    RF_disp <- Omega$eps$hazard_cor * RF_mort + sqrt(1-Omega$eps$hazard_cor^2) * Omega$eps$local * Omega$eps$hazard_disp / Omega$eps$hazard_mort * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
+    RF_bd <- Omega$eps$hazard_cor * RF_mort + sqrt(1-Omega$eps$hazard_cor^2) * Omega$eps$local * Omega$eps$hazard_bd / Omega$eps$hazard_mort * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
+    
+  } else {
+    #RF_local = Omega$u_local[[event_i]]
+    
+    RF_mort <- Omega$eps$local * Omega$u_local[[event_i]][,,1]
+    RF_disp <- Omega$eps$hazard_cor * RF_mort + sqrt(1-Omega$eps$hazard_cor^2) * Omega$eps$local * Omega$eps$hazard_disp / Omega$eps$hazard_mort * Omega$u_local[[event_i]][,,2]
+    RF_bd <- Omega$eps$hazard_cor * RF_mort + sqrt(1-Omega$eps$hazard_cor^2) * Omega$eps$local * Omega$eps$hazard_bd / Omega$eps$hazard_mort * Omega$u_local[[event_i]][,,3]
+  }
+  # RF_mort <- Omega$eps$local * RF_local
+  # RF_disp <- Omega$eps$local * Omega$eps$hazard_disp / Omega$eps$hazard_mort * RF_local
+  # RF_bd <- Omega$eps$local * Omega$eps$hazard_bd / Omega$eps$hazard_mort * RF_local
+  
+  # ODD$mort = RF_local[,1]
+  # plot(ODD$mort)
+  # RF_disp <- predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)]
+  # RF_bd <- predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)]
+  # 
+  # errors <- aperm(abind(
+  #   Omega$eps$hazard_mort * RF_mort, 
+  #   Omega$eps$hazard_disp * (Omega$eps$hazard_cor * RF_mort + RF_disp),
+  #   Omega$eps$hazard_bd * (Omega$eps$hazard_cor * RF_mort + RF_bd),
+  #   along=3
+  # ), c(1,3,2))
+  
+  #------------------------------------------------------
+  
   ODD_df <- as.data.frame(ODD, na.rm=F)
   
   #ODD_df$ISO3C <- levels(ODD[['ISO3C']])[[1]]$VALUE[ODD_df$ISO3C]
  
   # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
-  notnans<-which(!(is.na(ODD_df$Population) | is.na(ODD_df$ISO3C) | is.na(ODD_df$SHDI)))
+  nans_haz <- apply(ODD_df[,grep('hazMean', names(ODD_df)), drop=F], 1, function(x) all(is.na(x)))
+  
+  notnans<-which(!(is.na(ODD_df$Population) | is.na(ODD_df$ISO3C) | is.na(ODD_df$SHDI) | nans_haz))
 
   # Calculate non-local linear predictor values
-  LP<-GetLP(ODD_df,Omega,Params,Sinc,notnans, split_GNI=T)
+  LP<-GetLP(ODD_df,Omega,Params,Sinc,notnans, split_GNI=F)
   LP_buildings <- GetLP(ODD_df,Omega,Params,Sinc,notnans, split_GNI=F)
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, GetLP = finish_time-start_time); start_time <- Sys.time()
@@ -430,8 +487,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   } else {
     eps_event <-  chol(covar_matrix) %*% t(Omega$u[event_i,,])
   }
-  
-  
+  #eps_event[,] <- 0
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
 
@@ -443,8 +499,14 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
 
     #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochasticregen = finish_time-start_time); start_time <- Sys.time()
     
-    eps_local_long <- rmvnorm(length(hrange)*Method$Np, rep(0,3), sigma=covar_matrix_local)
-    eps_local_ij <- aperm(array(eps_local_long, dim=c(length(hrange), Method$Np, 3)), c(1,3,2))
+    #eps_local_long <- rmvnorm(length(hrange)*Method$Np, rep(0,3), sigma=covar_matrix_local)
+    #eps_local_ij <- aperm(array(eps_local_long, dim=c(length(hrange), Method$Np, 3)), c(1,3,2))
+    #eps_local_ij[1,,] <- cbind(local_errors_all[ij,],local_errors_all[ij,],local_errors_all[ij,])
+    #eps_local_ij <- array(0, dim=c(length(hrange),3,Method$Np))
+    
+    #eps_local_ij <- RF_local[ij,]
+    eps_local_ij <- rbind(RF_mort[ij,], RF_disp[ij,], RF_bd[ij,])
+    
     
     ##SLOWER:
     # for (i in 1:Method$Np){
@@ -453,33 +515,37 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     # notnans_ij <- which(notnans==ij)
     #eps_local_ij <- adrop(eps_local_transf[,,,notnans_ij, drop=F], drop=4)
     
-    locallinp<- LP[ij,] # LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] 
+    locallinp<- LP[ij] # LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] 
     
     # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochasticreshape = finish_time-start_time); start_time <- Sys.time()
     
     # Sample population per income distribution (Assumes 8 percentiles):
     # Population is split evenly between the income quantiles, with remainders randomly allocated between
-    lPopS <- matrix(ODD_df$Population[ij] %/% 8, nrow=8, ncol=Method$Np) + rmultinom(Method$Np,ODD_df$Population[ij] %% 8,rep(1/8,8)) 
+    lPopS <- rep(floor(ODD_df$Population[ij]), Method$Np) #+ rbinom(Method$Np,1, ODD_df$Population[ij] %% 1) 
     #lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) #matrix(round(ODD@data$Population[ij]/length(locallinp)), nrow=length(locallinp), ncol = Method$Np)
     #lPopS <- matrix(round(ODD@data$Population[ij]/ 8), nrow=8, ncol=Method$Np)
     
     # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
     
     
-    lPopDisp <- array(0, dim=c(length(locallinp), Method$Np))
-    lPopMort <- array(0, dim=c(length(locallinp), Method$Np))
+    lPopDisp <- rep(0, Method$Np)
+    lPopMort <- rep(0, Method$Np)
     tPop <-array(0,c(3, Method$Np)) #row 1 = tDisp, #row 2 = tMort, #row 3 = tRem
-    tPop[3,]=colSums(lPopS)
+    tPop[3,]=lPopS
     
     # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); 
     
     for(h_i in hrange_order){
+      
+      #eps_local_ij[h_i,,] <- errors[ij,,] #array(NA, dim=c(1, 3, Method$Np))
+      #eps_local_ij[h_i,,] <- as.matrix(rbind(RF_local[ij,], RF_local[ij,], RF_local[ij,]))
+      
       start_time <- Sys.time()
       h <- hrange[h_i]
 
       if(is.na(ODD_df[ij,h])) next
       
-      nonzero_pop <- which(lPopS != 0, arr.ind=T)
+      nonzero_pop <- which(lPopS != 0)
       if (length(nonzero_pop)==0) next
       
       
@@ -492,12 +558,15 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       #             mean = ODD@data[ij,paste0("hazMean",h)],
       #             sd = ODD@data[ij,paste0("hazSD",h)]/10)
       I_ij<-ODD_df[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=NROW(nonzero_pop)),Omega) + locallinp[nonzero_pop[,1]] + event_lp[h_i], error=function(e) NA) #+ rep(eps_local[h_i,], each=8), error=function(e) NA)
+      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=1),Omega) + locallinp + event_lp[h_i], error=function(e) NA) #+ rep(eps_local[h_i,], each=8), error=function(e) NA)
       
       # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, damcalc = finish_time-start_time); start_time <- Sys.time()
       
-      D_MortDisp <- D_MortDisp_calc(Damage, Omega, eps_event[1:2, nonzero_pop[,2], drop=F] + adrop(eps_local_ij[h_i,1:2,nonzero_pop[,2], drop=F], drop = 1)) #First row of D_MortDisp is D_Mort, second row is D_Disp
-
+      #D_MortDisp <- D_MortDisp_calc(Damage, Omega, eps_event[1:2, nonzero_pop[,2], drop=F] + adrop(eps_local_ij[h_i,1:2,nonzero_pop[,2], drop=F], drop = 1)) #First row of D_MortDisp is D_Mort, second row is D_Disp
+      #D_MortDisp <- D_MortDisp_calc(Damage, Omega, sweep(eps_event[1:2, nonzero_pop[,2], drop=F], 2, eps_local_ij[nonzero_pop[,2], drop=F], "+")) #First row of D_MortDisp is D_Mort, second row is D_Disp
+      D_MortDisp <- D_MortDisp_calc(rep(Damage, length(nonzero_pop)), Omega, eps_event[1:2, nonzero_pop, drop=F] + eps_local_ij[1:2, nonzero_pop, drop=F]) #First row of D_MortDisp is D_Mort, second row is D_Disp
+      
+      
       # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, mortdisp = finish_time-start_time); start_time <- Sys.time()
       
       D_Rem <- pmax(0, 1 - D_MortDisp[2,] - D_MortDisp[1,]) #probability of neither death nor displacement. Use pmax to avoid errors caused by numerical accuracy.
@@ -511,7 +580,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       lPopS[nonzero_pop] <- Dam[3,]
       lPopDisp[nonzero_pop] <- lPopDisp[nonzero_pop] + Dam[1,]
       lPopMort[nonzero_pop] <- lPopMort[nonzero_pop] + Dam[2,]
-      tPop[3,] <- colSums(lPopS)
+      tPop[3,] <- lPopS
       
       # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, sum_pops = finish_time-start_time); 
       
@@ -534,8 +603,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     
     # start_time <- Sys.time()
     
-    tPop[1,] <- colSums(lPopDisp)
-    tPop[2,] <- colSums(lPopMort)
+    tPop[1,] <- lPopDisp
+    tPop[2,] <- lPopMort
     
     #ensure the total displaced, deceased or remaining does not exceed total population
     tPop[tPop>ODD_df$Population[ij]] <- floor(ODD_df$Population[ij])
@@ -561,7 +630,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
       I_ij<-ODD_df[ij,h]
       Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + event_lp[h_i], error=function(e) NA) #+ eps_local[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
  
-      D_Dam <- D_Dam_calc(Damage, Omega, eps_event[3,] + eps_local_ij[h_i,3,]) 
+      D_Dam <- D_Dam_calc(Damage, Omega, eps_event[3,] + eps_local_ij[3,])
       
       # Accumulate the number of buildings damaged/destroyed, but not the number of buildings remaining
       nDam_new <- rbinom(Method$Np, nUnaff, D_Dam)
@@ -608,7 +677,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
     #We combine the polygons with observations so long as the proportion of overlapping pixels is less than 10%
     #and the total coverage of the exposed area is greater than 90%. Then sum the observations across these polygons.
     observed_total=rep(NA, length(impact_types))
-    exposed_haz <- which(apply(ODD_df[,grep('hazMean', names(ODD_df)), drop=F], 1, function(row) any(!is.na(row))) & !is.na(ODD_df$ISO3C))
+    exposed_haz <- which(apply(ODD_df[,grep('hazMean', names(ODD_df)), drop=F], 1, function(row) any(!is.na(row))) & !is.na(ODD_df$ISO3C) & (ODD_df$Population>0))
     get_overlap_coverage <- function(impact_type){
       indexes_list <- lapply(ODD@polygons[ODD@impact$polygon[which(ODD@impact$impact==impact_type)]], function(x) x$indexes)
       universal_set <- Reduce(union, indexes_list)

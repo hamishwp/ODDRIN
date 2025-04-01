@@ -248,12 +248,17 @@ aggregateODDbyX <- function(ODD, aggFactor){
   sum_vars <- c('PDens')
   if ('nBuildings' %in% names(ODD)) sum_vars <- c(sum_vars, 'nBuildings')
   
+  max_vars <- c(grep('hazMean', names(ODD), value=T), grep('hazSD', names(ODD), value=T))
+  
   for (var_name in sum_vars){
     ODDAgg[[var_name]] <- aggregate(ODD[[var_name]], aggFactor, fun='sum', na.rm=T)
   }
+  for (var_name in max_vars){
+    ODDAgg[[var_name]] <- aggregate(ODD[[var_name]], aggFactor, fun='max', na.rm=T)
+  }
   for (var_name in names(ODD)){
     print(var_name)
-    if (var_name %in% sum_vars | var_name == 'Population' | var_name=='ISO3C') next
+    if (var_name %in% sum_vars | var_name %in% max_vars | var_name == 'Population' | var_name=='ISO3C') next
     ODDAgg[[var_name]] <- aggregate(ODD[[var_name]], aggFactor, fun='mean', na.rm=T)
   }
   

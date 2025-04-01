@@ -21,6 +21,8 @@ ExtractOSMbuild<-function(bbox,timeout=60){
   
   obj<-opq(bbox = bbox,timeout = timeout)%>%add_osm_feature("building") %>%
     opq_string()%>%osmdata_sf()
+  
+  
   obj<-obj$osm_polygons
   inds<-st_is_valid(obj$geometry); inds[is.na(inds)]<-FALSE
   obj<-obj[inds,]
@@ -74,10 +76,10 @@ GetOSMbuildings<-function(bbox, BD=NULL,minnum=50,plotty=F,timeout=60){
   #   i<-i+1
   # }
 
-  return(SpatialPointsDataFrame(coords = buildings[,c("Longitude","Latitude")],
-                              data = buildings[,c("building.levels","area")],
-                              proj4string = crs("+proj=longlat +datum=WGS84 +ellps=WGS84")))
-    
+  # return(SpatialPointsDataFrame(coords = buildings[,c("Longitude","Latitude")],
+  #                             data = buildings[,c("building.levels","area")],
+  #                             proj4string = crs("+proj=longlat +datum=WGS84 +ellps=WGS84")))
+  #   
   return(buildings)
   
 }
@@ -106,7 +108,7 @@ getOSMBuildingCount <- function(ODDy){
 
 GetOSMbuildingsODD<-function(ODD,bbox=NULL,minnum=50,plotty=F,timeout=60){
   
-  if(is.null(bbox)) bbox<-ODD@bbox
+  if(is.null(bbox)) bbox<-ODD@hazinfo$bbox
   
   area<-(bbox[4]-bbox[2])*(bbox[3]-bbox[1])
   # If the bounding box size is too large, separate into pixels
@@ -114,7 +116,7 @@ GetOSMbuildingsODD<-function(ODD,bbox=NULL,minnum=50,plotty=F,timeout=60){
   if(area>0.01){
     tbuildings<-tryCatch(ExtractOSMbuild(bbox,timeout=timeout),error=function(e) NULL)
     if(is.null(tbuildings)) {
-      p<-ggplot(as.data.frame(ODD),aes(Longitude,Latitude))+stat_bin_2d(drop = F,binwidth = 0.1)
+      p<-ggplot(as.data.frame(ODD, xy=T, na.rm=F),aes(x,y))+stat_bin_2d(drop = F,binwidth = 0.1)
       pg<-(ggplot_build(p))$data[[1]]; rm(p)
       buildings<-data.frame()
       for(i in 1:nrow(pg)){
@@ -136,6 +138,9 @@ GetOSMbuildingsODD<-function(ODD,bbox=NULL,minnum=50,plotty=F,timeout=60){
   #   buildings%<>%distinct()
   #   i<-i+1
   # }
+  ODD[['OSM']] = rast(rasterize(buildings[,c('Longitude', 'Latitude')], raster(ODD), 1, fun='count'))
+  
+  return(ODD)
   
   return(SpatialPointsDataFrame(coords = buildings[,c("Longitude","Latitude")],
                                 data = buildings[,c("building.levels","area")],

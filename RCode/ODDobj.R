@@ -136,7 +136,7 @@ setMethod("AddHazSDF", "ODD", function(ODD,lhazSDF){
     if(lhazSDF$hazard_info$hazard=="TC"){
       stop('Not yet set up for TC hazards')
     } else {
-      haz_interpolated <- resample(HazDat,ODD, method = "bilinear")
+      haz_interpolated <- resample(HazDat,ODD, method='max') #method = "bilinear")
       ODD[[paste0("hazMean", i-start+1)]] <- haz_interpolated[['mean']]
       ODD[[paste0("hazSD", i-start+1)]] <- haz_interpolated[['sd']]
     }
@@ -1016,7 +1016,7 @@ plotODDy <-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha
   
   if(is.null(breakings) & (var=="Population" | var=="Disp" | var=='Population2')) breakings<-c(0,1,5,10,50,100,500,1000, 2000, 5000, 50000)
   
-  if(is.null(bbox)) bbox<-ODDy@bbox
+  if(is.null(bbox)) bbox<-ODDy@hazinfo$bbox
   
   if(!file.exists(api_key_loc)){
     warning('You need an API key from StadiaMaps to get terrain background. 
@@ -1031,23 +1031,30 @@ plotODDy <-function(ODDy,zoomy=7,var="Population",breakings=NULL,bbox=NULL,alpha
   mad_map <- get_stadiamap(bbox = bbox, zoom = zoomy, maptype = "stamen_terrain_background")
   p<-ggmap(mad_map) + xlab("Longitude") + ylab("Latitude")
   
-  hazard<-rep(NA_real_,length(ODDy@data$hazMean1))
-  for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
-    tmp<-ODDy[variable]
-    tmp$hazard<-hazard
-    hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
-  }
-  ODDy@data$hazard<-hazard
+  # hazard<-rep(NA_real_,ncell(ODDy))
+  # for (variable in names(ODDy)[grepl("Mean",names(ODDy))]){
+  #   tmp<-ODDy[variable]
+  #   tmp$hazard<-hazard
+  #   hazard<-apply(tmp@data,1,function(x) max(x,na.rm=T))
+  # }
+  # 
+  
+  hazard = apply(values(ODDy[grep("hazMean",names(ODDy),value = T), drop=F]),1,max, na.rm=T)
+  
+  ODDy$hazard<-hazard
   brks<-seq(9,ceiling(2*max(hazard,na.rm = T)),by=1)/2
   
   if(var!="hazard")  {
-    ODDy@data[is.na(ODDy@data$ISO3C),var]<-NA
+    ODDy_df <- as.data.frame(ODDy, na.rm=F, xy=T)
+    ODDy_df[is.na(ODDy_df$ISO3C), var]<-NA
+    names(ODDy_df)[which(names(ODDy_df)=='x')] = 'Longitude'
+    names(ODDy_df)[which(names(ODDy_df)=='y')] = 'Latitude'
     
-    p<-p+geom_contour_filled(data = as.data.frame(ODDy),
-                             mapping = aes(Longitude,Latitude,z=ODDy@data[[var]]),
+    p<-p+geom_contour_filled(data = ODDy_df,
+                             mapping = aes(Longitude,Latitude,z=.data[[var]]),
                              breaks=breakings,alpha=alpha)+ 
       labs(fill = GetVarName(var))
-    p<-p+geom_contour(data = as.data.frame(ODDy),
+    p<-p+geom_contour(data = ODDy_df,
                       mapping = aes(Longitude,Latitude,z=hazard,colour=..level..),
                       alpha=1.0,breaks = brks, size=1) +
       scale_colour_gradient(low = "transparent",high = "red",na.value = "transparent") + 
@@ -1205,6 +1212,7 @@ plotODDy_GADM <- function(ODDy, var, gadm_level=2, haz_legend=F, var_legend=T, v
         }
         p <- p + scale_fill_viridis( trans = scales::pseudo_log_trans(base = 10, sigma = 100), 
                                      breaks=breakings, labels = function(x) scales::comma(x))
+        #p <- p + scale_fill_viridis( trans = scales::pseudo_log_trans(base = 10, sigma = 5),breaks=c(0, 15, 50, 200), limits = c(0, 250) )
       }
       else {
         if (all(plot_df[, var]==0, na.rm=T)){

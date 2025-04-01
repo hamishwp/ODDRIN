@@ -534,7 +534,7 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
   if (AlgoParams$AllParallel){
     # When using task parallelisation, put the heaviest files first for optimisation reasons
     
-    return(pmap(mclapply(X = ufiles,FUN = tmpFn,mc.cores = AlgoParams$cores), rbind))
+    return(pmap(mclapply(X = ufiles,FUN = tmpFn, mc.cores = AlgoParams$cores, mc.preschedule=F), rbind))
     
   } else { 
     #even when AlgoParams$cores = 1 the above will still work, but this can sometimes be useful for debugging:
@@ -724,7 +724,7 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams, corr_noise 
       # get_mst_rank_single(cbind(obs_mst, sims_mst))
       
       #pre_ranks_mst <- c(pre_ranks_mst, get_mst_rank_single(cbind(obs_mst, sims_mst)))
-      pre_ranks <- c(pre_ranks, get_banddepth_rank_single(cbind(obs_rh, sims_rh), noise=corr_noise[i,]))
+      pre_ranks <- c(pre_ranks, get_banddepth_rank_single(cbind(obs_rh, sims_rh)))#, noise=corr_noise[i,]))
       #pre_ranks <- c(pre_ranks, get_mst_rank_single(cbind(obs_rh, sims_rh), noise=corr_noise[i,]))
 
       

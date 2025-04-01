@@ -1027,7 +1027,7 @@ plot_df_postpredictive_compare <- function(df_poly1, df_poly2, impact_type){
   
 }
 
-plot_df_postpredictive_PAGER_coloured <- function(df_poly_jitter, impact_type){
+plot_df_postpredictive_PAGER_coloured <- function(df_poly_jitter, impact_type, interactive=F){
   
   jitter_val <- function(x){
     return_arr <- c()
@@ -1052,28 +1052,74 @@ plot_df_postpredictive_PAGER_coloured <- function(df_poly_jitter, impact_type){
   folderin_haz <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_wMaxMMIDiff/'
   ufiles_haz <- na.omit(list.files(path=folderin_haz,pattern=Model$haz,recursive = T,ignore.case = T))
   df_poly_jitter$alertlevel <- ''
+  df_poly_jitter$file_name = NA
   for(i in 1:NROW(df_poly_jitter)){
     file_match <- grep(paste0("_", df_poly_jitter$event_id[i], "\\b"),  ufiles_haz, value = TRUE)
+    if (length(file_match)==0) next
+    event_label  = str_extract(file_match, "(?<=EQ)[^_]+")
+    df_poly_jitter$file_name[i] = paste0(substr(event_label, nchar(event_label) - 2, nchar(event_label)), 
+                                  substr(event_label, 1, nchar(event_label) - 3))
     HAZy <- readRDS(paste0(folderin_haz, file_match ))
-    which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(x$mean)))
-    df_poly_jitter$alertlevel[i] <- HAZy$hazard_info$alertlevel[which.max.mmi]
+    #which.max.mmi <- which.max(sapply(HAZy[2:length(HAZy)], function(x) max(x$mean)))
+    df_poly_jitter$alertlevel[i] <- ifelse(any(HAZy$hazard_info$alertlevel=='red'), 'red', 
+                                           ifelse(any(HAZy$hazard_info$alertlevel=='orange'), 'orange',
+                                                  ifelse(any(HAZy$hazard_info$alertlevel=='yellow'), 'yellow',
+                                                         ifelse(any(HAZy$hazard_info$alertlevel=='green'), 'green',NA))))#HAZy$hazard_info$alertlevel[which.max.mmi]
   }
   
   df_poly_jitter$alertlevel <- factor(df_poly_jitter$alertlevel, levels=c('green', 'yellow', 'orange', 'red'))
-  ggplot(df_poly_jitter %>% filter(impact==impact_type & train_flag=='TEST' & alertlevel !='null'), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-  #ggplot(df_poly_jitter %>% filter(impact==impact_type & train_flag=='TEST' & alertlevel !='null'), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-    geom_errorbar() + 
-    geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) +
-    geom_point(col='red', size=2.5) + #geom_point(aes(col=alertlevel), size=2.5) + 
-    geom_point(shape = 1, size = 3,colour = "black") + 
-    #scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) log(x+10), labels = scales::trans_format("log10")), labels = scales::comma) + 
-    scale_x_continuous(trans=scales::pseudo_log_trans(sigma=5,base = 10), breaks = c(0,20,100,1000, 10000, 100000), labels= scales::comma_format(),  minor_breaks =NULL) + 
-    scale_y_continuous(trans=scales::pseudo_log_trans(sigma=5,base = 10), breaks = c(0,20,100,1000, 10000, 100000), labels= scales::comma_format(),  minor_breaks =NULL) + 
-    #scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
-    #geom_pointrange(aes(col=train_flag)) + 
-    ylab(paste('ODDRIN Posterior Predictive', impact_type)) + xlab(paste('Observed', impact_type)) + 
-    #scale_color_manual(values = c('green'='green', 'yellow'='yellow', 'orange'='orange', 'red'='red'), labels = c('green'='0', 'yellow'='1 - 99', 'orange'='100 - 999', 'red'='1000+'),name = "PAGER Predicted Mortality") + 
-    theme_bw() + theme(plot.background = element_rect(fill = rgb(0.95,0.95,0.95)))
+  dat_filt = df_poly_jitter %>% filter(impact==impact_type & alertlevel !='null') #& train_flag=='TEST' 
+  #dat_filt = dat_filt %>% filter(abs(log10(get(paste0('sampled.', M_median))) - log10(observed)) > 1.5)
+  #dat_filt$file_name[which(dat_filt$observed < 10 & dat_filt[paste0('sampled.', M_median)] < 10)] = ''
+  # plot_coloured <- ggplot(dat_filt, mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)), col=alertlevel, label=file_name)) + 
+  # #ggplot(df_poly_jitter %>% filter(impact==impact_type & train_flag=='TEST' & alertlevel !='null'), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
+  #   geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) +
+  #   geom_point(size=2.5) +
+  #   geom_errorbar(col='black') +
+  #   geom_point(size=2.5) +
+  #   #geom_point(col=alertlevel, size=2.5) + #geom_point(aes(col=alertlevel), size=2.5) + 
+  #   geom_point(shape = 1, size = 3,colour = "black") + 
+  #   scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+  #   #scale_x_continuous(trans=scales::pseudo_log_trans(sigma=5,base = 10), breaks = c(0,20,100,1000, 10000, 100000), labels= scales::comma_format(),  minor_breaks =NULL) + 
+  #   #scale_y_continuous(trans=scales::pseudo_log_trans(sigma=5,base = 10), breaks = c(0,20,100,1000, 10000, 100000), labels= scales::comma_format(),  minor_breaks =NULL) + 
+  #   scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
+  #   #geom_pointrange(aes(col=train_flag)) + 
+  #   ylab(paste('ODDRIN Posterior Predictive', impact_type)) + xlab(paste('Observed', impact_type)) + 
+  #   scale_color_manual(values = c('green'='green', 'yellow'='yellow', 'orange'='orange', 'red'='red'), labels = c('green'='0', 'yellow'='1 - 99', 'orange'='100 - 999', 'red'='1000+'),name = "PAGER Predicted Mortality") + 
+  #   theme_bw() + #theme(plot.background = element_rect(fill = rgb(0.95,0.95,0.95))) + 
+  #   geom_text(hjust=-0.08, vjust=0.5, size=3, alpha=0.5, col='black') + coord_cartesian(clip="off")
+  
+  plot_coloured = ggplot(dat_filt, mapping=aes(x=observed, 
+                                                    y=get(paste0('sampled.', M_median)), 
+                                                    ymin=get(paste0('sampled.', M_lower)), 
+                                                    ymax=get(paste0('sampled.', M_upper)), 
+                                                    col=alertlevel, 
+                                                    text=file_name)) +  # Store hover text
+    geom_abline(slope=1, intercept=0) + 
+    theme(aspect.ratio=1) +
+    geom_errorbar(col='black') +
+    geom_point(size=2.5) +
+    geom_point(size=2.5) +
+    geom_point(shape = 1, size = 3, colour = "black") + 
+    scale_x_continuous(trans='log10', 
+                       breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), 
+                       labels = scales::comma) + 
+    scale_y_continuous(trans='log10', 
+                       breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), 
+                       labels = scales::comma) + 
+    ylab(paste('ODDRIN Posterior Predictive', impact_type)) + 
+    xlab(paste('Observed', impact_type)) + 
+    scale_color_manual(values = c('green'='green', 'yellow'='yellow', 'orange'='orange', 'red'='red'),
+                       labels = c('green'='0', 'yellow'='1 - 99', 'orange'='100 - 999', 'red'='1000+'),
+                       name = "PAGER Predicted Mortality") + 
+    theme_bw() + 
+    coord_cartesian(clip="off")
+  
+  if (interactive){
+    return(ggplotly(plot_coloured, tooltip = "text"))
+  } else {
+    return(plot_coloured)
+  }
 }
 
 gdacs_df <- rbind(
@@ -1419,23 +1465,64 @@ add_covar <- function(df_poly, covars='EQFreq', dat='all'){
   for (covar in covars){
     df_poly[[covar]] <- NA
   }
+  df_poly$file_name = NA
   
   for(i in 1:NROW(df_poly)){
     file_match <- grep(paste0("_", df_poly$event_id[i], "\\b"),  ufiles, value = TRUE)
     if (length(file_match) > 1) stop('Multiple ODD files for event with the same ID.')
-    ODDy <- readRDS(paste0(folderin,file_match))
-    poly_indexes <- ODDy@polygons[[df_poly$polygon[i]]]$indexes
-    if ('hazMean' %in% covars){
-      poly_pop_restricted <- poly_indexes[which(ODDy@data$Population[poly_indexes] > 1000)]
-      df_poly[['hazMean']][i] <- max(ODDy@data[poly_pop_restricted,grep("hazMean",names(ODDy),value = T)], na.rm=T)
-    } 
-    #df_poly[[covar]][i] <- median(ODDy@data[[covar]][poly_indexes])
-    #find mode:
-    for (covar in covars[which(covars != 'hazMean')]){
-      tbl <- table(ODDy@data[[covar]][poly_indexes])
-      if (length(tbl)==0){df_poly[[covar]][i] <- NA; next }
-      df_poly[[covar]][i] <- as.numeric(names(tbl)[which.max(tbl)])
+    ODDy <- readODD(paste0(folderin,file_match))
+    event_label  = str_extract(file_match, "(?<=/EQ)[^_]+")
+    df_poly$file_name[i] = paste0(substr(event_label, nchar(event_label) - 2, nchar(event_label)), 
+           substr(event_label, 1, nchar(event_label) - 3))
+    
+    if (df_poly$polygon[i] == 0){
+      poly_indexes <- 1:ncell(ODDy)
+    } else {
+      poly_indexes <- ODDy@polygons[[df_poly$polygon[i]]]$indexes
     }
+    haz_max = apply(values(ODDy[grep("hazMean",names(ODDy),value = T), drop=F]),1,max, na.rm=T)
+    poly_haz_restricted = which(haz_max - max(haz_max)> -1)
+    for (covar in covars){
+      
+      if (covar == 'hazMean'){
+        poly_pop_restricted <- poly_indexes[which(ODDy$Population[poly_indexes] > 100)]
+        df_poly[['hazMean']][i] <- max(ODDy[grep("hazMean",names(ODDy),value = T)][poly_pop_restricted], na.rm=T)
+      } else if (covar == 'Pop8.5'){
+        df_poly[['Pop8.5']][i] = sum(ODDy$Population[apply(values(ODDy[grep("hazMean",names(ODDy),value = T), drop=F])>8.5,1, any)], na.rm=T)
+      } else if (covar == 'shakeSD'){
+        df_poly[['shakeSD']][i] = max(values(ODDy[grep("hazSD",names(ODDy),value = T)]), na.rm=T)
+      } else if (covar == 'region'){
+        iso3_epi = as.character(
+          ODDy$ISO3C[which(values(!is.na(ODDy$ISO3C)))]$ISO3C[
+            which.max(apply(values(ODDy[grep("hazMean",names(ODDy),value = T)])[which(values(!is.na(ODDy$ISO3C))),, drop=F],1, max, na.rm=T))]
+        )
+        if (is.na(iso3_epi)){
+          #stop('hi')
+        }
+        df_poly[['region']][i] = iso3_to_region(iso3_epi, region_list)
+        if (is.na(df_poly[['region']][i])){
+          if (length(grep('EQ20181130USA_99', file_match, value=T))>0 | length(grep('EQ20200318USA_142', file_match, value=T))>0 | length(grep('EQ20200809USA_147', file_match, value=T))>0){
+            df_poly[['region']][i] = "United States (without California)"
+          } else if (length(grep('EQ20190704USA_114', file_match, value=T))>0){
+            df_poly[['region']][i] = "New Zealand and California"
+          } else {
+            #stop()
+          }
+        }
+      }
+      
+      else {
+        if (length(intersect(poly_indexes, poly_haz_restricted)) == 0) stop()
+        df_poly[[covar]][i] <- mean(pull(ODDy[[covar]][intersect(poly_indexes, poly_haz_restricted)]), na.rm=T)
+      }
+    }
+    #find mode:
+    #for (covar in covars[which(covars != 'hazMean')]){
+    #  tbl <- table(ODDy[[covar]][poly_indexes])
+    #  if (length(tbl)==0){df_poly[[covar]][i] <- NA; next }
+    #  tbl <- median(ODDy)
+      #df_poly[[covar]][i] <- as.numeric(names(tbl)[which.max(tbl)])
+    #}
   }
   return(df_poly)
 }
@@ -1504,10 +1591,10 @@ region_list <- list(
   list(name = "Western South America", countries = c("Colombia", "Ecuador", "Peru", "Chile", "Argentina", "Uruguay", "Brazil", "Paraguay")),
   list(name = "Eastern South America", countries = c("Venezuela", "Bolivia", "Brazil", "Uruguay", "Guyana", "Suriname", "Paraguay", "French Guiana")),
   list(name = "North Africa", countries = c("Algeria", "Egypt", "Tunisia", "Western Sahara")),
-  list(name = "South-central Africa", countries = c("Botswana", "Namibia", "South Africa", "Swaziland", "Zimbabwe", "Morocco", "Sudan", "Chad", "Central African Republic", "Cameroon", "Congo", "DRP Congo", "Gabon", "Equatorial Guinea", "Sao Tome and Principe", "Angola", "Mauritania", "Senegal", "Gambia", "Guinea-Bissau", "Sierra Leone", "Liberia", "Cote d'Ivoire", "Ghana", "Togo", "Benin", "Niger", "Nigeria", "Mali", "Burkina Faso", "Guinea", "Yemen", "Eritrea", "Djibouti", "Ethiopia", "Somalia", "Kenya", "Uganda", "Rwanda", "Burundi", "United Republic of Tanzania", "Malawi", "Madagascar", "Mozambique", "Zambia", "Lesotho")),
+  list(name = "South-central Africa", countries = c("Botswana", "Namibia", "South Africa", "Swaziland", "Zimbabwe", "Morocco", "Sudan", "Chad", "Central African Republic", "Cameroon", "Congo", "DRP Congo", "Congo (the Democratic Republic of the)", "Congo - Kinshasa", "Gabon", "Equatorial Guinea", "Sao Tome and Principe", "Angola", "Mauritania", "Senegal", "Gambia", "Guinea-Bissau", "Sierra Leone", "Liberia", "Cote d'Ivoire", "Ghana", "Togo", "Benin", "Niger", "Nigeria", "Mali", "Burkina Faso", "Guinea", "Yemen", "Eritrea", "Djibouti", "Ethiopia", "Somalia", "Kenya", "Uganda", "Rwanda", "Burundi", "United Republic of Tanzania", 'Tanzania', "Malawi", "Madagascar", "Mozambique", "Zambia", "Lesotho")),
   list(name = "Italy", countries = c("Italy", "Holy See", "Malta", "San Marino")),
   list(name = "Northern Europe", countries = c("Norway", "Sweden", "Finland", "Denmark", "Germany", "Belgium", "France", "Austria", "Switzerland", "Aland Islands", "Monaco", "Poland", "Bouvet Island", "United Kingdom", "Ireland", "Guernsey", "Isle of Man", "Jersey", "Falkland Islands (Malvinas)", "Saint Helena", "South Georgia and the South Sandwich Islands", "Iceland", "Faroe Islands", "Greenland", "Svalbard and Jan Mayen", "Liechtenstein", "Luxembourg", "Netherlands", "Greece", "Spain", "Portugal", "Gibraltar", "Cape Verde", "Andorra")),
-  list(name = "Eastern Europe", countries = c("Czech Republic", "Slovenia", "Slovakia", "Hungary", "Bosnia and Herzegovina", "Croatia", "Serbia", "Montenegro", "Romania", "Albania", "Former Yugoslav Republic of Macedonia", "Bulgaria", "Republic of Moldova")),
+  list(name = "Eastern Europe", countries = c("Czech Republic", "Slovenia", "Slovakia", "Hungary", "Bosnia and Herzegovina", "Croatia", "Serbia", "Montenegro", "Romania", "Albania", "Former Yugoslav Republic of Macedonia", "North Macedonia", "Bulgaria", "Republic of Moldova")),
   list(name = "Baltic States and Russia", countries = c("Estonia", "Latvia", "Lithuania", "Belarus", "Ukraine", "Russian Federation", "Georgia", "Armenia", "Azerbaijan")),
   list(name = "Central Asia", countries = c("Kazakhstan", "Uzbekistan", "Turkmenistan", "Kyrgyzstan", "Tajikistan")),
   list(name = "Arabian Peninsula", countries = c("Turkey", "Oman", "United Arab Emirates", "Qatar", "Saudi Arabia", "Bahrain", "Kuwait", "Lebanon", "Jordan", "Palestinian Territory", "Syrian Arab Republic", "Israel", "Cyprus", "Libyan Arab Jamahiriya")),
@@ -1531,7 +1618,7 @@ region_list <- list(
 
 iso3_to_region <- function(iso3, region_list) {
   #having some issues with getting some country name matches with countrycode() but this seems to work ok for now:
-  if (iso3 %in% c('TTO', 'BIH')){
+  if (iso3 %in% c('TTO', 'BIH', 'MMR')){
     country <- countrycode(iso3, origin='iso3c', destination='iso.name.en')
   } else {
     country <- ifelse(iso3=='KOS', 'Serbia', countrycode(iso3, origin='iso3c', destination='country.name'))
@@ -1600,7 +1687,7 @@ add_landslide_flag <- function(df_poly){
 }
 
 add_hazard_info <- function(df_poly){
-  folderin <- paste0(dir,"IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_wMaxMMIDiff/")
+  folderin <- paste0(dir,"IIDIPUS_Input_Alternatives/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/HAZARDobjects_wMaxMMIDiff/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
   
   df_poly$depth <- NA
@@ -1611,6 +1698,7 @@ add_hazard_info <- function(df_poly){
   
   for(i in 1:NROW(df_poly)){
     file_match <- grep(paste0("_", df_poly$event_id[i], "\\b"),  ufiles, value = TRUE)
+    if (length(file_match)==0) next
     HAZARDobj <- readRDS(paste0(folderin, file_match))
     max_mmi_i <- which.max(HAZARDobj$hazard_info$max_mmi)
     df_poly$max_mmi[i] <- HAZARDobj$hazard_info$max_mmi[max_mmi_i]
@@ -1704,41 +1792,83 @@ manual_modify_params = function(AlgoResults, s_finish=NULL){
 }
 
 
-
-plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all', s_finish=NULL){
+plot_covar_vs_error = function(df_poly, covar='EQFreq', dat='all', s_finish=NULL){
   #plot covariates against discrepancy between sampled and observed
   
-  M <- 10
-  AlgoResults %<>% addAlgoParams(s_finish)
-  particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
-  proposed <- relist(AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish], skeleton=Model$skeleton)
-  #proposed$vuln_coeff$Vs30=0
-  # proposed$vuln_coeff$Night=0
-  # proposed$vuln_coeff$FirstHaz.Night=0
-  # proposed$check$check = 0.5
-  #df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat=dat, single_particle=T, Omega = proposed)
-  df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat=dat, single_particle=T, particle_i = particle_min.d[1])
-  
+  # M <- 10
+  # AlgoResults %<>% addAlgoParams(s_finish)
+  # particle_min.d <- which(AlgoResults$d[,,AlgoResults$s_finish] == min(AlgoResults$d[which(AlgoResults$W[, AlgoResults$s_finish] > 0),,AlgoResults$s_finish]), arr.ind=T)
+  # proposed <- relist(AlgoResults$Omega_sample_phys[particle_min.d[1],,AlgoResults$s_finish], skeleton=Model$skeleton)
+  # #proposed$vuln_coeff$Vs30=0
+  # # proposed$vuln_coeff$Night=0
+  # # proposed$vuln_coeff$FirstHaz.Night=0
+  # # proposed$check$check = 0.5
+  # #df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat=dat, single_particle=T, Omega = proposed)
+  # df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat=dat, single_particle=T, particle_i = particle_min.d[1])
+  # 
   #df_poly <- sample_post_predictive(AlgoResults, M, AlgoResults$s_finish, dat=dat, single_particle=T, Omega = proposed)
   df_poly$sampled_median <- apply(df_poly[grep("sampled", names(df_poly))], 1, median)
   df_poly$sampled_mean <- apply(df_poly[grep("sampled", names(df_poly))], 1, mean)
   
+  if (is.null(df_poly$inferred)){
+    df_poly$inferred=F
+  }
   
-  impact_type <- 'buildDam'
+  impact_type <- 'mortality'
   k <- 10
   
-  df_poly %>% filter(impact=='mortality' & log(df_poly$sampled_median+10) < 3 & log(df_poly$observed+10)>5)
-  df_poly %>% filter(impact=='mortality' & abs(log(df_poly$sampled_median+10) - log(df_poly$observed+10))>2.8)
-  df_poly %>% filter(impact=='mortality' & log(df_poly$sampled_median+10) - log(df_poly$observed+10)>1.5)
+  resample_obs_quant = function(df_poly){
+    df_poly$obs_quant = apply(df_poly[, c('observed', grep('sampled.', names(df_poly), value=T, fixed=T))],1, function(x) sample_quant(x))
+    df_poly$obs_quant = (df_poly$obs_quant - runif(length(df_poly$obs_quant), 0, 1))/length(c('observed', grep('sampled.', names(df_poly), value=T, fixed=T)))
+    return(df_poly)
+  }
+  
+  df_poly %<>% add_hazard_info()
+  df_poly %<>% add_covar(covars=c('hazMean', 'EQFreq', 'Vs30', 'SHDI', 'PDens', 'region', 'shakeSD'), dat=dat)
+  
+  df_poly$time_numeric = as.numeric(format(as.POSIXct(df_poly$time, format = "%H:%M:%S"), "%H")) + as.numeric(format(as.POSIXct(df_poly$time, format = "%H:%M:%S"), "%M") )/60
+  df_poly$sin_time = cos(2*pi * (df_poly$time_numeric - 2) / 24)
+  df_poly$night_flag = ifelse(as.numeric(format(as.POSIXct(df_poly$time, format = "%H:%M:%S"), "%H")) < 6 | as.numeric(format(as.POSIXct(df_poly$time, format = "%H:%M:%S"), "%H")) > 20, T, F)
+  
+  
+  # df_poly %<>% resample_obs_quant()
+  # ggplot(df_poly %>% filter(impact==impact_type), aes(x=region, y=obs_quant)) +
+  #   #geom_point(aes(color=as.factor(train_flag))) + 
+  #   geom_point() +
+  #   ggtitle('Mortality Residuals by Region') +
+  #   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), legend.position='none') + ylab('log(Median_Prediction + 10) - log(Observed+10)') + xlab('')
+  # 
+  df_poly %<>% resample_obs_quant()
+  ggplot(df_poly %>% filter(impact==impact_type), aes(x=region, y=obs_quant, label=file_name)) +
+    #geom_point(aes(color=as.factor(train_flag))) + 
+    geom_point() +
+    ggtitle('Mortality Residuals by Region') +
+    theme_minimal() + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), legend.position='none')+ geom_text(hjust=0, vjust=0.5, size=3, alpha=0.5) + 
+    coord_cartesian(clip="off")+
+    theme(plot.margin = margin(10, 50, 10, 10))
+  
+  df_poly %<>% resample_obs_quant()
+  ggplot(df_poly %>% filter(impact==impact_type), aes(x=SHDI, y=obs_quant, label=file_name)) +
+    #geom_point(aes(color=as.factor(train_flag))) + 
+    geom_point(aes(color=as.factor(night_flag))) + 
+    ylab('Observation Quantile') # + geom_text(hjust=0, vjust=0.5, size=3, alpha=0.5)
+  
+  df_poly %<>% resample_obs_quant()
+  ggplot(df_poly %>% filter(impact==impact_type), aes(x=shakeSD, y=obs_quant, label=file_name)) +
+    #geom_point(aes(color=as.factor(train_flag))) + 
+    geom_point(aes(color=as.factor(train_flag))) + 
+    ggtitle('Mortality Residuals by Region') + ylab('Observation quantile')  + geom_text(hjust=0, vjust=0.5, size=3, alpha=0.5)
+  
   
   ggplot(df_poly %>% filter(impact==impact_type & inferred==F), aes(x= log(observed+k), y=log(sampled_median+k))) +
     geom_point(aes(color=train_flag)) +theme_minimal() + ggtitle(impact_type) +
     scale_color_manual(values = c("TRAIN" = "black", "TEST" = "red")) + geom_abline(intercept = 0, slope = 1, linetype = "dashed") + coord_fixed(ratio = 1)
   
   
-  df_poly %>% filter(impact=='mortality' & train_flag=='TEST' & log(observed+k)>5 & log(sampled_median+k) < 3)
   
-  df_poly_filt <- df_poly %>% filter(impact==impact_type & inferred==F)
+  
+  #df_poly_filt <- df_poly %>% filter(impact==impact_type & inferred==F)
   # df_poly_filt2 <- df_poly2 %>% filter(impact==impact_type  & inferred==F)
   # abline(0,1)
   # plot(log(df_poly_filt$observed+10), log(df_poly_filt$sampled_median+10))
@@ -1750,26 +1880,27 @@ plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all', s_finish=
   # df_poly_filt2[ log(df_poly_filt$sampled_median+10)-log(df_poly_filt$observed+10)>2.1,]
   # df_poly_filt[ log(df_poly_filt$sampled_median+10)-log(df_poly_filt$observed+10)>2.1,]
 
-  cor(df_poly_filt$sampled_median, df_poly_filt$observed)
-  cor(log(df_poly_filt$sampled_median+k), log(df_poly_filt$observed+k))
-
-  SS_res_raw = sum((df_poly_filt$observed-df_poly_filt$sampled_median)^2)
-  SS_tot_raw = sum((df_poly_filt$observed-mean(df_poly_filt$observed))^2)
-  R_squared_raw = 1-SS_res_raw/SS_tot_raw
-  R_squared_raw
-
-  SS_res_log = sum((log(df_poly_filt$observed+k)-log(df_poly_filt$sampled_median+k))^2)
-  SS_tot_log = sum((log(df_poly_filt$observed+k)-mean(log(df_poly_filt$observed+k)))^2)
-  R_squared_log = 1-SS_res_log/SS_tot_log
-  R_squared_log
+  # cor(df_poly_filt$sampled_median, df_poly_filt$observed)
+  # cor(log(df_poly_filt$sampled_median+k), log(df_poly_filt$observed+k))
+  # 
+  # SS_res_raw = sum((df_poly_filt$observed-df_poly_filt$sampled_median)^2)
+  # SS_tot_raw = sum((df_poly_filt$observed-mean(df_poly_filt$observed))^2)
+  # R_squared_raw = 1-SS_res_raw/SS_tot_raw
+  # R_squared_raw
+  # 
+  # SS_res_log = sum((log(df_poly_filt$observed+k)-log(df_poly_filt$sampled_median+k))^2)
+  # SS_tot_log = sum((log(df_poly_filt$observed+k)-mean(log(df_poly_filt$observed+k)))^2)
+  # R_squared_log = 1-SS_res_log/SS_tot_log
+  # R_squared_log
+  # 
+  # 
+  # df_poly %>% filter(impact==impact_type & abs((log(sampled_median+k)-log(observed+k)))>4)
+  # 
+  # df_poly %>% filter(impact==impact_type)
+  # 
+  df_poly %<>% add_covar(covars=c('hazMean', 'EQFreq', 'Vs30', 'SHDI', 'PDens'), dat=dat)
   
-  
-  df_poly %>% filter(impact==impact_type & abs((log(sampled_median+k)-log(observed+k)))>4)
-  
-  df_poly %>% filter(impact==impact_type)
-  
-  df_poly %<>% add_hazard_info()
-  df_poly %<>% add_covar(covars=c('hazMean', 'EQFreq', 'GNIc', 'Vs30', 'AveSchYrs', 'LifeExp', 'SHDI'), dat=dat)
+ 
   
   
   plot(df_poly$SHDI, log(df_poly$GNIc))
@@ -1782,14 +1913,22 @@ plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all', s_finish=
     geom_point(aes(color=train_flag)) +theme_minimal() + ggtitle(impact_type) +
     scale_color_manual(values = c("TRAIN" = "black", "TEST" = "red"))
   
- df_poly %>% filter(impact==impact_type & inferred==F & main_shock_first & log(sampled_median+k)-log(observed+k) > 1)
+  df_poly %>% filter(impact==impact_type & (log(sampled_median+k)-log(observed+k)) < (-2.5))
+  
+  ggplot(df_poly %>% filter(impact==impact_type), aes(x= Vs30, y=log(sampled_median+k)-log(observed+k))) +
+    geom_point(aes(color=train_flag)) +theme_minimal() + ggtitle(impact_type) +
+    scale_color_manual(values = c("TRAIN" = "black", "TEST" = "red"))
          
   time2 <- as.numeric(format(as.POSIXct(df_poly$time, format = "%H:%M:%S"), "%H")) + as.numeric(format(as.POSIXct(df_poly$time, format = "%H:%M:%S"), "%M") )/60
-  
+  df_poly$time_numeric=time2
   df_poly$sin_time = cos(2*pi * (time2 - 2) / 24)
   df_poly$night_flag = ifelse(as.numeric(format(as.POSIXct(df_poly$time, format = "%H:%M:%S"), "%H")) < 6 | as.numeric(format(as.POSIXct(df_poly$time, format = "%H:%M:%S"), "%H")) > 20, T, F)
   
   ggplot(df_poly %>% filter(impact==impact_type & inferred==F & train_flag=='TRAIN'), aes(x= -sin_time, y=log(sampled_median+k)-log(observed+k))) +
+    geom_point(aes(color=main_shock_first)) +theme_minimal() + ggtitle(impact_type) +
+    scale_color_manual(values = c("TRUE" = "black", "FALSE" = "red"))
+  
+  ggplot(df_poly %>% filter(impact==impact_type & inferred==F & train_flag=='TRAIN'), aes(x= time_numeric, y=log(sampled_median+k)-log(observed+k))) +
     geom_point(aes(color=main_shock_first)) +theme_minimal() + ggtitle(impact_type) +
     scale_color_manual(values = c("TRUE" = "black", "FALSE" = "red"))
   
@@ -1843,8 +1982,6 @@ plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all', s_finish=
   
   ggplot(df_poly %>% filter(impact == impact_type), aes(x = LifeExp, y = log(sampled_median + k) - log(observed + k))) + 
     geom_point(aes(color = train_flag, shape=train_flag))
-  
-  
   
   ggplot(df_poly %>% filter(impact == impact_type & train_flag=='TRAIN'), aes(x = hazMean, y = log(sampled_median + k) - log(observed + k))) + geom_point() +
     geom_point(color = "black", size = 1, stroke = 1) +
@@ -1911,8 +2048,10 @@ plot_covar_vs_error = function(AlgoResults, covar='EQFreq', dat='all', s_finish=
   
   df_poly %<>% add_regions()
   ggplot(df_poly %>% filter(impact==impact_type), aes(x=region, y=log(sampled_median+k) - log(observed+k))) +
-    geom_point(aes(color=as.factor(event_id))) + ggtitle(impact_type) +
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), legend.position='none')
+    #geom_point(aes(color=as.factor(train_flag))) + 
+    geom_point() +
+    ggtitle('Mortality Residuals by Region') +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), legend.position='none') + ylab('log(Median_Prediction + 10) - log(Observed+10)') + xlab('')
   
   ggplot(df_poly %>% filter(impact==impact_type), aes(x=region, y=log(sampled_median+k) - log(observed+k))) +
     geom_point(aes(color=Vs30)) + ggtitle(impact_type) +

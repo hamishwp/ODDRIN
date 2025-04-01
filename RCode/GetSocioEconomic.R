@@ -127,6 +127,12 @@ getMissingWID <- function(missing_iso3c, WID, WID_all){
     WID %<>% rbind(VCT_WID)
     missing_iso3c <- missing_iso3c[-which(missing_iso3c=='VCT')]
   }
+  if ('VAT' %in% missing_iso3c){ #Population/exposed region is small so just use WID data from Italy
+    VAT_WID <- filter_WID_by_iso3c(WID_all, 'ITA')
+    VAT_WID$iso3 = 'VAT'
+    WID %<>% rbind(VAT_WID)
+    missing_iso3c <- missing_iso3c[-which(missing_iso3c=='VAT')]
+  }
   if ('SLB' %in%  missing_iso3c){
     WID %<>% rbind(SLB_WID)
     missing_iso3c <- missing_iso3c[-which(missing_iso3c=='SLB')]

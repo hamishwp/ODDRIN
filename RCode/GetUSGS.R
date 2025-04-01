@@ -9,6 +9,8 @@
 # library(dplyr)
 # library(magrittr)
 # source('RCode/HAZARDobj.R')
+library(XML)
+library(xml2)
 
 # Create an object of the required form from the USGS data
 formUSGSobject<-function(meanhaz,sdhaz,I0=NULL){
@@ -109,6 +111,7 @@ GetUSGS_id<-function(USGSid,titlz="tmp",I0=4.5,minmag=5){
   
   url<-paste0("https://earthquake.usgs.gov/fdsnws/event/1/query?eventid=",USGSid,"&format=geojson")
   tmp<-FROM_GeoJson(url)
+  
   hazsdf<-tryCatch(ExtractUSGS(url = tmp$properties$products$shakemap[[1]]$contents$`download/raster.zip`$url,
                                namer = paste0(directory,"Disaster_Data/USGS/",titlz,"1"),
                                I0=I0),
@@ -226,8 +229,8 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
   if(!is.null(USGSid)) {
     hazsdf<-GetUSGS_id(USGSid, I0=I0, minmag=minmag)
     if(is.null(hazsdf)) return(NULL)
-    bbox<-hazsdf@bbox
-    USGS<-SearchUSGSbbox(expandBbox(hazsdf@bbox,f = 200,scaling = F),
+    bbox = ext(hazsdf)[c(1,3,2,4)] #hazsdf@bbox<-ext(hazsdf)[c(1,3,2,4)]#hazsdf@bbox
+    USGS<-SearchUSGSbbox(expandBbox(bbox,f = 200,scaling = F),
                          hazsdf@eventdate-7,hazsdf@eventdate+14,minmag)  
     sdate<-fdate<-hazsdf@eventdate
     lenny<-length(USGS$features)
@@ -250,8 +253,8 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
   } else {
     # Automatically assign end date if not specified (or badly specified)
     if(is.null(fdate)) {
-      fdate=min(Sys.Date(),(as.Date(sdate)+10))
-    } else fdate=min(Sys.Date(),as.Date(fdate)+1)
+      fdate=min(Sys.Date()+1,(as.Date(sdate)+10))
+    } else fdate=min(Sys.Date()+1,as.Date(fdate)+1)
     # Search through the USGS events
     USGS<-SearchUSGSbbox(bbox,sdate,fdate,minmag)  
     lenny<-length(USGS$features)
@@ -273,11 +276,18 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     #hazsdf <- ExtractUSGS_xml(grid_mmi, I0=I0)
     
     # Extract EQ raster of hazard intensity
-    hazsdf<-tryCatch(ExtractUSGS(url = tmp$properties$products$shakemap[[1]]$contents$`download/raster.zip`$url,
-                                 namer = paste0(directory,"Disaster_Data/USGS/",titlz,i),
-                                 I0=I0),
-                     error=function(e) NULL)
-  
+    if (tmp$properties$products$shakemap[[1]]$contents$`download/raster.zip`$url == "https://earthquake.usgs.gov/product/shakemap/us10006g7d/atlas/1594393561104/download/raster.zip"){
+      #Italy 2018-08-24 ShakeMap has been updated, use update sent by David Wald
+      hazsdf <- ExtractUSGS_xml(tmp$properties$products$shakemap[[1]]$contents$`download/raster.zip`$url, 
+                                namer = paste0(directory,"Disaster_Data/USGS/",titlz,i),
+                                I0=I0)
+    } else{
+      hazsdf<-tryCatch(ExtractUSGS(url = tmp$properties$products$shakemap[[1]]$contents$`download/raster.zip`$url,
+                                   namer = paste0(directory,"Disaster_Data/USGS/",titlz,i),
+                                   I0=I0),
+                       error=function(e) NULL)
+    }
+      
     # Check that this extracted event is in the correct form
     if(!check_hazsdf(hazsdf,minmag,bbox)){
       lhazdat$hazard_info$NumEvents<-lhazdat$hazard_info$NumEvents-1
@@ -379,7 +389,7 @@ get_intensities_raw <- function(url){
   grid <- xmlParse(xml_file)
 
   xml_data <- xmlToList(grid)
-  lines <- strsplit(xml_data[[20]], "\n")[[1]]
+  lines <- strsplit(xml_data$grid_data, "\n")[[1]] #strsplit(xml_data[[20]], "\n")[[1]]
 
   intensities <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][5]))
   longitude <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][1]))
@@ -392,7 +402,52 @@ get_intensities_raw <- function(url){
   return(plot_df[-1,])
 }
 
-ExtractUSGS_xml<-function(url,namer,I0=NULL,plotty=F){
+# url = 'https://earthquake.usgs.gov/product/shakemap/us6000jlqa/us/1734631881383/download/grid.xml'
+
+ExtractUSGS_xml<-function(url,namer=NULL,I0=NULL,plotty=F){
+  
+  if (url == "https://earthquake.usgs.gov/product/shakemap/us10006g7d/atlas/1594393561104/download/raster.zip"){
+    xml_file <- read_xml('/home/manderso/Documents/GitHub/ODDRIN/Disaster_Data/USGS/italy_20180824.xml.gz')
+  } else {
+    xml_file <- read_xml(url)
+  }
+  grid <- xmlParse(xml_file)
+  
+  xml_data <- xmlToList(grid)
+  lines <- strsplit(xml_data$grid_data, "\n")[[1]] #strsplit(xml_data[[20]], "\n")[[1]]
+  
+  intensities <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][3]))
+  pga <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][4]))
+  longitude <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][1]))
+  latitude <- sapply(lines, function(x) as.numeric(strsplit(x, " ")[[1]][2]))
+  plot_df <- data.frame(longitude=longitude, latitude=latitude, intensities=intensities)#, pga=pga)
+ 
+  grid_mmi = plot_df[-1,]
+  grid_mmi$longitude = round(grid_mmi$longitude * 60 * 2)/60/2 #correct rounding issues to create an evenly spaced grid
+  grid_mmi$latitude = round(grid_mmi$latitude * 60 * 2)/60/2 #correct rounding issues to create an evenly spaced grid
+  meanhaz <- rast(x = grid_mmi, type = "xyz", crs = "EPSG:4326")
+  names(meanhaz) = 'mmi_mean'
+  
+  sdhaz = meanhaz
+  values(sdhaz) = NA
+  names(sdhaz) = 'mmi_std'
+  
+  #spat_vect <- vect(grid_mmi, geom = c("longitude", "latitude"), crs = "EPSG:4326")
+  #meanhaz <- rasterize(spat_vect, rast(ext(spat_vect), resolution=0.008333333333333), field="intensities", fun=mean)
+  
+  #x_seq <- seq(min(grid_mmi[,1]), max(grid_mmi[,1]), length.out = length(grid_mmi[,1]))  
+  #y_seq <- seq(min(grid_mmi[,2]), max(grid_mmi[,2]), length.out = 100)
+  
+  #grid_mmi[,1] <- round(grid_mmi[,1], 3)  # Round longitudes
+  #grid_mmi[,2] <- round(grid_mmi[,2], 3) 
+  
+  # Extract the variance of the hazard intensity from raster
+  #sdhaz<-rast(file.path(namer,"mmi_std.flt"))
+  #unlink(temp)
+  
+  # Form a standard USGS object
+  HazDat <-formUSGSobject(meanhaz,sdhaz,I0)
+  return(HazDat)
   
   wide_df <- spread(grid_mmi, key = longitude, value = intensities)
   mean_haz <- raster(

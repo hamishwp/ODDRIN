@@ -23,12 +23,12 @@ merge_rastered_spdf <- function(raster1_spdf, raster2_spdf, added_var_name){
 # i = 82: POLYGON((34.8 -17.5, 34.8 -16.2, 36.1 -16.2, 36.1 -17.5, 34.8 -17.5))
 # i = 146: POLYGON((5.9 36.1,5.9 36.9,6.8 36.9,6.8 36.1, 5.9 36.1))
 AddOpenBuildingCounts <- function(ODD, isos_openbuildings, i, national_coverage=T){
-  lon_min <- ODD@bbox[1,1]; lon_max <- ODD@bbox[1,2]
-  lat_min <- ODD@bbox[2,1]; lat_max <- ODD@bbox[2,2]
+  lon_min <- ODD@hazinfo$bbox[1]; lon_max <- ODD@hazinfo$bbox[3]
+  lat_min <- ODD@hazinfo$bbox[2]; lat_max <- ODD@hazinfo$bbox[4]
   
-  indies_open_buildings <- which(ODD$ISO3C %in% isos_openbuildings)
+  indies_open_buildings <- which(levels(ODD$ISO3C)[[1]]$VALUE[values(ODD$ISO3C)] %in% isos_openbuildings) # need to check
   
-  iso3_unique <- unique(ODD$ISO3C)[!is.na(unique(ODD$ISO3C))]
+  iso3_unique <- levels(ODD$ISO3C)[[1]]$VALUE
   
   if (national_coverage){
     open_buildings_file <- paste0(dir, 'Demography_Data/Buildings/open_buildings_v2_points_your_own_wkt_polygon_',iso3_unique[1],'.csv')
@@ -84,21 +84,23 @@ AddOpenBuildingCounts <- function(ODD, isos_openbuildings, i, national_coverage=
   building_locs <- building_locs[,c('longitude', 'latitude')]
   
   rastered_buildings <- rasterize(building_locs, raster(ODD), 1, fun='count')
-  rastered_buildings_spdf <- as(rastered_buildings, "SpatialPixelsDataFrame")
   
-  ODD@data <- merge_rastered_spdf(ODD, rastered_buildings_spdf, 'nBuildings')
-  if (national_coverage){
-    ODD$nBuildings[indies_open_buildings[which(is.na(ODD$nBuildings[indies_open_buildings]))]] <- 0
-    ODD$nBuildings[-indies_open_buildings] <- NA
-  } else {
-    ODD$nBuildings[which(is.na(ODD$nBuildings))] <- 0
-  }
-  
-  sedacs2020 <- GetPopulationBbox(dir, ODD@bbox, yr=2020)
-  population2020 <- merge(ODD@coords, cbind(sedacs2020@coords, population2020=sedacs2020$Population), by=c('Longitude', 'Latitude'), all.x=T, sort=F)
-  nonzero_pop <- which(population2020$population2020 > 0)
-  ODD$nBuildings[nonzero_pop] <- round(ODD$nBuildings[nonzero_pop] * (ODD$Population[nonzero_pop] / population2020$population2020[nonzero_pop]))
-  
+  ODD[['OpenBuildings']] = rast(rastered_buildings)
+  # rastered_buildings_spdf <- as(rastered_buildings, "SpatialPixelsDataFrame")
+  # 
+  # ODD@data <- merge_rastered_spdf(ODD, rastered_buildings_spdf, 'nBuildings')
+  # if (national_coverage){
+  #   ODD$nBuildings[indies_open_buildings[which(is.na(ODD$nBuildings[indies_open_buildings]))]] <- 0
+  #   ODD$nBuildings[-indies_open_buildings] <- NA
+  # } else {
+  #   ODD$nBuildings[which(is.na(ODD$nBuildings))] <- 0
+  # }
+  # 
+  # sedacs2020 <- GetPopulationBbox(dir, ODD@bbox, yr=2020)
+  # population2020 <- merge(ODD@coords, cbind(sedacs2020@coords, population2020=sedacs2020$Population), by=c('Longitude', 'Latitude'), all.x=T, sort=F)
+  # nonzero_pop <- which(population2020$population2020 > 0)
+  # ODD$nBuildings[nonzero_pop] <- round(ODD$nBuildings[nonzero_pop] * (ODD$Population[nonzero_pop] / population2020$population2020[nonzero_pop]))
+  # 
   return(ODD)
 }
 
@@ -129,7 +131,7 @@ AddBuildingCounts <- function(ODD, i, file_write='IIDIPUS_Input/Building_count_n
     close(file_conn) 
     return(ODD)
   } 
-  missing_building_counts <- which(!is.na(ODD$ISO3C) & is.na(ODD$nBuildings))
+  missing_building_counts <- which(!is.na(values(ODD$ISO3C)) & is.na(values(ODD$nBuildings)))
   if (length(missing_building_counts)>0){
     file_conn <- file(file_write, open = "a")
     writeLines(paste("Build Count Missing for pixels in countries", paste(unique(ODD$ISO3C[missing_building_counts]), sep='_'), "Event Date:", ODD@hazdates[1]), file_conn)
@@ -175,7 +177,6 @@ resave_geojsonl <- function(iso3, USA_state=NULL){
     saveRDS(building_footprints, paste0(dir, 'Demography_Data/Buildings/',USA_state,'.RDS'))
   }
 }
-
 
 AddBingBuildingCounts <- function(ODD, plot_only = F){
   isos_bingbuildings <- c('COL', 'ECU', 'USA', 'PER')
@@ -393,14 +394,8 @@ getQuadKey <- function(Tile) {
   return(as.integer(paste(result, collapse='')))
 }
 
-
-getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Building_count_notes', aggregate=T){
-  # Note that if you choose to proceed with some missing quadkeys, the values in these pixels will be 0 rather than NA (making them indistinguishable from true 0s)
-  # This could be addressed by determining the polygons of the missing quadkeys and assigning the intersecting pixels to NA, but haven't had time to implement this yet. 
-  
-  zoom <- 9
-  
-  tiles <- getMercantileTiles(ext(ODD)[1], ext(ODD)[3], ext(ODD)[2], ext(ODD)[4], 9)
+getBingBuildingsFromTiles <- function(bbox, event_id=NA, file_write='IIDIPUS_Input/Building_count_notes'){
+  tiles <- getMercantileTiles(bbox[1], bbox[2], bbox[3], bbox[4], 9)
   quad_keys <- list()
   for (i in 1:NROW(tiles)){
     quad_keys[[i]] <- getQuadKey(tiles[i,])
@@ -432,7 +427,7 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
       writeLines(paste("Event:", event_id, ", Missing", length(missing_quadkeys)/length(quad_keys)*100, "percent of quad keys, not adding building data."), file_conn)
       close(file_conn)
     }
-    return(ODD)
+    return(NULL)
   }
   
   missing_quadkeys_flag <- F
@@ -457,7 +452,7 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
       #stop(paste("QuadKey not found in dataset:", quad_key))
     }
   }
-  inside_bbox <- which(build_coords[,1] > ext(ODD)[1] & build_coords[,1] < ext(ODD)[2] & build_coords[,2] > ext(ODD)[3] & build_coords[,2] < ext(ODD)[4])
+  inside_bbox <- which(build_coords[,1] > bbox[1] & build_coords[,1] < bbox[3] & build_coords[,2] > bbox[2] & build_coords[,2] < bbox[4])
   building_locs <- build_coords[inside_bbox,]
   
   if (!missing_quadkeys_flag){
@@ -473,6 +468,19 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   
   colnames(building_locs) <- c('Longitude', 'Latitude')
   
+  return(building_locs)
+}
+
+getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Building_count_notes', aggregate=T){
+  # Note that if you choose to proceed with some missing quadkeys, the values in these pixels will be 0 rather than NA (making them indistinguishable from true 0s)
+  # This could be addressed by determining the polygons of the missing quadkeys and assigning the intersecting pixels to NA, but haven't had time to implement this yet. 
+  
+  zoom <- 9
+  
+  building_locs =  getBingBuildingsFromTiles(c(ext(ODD)[1], ext(ODD)[3], ext(ODD)[2], ext(ODD)[4]), event_id=NA, file_write='IIDIPUS_Input/Building_count_notes')
+  
+  if(is.null(building_locs)) {return(ODD)}
+  
   if (!aggregate){return(building_locs)}
                                            
   ODD[['nBuildings']] <- rasterize(building_locs, ODD, 1, fun='count', background=0)
@@ -487,6 +495,39 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   
   return(ODD)
 }
+
+
+#------------------------------------------------------------------------------------------
+#----------------------COMPARE BUILDING COUNTS FOR PHL EVENT-------------------------------
+#------------------------------------------------------------------------------------------
+
+compare_building_counts <- function(){
+  # ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/Nov24Agg/ODDobjects/Train/EQ20191029PHL_125')
+  # ODDy %<>% AddBuildingCounts(125)
+  # ODDy %<>% GetOSMbuildingsODD()
+  # saveODD(ODDy, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/CaseStudies/EQ20191029PHL_125_3BuildingCounts')
+  
+  ODDy <- readODD(ODDy, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/CaseStudies/EQ20191029PHL_125_3BuildingCounts')
+  
+  plot_df <- as.data.frame(ODDy[[c('nBuildings', 'OpenBuildings', 'OSM')]])
+  plot_df$OpenBuildings[which(is.na(plot_df$OpenBuildings))] = 0
+  plot_df$OSM[which(is.na(plot_df$OSM))] = 0
+  ggplot(as.data.frame(ODDy[[c('nBuildings', 'OpenBuildings', 'OSM')]])) + 
+    geom_point(aes(x = nBuildings, y = OSM, color = "OSM"), cex = 0.6) + 
+    geom_point(aes(x = nBuildings, y = OpenBuildings, color = "Microsoft Open Buildings"), cex = 0.6) + 
+    geom_abline(slope = 1, intercept = 0) + 
+    scale_color_manual(values = c("OSM" = "blue", "Microsoft Open Buildings" = "red")) + 
+    xlab('Building Count: Bing') + 
+    ylab('Building Count: OSM/Microsoft') + 
+    theme_minimal() + 
+    labs(color = "")
+  #4 x 6, BuildingCountComparison
+  
+  plot(values(ODDy$nBuildings), values(ODDy$OpenBuildings), pch=19, cex=0.3, xlab='Building Count: Bing', ylab='Building Count: OSM/Microsoft')
+  points(values(ODDy$nBuildings), values(ODDy$OSM), pch=19, cex=0.3, col='red')
+  abline(0,1)
+}
+
 
 
 #-----------------------

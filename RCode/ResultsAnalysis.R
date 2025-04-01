@@ -65,6 +65,7 @@ points(AlgoResults$tolerancestore, pch=20, col='red')
 df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
                                                            M=100, output='SampledAgg')
 
+
 df_postpredictive_sampled_true <- create_df_postpredictive(AlgoResults, single_particle=T, 
                                                            Omega =list(Lambda1 = list(nu=8.75, kappa=0.6),
                                                                        Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
@@ -115,6 +116,9 @@ df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_p
                                                            M=50, output='SampledTotal')
 
 df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledBest18thSept')
+df_postpredictive_sampled_best1 = df_postpredictive_sampled_best
+df_postpredictive_sampled_best1$observed[which(df_postpredictive_sampled_best1$observed == 17899)] = 8957
+plot_df_postpredictive_PAGER_coloured(df_postpredictive_sampled_best1, 'mortality')
 
 quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='mortality'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/101
 hist(quants)
@@ -255,6 +259,47 @@ mort_test
 disp_test
 buildDam_test
 
+
+#----------------------------------------------------------------------------------------------------
+#------------------------------ Band Depth Score Results  -------------------------------------------
+#----------------------------------------------------------------------------------------------------
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-02-27_162932.543295_MCMC_BDScore.05nocorr_LR40_M100_Npart1000NovAgg5_RandomFieldThree')
+AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Nov24Agg/'
+AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Mar25Agg/'
+AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Mar25Agg/'
+df_postpredictive_sampled <- create_df_postpredictive_MCMC(AlgoResults, single_particle=F, 
+                                                           M=100, output='SampledTotal')
+
+#saveRDS(df_postpredictive_sampled, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledAggBandDepth24thMarch')
+#saveRDS(df_postpredictive_sampled, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledTotalBandDepth25thMarch')
+
+
+library(plotly)
+df_postpredictive_sampled <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledTotalBandDepth25thMarch')
+plot_df_postpredictive_PAGER_coloured(df_postpredictive_sampled, 'mortality', interactive=T) 
+
+
+
+
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-02-27_162932.543295_MCMC_BDScore.05nocorr_LR40_M100_Npart1000NovAgg5_RandomFieldThree')
+AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/Nov24Agg/'
+proposed = AlgoResults$Omega_sample_phys[,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams()
+xx <- SampleImpact(dir, Model, proposed, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 2) %>% 
+               replace(which(names(AlgoParams)==c('Np')), 1),)
+
+n_post_samples = 10
+ODD <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/ODDAggobjects/EQ20230908MAR_-1_AggLevel5')
+for (i in 1:n_post_samples){
+  
+  #plot: 
+  #grid.arrange(plotODDy_GADM(ODD, 'ISO3C', gadm_level=2, haz_legend=T, var_legend=T, var_discrete=T),plotODDy_GADM(ODD, 'Population', gadm_level=2, haz_legend=T, var_legend=T, var_discrete=F, log_legend=T), ncol=2)
+  Omega = AlgoResults$Omega_sample_phys[,1] %>% relist(skeleton=Model$skeleton)
+  sampled_out <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+                         replace(which(names(AlgoParams)==c('Np')), 1), 
+                       output='Sampled')
+}
 
 #MCMC Single:
 
@@ -792,7 +837,6 @@ plot_distance_measure_exp <- function(){
   
   # 
   SS_res_raw = sum((df_poly_filt$observed-df_poly_filt$medians_sampled)^2)
-  SS_tot_raw = sum((df_poly_filt$observed-mean(df_poly_filt$observed))^2)
   R_squared_raw = 1-SS_res_raw/SS_tot_raw
   print(paste('R squared raw', R_squared_raw))
   

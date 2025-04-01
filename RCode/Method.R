@@ -1952,31 +1952,54 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
      ext_all[[event_i]] = ext(ODD)
   }
   
+  # Old:
+  # initialise_random_fields <- function(filer) {
+  # 
+  #   event_i <- which(ufiles == filer)
+  #   
+  #   ext_i <- ext_all[[event_i]]
+  #   r <- rast(crs = crs_all, extent = ext_i, resolution = res_all)
+  #   grid <- as.data.frame(crds(r))
+  #   names(grid) <- c("x", "y")  # Name the columns
+  #   
+  #   vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+  #   gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+  #   
+  #   RF_local <- array(
+  #       as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+  #       dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+  #     )
+  #   
+  #   return(list(event_i = event_i, RF_local = RF_local))
+  # }
+  
+  # New:
   initialise_random_fields <- function(filer) {
 
     event_i <- which(ufiles == filer)
-    
+
     ext_i <- ext_all[[event_i]]
     r <- rast(crs = crs_all, extent = ext_i, resolution = res_all)
     grid <- as.data.frame(crds(r))
     names(grid) <- c("x", "y")  # Name the columns
-    
+
     vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
     gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
-    
+
     RF_local <- array(
-        as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
-        dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+        as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS)]),
+        dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS)
       )
-    
+
     return(list(event_i = event_i, RF_local = RF_local))
   }
   
+  # 
   # Use mclapply for parallel processing
-  results_list <- mclapply(ufiles, initialise_random_fields, mc.cores = AlgoParams$cores)
+  results_list <- mclapply(rep(ufiles, each=3), initialise_random_fields, mc.cores = detectCores() - 1, mc.preschedule=F)
   AlgoResults$RF_current <- vector("list", length(ufiles))
-  for (event in results_list) {
-    AlgoResults$RF_current[[event$event_i]] <- event$RF_local
+  for (event in seq(1, length(results_list), 3)){
+    AlgoResults$RF_current[[results_list[[event]]$event_i]] <- abind(lapply(results_list[c(event, event+1, event+2)], function(x) x$RF_local), along=3)
   }
   
   
@@ -2034,28 +2057,28 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     #------------------------------------
     #----------- NEW PERTURBATION-----------
     
-    perturbate_random_field <- function(event_i) {
-      # Create raster grid
-      r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
-      grid <- as.data.frame(crds(r))
-      names(grid) <- c("x", "y")  
-      
-      # Define variogram model
-      vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
-      gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
-      
-      # Generate random field perturbation
-      RF_local <- array(
-          as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
-          dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
-        )
-      
-      RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
-      return(RF_perturbed)
-      
-    }
+    # perturbate_random_field <- function(event_i) {
+    #   # Create raster grid
+    #   r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
+    #   grid <- as.data.frame(crds(r))
+    #   names(grid) <- c("x", "y")  
+    #   
+    #   # Define variogram model
+    #   vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+    #   gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+    #   
+    #   # Generate random field perturbation
+    #   RF_local <- array(
+    #       as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+    #       dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+    #     )
+    #   
+    #   RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
+    #   return(RF_perturbed)
+    #   
+    # }
     
-    RF_prop <- mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores)
+    RF_prop <- AlgoResults$RF_current #mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores)
     
     #----------------------------------
     
@@ -2162,9 +2185,34 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     #   RF_local <- array(as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS*3)[, 3:(2+AlgoParams$Np * AlgoParams$m_CRPS*3)]), dim=c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3))
     #   RF_prop[[event_i]] =  AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1-AlgoParams$rho_local^2) * RF_local
     # }
-    #------------- NEW PERTURBATION----------------
-    perturbate_random_field <- function(event_i) {
+    # #------------- NEW PERTURBATION----------------
+    # perturbate_random_field <- function(event_i) {
+    #   # Create raster grid
+    #   r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
+    #   grid <- as.data.frame(crds(r))
+    #   names(grid) <- c("x", "y")  
+    #   
+    #   # Define variogram model
+    #   vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+    #   gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+    #   
+    #   # Generate random field perturbation
+    #   RF_local <- array(
+    #     as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+    #     dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+    #   )
+    #   
+    #   RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
+    #   return(RF_perturbed)
+    # }
+    # RF_prop <- mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores)
+    
+    #------------- NEW PERTURBATION 2----------------
+    RF_prop = AlgoResults$RF_current
+    perturbate_random_field <- function(event_impact) {
       # Create raster grid
+      event_i = event_impact[1]
+      j = event_impact[2]
       r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
       grid <- as.data.frame(crds(r))
       names(grid) <- c("x", "y")  
@@ -2175,14 +2223,24 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
       
       # Generate random field perturbation
       RF_local <- array(
-        as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
-        dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+        as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS)]),
+        dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS)
       )
       
-      RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
-      return(RF_perturbed)
+      return(list(event_i=event_i,
+                  impact=j,
+                  RF=AlgoParams$rho_local * AlgoResults$RF_current[[event_i]][,,j] + sqrt(1 - AlgoParams$rho_local^2) * RF_local))
+      #return(RF_perturbed)
     }
-    RF_prop <- mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores)
+    i_j <- cbind(rep(seq_along(ext_all), each=3), 1:3)
+    
+    RF_prop = AlgoResults$RF_current
+    
+    results_list <-  mclapply(split(i_j, row(i_j)), perturbate_random_field, mc.cores = detectCores() - 1, mc.preschedule=F)
+    
+    for (event in seq(1, length(results_list))){
+      RF_prop[[results_list[[event]]$event_i]][,,results_list[[event]]$impact] <- results_list[[event]]$RF
+    }
     
     HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
     if (HP> AlgoParams$ABC & Model$higherpriors){

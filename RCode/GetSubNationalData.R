@@ -21,24 +21,47 @@ readSubNatData <- function(subnat_file){
   # Clean data from xlsx file by converting data to the appropriate formats/data types
   
   SubNatData <-  read.xlsx(paste0(dir, 'IIDIPUS_Input/', subnat_file), colNames = TRUE , na.strings = c("","NA"))
-  x <-xlsx_cells(paste0(dir, 'IIDIPUS_Input/', subnat_file))
-  formats <- xlsx_formats(paste0(dir, 'IIDIPUS_Input/', subnat_file))
+  
+  SubNatData <- read.xlsx('/home/manderso/Downloads/EQ_ImpactDatabase.xlsx')
+  #x <-xlsx_cells(paste0(dir, 'IIDIPUS_Input/', subnat_file))
+  #formats <- xlsx_formats(paste0(dir, 'IIDIPUS_Input/', subnat_file))
+  
+  SubNatData = SubNatData[-which(SubNatData$Polygon_source == "not available"),]
+  SubNatData$EventID <- suppressWarnings(as.integer(SubNatData$EventID)) #will set non-integers to NA but suppress the warning for this
 
-  #Set the values in all red cells to NA:
-  red_cells <- x %>% filter(local_format_id %in% which(formats$local$fill$patternFill$fgColor$rgb == "FFFF0000")) %>% dplyr::select(row, col)
-  red_cells$row <- red_cells$row - 1
-  red_cells <- red_cells[-which(red_cells$col > NCOL(SubNatData)), ]
-  SubNatData[as.matrix(red_cells)] <- NA
+  for (impact_type in c('mortality', 'displacement', 'buildDam', 'buildDest', 'buildDamDest')){
+    # Remove cells labelled to 'not include' or 'favour another source'
+    include_col <- paste0(impact_type, "_include")
+    
+    missing_include = SubNatData %>% filter(is.na(!!sym(include_col)) &
+                                  !is.na(!!sym(impact_type)))
+    if (nrow(missing_include) > 0){print(impact_type); print(missing_include)}
+    
+    SubNatData[[impact_type]][!(SubNatData[[include_col]] %in% c('Include', 'Include but completeness concerns'))] <- NA
+    
+    # Add inferred flag to data
+    inferred_col <- paste0(impact_type, "Inferred")
+    SubNatData[[inferred_col]] = ifelse(SubNatData$source_category=='4- Inferred', T, F)
+    
+    # Add MAR flag
+    MAR_col <- paste0(impact_type, "_MAR")
+    SubNatData[[MAR_col]] = ifelse(SubNatData[[MAR_col]]=='1-MAR assumed', T, F)
+  }
+  
+  #red_cells <- x %>% filter(local_format_id %in% which(formats$local$fill$patternFill$fgColor$rgb == "FFFF0000")) %>% dplyr::select(row, col)
+  #red_cells$row <- red_cells$row - 1
+  #red_cells <- red_cells[-which(red_cells$col > NCOL(SubNatData)), ]
+  #SubNatData[as.matrix(red_cells)] <- NA
   
   #Mark which observations are 'inferred' (e.g. assumed 0s due to non-reporting):
-  pink_cells <- x %>% filter(local_format_id %in% which(formats$local$fill$patternFill$fgColor$rgb == "FFFF00FF")) %>% dplyr::select(row, col)
-  SubNatData$buildDamInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDam_exlusion_reason'))]-1)
-  SubNatData$buildDestInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDest_exlusion_reason'))]-1)
-  SubNatData$buildDamDestInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDamDest_exlusion_reason'))]-1)
-  SubNatData$mortalityInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='mortality_exlusion_reason'))]-1)
-  SubNatData$displacementInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='displacement_exlusion_reason'))]-1)
+  #pink_cells <- x %>% filter(local_format_id %in% which(formats$local$fill$patternFill$fgColor$rgb == "FFFF00FF")) %>% dplyr::select(row, col)
+  #SubNatData$buildDamInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDam_exlusion_reason'))]-1)
+  #SubNatData$buildDestInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDest_exlusion_reason'))]-1)
+  #SubNatData$buildDamDestInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='buildDamDest_exlusion_reason'))]-1)
+  #SubNatData$mortalityInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='mortality_exlusion_reason'))]-1)
+  #SubNatData$displacementInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='displacement_exlusion_reason'))]-1)
   
-  SubNatData <- SubNatData[!is.na(SubNatData$iso3), ]
+  SubNatData = SubNatData[rowSums(!is.na(SubNatData[, c("mortality", "displacement", "buildDam", "buildDest", "buildDamDest")])) > 0, ]
   
   #ensure data is in the correct format:
   SubNatData$source_date <- openxlsx::convertToDate(SubNatData$source_date)
@@ -51,7 +74,6 @@ readSubNatData <- function(subnat_file){
   SubNatData$buildDam <- as.integer(SubNatData$buildDam)
   SubNatData$buildDest <- as.integer(SubNatData$buildDest)
   SubNatData$buildDamDest <- as.integer(SubNatData$buildDamDest)
-  SubNatData$EventID <- suppressWarnings(as.integer(SubNatData$EventID)) #will set non-integers to NA but suppress the warning for this
   SubNatData$Region <- ifelse(trimws(SubNatData$Region) == "", NA, SubNatData$Region)
   SubNatData$Subregion <- ifelse(trimws(SubNatData$Subregion) == "", NA, SubNatData$Subregion)
   
@@ -233,6 +255,7 @@ getSubNatImpact <- function(SubNatEvent, subnational=TRUE){
                                                                          observed=!!sym(impact_type), 
                                                                          qualifier=!!sym(paste0(impact_type, '_qualifier')), 
                                                                          inferred=!!sym(paste0(impact_type, 'Inferred')),
+                                                                         MAR=!!sym(paste0(impact_type, '_MAR')),
                                                                          build_type=ifelse(rep(impact_type, length(sources_selected)) %in% c('buildDam', 'buildDest', 'buildDamDest'), building_type, NA),
                                                                          polygon=polygon_id))
     }
@@ -570,16 +593,16 @@ updateODDSubNat <- function(dir, ODDy, event_sdate, event_fdate, event_id, folde
   
   ODDy <- pixel_weight_border_correction(ODDy, folder_write)
   
-  #additional_poly_check(ODDy, event_id, print_to_xl=T)
+  #ODDy = additional_poly_check(ODDy, event_id, folder_write = folder_write, SubNatEvent, print_to_xl=T, addToODD=T)
   
   return(ODDy)
 }
 
 
-additional_poly_check <- function(ODDy, i, folder_write, print_to_xl=F){
+additional_poly_check <- function(ODDy, i, folder_write, SubNatEvent, print_to_xl=F, addToODD=T){
   # Perform some checks on the polygons:
   #   - For each impact type, are all the observations at the same GADM level?
-  #   - Are there any exposed pixels that haven't been allocated to a polygon? If so, what GADM region do they belong to.
+  #   - Are there any exposed pixels that haven't been allocated to a polygon? If so, what GADM region do they belong to. If not MAR, add these GADM regions to the DOD object
   
   noteworthy <- F
   impacts_split <- ODDy@impact %>% group_by(impact) %>% group_split()
@@ -595,9 +618,10 @@ additional_poly_check <- function(ODDy, i, folder_write, print_to_xl=F){
     
     row = 1
     
-    print(impacts_split[[j]]$impact[1])
-    #check that all regions are on the same GADM admin level:
+    impact_type = impacts_split[[j]]$impact[1]
+    print(impact_type)
     
+    #check that all regions are on the same GADM admin level:
     polygons_impact <- ODDy@polygons[impacts_split[[j]]$polygon]
     polygon_names <- sapply(polygons_impact, function(x) x$name)
     # -1 = TOTAL
@@ -613,14 +637,23 @@ additional_poly_check <- function(ODDy, i, folder_write, print_to_xl=F){
         row = row + 1
       }
       print('More than one admin level. Go to data and manually delete if necessary.')
+      file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
+      writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', more than one admin level. Go to data and manually delete if necessary.'), file_conn)
+      close(file_conn) 
     }
     
     for (gadm_level in sort(unique(gadm_levels))){
-      writeData(wb, sheet, paste('GADM Level ', gadm_level), startCol = 1, startRow = row)
-      row = row + 1
-      if (gadm_level == -1){
-        writeData(wb, sheet, 'TOTAL', startCol = 1, startRow = row)
+      treat_as_MAR = all(impacts_split[[j]]$MAR == T)
+      if (treat_as_MAR){
+        next
+      }
+      if (print_to_xl){
+        writeData(wb, sheet, paste('GADM Level ', gadm_level), startCol = 1, startRow = row)
         row = row + 1
+        if (gadm_level == -1){
+          writeData(wb, sheet, 'TOTAL', startCol = 1, startRow = row)
+          row = row + 1
+        }
       }
       if (gadm_level == 0) { #handle countries
         iso3_incl <- c()
@@ -634,11 +667,40 @@ additional_poly_check <- function(ODDy, i, folder_write, print_to_xl=F){
         iso3_missing <- non_na_iso3[which(!(non_na_iso3 %in% iso3_incl))]
         for (iso3_miss in iso3_missing){
           max_exposed_int = max(haz_max[which(values(ODDy[['ISO3C']]==iso3_miss))], na.rm=T)
-          writeData(wb, sheet, iso3_miss, startCol = 1, startRow = row)
-          writeData(wb, sheet, max_exposed_int, startCol = 2, startRow = row)
-          writeData(wb, sheet, length(which(values(ODDy[['ISO3C']]==iso3_miss)[exposed_cells])), startCol = 3, startRow = row)
-          row = row + 1
+          
+          if (print_to_xl){
+            writeData(wb, sheet, iso3_miss, startCol = 1, startRow = row)
+            writeData(wb, sheet, max_exposed_int, startCol = 2, startRow = row)
+            writeData(wb, sheet, length(which(values(ODDy[['ISO3C']]==iso3_miss)[exposed_cells])), startCol = 3, startRow = row)
+            row = row + 1
+          }
           noteworthy=T
+          
+          if (addToODD){
+              #find if polygon already exists
+              match = which(unlist(lapply(ODDy@polygons, function(x) x$name)) == countrycode(iso3_miss, origin='iso3c', destination='country.name'))
+              if (length(match)==1){
+                polygon_match = match
+              } else if (length(match)==0){
+                indexes_match =  which(values(ODDy$ISO3C)==which(levels(ODDy[['ISO3C']])[[1]]$VALUE==iso3_miss))
+                ODDy@polygons[[length(ODDy@polygons)+1]] = list(
+                  name = countrycode(iso3_miss, origin='iso3c', destination='country.name'),
+                  indexes = indexes_match,
+                  weights = rep(1, length(indexes_match))
+                )
+                polygon_match = length(ODDy@polygons)
+              } else stop('Multiple matching polygons additional_poly_check')
+              ODDy@impact %<>% add_row(
+                iso3=iso3_miss, sdate=ODDy@impact$sdate[1],
+                impact=impact_type,
+                observed=0,
+                qualifier=NA,
+                inferred=T,
+                MAR=F,
+                build_type=NA,
+                polygon=polygon_match
+              )
+          }
         }
         next
       }
@@ -694,15 +756,50 @@ additional_poly_check <- function(ODDy, i, folder_write, print_to_xl=F){
             n_pixels <- length(which(contained))
             pixels_unallocated <- pixels_unallocated[-which(contained)]
             if(print_to_xl){ 
-              r <- rev(r)
+              r_rev <- rev(r)
               writeData(wb, sheet, iso3, startCol = 1, startRow = row)
-              for (ll in 1:length(r)){
-                writeData(wb, sheet, r[ll], startCol = ll+1, startRow = row)
+              for (ll in 1:length(r_rev)){
+                writeData(wb, sheet,  r_rev[ll], startCol = ll+1, startRow = row)
               }
               writeData(wb, sheet, max_exposed_int, startCol = ll+2, startRow = row)
               writeData(wb, sheet, n_pixels, startCol = ll+3, startRow = row)
               row = row + 1
               noteworthy=T
+              
+            }
+            if (addToODD){
+              #find if polygon already exists
+              if (gadm_level == 2){
+                polygon_name = paste0(r[1], ', ', countrycode(iso3, origin='iso3c', destination='country.name'))
+                match = which(unlist(lapply(ODDy@polygons, function(x) x$name)) ==  polygon_name)
+              } else if (gadm_level == 1){
+                polygon_name = paste0(r[1], ', ', r[2], ', ', countrycode(iso3, origin='iso3c', destination='country.name'))
+                match = which(unlist(lapply(ODDy@polygons, function(x) x$name)) ==  polygon_name)
+              } else {
+                stop('Error in additional_poly_check')
+              }
+              if (length(match)==1){
+                polygon_match = match
+              } else if (length(match)==0){
+                indexes_match = contained
+                ODDy@polygons[[length(ODDy@polygons)+1]] = list(
+                  name = polygon_name,
+                  indexes = which(contained),
+                  weights = rep(1, length(which(contained)))
+                )
+                polygon_match = length(ODDy@polygons)
+              } else stop('Multiple matching polygons additional_poly_check')
+              ODDy@impact %<>% add_row(
+                iso3=iso3, 
+                sdate=ODDy@impact$sdate[1],
+                impact=impact_type,
+                observed=0,
+                qualifier=NA,
+                inferred=T,
+                MAR=F,
+                build_type=NA,
+                polygon=polygon_match
+              )
             }
           }
         }
@@ -711,7 +808,7 @@ additional_poly_check <- function(ODDy, i, folder_write, print_to_xl=F){
   }
   
   if (print_to_xl & noteworthy) {
-    file_path <- paste0(dir, folder_write, "MissingRegions2/Event_", i, ".xlsx")
+    file_path <- paste0(dir, folder_write, "MissingRegions/Event_", i, ".xlsx")
     
     # Check if the file exists and delete it if so
     if (file.exists(file_path)) {
@@ -721,9 +818,10 @@ additional_poly_check <- function(ODDy, i, folder_write, print_to_xl=F){
     # Save the new workbook
     saveWorkbook(wb, file_path)
   }
+  return(ODDy)
 }
 
-GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder_write='IIDIPUS_Input_Alternatives/Aug24/'){
+GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder_write='IIDIPUS_Input_Alternatives/Apr25/'){
   # Works through EQ_Subnational.xlsx and, for each event, either updates the existing ODD object or, if
   # no corresponding existing ODD object can be found, creates a new ODD object.
   
@@ -739,7 +837,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
   options(timeout = 500)
-  for (i in c(68)){#31,73,75,83,91,109,121,122)){#1:169){#c(89, 119, 122, 127, 133, 139, 150,151,152,164,165,166,167, 168,169)){#c(7,8,9,11,12,13,14,48,49,67,68,73,74,75,85,88,92,93,98,99,100,104,114, 128:163)){
+  for (i in c(101:170)){#31,73,75,83,91,109,121,122)){#1:169){#c(89, 119, 122, 127, 133, 139, 150,151,152,164,165,166,167, 168,169)){#c(7,8,9,11,12,13,14,48,49,67,68,73,74,75,85,88,92,93,98,99,100,104,114, 128:163)){
     print(i)
     if (i==126) next
     # Subset displacement and disaster database objects to not all NA
@@ -836,7 +934,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     ODDpath<-paste0(dir, folder_write, "ODDobjects/",namer)
     saveODD(ODDy,ODDpath)
     
-    additional_poly_check(ODDy, i, folder_write, print_to_xl=T)
+    #additional_poly_check(ODDy, i, folder_write, print_to_xl=T)
     
     next
     # Building damage subset

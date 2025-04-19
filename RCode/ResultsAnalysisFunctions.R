@@ -2589,39 +2589,43 @@ plot_total_impact <- function(ODD_with_impact){
 }
 
 # Check correlation structure
-plot_joint <- function(event_ids=c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135, 139, 164, 170), AlgoParams){
-  #AlgoParams$input_folder <- "IIDIPUS_Input_Alternatives/Nov24Agg/"
+plot_joint <- function(event_ids=c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135, 139, 164, 170), AlgoParams, Omega=NULL, N_postpred_samples = 50){
+  
+  AlgoParams$input_folder <- "IIDIPUS_Input_Alternatives/Mar25Agg/"
+  #AlgoResults %<>% addAlgoParams()
   folderin<-paste0(dir,AlgoParams$input_folder, "ODDobjects/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
   
   event_ids_all <- as.numeric(sub(".*_(\\d+)$", "\\1", ufiles))
+  
+  if (is.null(Omega)) Omega = AlgoResults$Omega_sample_phys[sample(1:AlgoResults$Npart,1),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+  
   #Selecting events:
   # for (file in ufiles){
   #   ODD <- readODD(paste0(folderin, file))
   #   impact_filt <- ODD@impact %>% filter(impact=='mortality')
   #   print(paste('Event:', file, '.Non-zero mortality observations:', sum(impact_filt$observed != 0)))
   # }
-  AlgoResults_vs <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-01-10_181501_MCMC_VariogramScore_M100_Npart1000NovAgg5_propCOVmult0.2')
-  Omega_i <- which(AlgoResults_vs$Omega_sample_phys[7,] <0.5 & AlgoResults_vs$Omega_sample_phys[8,] >0.5)
-  Omega <- AlgoResults_vs$Omega_sample_phys[,Omega_i[Omega_i > 2000][1]] %>% relist(skeleton=Model$skeleton)
+  # AlgoResults_vs <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-01-10_181501_MCMC_VariogramScore_M100_Npart1000NovAgg5_propCOVmult0.2')
+  # Omega_i <- which(AlgoResults_vs$Omega_sample_phys[7,] <0.5 & AlgoResults_vs$Omega_sample_phys[8,] >0.5)
+  # Omega <- AlgoResults_vs$Omega_sample_phys[,Omega_i[Omega_i > 2000][1]] %>% relist(skeleton=Model$skeleton)
+  # 
+  # AlgoResults_es <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180047_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat2')
+  # Omega_i <- which(AlgoResults_es$Omega_sample_phys[7,] <0.5 & AlgoResults_es$Omega_sample_phys[8,] >0.8)
+  # Omega <- AlgoResults_es$Omega_sample_phys[,Omega_i[Omega_i > 5000][1]] %>% relist(skeleton=Model$skeleton)
   
-  AlgoResults_es <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180047_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat2')
-  Omega_i <- which(AlgoResults_es$Omega_sample_phys[7,] <0.5 & AlgoResults_es$Omega_sample_phys[8,] >0.8)
-  Omega <- AlgoResults_es$Omega_sample_phys[,Omega_i[Omega_i > 5000][1]] %>% relist(skeleton=Model$skeleton)
-  
-  
-  
-  Omega_i <- which(AlgoResults_rf$Omega_sample_phys[7,] >0.8)
-  Omega <- AlgoResults_rf$Omega_sample_phys[,Omega_i[Omega_i > 600][1]] %>% relist(skeleton=Model$skeleton)
+  # Omega_i <- which(AlgoResults_rf$Omega_sample_phys[7,] >0.8)
+  # Omega <- AlgoResults_rf$Omega_sample_phys[,Omega_i[Omega_i > 600][1]] %>% relist(skeleton=Model$skeleton)
   # Omega$eps$local <- 1.4
   # Omega$eps$hazard_mort <- 1
   # Omega$eps$hazard_disp <- 1.4
   # Omega$eps$hazard_bd <- 1.2
-  Omega$eps$hazard_disp <- 1.5
-  Omega$eps$hazard_bd <- 1
+  # Omega$eps$hazard_disp <- 1.5
+  # Omega$eps$hazard_bd <- 1
   
-  i = 70
-  for (i in 70){
+  #i = 70
+  if (length(event_ids)==1 & event_ids == 70){
+    i=70
     ODD <- readODD(paste0(folderin, ufiles[which(event_ids_all==i)]))
     
     #plot: 
@@ -2637,8 +2641,31 @@ plot_joint <- function(event_ids=c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135
     #                                  polygon=c(99, 100)))
     
     sampled_out <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
-                           replace(which(names(AlgoParams)==c('Np')), 50), 
+                           replace(which(names(AlgoParams)==c('Np')), N_postpred_samples), 
                          output='SampledAgg')
+    
+    iran_mort_i = 3
+    iraq_mort_i = 7
+    
+    joint_pred = data.frame(
+      sample = 1:length(sampled_out),
+      iran_mort_sampled = unlist(lapply(sampled_out, function(x) x$sampled[iran_mort_i])),
+      iraq_mort_sampled = unlist(lapply(sampled_out, function(x) x$sampled[iraq_mort_i]))
+    )
+    
+    p_joint_mort = ggplot(joint_pred, aes(x=iran_mort_sampled, y=iraq_mort_sampled)) + geom_point() + theme_minimal() + 
+      geom_point(aes(x=560, y=10), col='red',shape = 4, size = 2) + xlab('Iran Mortality') + ylab('Iraq Mortality') +
+      theme(
+        axis.title.y =element_text(family = "Times New Roman", size = 12),  # Change y-axis title font
+        axis.text.x = element_text(family = "Times New Roman", size = 12),   # Change x-axis text font
+        axis.text.y = element_text(family = "Times New Roman", size = 12),  # Remove y-axis text (numbers)
+        axis.title.x = element_text(family = "Times New Roman", size = 12),  # Change x-axis title font
+        plot.title = element_text(family = "Times New Roman", size = 14),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+        plot.margin = unit(c(0, 20, 0, 15), "pt")
+      )
+    
+    return(p_joint_mort)
     
     #ordered_obs <- which(sampled_out[[1]]$impact=='mortality')[order(sampled_out[[1]]$observed[which(sampled_out[[1]]$impact=='mortality')], decreasing=T)]
     ordered_obs <- c(1,2,3, 8)

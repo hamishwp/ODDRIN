@@ -25,7 +25,7 @@ AlgoParams<-list(Np=1, # Number of Monte Carlo particles
                  ABC=0, # Approximate Bayesian Computation rejection
                  kernel='energy_score', #Distance kernel between simulated and observed data
                  tol0=12000, # should be larger than largest expected distance
-                 impact_weights=list(displacement=1,mortality=7,buildDam=0.6), #Relative weights of the different impact types when obtaining the energy score
+                 impact_weights=list(displacement=1,mortality=7,buildDam=0.8), #Relative weights of the different impact types when obtaining the energy score
                  smc_steps = 200, #Number of steps in the ABC-SMC algorithm
                  smc_Npart = 500, #Number of particles in the ABC-SMC algorithm
                  smc_alpha = 0.9, #Proportion of particles that we aim to keep 'alive' between steps
@@ -52,7 +52,7 @@ multvarNormProp <- function(xt, propPars){
   #           MCMC
   # inputs  : xt       - The value of the chain at the previous time step 
   #           propPars - The correlation structure of the proposal
-  return(array(mvtnorm::rmvnorm(1, mean=xt, sigma=propPars),dimnames = list(names(xt))))
+  return(array(mvtnorm::rmvnorm(1, mean=xt, sigma=propPars + diag(1e-6, nrow(propPars))),dimnames = list(names(xt))))
 }
 
 Proposed2Physical<-function(proposed,Model,index=NULL){
@@ -1858,8 +1858,11 @@ retrieve_UnfinishedAlgoResults_AMCMC3 <- function(dir, oldtag, AlgoResults){
 
 # AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Nov24Agg/'
 # prior_samples <- t(readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-02-13_114747.170477_MCMC_ESscore_M100_Npart1000NovAgg5_RandomFieldThree')$Omega_sample)
+# prior_samples <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input/HLPriorSamples_MCMCOut')
 # propCOV <- cov(prior_samples)
 # init_val_phys <- prior_samples[1,] %>% Array2Physical(Model) %>% unlist()
+# AlgoParams$v_0 = 15
+# AlgoParams$rho_local = 0.95
 
 correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys = NULL, unfinished=F, oldtag=NULL, tag_notes=NULL){
   #Input: 
@@ -1925,6 +1928,14 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
   crs_all <- crs(ODD)
   res_all <- res(ODD)
   
+  ext_all <- list()
+  for (filer in ufiles){
+    ODD<-readODD(paste0(folderin,filer))
+    event_i = which(ufiles==filer)
+    
+    ext_all[[event_i]] = ext(ODD)
+  }
+  
   #----- OLD UNPARALLELISED -----------
   # ext_all <- list()
   # for (filer in ufiles){
@@ -1942,19 +1953,9 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
   # }
   #RF_store <- AlgoResults$RF_current
   
-  #----- NEW PARALLELISED -----------
-  
-  ext_all <- list()
-  for (filer in ufiles){
-     ODD<-readODD(paste0(folderin,filer))
-     event_i = which(ufiles==filer)
-     
-     ext_all[[event_i]] = ext(ODD)
-  }
-  
-  # Old:
+  #------ OLD PARALLELISED 2--------
   # initialise_random_fields <- function(filer) {
-  # 
+  #   
   #   event_i <- which(ufiles == filer)
   #   
   #   ext_i <- ext_all[[event_i]]
@@ -1966,14 +1967,23 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
   #   gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
   #   
   #   RF_local <- array(
-  #       as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
-  #       dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
-  #     )
+  #     as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS)]),
+  #     dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS)
+  #   )
   #   
   #   return(list(event_i = event_i, RF_local = RF_local))
   # }
+  # 
+  # # 
+  # # Use mclapply for parallel processing
+  # results_list <- mclapply(rep(ufiles, each=3), initialise_random_fields, mc.cores = AlgoParams$cores, mc.preschedule=F)
+  # AlgoResults$RF_current <- vector("list", length(ufiles))
+  # for (event in seq(1, length(results_list), 3)){
+  #   AlgoResults$RF_current[[results_list[[event]]$event_i]] <- abind(lapply(results_list[c(event, event+1, event+2)], function(x) x$RF_local), along=3)
+  # }
   
-  # New:
+  #----- NEW PARALLELISED -----------
+  
   initialise_random_fields <- function(filer) {
 
     event_i <- which(ufiles == filer)
@@ -1987,21 +1997,18 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
 
     RF_local <- array(
-        as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS)]),
-        dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS)
+        as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+        dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
       )
 
     return(list(event_i = event_i, RF_local = RF_local))
   }
   
-  # 
-  # Use mclapply for parallel processing
-  results_list <- mclapply(rep(ufiles, each=3), initialise_random_fields, mc.cores = detectCores() - 1, mc.preschedule=F)
+  results_list <- mclapply(ufiles, initialise_random_fields, mc.cores = AlgoParams$cores, mc.preschedule=F)
   AlgoResults$RF_current <- vector("list", length(ufiles))
-  for (event in seq(1, length(results_list), 3)){
-    AlgoResults$RF_current[[results_list[[event]]$event_i]] <- abind(lapply(results_list[c(event, event+1, event+2)], function(x) x$RF_local), along=3)
+  for (event in results_list) {
+    AlgoResults$RF_current[[event$event_i]] <- event$RF_local
   }
-  
   
   #------------
   #------------
@@ -2055,10 +2062,12 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     #   RF_prop[[event_i]] =  AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1-AlgoParams$rho_local^2) * RF_local
     # }
     #------------------------------------
-    #----------- NEW PERTURBATION-----------
-    
-    # perturbate_random_field <- function(event_i) {
+    #------------- OLD PERTURBATION 2----------------
+    # RF_prop = AlgoResults$RF_current
+    # perturbate_random_field <- function(event_impact) {
     #   # Create raster grid
+    #   event_i = event_impact[1]
+    #   j = event_impact[2]
     #   r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
     #   grid <- as.data.frame(crds(r))
     #   names(grid) <- c("x", "y")  
@@ -2069,16 +2078,51 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     #   
     #   # Generate random field perturbation
     #   RF_local <- array(
-    #       as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
-    #       dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
-    #     )
+    #     as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS)]),
+    #     dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS)
+    #   )
     #   
-    #   RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
-    #   return(RF_perturbed)
-    #   
+    #   return(list(event_i=event_i,
+    #               impact=j,
+    #               RF=AlgoParams$rho_local * AlgoResults$RF_current[[event_i]][,,j] + sqrt(1 - AlgoParams$rho_local^2) * RF_local))
+    #   #return(RF_perturbed)
+    # }
+    # i_j <- cbind(rep(seq_along(ext_all), each=3), 1:3)
+    # 
+    # RF_prop = AlgoResults$RF_current
+    # 
+    # results_list <-  mclapply(split(i_j, row(i_j)), perturbate_random_field, mc.cores = AlgoParams$cores, mc.preschedule=F)
+    # 
+    # for (event in seq(1, length(results_list))){
+    #   RF_prop[[results_list[[event]]$event_i]][,,results_list[[event]]$impact] <- results_list[[event]]$RF
     # }
     
-    RF_prop <- AlgoResults$RF_current #mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores)
+    #RF_prop <- AlgoResults$RF_current #mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores)
+    
+    #----------- NEW PERTURBATION-----------
+    
+    perturbate_random_field <- function(event_i) {
+      # Create raster grid
+      r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
+      grid <- as.data.frame(crds(r))
+      names(grid) <- c("x", "y")
+
+      # Define variogram model
+      vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+      gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
+
+      # Generate random field perturbation
+      RF_local <- array(
+          as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+          dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+        )
+
+      RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
+      return(RF_perturbed)
+
+    }
+    
+    RF_prop <- mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores, mc.preschedule=F)
     
     #----------------------------------
     
@@ -2185,9 +2229,13 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     #   RF_local <- array(as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS*3)[, 3:(2+AlgoParams$Np * AlgoParams$m_CRPS*3)]), dim=c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3))
     #   RF_prop[[event_i]] =  AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1-AlgoParams$rho_local^2) * RF_local
     # }
-    # #------------- NEW PERTURBATION----------------
-    # perturbate_random_field <- function(event_i) {
+    
+    #------------ OLD PERTURBATION 2 --------------
+    # RF_prop = AlgoResults$RF_current
+    # perturbate_random_field <- function(event_impact) {
     #   # Create raster grid
+    #   event_i = event_impact[1]
+    #   j = event_impact[2]
     #   r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
     #   grid <- as.data.frame(crds(r))
     #   names(grid) <- c("x", "y")  
@@ -2198,49 +2246,48 @@ correlated_AMCMC3 <- function(AlgoParams, Model, propCOV = NULL, init_val_phys =
     #   
     #   # Generate random field perturbation
     #   RF_local <- array(
-    #     as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
-    #     dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+    #     as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS)]),
+    #     dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS)
     #   )
     #   
-    #   RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
-    #   return(RF_perturbed)
+    #   return(list(event_i=event_i,
+    #               impact=j,
+    #               RF=AlgoParams$rho_local * AlgoResults$RF_current[[event_i]][,,j] + sqrt(1 - AlgoParams$rho_local^2) * RF_local))
+    #   #return(RF_perturbed)
     # }
-    # RF_prop <- mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores)
+    # i_j <- cbind(rep(seq_along(ext_all), each=3), 1:3)
+    # 
+    # RF_prop = AlgoResults$RF_current
+    # 
+    # results_list <-  mclapply(split(i_j, row(i_j)), perturbate_random_field, mc.cores = AlgoParams$cores, mc.preschedule=F)
+    # 
+    # for (event in seq(1, length(results_list))){
+    #   RF_prop[[results_list[[event]]$event_i]][,,results_list[[event]]$impact] <- results_list[[event]]$RF
+    # }
     
-    #------------- NEW PERTURBATION 2----------------
-    RF_prop = AlgoResults$RF_current
-    perturbate_random_field <- function(event_impact) {
+    # #------------- NEW PERTURBATION----------------
+    perturbate_random_field <- function(event_i) {
       # Create raster grid
-      event_i = event_impact[1]
-      j = event_impact[2]
       r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
       grid <- as.data.frame(crds(r))
-      names(grid) <- c("x", "y")  
-      
+      names(grid) <- c("x", "y")
+
       # Define variogram model
       vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
       gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
-      
+
       # Generate random field perturbation
       RF_local <- array(
-        as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS)]),
-        dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS)
+        as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+        dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
       )
-      
-      return(list(event_i=event_i,
-                  impact=j,
-                  RF=AlgoParams$rho_local * AlgoResults$RF_current[[event_i]][,,j] + sqrt(1 - AlgoParams$rho_local^2) * RF_local))
-      #return(RF_perturbed)
+
+      RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
+      return(RF_perturbed)
     }
-    i_j <- cbind(rep(seq_along(ext_all), each=3), 1:3)
+    RF_prop <- mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores, mc.preschedule=F)
     
-    RF_prop = AlgoResults$RF_current
     
-    results_list <-  mclapply(split(i_j, row(i_j)), perturbate_random_field, mc.cores = detectCores() - 1, mc.preschedule=F)
-    
-    for (event in seq(1, length(results_list))){
-      RF_prop[[results_list[[event]]$event_i]][,,results_list[[event]]$impact] <- results_list[[event]]$RF
-    }
     
     HP<- Model$HighLevelPriors(Omega_prop_phys %>% addTransfParams(), Model)
     if (HP> AlgoParams$ABC & Model$higherpriors){

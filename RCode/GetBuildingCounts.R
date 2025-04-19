@@ -437,8 +437,15 @@ getBingBuildingsFromTiles <- function(bbox, event_id=NA, file_write='IIDIPUS_Inp
     if (nrow(rows) >= 1) {
       for (url in rows$Url){
         tmp <- tempfile()
-        download.file(url, destfile =tmp,quiet = FALSE, mode = "wb")
-        out <- lapply(readLines(tmp), fromJSON)
+        #download.file(url, destfile =tmp,quiet = FALSE, mode = "wb")
+        #out <- lapply(readLines(tmp), fromJSON)
+        tryCatch({
+          download.file(url, destfile = tmp, quiet = FALSE, mode = "wb")
+          out <- lapply(readLines(tmp), fromJSON)
+        }, error = function(e) {
+          warning("An error occurred: ", e$message)
+          out <- NULL  # or some fallback value
+        })
         
         #convert building polygons to points by just taking the first in the coordinate 
         build_coords %<>% rbind(t(sapply(out, function(build) return(build$geometry$coordinates[1,1,]))))

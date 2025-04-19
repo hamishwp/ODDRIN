@@ -260,6 +260,27 @@ disp_test
 buildDam_test
 
 
+#-----
+source('RCode/ODDobj_noRF.R')
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-12-10_060355_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2')
+AlgoResults %<>% addAlgoParams()
+AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Mar25Agg/'
+
+Omega_trial <- list(Lambda1 = list(nu=8.75, kappa=0.6),
+                            Lambda2 = list(nu=12, kappa=1), #list(nu=10.65, kappa=1.5), #
+                            Lambda3 = list(nu=9.55, kappa=0.68),
+                            #Lambda4 = list(nu=9.9, kappa=1.6),
+                            #theta= list(theta1=0.6),
+                            eps=list(local=0.25, hazard_mort=1, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
+                            #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                            vuln_coeff = list(PDens=-0.1239836, SHDI=-0.6717716, GNIc=0.1994072, Vs30=0.473589, EQFreq=-0.5352366, FirstHaz=0.08874202, Night=0.03315047, FirstHaz.Night=-0.1316748))
+
+df_postpredictive_sampled_total <- create_df_postpredictive(AlgoResults, single_particle=T, 
+                                                           M=100, output='SampledTotal', 
+                                                           Omega = Omega_trial %>% addTransfParams())
+
+plot_df_postpredictive(df_postpredictive_sampled_total %>% filter(train_flag=='TRAIN'),'mortality')  + guides(color="none") 
+
 #----------------------------------------------------------------------------------------------------
 #------------------------------ Band Depth Score Results  -------------------------------------------
 #----------------------------------------------------------------------------------------------------
@@ -281,7 +302,8 @@ plot_df_postpredictive_PAGER_coloured(df_postpredictive_sampled, 'mortality', in
 
 
 
-
+plot(density(rnorm(10000)), freq=F)
+lines(density(rt(10000,3)*0.7), freq=F, col='red')
 
 AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-02-27_162932.543295_MCMC_BDScore.05nocorr_LR40_M100_Npart1000NovAgg5_RandomFieldThree')
 AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/Nov24Agg/'
@@ -300,6 +322,113 @@ for (i in 1:n_post_samples){
                          replace(which(names(AlgoParams)==c('Np')), 1), 
                        output='Sampled')
 }
+
+
+#-------------------------------------
+#------------No RF Total--------------
+#-------------------------------------
+
+AlgoResults_noTotErr <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-04-13_120740.076549_MCMC_BDScore.05nocorr_M100_Npart1000NovAgg5_RandomFieldThree_rfNoTot')
+AlgoResults_noTotErr$input_folder <- 'IIDIPUS_Input_Alternatives/Mar25Agg/'
+
+plot(AlgoResults$loss, type='l')
+lines(AlgoResults_noTotErr$loss, col='blue')
+
+
+mcmc_trace(AlgoResults_noTotErr, AlgoResults,  var_plot=1:19, xlim=c(1, 2000))
+
+
+
+AlgoResults_LogLinear <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-04-12_195835_MCMC_BDScore.05nocorr_M100_Npart1000MarAgg5_RandomFieldThree_LogLinear')
+plot(AlgoResults$loss, type='l')
+lines(AlgoResults_LogLinear$loss, type='l', col='red')
+
+
+
+
+
+
+
+#----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------
+
+mcmc_trace <- function(..., var_plot = 7:10, xlim = c(4000, 8000)) {
+  
+  chains <- list(...)
+  num_chains <- length(chains)
+  
+  if (num_chains < 1) {
+    stop("At least one chain must be provided.")
+  }
+  
+  # Define subfigure labels (a), (b), (c), ...
+  subfig_labels <- letters[1:20]
+  plot_list <- list()
+  
+  for (i in seq_along(var_plot)) {
+    var <- var_plot[i]
+    
+    # Create base data frame with x values
+    post_samples <- data.frame(x = (xlim[1]:xlim[2]) - xlim[1])
+    
+    # Loop through each chain and add its samples to the data frame
+    for (j in seq_along(chains)) {
+      chain_name <- paste0("Chain", j)
+      post_samples[[chain_name]] <- chains[[j]]$Omega_sample_phys[var, xlim[1]:xlim[2]]
+    }
+    
+    # Convert to long format
+    post_samples_long <- post_samples %>%
+      pivot_longer(cols = -x, names_to = "Parameter", values_to = "Value")
+    
+    
+    if (length(grep('vuln_coeff.', names(unlist(Model$skeleton))[var])>0)){
+      y_lb = -1
+      y_ub = 1
+    } else {
+      y_lb = Model$par_lb[var]
+      y_ub = Model$par_ub[var]
+    }
+    
+    # Plot the lines
+    plot <- ggplot(data = post_samples_long, aes(x = x, y = Value, color = Parameter)) +
+      labs(y = get_greek_titles(names(unlist(Model$skeleton))[var]),
+           x = 'Post warmup iteration') +
+      scale_y_continuous(limits = c(y_lb, y_ub), expand = c(0.01, 0.01)) +
+      geom_line(alpha = 0.8) +
+      theme_minimal() +
+      scale_color_viridis(discrete = TRUE) +
+      theme(
+        axis.title.y = element_text(family = "Times New Roman", size = 12),
+        axis.text.x = element_text(family = "Times New Roman", size = 12),
+        axis.text.y = element_text(family = "Times New Roman", size = 12),
+        axis.ticks.y = element_blank(),
+        axis.title.x = element_text(family = "Times New Roman", size = 12),
+        plot.title = element_text(family = "Times New Roman", size = 14),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+        plot.margin = unit(c(0, 20, 0, 15), "pt"),
+        legend.position = "none"
+      )
+    
+    # Add subfigure label
+    plot_with_label <- arrangeGrob(
+      plot,
+      top = textGrob(paste0("(", subfig_labels[i], ")"),
+                     x = unit(0.0, "npc"), y = unit(1, "npc"),
+                     just = c("left", "top"),
+                     gp = gpar(fontsize = 14, fontfamily = "Times New Roman"))
+    )
+    
+    plot_list[[i]] <- plot_with_label
+  }
+  
+  # Arrange plots in a 1-row grid
+  grid.arrange(grobs = plot_list, ncol = 4)
+}
+
+#--------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 #MCMC Single:
 
@@ -966,3 +1095,128 @@ plot_mcmc_compare = function(SR1, SR2, SR_vs, xlim=c(1, 10000)){
 # cov(HLPrior_samples)
 # Proposed2Physical(HLPrior_samples[300,] %>% relist(skeleton=Model$skeleton) %>% unlist(), Model)
 # saveRDS(HLPrior_samples, paste0(dir, 'IIDIPUS_Input/HLPriorSamples_MCMCOut'))
+
+#------------------ Prediction updating Myanmar using Microsoft building damage -----------------------------
+
+ODDyWithImpact <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/EQ20250328MMR_-1_WithBuildings_WithImpactSummaries')
+sampled_full <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/tmp/EQ20250328MMR_-1_WithBuildings_fullSampledImpact')
+
+mandalay_dam = st_read("/home/manderso/Downloads/skysat_20250329_080228_predictions_merged.gpkg")
+bbox_obsdam = project(ext(mandalay_dam), from=crs(mandalay_dam), to="EPSG:4326")
+
+overlapping_cells = cells(ODDyWithImpact, bbox_obsdam)
+plot(t(sampled_full[overlapping_cells[c(1,2)],3,]))
+
+ODD_cropped <- crop(ODDyWithImpact, bbox_obsdam)
+
+project(mandalay_dam, from=crs(mandalay_dam), to="EPSG:4326")
+mandalay_dam_v <- project(vect(mandalay_dam),crs(ODD_cropped))
+mandalay_dam_v$cond_1 <- as.numeric(mandalay_dam_v$damage_pct_0m > 0 & mandalay_dam_v$unknown_pct < .50)
+mandalay_dam_v$cond_2 <- as.numeric(mandalay_dam_v$unknown_pct > .50)
+
+dam_agg = data.frame(
+  cell = numeric(),
+  n_buildings = numeric(),
+  damage_count = numeric(),
+  unknown_count = numeric()
+)
+
+for (cell_num in overlapping_cells){
+
+  xy <- xyFromCell(ODDyWithImpact, cell=cell_num)
+  
+  # Cell resolution
+  res_x <- res(ODDyWithImpact)[1]
+  res_y <- res(ODDyWithImpact)[2]
+  
+  # Calculate extent: xmin, xmax, ymin, ymax
+  cell_ext <- ext(
+    xy[1] - res_x / 2,
+    xy[1] + res_x / 2,
+    xy[2] - res_y / 2,
+    xy[2] + res_y / 2
+  )
+  
+  cropped_builds = crop(mandalay_dam_v, cell_ext)
+  dam_agg %<>% add_row(
+    cell = cell_num,
+    n_buildings = length(cropped_builds$cond_1),
+    damage_count = sum(cropped_builds$cond_1, na.rm=T),
+    unknown_count = sum(cropped_builds$cond_2, na.rm=T))
+  
+}
+cells_plot = c(15,6)
+plot(t(sampled_full[overlapping_cells[cells_plot],3,]/values(ODDyWithImpact$nBuildings)[overlapping_cells[cells_plot]]),
+     xlab='Prop Dam Cell 1',
+     ylab='Prop Dam Cell 2')
+true_prop = dam_agg[cells_plot,'damage_count']/dam_agg[cells_plot,'n_buildings']
+points(ifelse(is.na(true_prop[1]), 0, true_prop[1]), ifelse(is.na(true_prop[2]), 0, true_prop[2]), col='red', pch=19)
+
+plot(colSums(sampled_full[overlapping_cells, 3, ])/sum(values(ODDyWithImpact$nBuildings)[overlapping_cells], na.rm=T), 
+     colSums(sampled_full[,3,]),
+     xlab='Prop Dam Mandalay', ylab='Total Buildings Damaged')
+abline(v=sum(dam_agg$damage_count)/sum(dam_agg$n_buildings), col='red')
+
+plot(colSums(sampled_full[overlapping_cells, 3, ])/sum(values(ODDyWithImpact$nBuildings)[overlapping_cells], na.rm=T), 
+     colSums(sampled_full[,1,]),
+     xlab='Prop Dam Mandalay', ylab='Total Population Displacement')
+abline(v=sum(dam_agg$damage_count)/sum(dam_agg$n_buildings), col='red')
+
+ODDyWithImpact <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/EQ20250328MMR_-1_WithBuildings_WithImpactSummaries')
+sampled_full <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/tmp/EQ20250328MMR_-1_WithBuildings_fullSampledImpact')
+
+
+#-----------------------------------
+
+naypyidaw_dam = st_read("/home/manderso/Downloads/naypyidaw_myanmar_results_03313025_skysat.gpkg")
+bbox_loc2 = project(ext(naypyidaw_dam), from=crs(naypyidaw_dam), to="EPSG:4326")
+
+overlapping_cells2 = cells(ODDyWithImpact, bbox_loc2)
+plot(t(sampled_full[overlapping_cells2[c(1,2)],3,]))
+
+ODD_cropped2 <- crop(ODDyWithImpact, bbox_loc2)
+
+project(naypyidaw_dam, from=crs(naypyidaw_dam), to="EPSG:4326")
+naypyidaw_dam_v <- project(vect(naypyidaw_dam),crs(ODD_cropped))
+naypyidaw_dam_v$cond_1 <- as.numeric(naypyidaw_dam_v$damage_pct_0m > 0 & naypyidaw_dam_v$unknown_pct < .50)
+naypyidaw_dam_v$cond_2 <- as.numeric(naypyidaw_dam_v$unknown_pct > .50)
+
+dam_agg2 = data.frame(
+  cell = numeric(),
+  n_buildings = numeric(),
+  damage_count = numeric(),
+  unknown_count = numeric()
+)
+
+for (cell_num in overlapping_cells2){
+  
+  xy <- xyFromCell(ODDyWithImpact, cell=cell_num)
+  
+  # Cell resolution
+  res_x <- res(ODDyWithImpact)[1]
+  res_y <- res(ODDyWithImpact)[2]
+  
+  # Calculate extent: xmin, xmax, ymin, ymax
+  cell_ext <- ext(
+    xy[1] - res_x / 2,
+    xy[1] + res_x / 2,
+    xy[2] - res_y / 2,
+    xy[2] + res_y / 2
+  )
+  
+  cropped_builds = crop(naypyidaw_dam_v, cell_ext)
+  dam_agg2 %<>% add_row(
+    cell = cell_num,
+    n_buildings = length(cropped_builds$cond_1),
+    damage_count = sum(cropped_builds$cond_1, na.rm=T),
+    unknown_count = sum(cropped_builds$cond_2, na.rm=T))
+  
+}
+
+plot(colSums(sampled_full[overlapping_cells, 3,])/sum(values(ODDyWithImpact$nBuildings)[overlapping_cells]), 
+     colSums(sampled_full[overlapping_cells2, 3,])/sum(values(ODDyWithImpact$nBuildings)[overlapping_cells2]), 
+     xlab='Mandalay Dam Prop', ylab='Naypyidaw Dam Prop')
+points(sum(dam_agg$damage_count)/sum(dam_agg$n_buildings), sum(dam_agg2$damage_count)/sum(dam_agg2$n_buildings),
+     col='red', pch=19)
+
+

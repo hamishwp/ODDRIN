@@ -18,6 +18,8 @@ IIDIPUS_Input_Alternatives/
 
 IIDIPUS_Input_NonFinal/
 
+IIDIPUS_Input_Alternatives/
+
 IIDIPUS_Input_full/
 =======
 >>>>>>> Stashed changes
@@ -52,6 +54,8 @@ RCode/GetHelix.R
 RCode/GetEnv.R
 
 RCode/Examples.R
+
+RCode/HPC/
 
 RCode/.Rhistory
 

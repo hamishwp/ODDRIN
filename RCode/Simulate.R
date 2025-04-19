@@ -26,18 +26,10 @@ setMethod(f="initialize", signature="ODDSim",
             
             if(is.null(lhazSDF)) return(.Object)
             if(!class(lhazSDF[[length(lhazSDF)]])[1]=="HAZARD") return(.Object)
-            
-            if(lhazSDF$hazard_info$hazard=="EQ"){ Model$INFORM_vars%<>%c("HA.NAT.EQ")
-            } else if(lhazSDF$hazard_info$hazard=="TC"){Model$INFORM_vars%<>%c("HA.NAT.TC")
-            } else if(lhazSDF$hazard_info$hazard=="FL"){Model$INFORM_vars%<>%c("HA.NAT.FL")
-            } else stop("Not currently prepared for hazards other than EQ, TC or FL")
-            
-            
+
             .Object@dir<-dir
             .Object@hazard<-lhazSDF$hazard_info$hazard
-            
-            
-            
+
             if(length(unique(DamageData$eventid))==1) .Object@eventid<-unique(DamageData$eventid)
         
             # This bounding box is taken as the minimum region that encompasses all hazard events in HAZARD object:
@@ -48,32 +40,47 @@ setMethod(f="initialize", signature="ODDSim",
             
             year<-AsYear(dater)
             
-            obj<-PopSim
-            .Object@data <- obj@data
-            .Object@coords.nrs <-obj@coords.nrs
-            .Object@grid <-obj@grid
-            .Object@grid.index <-obj@grid.index
-            .Object@coords <-obj@coords
-            .Object@bbox <-obj@bbox 
-            .Object@proj4string <- PopSim@proj4string # crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            ISO3C <- PopSim
+            values(ISO3C) <- as.factor(coords2country(xyFromCell(ISO3C, 1:ncell(ISO3C))))
+            PopSim <-c(PopSim, ISO3C)
+            names(PopSim) <- c('Population', 'ISO3C')
+            
+            .Object@ptr <- PopSim@ptr
+            # .Object@file <- obj@file
+            # .Object@data <- obj@data
+            # .Object@legend <- obj@legend
+            # .Object@title <- obj@title
+            # .Object@extent <- obj@extent
+            # .Object@rotated <- obj@rotated
+            # .Object@rotation <- obj@rotation
+            # .Object@ncols <- obj@ncols
+            # .Object@nrows <- obj@nrows
+            # .Object@crs <- obj@crs
+            # .Object@srs <- obj@srs
+            # .Object@history <- obj@history
+            # .Object@z <- obj@z # crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             
             # Including minshake polygon per hazard event using getcontour from adehabitatMA package
             # LOOSEEND
             .Object%<>%AddHazSDF(lhazSDF)
             
+
             # Extract empty indices to save time
-            inds<-!is.na(.Object$Population)
+            inds<-which(!is.na(values(.Object[['Population']])))
+            if (length(inds)!= ncell(.Object)){
+              .Object[['ISO3C']][-inds] <- NA
+            }
             
-            .Object$GDP <- GDPSim
-            .Object@data$ISO3C<-NA_character_
-            .Object@data$ISO3C[inds]<-coords2country(obj@coords)[inds]
-            iso3c<-unique(.Object@data$ISO3C) ; iso3c<-iso3c[!is.na(iso3c)]
+            .Object[['GDP']] <- as.data.frame(GDPSim)
             
+            iso3c_unique<-unique(.Object$ISO3C)$ISO3C
+            iso3c_unique<-iso3c_unique[!is.na(iso3c_unique)]
+          
             
             if (runif(1) < 1){ # with probability 0.025, allocate all pixels to polygons and have a lot of subnational data
               subnat_complete <- T
               grouping_mechanism <- runif(1)
-              if (grouping_mechanism < 0.65 | max(.Object@data[,grep('hazMean', colnames(.Object@data))], na.rm=T) < 7){
+              if (grouping_mechanism < 0.65 |  max(.Object@hazinfo$max_mmi) < 7){
                 n_col_groups <- round(rpois(1,0.3))+1
                 n_row_groups <- 1
               } else if (grouping_mechanism < 0.825){
@@ -106,8 +113,8 @@ setMethod(f="initialize", signature="ODDSim",
             
             polygons_list <- list()
             if (subnat_complete){ 
-              ncol = sqrt(NROW(.Object))
-              indexes_matrix <- t(matrix(1:NROW(.Object), ncol=ncol))
+              ncol = sqrt(ncell(.Object))
+              indexes_matrix <- t(matrix(1:ncell(.Object), ncol=ncol))
               indexes_matrix <- indexes_matrix[NROW(indexes_matrix):1,]
               nrow = ncol
               
@@ -117,11 +124,11 @@ setMethod(f="initialize", signature="ODDSim",
               }
               ncol <- NCOL(indexes_matrix); nrow=NROW(indexes_matrix)
               
-              break.pts_col <- sort(sample(1:ncol, n_col_groups - 1, replace = FALSE))
+              break.pts_col <- sort(sample(1:(ncol-1), n_col_groups - 1, replace = FALSE))
               break.len_col <- diff(c(0, break.pts_col, ncol))
               groups_col <- rep(1:n_col_groups, times = break.len_col)
               
-              break.pts_row <- sort(sample(1:nrow, n_row_groups - 1, replace = FALSE))
+              break.pts_row <- sort(sample(1:(nrow-1), n_row_groups - 1, replace = FALSE))
               break.len_row <- diff(c(0, break.pts_row, nrow))
               groups_row <- rep(1:n_row_groups, times = break.len_row)
               for (i in 1:n_polygons){
@@ -135,14 +142,14 @@ setMethod(f="initialize", signature="ODDSim",
               }
               
             } else {
-              polygons_list[[1]] <- list(name='Polygon 1', indexes = 1:length(.Object@data$ISO3C), weights=rep(1, length(.Object@data$ISO3C)))
+              polygons_list[[1]] <- list(name='Polygon 1', indexes = 1:ncell(.Object), weights=rep(1, ncell(.Object)))
               if (n_polygons > 1){
                 pixels_allocated <- c()
                 for (i in 2:n_polygons){ 
                   nPixels_in_poly <- c()
                   while(length(nPixels_in_poly)==0){
-                    nPixels_in_poly <-  runif(1, 1, length(.Object@data$ISO3C))
-                    Pixels_in_poly <- sample(1:length(.Object@data$ISO3C),nPixels_in_poly, replace=F)
+                    nPixels_in_poly <-  runif(1, 1, ncell(.Object))
+                    Pixels_in_poly <- sample(1:ncell(.Object),nPixels_in_poly, replace=F)
                     Pixels_in_poly <- Pixels_in_poly[!(which(Pixels_in_poly) %in% pixels_allocated)] # avoid double counting
                   }
                   pixels_allocated <- c(pixels_allocated, Pixels_in_poly)
@@ -153,11 +160,12 @@ setMethod(f="initialize", signature="ODDSim",
               }
             }
             
+            .Object[['nBuildings']] <- .Object[['Population']]
+            nBuildings <-  round(runif(1,0.2,1) * values(PopSim[['Population']]) + rnorm(ncell(PopSim),0,20))
+            nBuildings[nBuildings < 0] = 0
+            values(.Object[['nBuildings']]) <- nBuildings
             
-            .Object@data$nBuildings <- round(runif(1,0.2,1) * PopSim$Population + rnorm(length(PopSim$Population),0,20))
-            .Object@data$nBuildings[.Object@data$nBuildings < 0] <- 0
-            
-            if(length(iso3c)==0){return(NULL)}
+            if(length(iso3c_unique)==0){return(NULL)}
             
             if(.Object@hazard%in%c("EQ","TC")){
               .Object@impact <- data.frame(iso3=character(), polygon=numeric(), impact=character(),
@@ -171,7 +179,7 @@ setMethod(f="initialize", signature="ODDSim",
                   } else if (n_poly_observed < 10){
                     for (i in 1:n_poly_observed){
                       .Object@impact %<>% add_row(
-                        iso3=sample(na.omit(.Object@data$ISO3C),1),
+                        iso3=sample(iso3c_unique,1),
                         polygon=i,
                         impact=Model$impacts$labels[j],
                         observed= 0,
@@ -191,8 +199,8 @@ setMethod(f="initialize", signature="ODDSim",
                       inferred=F,
                       sdate=dater)
                     polygons_list[[n_polygons+1]] <- list(name='Total', 
-                                               indexes = 1:length(.Object$ISO3C),
-                                               weights = rep(1, length(.Object$ISO3C)))
+                                               indexes = 1:ncell(.Object),
+                                               weights = rep(1, ncell(.Object)))
                     next
                   }
                 }
@@ -204,7 +212,7 @@ setMethod(f="initialize", signature="ODDSim",
                 for (i in 1:n_poly_observed){
                   
                   .Object@impact %<>% add_row(
-                    iso3=sample(na.omit(.Object@data$ISO3C),1),
+                    iso3=sample(iso3c_unique,1),
                     polygon=i,
                     impact=Model$impacts$labels[j],
                     observed= 0,
@@ -242,7 +250,7 @@ setMethod(f="initialize", signature="ODDSim",
             #Simulate World Income Database (WID) data
             #Simulate a cubic distribution with max given by max_inc (WID data appears close to cubic)
             WID <- data.frame(variable=numeric(), iso3=character(), value=numeric())
-            for (iso3 in unique(na.omit(.Object@data$ISO3C))){
+            for (iso3 in unique(na.omit(iso3c_unique))){
               max_inc <- runif(1,0.4,0.8)
               perc <- seq(0.1,1,0.1)
               cubic <- perc^3+runif(1,0.3,1)*perc^2
@@ -272,23 +280,27 @@ setMethod(f="initialize", signature="ODDSim",
             #Add linear predictor data
             #need to tidy this up, not very reflective of real data to have this much variation within such a small region!
             ulist <- unique(GDPSim)
-            AveSchYrs_vals <- runif(length(ulist), 3, 18)
-            LifeExp_vals <- runif(length(ulist), 30, 85)
+            #AveSchYrs_vals <- runif(length(ulist), 3, 18)
+            #LifeExp_vals <- runif(length(ulist), 30, 85)
             GNIc_vals <- exp(runif(length(ulist), 6, 12))
             # Vs30_vals <- runif(length(ulist), 98, 2197)
             # EQFreq_vals <- runif(length(ulist), 1, 10)
             SHDI_vals <- runif(length(ulist), 0.1, 0.9)
+            
+            .Object[['GNIc']] <- .Object[['Population']]
+            .Object[['SHDI']] <- .Object[['Population']]
             for(i in 1:length(ulist)){
-              .Object@data$AveSchYrs[GDPSim %in% ulist[i]] <- AveSchYrs_vals[1] + rbeta(1, 1,2) * (AveSchYrs_vals[i] - AveSchYrs_vals[1]) #cluster the values towards the first
-              .Object@data$LifeExp[GDPSim %in% ulist[i]] <- LifeExp_vals[1] + rbeta(1, 1,2) * (LifeExp_vals[i] - LifeExp_vals[1])
-              .Object@data$GNIc[GDPSim %in% ulist[i]] <- GNIc_vals[1] + rbeta(1, 1,2) * (GNIc_vals[i] - GNIc_vals[1])
+              #.Object@data$AveSchYrs[GDPSim %in% ulist[i]] <- AveSchYrs_vals[1] + rbeta(1, 1,2) * (AveSchYrs_vals[i] - AveSchYrs_vals[1]) #cluster the values towards the first
+              #.Object@data$LifeExp[GDPSim %in% ulist[i]] <- LifeExp_vals[1] + rbeta(1, 1,2) * (LifeExp_vals[i] - LifeExp_vals[1])
+              values(.Object[['GNIc']])[GDPSim %in% ulist[i]] <- GNIc_vals[1] + rbeta(1, 1,2) * (GNIc_vals[i] - GNIc_vals[1])
               # .Object@data$Vs30[GDPSim %in% ulist[i]] <- Vs30_vals[1] + rbeta(1, 1,5) * (Vs30_vals[i] - Vs30_vals[1])
               # .Object@data$EQFreq[GDPSim %in% ulist[i]] <- EQFreq_vals[1] + rbeta(1, 1,5) * (EQFreq_vals[i] - EQFreq_vals[1])
-              .Object@data$SHDI[GDPSim %in% ulist[i]] <- SHDI_vals[1] + rbeta(1, 1,2) * (SHDI_vals[i] - SHDI_vals[1])
+              values(.Object[['SHDI']])[GDPSim %in% ulist[i]] <- SHDI_vals[1] + rbeta(1, 1,2) * (SHDI_vals[i] - SHDI_vals[1])
             }
-            .Object@data$PDens <- .Object@data$Population
-            .Object@data$EQFreq <- EQFreqSim$EQFreq
-            .Object@data$Vs30 <- Vs30Sim$Vs30
+            .Object[['PDens']] <- .Object[['Population']] 
+            .Object[['EQFreq']] <- EQFreqSim
+            .Object[['Vs30']] <- Vs30Sim
+            .Object[['GDP']] <- NULL
             
             print("Checking ODDSim values")
             checkODD(.Object)
@@ -308,53 +320,61 @@ setMethod(f="initialize", signature="BDSim",
             .Object@I0<-ODD@I0
             .Object@hazdates<-ODD@hazdates
             .Object@eventid<-ODD@eventid
+            .Object@hazinfo<-ODD@hazinfo
+            
             #.Object@fIndies<-ODD@fIndies
             
             .Object@buildingsfile<-paste0("./IIDIPUS_Input/OSM_Buildings_Objects/",unique(ODD@eventid)[1])
             
             Damage = data.frame(Latitude=double(),Longitude=double(), grading=character(), Confidence=character())
-            cells_with_sat <- sample(1:NROW(ODD@coords), runif(1,3,20))
+            cells_with_sat <- sample(1:nrow(crds(ODD)), min(runif(1,30,500), nrow(crds(ODD))))
             
             for (ij in cells_with_sat){
-              lonmin <- ODD@coords[ij,'Longitude']-ODD@grid@cellsize['Longitude']/2
-              latmin <- ODD@coords[ij,'Latitude']-ODD@grid@cellsize['Latitude']/2
-              lonmax <- ODD@coords[ij,'Longitude']+ODD@grid@cellsize['Longitude']/2
-              latmax <- ODD@coords[ij,'Latitude']+ODD@grid@cellsize['Latitude']/2
+              lonmin <- crds(ODD)[ij,1]-res(ODD)[1]/2
+              latmin <- crds(ODD)[ij,2]-res(ODD)[2]/2
+              lonmax <- crds(ODD)[ij,1]+res(ODD)[1]/2
+              latmax <- crds(ODD)[ij,2]+res(ODD)[2]/2
               if(ODD$nBuildings[ij] == 0){
                 next
               }
-              for (k in 1:min(20, ODD$nBuildings[ij])){ #avoid having more than 20 buildings per grid in simulated data
-                                                        #to keep the computational requirements low
-                Damage %<>% add_row(
-                  Longitude = runif(1,lonmin, lonmax),
-                  Latitude = runif(1, latmin, latmax),
-                  grading = NA, 
-                  Confidence = NA
-                )
-              }
+              k <- min(250,ceiling(as.numeric(ODD$nBuildings[ij])/8)) #avoid having more than 250 buildings per grid in simulated data
+                                                                     #to keep the computational requirements low
+              Damage %<>% add_row(
+                Longitude = runif(k,lonmin, lonmax),
+                Latitude = runif(k, latmin, latmax),
+                grading = NA, 
+                Confidence = NA
+              )
             }
             
             print("Forming SpatialPointsDataFrame from building damage data")
-            Damage<-SpatialPointsDataFrame(coords = Damage[,c("Longitude","Latitude")],
-                                           data = Damage[,c("grading","Confidence")],
-                                           proj4string = ODD@proj4string)
+            # Damage<-SpatialPointsDataFrame(coords = Damage[,c("Longitude","Latitude")],
+            #                                data = Damage[,c("grading","Confidence")],
+            #                                proj4string = ODD@proj4string)
             
-            .Object@data <- Damage@data
-            .Object@coords.nrs <-Damage@coords.nrs
-            .Object@coords <-Damage@coords
-            .Object@bbox <-Damage@bbox
-            .Object@proj4string <-Damage@proj4string #crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
+            Damage <- vect(x=as.matrix(Damage[,c('Longitude', 'Latitude')]), type='points',
+                           atts = Damage[, c('grading', 'Confidence')], crs=crs(ODD))
+            
+            .Object@ptr <- Damage@ptr
+           
+            # .Object@data <- Damage@data
+            # .Object@coords.nrs <-Damage@coords.nrs
+            # .Object@coords <-Damage@coords
+            # .Object@bbox <-Damage@bbox
+            # .Object@proj4string <-Damage@proj4string #crs("+proj=longlat +datum=WGS84 +ellps=WGS84")
             rm(Damage)
             
             print("Interpolating population density, hazard & GDP-PPP data")
-            ODD$spatial_pixel <- 1:NROW(ODD)
+            ODD[['spatial_pixel']] <- 1:ncell(ODD)
             .Object%<>%BDinterpODD(ODD=ODD)
             
             print("Filter spatial data per country")
             # We could just copy Damage$iso3 directly, but I don't believe in anyone or anything...
-            if(NROW(.Object@data)>0) .Object@data$ISO3C<-coords2country(.Object@coords)
+            .Object$ISO3C<-coords2country(crds(.Object))
             
-            print("Accessing OSM to sample building height & area")
+            .Object@cIndies <- ODD@cIndies
+            
+            #print("Accessing OSM to sample building height & area")
             # ExtractOSMbuildVol(.Object,ODD)
             
             # linp<-rep(list(0.),length(unique(ODD@cIndies$iso3)))
@@ -382,9 +402,9 @@ simulateEvent <- function(r, I0 = 4.5){
   max_mmi = max(4.7, rnorm(1,6.5, 1.1))
    # rnorm(1, 1, 0.28)
   sigma = 0.2 * (max_mmi-4)^3 + runif(1,-0.5,0.5) + 1#0.7*(max_mmi - 4.5)^2.2 + (max_mmi - 6) + 2 + runif(1,-0.1,0.1) #runif(1, 3,8.5)
-  r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, s=r@nrows))
+  r <- setValues(r, spatialEco::gaussian.kernel(sigma=sigma, s=nrow(r)))
   #r <- exp(r-min_mmi)
-  r <- r * ((max_mmi-min_mmi)/r@data@max) + min_mmi
+  r <- r * ((max_mmi-min_mmi)/max(values(r))) + min_mmi
  
   cells_above_I0 <- xyFromCell(r, which(values(r>4.5)))
   crop_extent <- c(min(cells_above_I0[,1]), max(cells_above_I0[,1]), min(cells_above_I0[,2]), max(cells_above_I0[,2]))
@@ -392,15 +412,15 @@ simulateEvent <- function(r, I0 = 4.5){
   #values(r)[values(r) < I0] = NA
   #r <- trim(r)
   #r <- (r - r@data@min) / (r@data@max-r@data@min) * (max_mmi-min_mmi) + min_mmi
-  sd <- setValues(r, runif(r@ncols*r@nrows, 0.8, 1.1))
+  sd <- setValues(r, runif(ncell(r), 0.8, 1.1))
   #r <- 4.51 + exp(r)
   names(r) <- 'mmi_mean'
   r$mmi_sd <- sd
-  hazsdf <- as(r, 'SpatialPixelsDataFrame')
+  #hazsdf <- as(r, 'SpatialPixelsDataFrame')
   #hazsdf<-hazsdf[hazsdf$mmi_mean>I0,]
-  colnames(hazsdf@coords)<-rownames(hazsdf@bbox)<-c("Longitude","Latitude")
+  #colnames(hazsdf@coords)<-rownames(hazsdf@bbox)<-c("Longitude","Latitude")
 
-  return(hazsdf)
+  return(r)
 }
 
 simulatePopulation <- function(r){
@@ -413,7 +433,7 @@ simulatePopulation <- function(r){
   #   and is then scaled onto [0, maxPopDens] using the cumulative weibull distribution.
   
   maxPopDens = runif(1, 5000, 50000)
-  Field = as.data.frame(rasterToPoints(r))
+  Field = as.data.frame(xyFromCell(r, 1:ncell(r)))
   names(Field)=c('Longitude','Latitude')
   Pop_modelling=gstat(formula=Population~1, 
                       locations=~Latitude+Longitude,
@@ -429,8 +449,8 @@ simulatePopulation <- function(r){
   minval = min(PopSim[,3])
   maxval = max(PopSim[,3])
   PopSim[,3] = pweibull( (PopSim[,3]-minval)/(maxval-minval),5,2) /pweibull(1,5,2)* maxPopDens
-  PopSim %<>% acast(Longitude~Latitude, value.var='sim1') %>% convMat2SPDF(name='Population')
-  return(PopSim)
+  #PopSim %<>% acast(Longitude~Latitude, value.var='sim1')
+  return(PopSim$sim1)
 }
 
 simulateVs30 <- function(r){
@@ -440,7 +460,7 @@ simulateVs30 <- function(r){
   while(abs(diff(Vs30_range))<30){
     Vs30_range = runif(2, 180, 880)
   }
-  Field = as.data.frame(rasterToPoints(r))
+  Field = as.data.frame(xyFromCell(r, 1:ncell(r)))
   names(Field)=c('Longitude','Latitude')
   Vs30_modelling=gstat(formula=Population~1, 
                       locations=~Latitude+Longitude,
@@ -455,8 +475,7 @@ simulateVs30 <- function(r){
   minval = min(Vs30Sim[,3])
   maxval = max(Vs30Sim[,3])
   Vs30Sim[,3] = (Vs30Sim[,3]-minval)/(maxval-minval) * (abs(diff(Vs30_range))) + min(Vs30_range)
-  Vs30Sim %<>% acast(Longitude~Latitude, value.var='sim1') %>% convMat2SPDF(name='Vs30')
-  return(Vs30Sim)
+  return(Vs30Sim$sim1)
 }
 
 simulateEQFreq <- function(r){
@@ -464,7 +483,7 @@ simulateEQFreq <- function(r){
   EQFreq_min = rnorm(1, 200, 50)
   EQFreq_max = EQFreq_min + rbeta(1, 0.5, 5) * 350
  
-  Field = as.data.frame(rasterToPoints(r))
+  Field = as.data.frame(xyFromCell(r, 1:ncell(r)))
   names(Field)=c('Longitude','Latitude')
   EQFreq_modelling=gstat(formula=Population~1, 
                        locations=~Latitude+Longitude,
@@ -476,8 +495,7 @@ simulateEQFreq <- function(r){
   minval = min(EQFreqSim[,3])
   maxval = max(EQFreqSim[,3])
   EQFreqSim[,3] = (EQFreqSim[,3]-minval)/(maxval-minval) * (EQFreq_max-EQFreq_min) + EQFreq_min
-  EQFreqSim %<>% acast(Longitude~Latitude, value.var='sim1') %>% convMat2SPDF(name='EQFreq')
-  return(EQFreqSim)
+  return(EQFreqSim$sim1)
 }
 
 simulateGDP <- function(r){
@@ -491,9 +509,9 @@ simulateGDP <- function(r){
   #   boundaries present in the actual GDP data.
   
   nRegions = rpois(1, 5) + 1
-  regionPoints = cbind(runif(nRegions,r@extent@xmin, r@extent@xmax),runif(nRegions,r@extent@ymin, r@extent@ymax))
+  regionPoints = cbind(runif(nRegions,ext(r)[1], ext(r)[2]),runif(nRegions,ext(r)[3], ext(r)[4]))
   GDPperRegion = round(sort(runif(nRegions, 100, 100000)))
-  r_mat <- rasterToPoints(r)
+  r_mat <- xyFromCell(r, 1:ncell(r))
   GDP = array(0, NROW(r_mat))
   for (cell in 1:NROW(r_mat)){
     GDP[cell] = GDPperRegion[which.min(distmat(r_mat[cell,], regionPoints))]
@@ -517,12 +535,12 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
   xsize <- 25/12
   ysize <- 25/12
-  r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+xsize, ymn=ymn,ymx=ymn+ysize, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+  r <- rast(ncol=50, nrow=50, xmin=xmn, xmax=xmn+xsize, ymin=ymn,ymax=ymn+ysize, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   
-  while(mean(is.na(coords2country(as(r, 'SpatialPixelsDataFrame')@coords)))>0.5){ #repeat until over a country
+  while(mean(is.na(coords2country(xyFromCell(r, 1:ncell(r)))))>0.5){ #repeat until over a country
     xmn <- round(runif(1, -180, 179.5)/0.05)*0.05
     ymn <- round(runif(1, -60, 79.5)/0.05)*0.05
-    r <- raster(ncol=50, nrow=50, xmn=xmn, xmx=xmn+xsize, ymn=ymn,ymx=ymn+ysize, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
+    r <- rast(ncol=50, nrow=50, xmin=xmn, xmax=xmn+xsize, ymin=ymn,ymax=ymn+ysize, crs="+proj=longlat +datum=WGS84") #each cell is 30 arcseconds x 30 arcseconds
   }
   
   lenny = ifelse(runif(1)<0.5, rgeom(1, 0.6) + 1, 1) #generate number of events according to a geometric distribution
@@ -533,7 +551,7 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   
   for(i in 1:lenny){
     hazsdf <- simulateEvent(r, I0)
-    while(NROW(hazsdf)<=9 | length(which(hazsdf@data$mmi_mean > I0))<=1 | is.null(hazsdf@data$mmi_mean)){
+    while(ncell(hazsdf)<=9 | length(which(values(hazsdf[['mmi_mean']]) > I0))<=1 | !('mmi_mean' %in% names(hazsdf))){
       hazsdf <- simulateEvent(r, I0)
     }
   
@@ -543,11 +561,11 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
                   hazard="EQ",
                   dater= min(miniDam$sdate),
                   I0=I0,
-                  alertlevel=ifelse(max(hazsdf$mmi_mean, na.rm=T)>7.5, 'red', ifelse(max(hazsdf$mmi_mean, na.rm=T)>6, 'orange', 'green')), #assign pretty arbitrarily, don't think this is used in the model, 
+                  alertlevel=ifelse(max(values(hazsdf[['mmi_mean']]), na.rm=T)>7.5, 'red', ifelse(max(values(hazsdf[['mmi_mean']]), na.rm=T)>6, 'orange', 'green')), #assign pretty arbitrarily, don't think this is used in the model, 
                   alertscore=0,
                   depth= runif(1,0,50), #doesn't matter as not currently included in model
                   magnitude=runif(1,4,10),  
-                  max_mmi=max(hazsdf@data$mmi_mean, na.rm=T),
+                  max_mmi=max(values(hazsdf[['mmi_mean']]), na.rm=T),
                   USGS_id=paste0('USGS', '_',miniDam$eventid[1], '_', round(runif(1,1000,9000))), #doesn't matter as not included in model
                   eventtime=format(as.POSIXct(sample(as.numeric(as.POSIXct("00:00:00", format = "%H:%M:%S")):as.numeric(as.POSIXct("23:59:59", format = "%H:%M:%S")), 1), origin = "1970-01-01", tz = "UTC"), "%H:%M:%S"),
                   alertfull=list()
@@ -575,18 +593,26 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
     return(NULL)
   }
   
-  max_extent <- extent(lhazdat[[2]])
+  max_extent <- ext(lhazdat[[2]])
   if (lenny > 1){
     for (i in 2:lenny){
-      max_extent[c(1,3)] <- pmin(max_extent[c(1,3)], extent(lhazdat[[i]])[c(1,3)])
-      max_extent[c(2,4)] <- pmax(max_extent[c(2,4)], extent(lhazdat[[i]])[c(2,4)])
+      max_extent[c(1,3)] <- pmin(max_extent[c(1,3)], ext(lhazdat[[i]])[c(1,3)])
+      max_extent[c(2,4)] <- pmax(max_extent[c(2,4)], ext(lhazdat[[i]])[c(2,4)])
     }
   }
- 
-  PopSim <- simulatePopulation(crop(r, max_extent))
+  
+  r_cropped <- crop(r, max_extent)
+  
+  values(r_cropped) <-  simulateEQFreq(r_cropped)
+  EQFreqSim <- r_cropped
+  
+  values(r_cropped) <- simulatePopulation(r_cropped)
+  PopSim <- r_cropped
+  
+  values(r_cropped) <- simulateVs30(r_cropped)
+  Vs30Sim <- r_cropped
+
   GDPSim <- simulateGDP(crop(r, max_extent))
-  EQFreqSim <- simulateEQFreq(crop(r, max_extent))
-  Vs30Sim <- simulateVs30(crop(r, max_extent))
   
   ODDSim <- tryCatch(new('ODDSim', lhazSDF=lhazdat,DamageData=miniDam, PopSim=PopSim, GDPSim=GDPSim, EQFreqSim=EQFreqSim, # no longer use GDP but use the spatial groupings of GDPSim for grouping vulnerability covariates
                          Vs30Sim=Vs30Sim, Model=Model), error=function(e) NULL)
@@ -631,10 +657,17 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
                   "_",ODDSim@eventid)
     # Save out objects to save on RAM
     ODDpath<-paste0(dir,folder_write, "ODDobjects/",namer)
-    saveRDS(ODDSim,ODDpath)
+    saveODD(ODDSim,ODDpath)
     
-    #BDpath<-paste0(dir,folder_write,"BDobjects/",namer) 
-    #saveRDS(BDSim,BDpath)
+    max_haz <- max(values(ODDSim[[grep('hazMean', names(ODDSim))]]), na.rm=T)
+    if (runif(1) < 0.2 & max_haz > 6 & max_haz < 9){ #create BD object with 20% probability
+      BDSim <- new('BDSim', ODDSim)
+      
+      BDpath<-paste0(dir,folder_write,"BDobjects/",namer) 
+      saveBD(BDSim,BDpath)
+    }
+   
+    
     print(paste0('Saved simulated hazard to ', namer))
   }
   
@@ -647,8 +680,8 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   intensities <- c() #store eq intensities
   #now loop through each event and simulate the displacement, mortality, and building destruction using DispX()
   for(i in 1:length(ODDpaths)){
-    ODDSim <- readRDS(paste0(folder_write,"ODDobjects/",ODDpaths[i]))
-    intensities <- append(intensities, max(ODDSim@data$hazMean1, na.rm=TRUE))
+    ODDSim <- readODD(paste0(folder_write,"ODDobjects/",ODDpaths[i]))
+    intensities <- append(intensities, max(values(ODDSim[[grep('hazMean', names(ODDSim))]]), na.rm=TRUE))
     #simulate displacement, mortality and building destruction using DispX
     ODDSim %<>% DispX(Omega %>% addTransfParams(), Model$center, output='ODDwithSampled',
                       Method=list(Np=1,cores=1, NestedCores=1))
@@ -658,7 +691,8 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     ODDSim@impact %<>% dplyr::select(-sampled)
     
     #overwrite ODDSim with the updated
-    saveRDS(ODDSim, paste0(folder_write, "ODDobjects/",ODDpaths[i]))
+    saveODD(ODDSim, paste0(folder_write, "ODDobjects/",ODDpaths[i]))
+    
     # if (i < 100){
     #   saveRDS(ODDSim, paste0("IIDIPUS_Input/ODDobjects/Train/",ODDpaths[i]))
     # } else {
@@ -666,21 +700,21 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     # }
     
   }
-  # for (i in 1:length(BDpaths)){
-  #   BDSim <- readRDS(paste0(folder_write,"BDobjects/", BDpaths[i]))
-  #   BDSim %<>% BDX(Omega %>% addTransfParams(), Model, Method=list(Np=1,cores=1), output='sim')
-  #   #take these simulations as the actual values
-  #   BDSim@data$grading <- BDSim@data$ClassPred
-  #   #switch those affected to 'Damaged' with probability 0.5
-  #   affected <- which(BDSim@data$grading != 'notaffected')
-  #   for (j in affected){
-  #     BDSim@data$grading[j] = ifelse(runif(1)>0.5, BDSim@data$grading[j], 'Damaged')
-  #   }
-  #   if(NROW(BDSim@data)>100){
-  #     BDSim@data <- BDSim@data[1:100,]
-  #   }
-  #   saveRDS(BDSim,paste0(folder_write, "BDobjects/",BDpaths[i]))
-  # }
+  for (i in 1:length(BDpaths)){
+    BDSim <- readBD(paste0(folder_write,"BDobjects/", BDpaths[i]))
+    BDSim %<>% BDX(Omega %>% addTransfParams(), Model, Method=list(Np=1,cores=1), output='sim')
+    #take these simulations as the actual values
+    #BDSim@data$grading <- BDSim@data$ClassPred
+    #switch those affected to 'Damaged' with probability 0.5
+    # affected <- which(BDSim@data$grading != 'notaffected')
+    # for (j in affected){
+    #   BDSim@data$grading[j] = ifelse(runif(1)>0.5, BDSim@data$grading[j], 'Damaged')
+    # }
+    # if(NROW(BDSim@data)>100){
+    #   BDSim@data <- BDSim@data[1:100,]
+    # }
+    saveBD(BDSim,paste0(folder_write, "BDobjects/",BDpaths[i]))
+  }
   
   if (outliers){
     #double the impact of the highest intensity earthquake
@@ -694,6 +728,19 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
     saveRDS(ODDSim, paste0(folder_write, "ODDobjects/",ODDpaths[i]))
   }
   return(Model$center)
+}
+
+remakeBDSim <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/', folder_out='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/'){
+  
+  ufiles<-list.files(path=paste0(dir, folder_in, 'BDobjects/'),pattern=Model$haz,recursive = T,ignore.case = T) 
+  
+  for (file in ufiles){
+    ODDSim <- readODD(paste0(dir, folder_in, 'ODDobjects/', file))
+    BDSim <- new('BDSim', ODDSim)
+    BDpath<-paste0(dir,folder_out,"BDobjects/",file) 
+    saveBD(BDSim,BDpath)
+  }
+  
 }
 
 perturb_impacts <- function(d=1900, AlgoParams){
@@ -883,37 +930,125 @@ plotODDy_sim <- function(ODDy, zoomy=7,var="Population",breakings=NULL,bbox=NULL
   
 }
 
-plot_sim_event <- function(ODDy){
-  #ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput2/ODDobjects/Train/EQ20120115ABC_1')
-  # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130409ABC_-3')
-  # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130416ABC_-4')
-  # 
-  plot_with_haz_legend <- plotODDy_sim(ODDy, var='Population', haz_legend=T, var_legend=F) + coord_fixed()+
-    theme(legend.position="bottom", legend.key.size = unit(15, 'pt'),
-          legend.key.width= unit(30, 'pt'),
-          legend.text = element_text(margin = margin(t=2, r = 10)))
-  haz_legend <- get_plot_component(plot_with_haz_legend, 'guide-box', return_all=T)[[3]]
-  
-  plots_all <- plot_grid( plotODDy_sim(ODDy, var='Population') + coord_fixed(),
-                          plotODDy_sim(ODDy, var='nBuildings') + coord_fixed(), 
-                          plotODDy_sim(ODDy, var='SHDI') + coord_fixed(), 
-                          plotODDy_sim(ODDy, var='Vs30') + coord_fixed(), 
-                          plotODDy_sim(ODDy, var='BuildDam') + coord_fixed(),
-                          plotODDy_sim(ODDy, var='BuildDamAgg', discrete=T) + coord_fixed(), 
-                          nrow=2, rel_heights=c(1,1), align='v', labels = c('(a)', '(b)', '(c)', '(d)', '(e)', '(f)'),
-                          label_fontface = "plain")
-  
-  plots_with_legend <- plot_grid(plots_all, haz_legend, nrow=2, rel_heights=c(1,0.1))
-  plots_with_legend
-}
+#Spatial pixels data frame:
+# plot_sim_event <- function(ODDy){
+#   #ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput2/ODDobjects/Train/EQ20120115ABC_1')
+#   # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130409ABC_-3')
+#   # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130416ABC_-4')
+#   # 
+#   plot_with_haz_legend <- plotODDy_sim(ODDy, var='Population', haz_legend=T, var_legend=F) + coord_fixed()+
+#     theme(legend.position="bottom", legend.key.size = unit(15, 'pt'),
+#           legend.key.width= unit(30, 'pt'),
+#           legend.text = element_text(margin = margin(t=2, r = 10)))
+#   haz_legend <- get_plot_component(plot_with_haz_legend, 'guide-box', return_all=T)[[3]]
+#   
+#   plots_all <- plot_grid( plotODDy_sim(ODDy, var='Population') + coord_fixed(),
+#                           plotODDy_sim(ODDy, var='nBuildings') + coord_fixed(), 
+#                           plotODDy_sim(ODDy, var='SHDI') + coord_fixed(), 
+#                           plotODDy_sim(ODDy, var='Vs30') + coord_fixed(), 
+#                           plotODDy_sim(ODDy, var='BuildDam') + coord_fixed(),
+#                           plotODDy_sim(ODDy, var='BuildDamAgg', discrete=T) + coord_fixed(), 
+#                           nrow=2, rel_heights=c(1,1), align='v', labels = c('(a)', '(b)', '(c)', '(d)', '(e)', '(f)'),
+#                           label_fontface = "plain")
+#   
+#   plots_with_legend <- plot_grid(plots_all, haz_legend, nrow=2, rel_heights=c(1,0.1))
+#   plots_with_legend
+# }
 
 # ODDy <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput3/ODDobjects/Train/EQ20200502ABC_118')
 # ODDy$BuildDamAgg = NA
 # ODDy$BuildDamAgg[ODDy@polygons[[1]]$indexes] <- ODDy@impact$observed[1]
 # ODDy$BuildDamAgg[ODDy@polygons[[2]]$indexes] <- ODDy@impact$observed[4]
 # ODDy$BuildDamAgg <- as.factor(ODDy$BuildDamAgg)
+# 
+
+
+plotODDy_sim <- function(ODDy, var, haz_legend=F, var_legend=T, var_discrete=F){
+  plot_df <- as.data.frame(ODDy, xy=T, na.rm=F)
+  names(plot_df)[which(names(plot_df)=='x')] = 'Longitude'
+  names(plot_df)[which(names(plot_df)=='y')] = 'Latitude'
+  p <- ggplot(plot_df) + 
+    geom_raster(aes(x=Longitude, y=Latitude, fill=!!sym(var))) +   
+    coord_equal() +
+    scale_x_continuous(expand=c(0,0)) + scale_y_continuous(expand=c(0,0)) +
+    theme_minimal() + 
+    theme(
+      axis.title = element_text(family = "Liberation Serif", size=12),  
+      legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
+      legend.title = element_text(family = "Liberation Serif", size=12)
+    ) + 
+    geom_contour(aes(Longitude,Latitude,z=hazMean1,colour=..level..),
+                   alpha=0.7, lwd=0.8) +
+    scale_color_gradientn(colors = c("transparent","#fc9272", "#ef3b2c"))
+  if (haz_legend){
+    p <- p + scale_color_gradientn(colors = c("transparent","#fc9272", "#ef3b2c")) + labs(colour = "Hazard Intensity      ")
+  } else {
+    p <- p + scale_color_gradientn(colors = c("transparent","#fc9272", "#ef3b2c"), guide='none')
+  }
+  if (var_discrete){
+    p <- p + scale_fill_viridis_d()
+  } else {
+    if (var_legend){
+      p <- p + scale_fill_viridis_c()
+    } else {
+      p <- p + scale_fill_viridis_c(guide='none')
+    }
+  }
+  return(p)
+}
+
+plot_sim_event <- function(ODDy){
+  #ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput2/ODDobjects/Train/EQ20120115ABC_1')
+  # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130409ABC_-3')
+  # ODDSim <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_SimInput/ODDobjects/EQ20130416ABC_-4')
+  #
+  plot_with_haz_legend <- plotODDy_sim(ODDy, var='Population', haz_legend=T, var_legend=F) + coord_fixed()+
+    theme(legend.position="bottom", legend.key.size = unit(15, 'pt'),
+          legend.key.width= unit(30, 'pt'),
+          legend.text = element_text(margin = margin(t=2, r = 10)))
+  haz_legend <- get_plot_component(plot_with_haz_legend, 'guide-box', return_all=T)[[3]]
+  
+  names(ODDy)[which(names(ODDy)=='Disp')] = 'Displacement'
+  names(ODDy)[which(names(ODDy)=='nBuildings')] = 'Building Count'
+  plots_all <- plot_grid( plotODDy_sim(ODDy, var='Population') + coord_fixed(),
+                          plotODDy_sim(ODDy, var='Building Count') + coord_fixed(),
+                          plotODDy_sim(ODDy, var='SHDI') + coord_fixed(),
+                          plotODDy_sim(ODDy, var='Vs30') + coord_fixed(),
+                          plotODDy_sim(ODDy, var='BuildDam') + coord_fixed(),
+                          plotODDy_sim(ODDy, var='BuildDamAgg', var_discrete=T) + coord_fixed(),
+                          nrow=2, rel_heights=c(1,1), align='v', labels = c('(a)', '(b)', '(c)', '(d)', '(e)', '(f)'),
+                          label_fontface = "plain",
+                          label_fontfamily = "Liberation Serif")
+  
+
+  plots_with_legend <- plot_grid(plots_all, haz_legend, nrow=2, rel_heights=c(1,0.1))
+  plots_with_legend
+}
+# ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/ODDobjects/EQ20191028ABC_113')
+# ODDy$BuildDamAgg <- ODDy$BuildDam
+# values(ODDy$BuildDamAgg)[ODDy@polygons[[1]]$indexes] <- ODDy@impact$observed[1]
+# values(ODDy$BuildDamAgg)[ODDy@polygons[[2]]$indexes] <- ODDy@impact$observed[4]
+# ODDy$BuildDamAgg %<>% as.factor()
 # plot_sim_event(ODDy)
+
+#SimEvent.odf, 6 x 12 inches
+
+#plot(ODDy)
+# ODDy$BuildDamAgg = NA
+# ODDy$BuildDamAgg[ODDy@polygons[[1]]$indexes] <- ODDy@impact$observed[1]
+# ODDy$BuildDamAgg[ODDy@polygons[[2]]$indexes] <- ODDy@impact$observed[4]
+# ODDy$BuildDamAgg <- as.factor(ODDy$BuildDamAgg)
+
 #SimEvent.pdf , 6 x 12 inches
+# 
+# ufiles <- list.files(path=paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/ODDobjects/'),pattern=Model$haz,recursive = T,ignore.case = T)
+# for (file in ufiles[100:150]){
+#   print(file)
+#   ODDy <- readODD(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/ODDobjects/', file))
+#   plot(ODDy)
+#   print(ODDy@impact)
+#   readline(prompt = "Press [Enter] to continue to the next file...")
+# }
 
 
 # grid.arrange(plotODDy(ODDSim, var='Population') + coord_fixed(),

@@ -54,7 +54,7 @@ LoadLibraries<-function(packred, loadRmpi=F){
   
   library(tidyverse)
   library(magrittr)
-  library(ggmap)
+  #library(ggmap)
   library(pracma)
   library(parallel)
   library(mvtnorm)
@@ -90,7 +90,6 @@ LoadLibraries<-function(packred, loadRmpi=F){
     library(openxlsx)
     library(osmdata)
     library(tidyxl)
-    library(grid)
     
     # library(doParallel)
     # library(foreach)
@@ -127,7 +126,7 @@ GetODDPackages<-function(packred, loadRmpi=F){
   if(!packred) list.of.packages<-c(list.of.packages,
                                    'sf', 'geojsonR', 'geosphere', 'rworldmap', 'lutz',
                                    'xml2', 'gstat', 'terra', 'geojsonio', 'jsonlite', 'reshape2',
-                                   'ecochange', 'openxlsx', 'osmdata', 'tidyxl', 'grid')
+                                   'ecochange', 'openxlsx', 'osmdata', 'tidyxl')
                                    # "codetools","latex2exp", "geojsonR", 'geojsonio',
                                    # "rJava","devtools","OpenStreetMap","osmdata",
                                    # "tidyRSS","geojsonR", "tiff", "gstat",
@@ -147,7 +146,7 @@ GetODDPackages<-function(packred, loadRmpi=F){
   # devtools::install_github('daroczig/fbRads')
   # if(length(list.of.packages[!("openrouteservice" %in% installed.packages()[,"Package"])])){devtools::install_github("rCarto/osrm")}
   #if(length(list.of.packages[!("ggmap" %in% installed.packages()[,"Package"])])){devtools::install_github("dkahle/ggmap")}
-  if(length(list.of.packages[!("ggmap" %in% installed.packages()[,"Package"])])){devtools::install_github("stadiamaps/ggmap")}
+  #if(length(list.of.packages[!("ggmap" %in% installed.packages()[,"Package"])])){devtools::install_github("stadiamaps/ggmap")}
   # if(length(list.of.packages[!("countrycodes" %in% installed.packages()[,"Package"])])){devtools::install_github("vincentarelbundock/countrycode")}
   #if(length(list.of.packages[!("wbstats" %in% installed.packages()[,"Package"])])){devtools::install_github('nset-ornl/wbstats')}
   #if(length(list.of.packages[!("parallelsugar" %in% installed.packages()[,"Package"])])){devtools::install_github('nathanvan/parallelsugar')}

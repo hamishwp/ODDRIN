@@ -69,6 +69,7 @@ WorldPopURL<-function(iso3c,year,constrained=T,kmres=T,unadj=T,BGSM=T){
 
 # Extract the required URL link to WorldPop and build the file names
 CheckWPop_API<-function(iso3c,year,folder="./",constrained=T,kmres=T,unadj=T){
+  options(timeout=180)
   # Main host URL
   url<-WorldPopURL(iso3c,year,constrained,kmres,unadj)
   # File name to be saved
@@ -89,22 +90,22 @@ CheckWPop_API<-function(iso3c,year,folder="./",constrained=T,kmres=T,unadj=T){
 }
 
 #---------------------------------WORLDPOP POPULATION-----------------------------------------#
-GetWorldPopISO3C<-function(iso3c,year=NULL,folder="./Data/Exposure/PopDemo/",constrained=T,kmres=T,unadj=T){
+GetWorldPopISO3C<-function(iso3c,year=NULL,folder="./Data/Exposure/PopDemo/",constrained=T,kmres=T,unadj=T, mostrecent=F){
   # Try to download the most recent dataset
-  if(is.null(year)) {year<-AsYear(Sys.Date()); mostrecent<-T} else mostrecent<-F
+  if(is.null(year) | year == AsYear(Sys.Date())) {year<-AsYear(Sys.Date()); mostrecent<-T} #else mostrecent<-F
   # If we left the year blank, then let's search for the most recent CONSTRAINED dataset
-  if (year > 2022) year = 2022;
-  if (iso3c == 'KOS' & year > 2018) year=2021; #No WorldPop population data in Kosovo before 2021
+  #if (iso3c == 'KOS' & year > 2018) year=2021; #No WorldPop population data in Kosovo before 2021
   if(mostrecent){
     # Go through every year from now until 2020 until we find some data!
     yr<-year; extracter<-T
     # keep trying to extract most recent data, unless you go lower than 2020 which means WorldPop changed their API addresses
-    while(extracter | yr>=2020){
+    while(extracter & yr>=2015){
       checker<-tryCatch(CheckWPop_API(iso3c,yr,folder,constrained,kmres,unadj),error = function(e) NA)
       # Check that something was returned!
-      if(is.na(checker)) {yr<-yr-1; next} else extracter<-F
+      if(is.na(checker[1])) {yr<-yr-1; next} else extracter<-F
     }
   } else {
+    if (year > 2022) year = 2022;
     checker<-tryCatch(CheckWPop_API(iso3c,year,folder,constrained,kmres,unadj),error = function(e) NA)
   }
   # If nothing happened... FML
@@ -148,13 +149,21 @@ getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demograph
   if (length(iso3c_all)>1){
     for (iso3c in iso3c_all[2:length(iso3c_all)]){
       if (iso3c == 'UMI') next; #No WorldPop data. Have no permanent residents so ignoring. e.g. Navassa island in Haiti event i=164
-      if (iso3c == 'KOS' & year==2016){ #No WorldPop data for Kosovo before 2021. Use 2021 data scaled by change in total population (https://data.worldbank.org/indicator/SP.POP.TOTL?locations=XK)
-        popy_add <- GetWorldPopISO3C(iso3c, year=2021, constrained=F, folder=paste0(dir, folder)) %>% raster()
-        popy_add@extent <- popy_add@extent
-        popy_add_cropped <- crop(popy_add, bbox) * 1777557/1786038
+      #if (iso3c == 'KOS' & year==2016){ #No WorldPop data for Kosovo before 2021. Use 2021 data scaled by change in total population (https://data.worldbank.org/indicator/SP.POP.TOTL?locations=XK)
+        # popy_add <- GetWorldPopISO3C(iso3c, year=2021, constrained=F, folder=paste0(dir, folder)) %>% raster()
+        # popy_add@extent <- popy_add@extent
+        # popy_add_cropped <- crop(popy_add, bbox) * 1777557/1786038
+        # popy_cropped %<>% merge(popy_add_cropped)
+      #  stop()
+      #  next
+      #} 
+      if (iso3c == 'KOS'){
+        #No UN_adj data for Kosovo
+        popy_add <- GetWorldPopISO3C(iso3c, year=year, constrained=F, unadj=F, folder=paste0(dir, folder)) %>% raster()
+        popy_add_cropped <- crop(popy_add, bbox)
         popy_cropped %<>% merge(popy_add_cropped)
         next
-      } 
+      }
       popy_add <- GetWorldPopISO3C(iso3c, year=year, constrained=F, folder=paste0(dir, folder)) %>% raster()
       if (bbox[1] > popy_add@extent[2] | bbox[3] < popy_add@extent[1] | bbox[2] > popy_add@extent[4] | bbox[4] < popy_add@extent[3]){
         warning('SEDACS is placing a country inside bbox but WorldPop is not.')
@@ -164,14 +173,13 @@ getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demograph
       popy_cropped %<>% merge(popy_add_cropped)
     }
     
-    
   }
   spat_agg <- aggregate(popy_cropped, fact=agg_level, fun=sum, expand=F) 
   
   names(spat_agg) <- 'Population'
-  spat_agg$dummy <- 0 #need to add some variable so that pixels with 0 population are not lost when converting to SpatialPixelsDataFrame
-  spdf <- as(spat_agg, 'SpatialPixelsDataFrame')
-  spdf@data <- spdf@data[,-2, drop=F] #remove dummy
+  #spat_agg$dummy <- 0 #need to add some variable so that pixels with 0 population are not lost when converting to SpatialPixelsDataFrame
+  #spdf <- as(spat_agg, 'SpatialPixelsDataFrame')
+  #spdf@data <- spdf@data[,-2, drop=F] #remove dummy
   
   iso3_lookup <- data.frame(ISO3C=c(NA, unique(iso3c_all)), id=0:length(iso3c_all))
   nations@data$order <- 1:NROW(nations@data)
@@ -179,17 +187,27 @@ getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demograph
   nations@data <- nations@data[order(nations@data$order),]
     
   rastered_iso3 <- rasterize(nations, spat_agg, field='id', fun=mode_non_na)
-  spdf_iso3 <- as(rastered_iso3, 'SpatialPixelsDataFrame')
-  colnames(spdf_iso3@data) <- 'id'
-  spdf_iso3@data$order <- 1:NROW(spdf_iso3@data)
-  spdf_iso3@data %<>% merge(iso3_lookup, all.x=T)
-  spdf_iso3@data <- spdf_iso3@data[order(spdf_iso3@data$order),'ISO3C', drop=F]
+  rastered_iso3_df <- data.frame(id=values(rastered_iso3))
+  rastered_iso3_df$order <- 1:NROW(rastered_iso3_df)
+  rastered_iso3_df %<>% merge(iso3_lookup, all.x=T)
+  rastered_iso3_df <- rastered_iso3_df[order(rastered_iso3_df$order),'ISO3C', drop=F]
+  values(rastered_iso3) <- as.factor(rastered_iso3_df$ISO3C)
   
-  spdf@data <- merge_rastered_spdf(spdf, spdf_iso3, 'ISO3C') 
- 
-  colnames(spdf@coords) <- c('Longitude', 'Latitude')
-  rownames(spdf@bbox) <- c('Longitude', 'Latitude')
-  return(spdf)
+  
+  pop <- stack(spat_agg, rastered_iso3)
+  names(pop) <- c('Population', 'ISO3C')
+  if (any(levels(pop$ISO3C)[[1]]$ID != 1:NROW(levels(pop$ISO3C)[[1]]))){
+    stop('Factor levels have not been assigned in increasing order. Have assumed that they have been 
+          assigned this way when obtaining values.')
+  }
+  
+  # return(brick(pop))
+  
+  terra_stack <- c(terra::rast(spat_agg), terra::rast(rastered_iso3))
+  names(terra_stack) <- c('Population', 'ISO3C')
+
+  return(terra_stack)
+  
 }
 
 #----------------------GRIDDED WORLDPOP----------------------------

@@ -31,6 +31,8 @@ Testing_Results/
 
 Unfinished/
 
+RCode/Model Variations/
+
 Case_Studies/
 
 >>>>>>> master
@@ -47,6 +49,8 @@ RCode/GetHelix.R
 RCode/GetEnv.R
 
 RCode/Examples.R
+
+RCode/HPC/
 
 RCode/.Rhistory
 

@@ -103,114 +103,31 @@ ExtractCentering<-function(dir, haz="EQ",saver=T, input_folder='IIDIPUS_Input/')
   return(center)
 }
 
-GetInitVals<-function(ODDpath, Model, AlgoParams, optimiser=F){
-  # Omega<-list(
-  #   Lambda1=list(kappa=0.2141987,nu=0.5677207,omega=0.1),
-  #   Lambda2= list(kappa=0.2, nu= -0.4253, omega=1.1), 
-  #   Lambda3= list(nu=0.9,omega=-0.1), 
-  #   zeta=list(k=1.091486,lambda=0.3404209), # zeta=list(k=2.5,lambda=1.6),
-  #   # beta=list(CC.INS.GOV.GE=0,VU.SEV.AD=0,CC.INS.DRR=0,VU.SEV.PD=0,CC.INF.PHY=0,HA.NAT.EQ=0),
-  #   Pdens=list(M=-3.51036,k=1.054248),
-  #   dollar=list(M=0.05,k=1.867706),
-  #   theta=list(e=-1.444013), #list(e=0.25),
-  #   # rho=list(A=0,H=0),
-  #   eps=list(eps=-4.339465)#,xi=3.52269924)
-  #   # mu=list(muplus=1,muminus=1,sigplus=0.001,sigminus=0.001)
-  # )
-  # Omega <- Physical2Proposed(list(Lambda1 = list(nu=1,omega=0.1),
-  #      Lambda2 = list(nu= 0.15, omega=0.75),
-  #      Lambda3 = list(nu=0.7,omega=0.05),
-  #      zeta = list(k=2.978697, lambda=1.405539),
-  #      Pdens = list(M=0.02988616, k = 6.473428),
-  #      dollar = list(M = -1.051271, k = 6.473428),
-  #      theta = list(e=0.2359788),
-  #      eps = list(eps=0.01304351)), Model)
-  # Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=0.9,omega=0.1),
-  #                                        Lambda2 = list(nu= 0.3, omega=0.7),
-  #                                        Lambda3 = list(nu=0.8,omega=0.1),
-  #                                        zeta = list(k=2.978697, lambda=1.405539),
-  #                                        Pdens = list(M=0.02988616, k = 6.473428),
-  #                                        dollar = list(M = -1.051271, k = 6.473428),
-  #                                        theta = list(e=0.2359788),
-  #                                        eps = list(eps=0.01304351))), Model)
+GetInitVals<-function(ODDpath, Model, AlgoParams, usePastPost=T, pastPostFile='mcmc_2025-04-10'){
+  # Produces initial proposal and perturbation covariance for the MCMC chains
+  # if usePastPost = T, then uses the posterior from another chain to estimate the proposal covariance
+  # if usePastPost = F, then uses prior samples to estimate the proposal covariance
   
-  
-  # Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=-0.05,omega=0.45),
-  #                                        Lambda2 = list(nu= 1.4, omega=0.85),
-  #                                        Lambda3 = list(nu=0.35,omega=0.6),
-  #                                        zeta = list(k=2.9, lambda=1.5),
-  #                                        Pdens = list(M=0.02988616, k = 6.473428), #list(M=0.05, k = 6.4),
-  #                                        dollar = list(M = -1.051271, k = 6.473428), #list(M = -1.05, k = 6.5),
-  #                                        theta = list(e=0.2359788), #list(e=0.23),
-  #                                        eps = list(eps=0.01))), Model)
-  
-  HP = Inf
-  while(HP> AlgoParams$ABC){
-   Omega <- list(Lambda1 = list(nu=runif(1,-0.1,0.1),omega=runif(1,0.4,0.6)),
-                                           Lambda2 = list(nu=runif(1,1.2,1.4), omega=runif(1,0.8,1)),
-                                           Lambda3 = list(nu=runif(1,0.3,0.5),omega=runif(1,0.5,0.7)),
-                                          zeta = list(k=runif(1,2.85,3.15), lambda=runif(1,1.3,1.5)),
-                                          Pdens = list(M=runif(1,0.02,0.04), k = runif(1,6.3,6.7)),
-                                          dollar = list(M = runif(1,-1.2,-0.9), k = runif(1,6.3,6.7)), #list(M = -1.05, k = 6.5),
-                                          theta = list(e=runif(1,0.22,0.25)), #list(e=0.23),
-                                          eps = list(eps=runif(1,0.001,0.02)))
-   HP<-Model$HighLevelPriors(Omega,Model)
-   print(HP)
+  if (usePastPost){
+    if(length(pastPostFile)==0){
+      stop('Please provide AlgoResults file from which to obtain the posterior')
+    }
+    post_samples <- t(readRDS(paste0(dir, 'IIDIPUS_Results/', pastPostFile))$Omega_sample)
+    s_finish = which(is.na(post_samples)[,1])[1] - 1
+    post_samples = post_samples[max(1, s_finish-1000):s_finish,]
+    propCOV = cov(post_samples)
+    init_value = post_samples[nrow(post_samples),]
+    iVals = list(x0 = init_value, COV=propCOV/10)
+    
+  } else {
+    n_samples <- 500
+    hp_samples <- array(NA, dim=c(n_samples,length(Model$par_lb)))
+    for (i in 1:n_samples){
+      hp_samples[i, ] = HLPrior_sample(Model, AlgoParams)
+    }
+    iVals = list(x0=hp_samples[1,],COV=cov(hp_samples)/10)
   }
-  
-  Omega %<>% Physical2Proposed(Model)
-   # Omega <- Physical2Proposed(unlist(list(Lambda1 = list(nu=0.9,omega=7),
-   #   Lambda2 = list(nu= 0.9, omega=8),
-   #   Lambda3 = list(nu=1.2,omega=7.5),
-   #   zeta = list(k=4.5, lambda=1.8),
-   #   #zeta1 = list(k=4.5, lambda=1.5),
-   #   #zeta2 = list(k=4.5, lambda=3),
-   #   #zeta3 = list(k=4.5, lambda=1.8),
-   #   Pdens = list(M=0.02988616, k = 6.473428),
-   #   dollar = list(M = -1.051271, k = 6.473428),
-   #   theta = list(e=0.3),
-   #   eps = list(eps=0.01))),Model)
-  
-  # Omega <- Physical2Proposed(unlist(list(#Lambda1 = list(nu=1.4,omega=0.01),
-  #                     #Lambda2 = list(nu= 0.9, omega=0.1),
-  #                     Lambda3 = list(nu=3,omega=1),
-  #                     zeta = list(k=4,lambda=2),
-  #                     Pdens = list(M=0.03,k=2.5),
-  #                     dollar = list(M=-1.16, k=6.3),
-  #                     theta = list(e=0.2),
-  #                     eps = list(eps=0.01))), Model)
-
-  lenny<-length(unlist(Model$links))
-  # Note that this is in proposal space, not physical space, hence the logarithms
-  propCOV <- diag(c(rep(0.001,lenny)))
-  propCOV[lenny, lenny] <- 0.01 #increase proposal variance for epsilon (parameter for variation of stochastic component)
-  
-  # i = 1
-  # n_samples <- 100
-  # hp_samples <- array(NA, dim=c(n_samples,lenny+1))
-  # while (i <= n_samples){
-  #   sample <- runif(lenny, Model$par_lb, Model$par_ub) #generate proposal on the physical space
-  #   HP <- Model$HighLevelPriors(relist(sample,skeleton=Model$skeleton),Model) #check higher level prior of the proposal
-  #   #print(HP)
-  #   if (HP < AlgoParams$ABC){ #if less then ABC threshold
-  #     hp_samples[i,] <- c(unlist(Physical2Proposed(relist(sample, Model$skeleton), Model)), HP) #transform to proposed space from physical and store
-  #     print(hp_samples[i,])
-  #     i = i + 1
-  #   }
-  # }
-  # Omega <- unlist(relist(hp_samples[which.min(hp_samples[,lenny+1]), 1:lenny], Model$skeleton))
-  # # propCOV<-cov(hp_samples[,1:lenny]) /100
-
-  #propCOV<-readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/covariance_2022-05-04_120755')
-  # propCOV<-diag(abs(c(log(0.17/0.12),log(0.04/0.02),log(0.09/0.055),
-  #                     log(2/1.5),log(5.5/4.5),
-  #                     log(0.67/0.5),log(0.13/0.09),
-  #                     log(3.5/4.5)
-  #                     )))*0.5
-  
-  iVals<-list(x0=Omega,COV=propCOV)
   return(iVals)
-  
 }
 
 HLPrior_sample <- function(Model, AlgoParams){

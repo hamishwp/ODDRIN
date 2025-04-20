@@ -11,8 +11,25 @@
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
-# Download and install the necessary packages, and load source files & data:
+#change the working directory to the location of cloned ODDRIN repository:
+dir<-directory<- "/home/manderso/Documents/GitHub/ODDRIN/" #"./" #"/home/hamishwp/Documents/BEAST/Coding/Oxford/ODDRIN/"
+# Set the working directory from your environment variables
+setwd(directory)
+
+packred<-F
+loadRmpi<-F
+
+# Download and install the necessary packages:
 source('RCode/GetODDPackages.R')
+# Sourcing the data:
+source('RCode/GetData.R')
+# Extract model functions and priors
+source('RCode/Model.R')
+# Extract the model parameterisation algorithm, default = Adaptive MCMC
+source('RCode/Method.R')
+# Load functions for setting up event objects and sampling from model
+source('RCode/AutoQuake_functions.R')
+
 
 #%%%%%%%%%%%%% User defined input - bare minimum required %%%%%%%%%%%%%%%#
 input<-list(
@@ -22,39 +39,47 @@ input<-list(
   datadir=dir, # Location of the main folder to access the data 
   plotdir="Plots/" # Location for plots as paste0(datadir,plotdir)
 )
+
 # Or extract the data purely based on the USGS id number
 input<-list(USGSid="usp000huvq",
             datadir=dir, # Location of the main folder to access the data 
             plotdir="Plots/" # Location for plots as paste0(datadir,plotdir)
 )
 
-input<-list(USGSid="at00qxtxcn",
-            datadir=dir, # Location of the main folder to access the data 
-            plotdir="Plots/" # Location for plots as paste0(datadir,plotdir)
-)
-
 #%%%%%%%%%%%%% Variables and functions from IIDIPUS files %%%%%%%%%%%%%%%#
 input%<>%append(list(Model=Model, # Model parameters - equations, parameters, ... (Model.R)
-                     Omega=Omega, # Parameterisation of the model (GetInitialValues.R)
+                     PosteriorFileLoc='IIDIPUS_Results/mcmc_2025-04-10', # Location of fitted model (AlgoResults)
                      Method=AlgoParams)) # Number of CPUs, particles in SMC, etc. (Method.R)
 
 #%%%%%%% Function to extract data, predict displacement & plot %%%%%%%%%%#
-AutoQuake<-function(input,extras=T){
-  # Find the earthquake data via APIs (GetDisaster.R & GetUSGS.R)
-  EQ<-GetEarthquake(input)
-  # Create ODD object from EQ, Population, GDP, ... datasets (ODDobj.R)
-  ODDy<-new("ODD",lhazSDF=EQ, dir=input$datadir, Model=input$Model) ; rm(EQ) # Model defined in Model.R
+AutoQuake<-function(input,predImpact=T, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/'){
   
-  if(!extras) return(ODDy)
+  # Collect hazard, population and vulnerability data:
+  ODDy_with_namer <- prepareODD(dir, input, getGADMregions=T, folder_write=folder_write)
+  ODDy = ODDy_with_namer$ODDy
+  namer = ODDy_with_namer$namer
   
-  # Predict displacement (ODDobj.R)
-  ODDy%<>%DispX(Omega = input$Omega, 
-                center = input$Model$center, 
-                BD_params = Model$BD_params,
-                LL = F, # Do not return the log-likelihood, but the displacement prediction
-                Method = input$AlgoParams) 
+  if(!predImpact) return(ODDy)
+  
+  ODDy_with_sampled = PosteriorImpactPred(ODDy, 
+                            AlgoResultsFilename=input$PosteriorFileLoc,
+                            folder_write=folder_write,
+                            namer=namer,
+                            N_samples = 100)
+  
+  #sampled_full = ODDy_with_sampled$sampled_full
+  #ODDy = ODDy_with_sampled$ODDyWithImpact
+  #namer = ODDy_with_sampled$namer
+  
   # Make plots and store them in a specific folder (ODDobj.R)
-  pout<-MakeODDPlots(ODDy, input)
+  
+  # Makes plots and saves them in folder_write/input$plotdir
+  pout<-MakeODDPredPlots(ODDy_with_sampled, 
+                         input = input,
+                         folder_write=folder_write, 
+                         namer = namer)
+  
+  pout
   
   return(ODDy)
 }

@@ -2,7 +2,7 @@
 #%%%% IIDIPUS - Integrated Internal DIsplaced PopUlation Sampler %%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
-#%%%%%%%%%%%%%%%%%%%%% Coded by Hamish Patten %%%%%%%%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%% Coded by Hamish Patten and Max Anderson Loake %%%%%%%%%%#
 #%%%%%%%%%% Collaboration between the University of Oxford %%%%%%%%%%#
 #%%%%%%%%%% and the Internal Displacement Monitoring Centre %%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%% Started January 2020 %%%%%%%%%%%%%%%%%%%%%%%%#
@@ -11,8 +11,16 @@
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
+#change the working directory to the location of cloned ODDRIN repository:
+dir<-directory<- "/home/manderso/Documents/GitHub/ODDRIN/" #"./" #"/home/hamishwp/Documents/BEAST/Coding/Oxford/ODDRIN/"
+# Set the working directory from your environment variables
+setwd(directory)
+
+packred<-F
+loadRmpi<-F
+
 # Extract Environment Variables
-source('RCode/GetEnv.R')
+# source('RCode/GetEnv.R')
 # Download and install the necessary packages:
 source('RCode/GetODDPackages.R')
 # Sourcing the data:
@@ -27,26 +35,22 @@ IIDIPUSModelTraining<-function(extractedData=T){
   # Extract Displacement & Hazard data and match & reduce
   ODDpaths<-ExtractData(Model$haz,dir,extractedData)
   # Extract initial parameterisation estimate
-  iVals<-GetInitVals(dir,Model,AlgoParams)
-  # Parameterise... Here we go!
-  output <- Algorithm(dir=dir,
-                      Model=Model,
-                      iVals=iVals,
-                      AlgoParams=AlgoParams)
-  # Save the output
-  saveRDS(object = output,
-          file = paste0(dir,"IIDIPUS_Results/output_",
-                        DateTimeString(),".Rdata"))
+  iVals<-GetInitVals(dir,Model,AlgoParams,usePastPost=T)
   
-  # Calculate the single linear predictor term that would make each event prediction perfectly accurate
-  modifiers<-SingleEventsModifierCal(dir,Model,output$PhysicalValues,AlgoParams)
-  # Correlate the modifiers to systemic vulnerability, note that systemic vulnerability variables must be defined in the model
-  vulnerability<-CorrelateModifier(modifiers,Model)
+  # Parameterise... Here we go!
+  output <- AMCMC(dir=dir,
+                  AlgoParams=AlgoParams,
+                  Model=Model,
+                  iVals=iVals)
+  
+  #Alternatively, using ABCSMC:
+  # output <- ABCSMC(dir=dir,
+  #                 AlgoParams=AlgoParams,
+  #                 Model=Model)
   
   return(list(DataDirectory=ODDpaths,
-              Parameterisation=output,
-              fullvulnerability=vulnerability))
-   
+              Parameterisation=output))
+  
 }
 
 ODDRIN<-IIDIPUSModelTraining()

@@ -155,7 +155,7 @@ for (i in 1:length(Model$Priors)){
 # Model$BinR<- "pnorm" #"weibull" # "gompertz" 
 
 # Implement higher order Bayesian priors?
-Model$higherpriors<-TRUE
+Model$higherpriors<-FALSE
 
 Model$center<-ExtractCentering(dir,haz,T)
 
@@ -175,6 +175,25 @@ Model$DestDam_modifiers <- c(1,1,1)
 # Probability is placed to power of modifier. Therefore:
 #     - Modifier > 1 means probability decreases, modifier < 1 means probability increases
 #     - Modifier must be greater than 0 to ensure probabilities less than 1. 
+
+#Transform parameters to reduce correlation between them
+addTransfParams <- function(Omega, I0=Model$I0){
+  #Omega$theta$theta1 <- 0.6
+  Omega$Lambda1$loc <- Omega$Lambda1$nu #h_0(Omega$Lambda1$nu, I0, Omega)
+  Omega$Lambda2$loc <- Omega$Lambda2$nu #h_0(Omega$Lambda2$nu, I0, Omega)
+  Omega$Lambda3$loc <- Omega$Lambda3$nu #h_0(Omega$Lambda3$nu, I0, Omega)
+  #Omega$Lambda4$loc <- Omega$Lambda4$nu #h_0(Omega$Lambda4$nu, I0, Omega)
+  #h_10_minus_h_4.5 = h_0(10, I0, Omega) - h_0(4.5, I0, Omega)
+  Omega$Lambda1$scale <- Omega$Lambda1$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda1$kappa)
+  Omega$Lambda2$scale <- Omega$Lambda2$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda2$kappa)
+  Omega$Lambda3$scale <- Omega$Lambda3$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda3$kappa)
+  #Omega$Lambda4$scale <- Omega$Lambda4$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda4$kappa)
+  if (Omega$eps$hazard_cor < 0){Omega$eps$hazard_cor = 0.001}
+  Omega$vuln_coeff_adj <- Omega$vuln_coeff #lapply(Omega$vuln_coeff, function(x) x * Omega$Lambda2$scale)
+  Omega$eps_adj <- Omega$eps #lapply(Omega$eps, function(x) x * Omega$Lambda2$scale)
+  Omega$eps_adj$local <- Omega$eps$local / Omega$eps$hazard_mort # local mort / hazard wide mort = ratio
+  return(Omega)
+}
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 # Linear predictor calculations (act to modify the expected damage values)
@@ -290,24 +309,6 @@ fDamUnscaled_BD<-function(I,Params,Omega){
   return(h_0(I,Params$I0,Omega))
   #(h_0(I,Params$I0,Omega$theta) + 
   #   stochastic(Params$Np,Omega$eps_adj$local)) %>%return()
-}
-
-addTransfParams <- function(Omega, I0=Model$I0){
-  #Omega$theta$theta1 <- 0.6
-  Omega$Lambda1$loc <- Omega$Lambda1$nu #h_0(Omega$Lambda1$nu, I0, Omega)
-  Omega$Lambda2$loc <- Omega$Lambda2$nu #h_0(Omega$Lambda2$nu, I0, Omega)
-  Omega$Lambda3$loc <- Omega$Lambda3$nu #h_0(Omega$Lambda3$nu, I0, Omega)
-  #Omega$Lambda4$loc <- Omega$Lambda4$nu #h_0(Omega$Lambda4$nu, I0, Omega)
-  #h_10_minus_h_4.5 = h_0(10, I0, Omega) - h_0(4.5, I0, Omega)
-  Omega$Lambda1$scale <- Omega$Lambda1$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda1$kappa)
-  Omega$Lambda2$scale <- Omega$Lambda2$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda2$kappa)
-  Omega$Lambda3$scale <- Omega$Lambda3$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda3$kappa)
-  #Omega$Lambda4$scale <- Omega$Lambda4$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda4$kappa)
-  if (Omega$eps$hazard_cor < 0){Omega$eps$hazard_cor = 0.001}
-  Omega$vuln_coeff_adj <- Omega$vuln_coeff #lapply(Omega$vuln_coeff, function(x) x * Omega$Lambda2$scale)
-  Omega$eps_adj <- Omega$eps #lapply(Omega$eps, function(x) x * Omega$Lambda2$scale)
-  Omega$eps_adj$local <- Omega$eps$local / Omega$eps$hazard_mort # local mort / hazard wide mort = ratio
-  return(Omega)
 }
 
 # Calculate Mortality and Displacement probabilities from the unscaled damage
@@ -515,7 +516,7 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
     #remove inferred building damage and displacement observations:
     ODDy@impact <- ODDy@impact[!1:NROW(ODDy@impact) %in% which(ODDy@impact$impact %in% c('buildDam', 'displacement') & ODDy@impact$inferred == T),]
     
-    ODDy@impact$event_id = as.numeric(gsub(".*_(-?\\d+)$", "\\1", filer))
+    ODDy@impact$event_id =as.numeric(sub(".*?_(\\d+).*", "\\1", filer))
    
     #DispX requires event_i if introducing correlation between error terms in subsequent model samples (i.e. for correlated MCMC)
     event_i = ifelse(is.null(proposed$u), NA, which(ufiles==filer))

@@ -79,3 +79,8 @@ RCode/.Rhistory
 .gitignore~
 .Rproj.user
 .Rhistory
+
+!IIDIPUS_Input/ODDobjects/EQ20150425NPL_31_example
+!IIDIPUS_Input/ODDobjects/EQ20210814HTI_164_example
+!IIDIPUS_Input/ODDobjects/EQ20220727PHL_167_example
+!IIDIPUS_Results/mcmc_2025-04-10

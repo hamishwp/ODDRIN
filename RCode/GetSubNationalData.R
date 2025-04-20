@@ -61,7 +61,7 @@ readSubNatData <- function(subnat_file){
   #SubNatData$mortalityInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='mortality_exlusion_reason'))]-1)
   #SubNatData$displacementInferred <- 1:NROW(SubNatData) %in% (pink_cells$row[which(pink_cells$col==which(names(SubNatData)=='displacement_exlusion_reason'))]-1)
   
-  SubNatData = SubNatData[rowSums(!is.na(SubNatData[, c("mortality", "displacement", "buildDam", "buildDest", "buildDamDest")])) > 0, ]
+  SubNatData = SubNatData[rowSums(!is.na(SubNatData[, c("mortality", "displacement", "buildDam", "buildDest", "buildDamDest")])) > 0 | SubNatData$EventID==126, ]
   
   #ensure data is in the correct format:
   SubNatData$source_date <- openxlsx::convertToDate(SubNatData$source_date)
@@ -837,9 +837,13 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
   options(timeout = 500)
-  for (i in c(101:170)){#31,73,75,83,91,109,121,122)){#1:169){#c(89, 119, 122, 127, 133, 139, 150,151,152,164,165,166,167, 168,169)){#c(7,8,9,11,12,13,14,48,49,67,68,73,74,75,85,88,92,93,98,99,100,104,114, 128:163)){
+  
+  ufiles<-na.omit(list.files(path=paste0(dir,'IIDIPUS_Input_Alternatives/Apr25/ODDobjects/'),pattern=Model$haz,recursive = T,ignore.case = T))
+  #for (i in 128:129){
+  for (i in c( 160,161,164)){
+    
     print(i)
-    if (i==126) next
+    #if (i==126) next
     # Subset displacement and disaster database objects to not all NA
     SubNatDataByEvent[[i]] <- SubNatDataByEvent[[i]][rowSums(is.na(SubNatDataByEvent[[i]][,-1])) != ncol(SubNatDataByEvent[[i]])-1, ]
     miniDam<-SubNatDataByEvent[[i]]
@@ -869,50 +873,50 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
       EQparams=list(I0=4.3, minmag=5)
     }
     
-    # lhazSDF <- GetDisaster(miniDamSimplified, bbox = c(160, -11.8, 163, -9.7))
-    lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
-    if(is.null(lhazSDF)) {
-      #stop()
-      file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
-      writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', lhazSDF not found.'), file_conn)
-      close(file_conn) 
-      next
-    }
-    
-    # Create the ODD object:
-    ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified, agg_level=1),error=function(e) NULL)
-    if(is.null(ODDy)) {
-      #stop()
-      file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
-      writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', ODD object not created.'), file_conn)
-      close(file_conn) 
-      next
-    }
-    
-    
-    #Fetch building count data:
-    #ODDy_build <- tryCatch(AddBuildingCounts(ODDy, i, paste0(dir, folder_write, 'Building_count_notes')), error=function(e) NULL)
-    ODDy_build <- tryCatch(getBingBuildingsGlobal(ODDy, i, paste0(dir, folder_write, 'Building_count_notes')), error=function(e) NULL)
-    if(is.null(ODDy_build)) {
-      #stop()
-      file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
-      writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', Building counts not added.'), file_conn)
-      close(file_conn)
-    } else {
-      ODDy <- ODDy_build
-      rm(ODDy_build)
-    }
-    
-    iso3_ODDy <- unique(ODDy$ISO3C)$ISO3C
-    
-    # Create a unique hazard event name
-    namer<-paste0(ODDy@hazard,
-                  str_remove_all(as.character.Date(min(ODDy@hazdates)),"-"),
-                  unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
-                  "_",i)
-    HAZARDpath<-paste0(dir,folder_write, "HAZARDobjects/",namer)
-    saveHAZ(lhazSDF,HAZARDpath)
-    rm(lhazSDF)
+    # # lhazSDF <- GetDisaster(miniDamSimplified, bbox = c(160, -11.8, 163, -9.7))
+    # lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
+    # if(is.null(lhazSDF)) {
+    #   #stop()
+    #   file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
+    #   writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', lhazSDF not found.'), file_conn)
+    #   close(file_conn)
+    #   next
+    # }
+    # 
+    # # Create the ODD object:
+    # ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified, agg_level=1),error=function(e) NULL)
+    # if(is.null(ODDy)) {
+    #   #stop()
+    #   file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
+    #   writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', ODD object not created.'), file_conn)
+    #   close(file_conn)
+    #   next
+    # }
+    # 
+    # 
+    # #Fetch building count data:
+    # #ODDy_build <- tryCatch(AddBuildingCounts(ODDy, i, paste0(dir, folder_write, 'Building_count_notes')), error=function(e) NULL)
+    # ODDy_build <- tryCatch(getBingBuildingsGlobal(ODDy, i, paste0(dir, folder_write, 'Building_count_notes')), error=function(e) NULL)
+    # if(is.null(ODDy_build)) {
+    #   #stop()
+    #   file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
+    #   writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', Building counts not added.'), file_conn)
+    #   close(file_conn)
+    # } else {
+    #   ODDy <- ODDy_build
+    #   rm(ODDy_build)
+    # }
+    # 
+    # iso3_ODDy <- unique(ODDy$ISO3C)$ISO3C
+    # 
+    # # Create a unique hazard event name
+    # namer<-paste0(ODDy@hazard,
+    #               str_remove_all(as.character.Date(min(ODDy@hazdates)),"-"),
+    #               unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
+    #               "_",i)
+    # #HAZARDpath<-paste0(dir,folder_write, "HAZARDobjects/",namer)
+    # #saveHAZ(lhazSDF,HAZARDpath)
+    # #rm(lhazSDF)
     
     
     ODDy_with_impact <- tryCatch(updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1], i, folder_write),error=function(e) NULL)
@@ -1119,7 +1123,7 @@ UpdateBDData <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', fold
 
 
 
-moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/Nov24Agg'){
+moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/Apr25Agg'){
     ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
     ODD_foldertest<-paste0(dir, folder_in, '/ODDobjects/Test/')
     ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
@@ -1162,6 +1166,30 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/Nov24Agg'){
   #             to = paste0(BD_foldertest, file))
   #   file.remove(from = paste0(BD_folderall, file))
   # }
+}
+
+moveTestDataMatch <- function(folder_in='IIDIPUS_Input_Alternatives/Apr25Agg'){
+  ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
+  ODD_foldertest<-paste0(dir, folder_in, '/ODDobjects/Test/')
+  ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
+  #set.seed(1)
+  #ufiles <- ufiles[sample(1:length(ufiles), length(ufiles), replace=F)]
+  total_mortalities <- c()
+  #sort by mortality
+  
+  
+  ufiles_oldToMatch = list.files(path=paste0(dir, 'IIDIPUS_Input_Alternatives/Nov24Agg/ODDobjects/'),pattern=Model$haz,recursive = T,ignore.case = T)
+  for (file in ufiles){
+    match <- which(sub(".*/", "",  ufiles_oldToMatch) == file)
+    test_flag = grepl("^Test/", ufiles_oldToMatch[match])
+    ODD <- readODD(paste0(ODD_folderall, file))
+    if (test_flag){
+      file.copy(from = paste0(ODD_folderall, file),
+                to = paste0(ODD_foldertest, file))
+      file.remove(from = paste0(ODD_folderall, file))
+      options(warn = 1)
+    }
+  }
 }
 
 

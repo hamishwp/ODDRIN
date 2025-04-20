@@ -657,7 +657,14 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   Dam[notnans,,]<-aperm(simplify2array(lapply(CalcDam_out, function(x) x$samples)), perm=c(3,2,1))
   
   if (output=='SampledFull'){
-    return(Dam)
+    #return(Dam)
+    ODDy$SampledDisplacement = Dam[,1,1]
+    ODDy$SampledDisplacement[-notnans] = NA
+    ODDy$SampledMortality = Dam[,1,2]
+    ODDy$SampledMortality[-notnans] = NA
+    ODDy$SampledBuildDam = Dam[,1,3]
+    ODDy$SampledBuildDam[-notnans] = NA
+    return(ODDy)
   } else if (output == 'SampledTotal'){
     SampledTot <- colSums(Dam)
     df_SampledTot <- list()

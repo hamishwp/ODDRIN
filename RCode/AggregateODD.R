@@ -336,11 +336,11 @@ aggregateODDbyX <- function(ODD, aggFactor){
 }
 
 
-increaseAggregation_all <- function(folder_in='IIDIPUS_Input_Alternatives/Aug24'){
+increaseAggregation_all <- function(folder_in='IIDIPUS_Input_Alternatives/Apr25'){
   ODD_folderin<-paste0(dir, folder_in, '/ODDobjects/')
-  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_Agg5_Nov/')
+  ODD_folderout<-paste0(dir, folder_in, '/ODDobjects_Agg5/')
   ufiles<-list.files(path=ODD_folderin,pattern=Model$haz,recursive = T,ignore.case = T)
-  for (file in ufiles){
+  for (file in ufiles[c(160,161,164)]){#for (file in ufiles){
     event_id <- as.numeric(strsplit(file, "_")[[1]][2])
     print(event_id)
     ODDy <- readODD(paste0(ODD_folderin, file))

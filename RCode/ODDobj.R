@@ -658,12 +658,16 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   
   if (output=='SampledFull'){
     #return(Dam)
+    
     ODDy$SampledDisplacement = Dam[,1,1]
-    ODDy$SampledDisplacement[-notnans] = NA
     ODDy$SampledMortality = Dam[,1,2]
-    ODDy$SampledMortality[-notnans] = NA
     ODDy$SampledBuildDam = Dam[,1,3]
-    ODDy$SampledBuildDam[-notnans] = NA
+    nans_iso3 = which(is.na(ODD_df$ISO3C))
+    if(length(nans_iso3)>0){
+      ODDy$SampledDisplacement[nans_iso3] = NA
+      ODDy$SampledMortality[nans_iso3] = NA
+      ODDy$SampledBuildDam[nans_iso3] = NA
+    }
     return(ODDy)
   } else if (output == 'SampledTotal'){
     SampledTot <- colSums(Dam)

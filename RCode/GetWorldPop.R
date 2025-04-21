@@ -141,8 +141,26 @@ getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demograph
   
   bbox <- rbind(c(bbox_vect[1], bbox_vect[3]), c(bbox_vect[2],bbox_vect[4]))
   
-  nations <- GetNationsBbox(dir, bbox)
-  iso3c_all <- unique(nations$ISO3C)[which(!is.na(unique(nations$ISO3C)))]
+  if (file.exists(paste0(dir, 'Demography_Data/Population/gpw-v4-national-identifier-grid-rev11_30_sec_asc/gpw_v4_national_identifier_grid_rev11_lookup.txt'))){
+    #if available and downloaded when still online, use CIESIN data to label country of grid points
+    nations <- GetNationsBbox(dir, bbox)
+    iso3c_all <- unique(nations$ISO3C)[which(!is.na(unique(nations$ISO3C)))]
+  } else {
+    print('CIESIN data not downloaded (does not currently seem available online). Using coords2country() instead.')
+    #otherwise use coords2country()
+    res <- 1/60/2
+
+    nations <- raster(xmn = bbox[1,1], xmx = bbox[1,2],
+                ymn =bbox[2,1], ymx = bbox[2,2],
+                res = res, crs = CRS("+proj=longlat +datum=WGS84"))
+    
+    coords = xyFromCell(nations, 1:ncell(nations))
+    
+    values(nations) = as.factor(coords2country(coords))
+    
+    names(nations) = 'ISO3C'
+    iso3c_all = levels(nations)[[1]]$VALUE
+  }
   
   popy <- GetWorldPopISO3C(iso3c_all[1], year=year, constrained=F, folder=paste0(dir, folder)) %>% raster()
   popy_cropped <- crop(popy, bbox)
@@ -181,12 +199,22 @@ getWorldPop_ODD <- function(dir, year, bbox_vect, agg_level=2, folder='Demograph
   #spdf <- as(spat_agg, 'SpatialPixelsDataFrame')
   #spdf@data <- spdf@data[,-2, drop=F] #remove dummy
   
-  iso3_lookup <- data.frame(ISO3C=c(NA, unique(iso3c_all)), id=0:length(iso3c_all))
-  nations@data$order <- 1:NROW(nations@data)
-  nations@data %<>% merge(iso3_lookup)
-  nations@data <- nations@data[order(nations@data$order),]
+  if (file.exists(paste0(dir, 'Demography_Data/Population/gpw-v4-national-identifier-grid-rev11_30_sec_asc/gpw_v4_national_identifier_grid_rev11_lookup.txt'))){
+    #format slightly different when using CIESIN data
+    iso3_lookup <- data.frame(ISO3C=c(NA, unique(iso3c_all)), id=0:length(iso3c_all))
+    nations@data$order <- 1:NROW(nations@data)
+    nations@data %<>% merge(iso3_lookup)
+    nations@data <- nations@data[order(nations@data$order),]
+    rastered_iso3 <- rasterize(nations, spat_agg, field='id', fun=mode_non_na)
     
-  rastered_iso3 <- rasterize(nations, spat_agg, field='id', fun=mode_non_na)
+  } else {
+    nations_point = rasterToPoints(nations, spatial=T)
+    #nations_point$ISO3C = levels(nations)[[1]]$VALUE[nations_point$ISO3C ]
+    
+    rastered_iso3 = rasterize(nations_point, spat_agg, field='ISO3C', fun=mode_non_na)
+    iso3_lookup <- data.frame(ISO3C=c(NA, iso3c_all), id=0:length(iso3c_all))
+  }
+  
   rastered_iso3_df <- data.frame(id=values(rastered_iso3))
   rastered_iso3_df$order <- 1:NROW(rastered_iso3_df)
   rastered_iso3_df %<>% merge(iso3_lookup, all.x=T)

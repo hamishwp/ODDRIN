@@ -72,7 +72,6 @@ LoadLibraries<-function(packred, loadRmpi=F){
   library(terra) 
   library(DescTools)
   library(gstat)
-  library(Matrix)
   if (loadRmpi){library(Rmpi)}
   
   if(!packred) {
@@ -122,7 +121,7 @@ GetODDPackages<-function(packred, loadRmpi=F){
   list.of.packages <- c('tidyverse', 'magrittr', 'pracma', 'parallel',
                         'mvtnorm', 'abind', 'countrycode', 'raster', 'scoringRules',
                         'viridis', 'gridExtra', 'devtools', 'shiny', 'usethis',
-                        'LaplacesDemon', 'cowplot', 'DescTools', 'gstat', 'Matrix')
+                        'LaplacesDemon', 'cowplot', 'DescTools', 'gstat')
   if (loadRmpi){ list.of.packages <- c(list.of.packages,'Rmpi')}
   
   if(!packred) list.of.packages<-c(list.of.packages,
@@ -201,16 +200,16 @@ if (!packred){
   #   stop("GetEnv.R problem finding GDP data")
   # }
   
-  #CIESIN Population Data:
-  #even though we are now using WorldPop rather than CIESIN, we are still using the nation identifiers from the CIESIN data (national_identifier_grid files)
-  if(!file.exists(paste0(dir,"Demography_Data/Population/gpw-v4-population-count-2015/gpw_v4_population_count_adjusted_to_2015_unwpp_country_totals_rev11_2015_30_sec_1.asc"))){
-    print("Please download manually the CIESIN population count dataset from")
-    print("https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-adjusted-to-2015-unwpp-country-totals-rev11/data-download")
-    print("then extract the file and make sure it can be found at the location")
-    print(filers[2])
-    print("For more information, please look at the `Installation` section of the README.md file on the Github landing page ")
-    stop("GetEnv.R problem finding CIESIN population data")
-  }
+  # CIESIN Population Data (doesn't currently seem to be available online so using coord2country() instead)
+  # #even though we are now using WorldPop rather than CIESIN, we are still using the nation identifiers from the CIESIN data (national_identifier_grid files)
+  # if(!file.exists(paste0(dir,"Demography_Data/Population/gpw-v4-population-count-2015/gpw_v4_population_count_adjusted_to_2015_unwpp_country_totals_rev11_2015_30_sec_1.asc"))){
+  #   print("Please download manually the CIESIN population count dataset from")
+  #   print("https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-adjusted-to-2015-unwpp-country-totals-rev11/data-download")
+  #   print("then extract the file and make sure it can be found at the location")
+  #   print(filers[2])
+  #   print("For more information, please look at the `Installation` section of the README.md file on the Github landing page ")
+  #   stop("GetEnv.R problem finding CIESIN population data")
+  # }
   
   #GDL data:
   if(!file.exists(paste0(dir,"Demography_Data/SocioEconomic/GlobalDataLab/GDL Shapefiles V6/shdi2022_World_large.shp"))){

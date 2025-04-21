@@ -239,6 +239,47 @@ Furthermore, you will also be required to download the following datasets:
   - Then download the [high resolution population count dataset](https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-adjusted-to-2015-unwpp-country-totals-rev11/data-download) - Taken from the article produced by [Center for International Earth Science Information Network - CIESIN](https://doi.org/10.7927/H4F47M65). Please download **all years via the *Single Year* option, in ASCII format, at a resolution of 30 arc-seconds** as shown in the screenshot below. From what I remember, you may need to download each year at a time, otherwise the CIESIN servers hang. In all cases, you need the 2015 file as this is used to normalise the ODDRIN population values. The ASCII format is to ensure quick computation, and also to ensure that no problems are found when crossing the longitude=0 plane. Once downloaded, place the files in folders separately split by year, such that folders such as `paste0(dir,"Demography_Data/Population/gpw-v4-population-count-2015/")` or `paste0(dir,"Demography_Data/Population/gpw-v4-population-count-2005/")` exist. The files should then exist inside the correct folder under, for example, the name `gpw_v4_population_count_adjusted_to_2015_unwpp_country_totals_rev11_2015_30_sec_1.asc` (for the 2015 year). Please check that there should be 8 files in each folder finishing with the same extension `.asc` but as `...30_sec_2.asc`, `...30_sec_3.asc`, `...30_sec_4.asc` etc.
   - Download the [EM-DAT database](https://public.emdat.be/) using the query tool and selecting `Natural -> Geophysical -> Earthquake` as the Disaster Classification and filtering from 2008 - 2021. Name the file `emdat.xlsx` and save in the folder `Displacement_Data` such that the folder `paste0(dir,"Displacement_Data/emdat.xlsx")` exists.
 
+  ### Required Datasets
+
+In addition to installing the necessary packages, you are also required to **manually download** several datasets due to licensing and access restrictions. Please follow the instructions below carefully:
+<!--
+- **Sub-national GDP dataset**  
+  Download the dataset from [Dryad Repository](https://datadryad.org/stash/dataset/doi:10.5061/dryad.dk1j0), as described in [Kummu et al., 2020](https://www.nature.com/articles/sdata20184). After downloading, place the file named `GDP_per_capita_PPP_1990_2015_v2.nc` inside the folder `Demography_Data/SocioEconomic/KUMMU/` (you will need to create this folder). You should be able to confirm the file has been correctly placed using the R check:  
+  `file.exists(paste0(dir,"Demography_Data/SocioEconomic/KUMMU/GDP_per_capita_PPP_1990_2015_v2.nc")) == TRUE`.
+
+- **High-resolution population count dataset**  
+  Download the [GPWv4 population count dataset](https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-adjusted-to-2015-unwpp-country-totals-rev11/data-download) from [CIESIN](https://doi.org/10.7927/H4F47M65). Use the *Single Year* option and choose the **ASCII format at 30 arc-second resolution**. You will need to download files **year by year** (e.g., 2000, 2005, 2010, 2015), ensuring that each year has its own folder (e.g., `Demography_Data/Population/gpw-v4-population-count-2015/`). For the model, only the 2015 dataset is required, particularly the file named:  
+  `gpw_v4_population_count_adjusted_to_2015_unwpp_country_totals_rev11_2015_30_sec_1.asc`  
+  Make sure this file exists at:  
+  `file.exists(paste0(dir,"Demography_Data/Population/gpw-v4-population-count-2015/gpw_v4_population_count_adjusted_to_2015_unwpp_country_totals_rev11_2015_30_sec_1.asc")) == TRUE`.  
+  Each folder should contain 8 `.asc` files (`...30_sec_1.asc` to `...30_sec_8.asc`).
+-->
+- **Global Data Lab Vulnerability Data (SHDI/SGDI)**  
+  You will need to download two sets of files:
+  1. The **GDL shapefiles** from [this link](https://globaldatalab.org/asset/378/GDL%20Shapefiles%20V7.zip) (requires free account). Extract and place all files in:  
+     `Demography_Data/SocioEconomic/GlobalDataLab/GDL Shapefiles V6/`. Ensure that the file `shdi2022_World_large.shp` is in that folder.
+  2. The **CSV data** containing SHDI/SGDI values from [this link](https://globaldatalab.org/asset/348/SHDI-SGDI-Total%207.0.csv) (also requires free account). Name the file exactly:  
+     `SHDI-SGDI-Total 7.0.csv` and place it in:  
+     `Demography_Data/SocioEconomic/GlobalDataLab/`.
+
+- **VS30 dataset (soil shear wave velocity)**  
+  Download the dataset from the [USGS VS30 page](https://www.usgs.gov/programs/earthquake-hazards/science/vs30-models-and-data). Place the extracted `global_vs30.tif` and any auxiliary files in:  
+  `Hazard_Data/global_vs30_tif/`.
+
+- **Global Earthquake Hazard Frequency Data (PGA)**  
+  Download the most recent version of the PGA hazard data from the [Global Earthquake Model's GSHM page](https://www.globalquakemodel.org/product/global-seismic-hazard-map). Extract the file named:  
+  `v2023_1_pga_475_rock_3min.tif`  
+  and place it in:  
+  `Hazard_Data/GEM-GSHM_PGA-475y-rock_v2023/`.
+
+- **High-resolution population count dataset**  
+  Does not currently seem available online. If not downloaded, code uses coords2country() in its place (and results should be similar), but download instructions are as follows if it does become available again:
+  Download the [GPWv4 population count dataset](https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-adjusted-to-2015-unwpp-country-totals-rev11/data-download) from [CIESIN](https://doi.org/10.7927/H4F47M65). Use the *Single Year* option and choose the **ASCII format at 30 arc-second resolution**. You will need to download files **year by year** (e.g., 2000, 2005, 2010, 2015), ensuring that each year has its own folder (e.g., `Demography_Data/Population/gpw-v4-population-count-2015/`). For the model, only the 2015 dataset is required, particularly the file named:  
+  `gpw_v4_population_count_adjusted_to_2015_unwpp_country_totals_rev11_2015_30_sec_1.asc`  
+  Make sure this file exists at:  
+  `file.exists(paste0(dir,"Demography_Data/Population/gpw-v4-population-count-2015/gpw_v4_population_count_adjusted_to_2015_unwpp_country_totals_rev11_2015_30_sec_1.asc")) == TRUE`.  
+  Each folder should contain 8 `.asc` files (`...30_sec_1.asc` to `...30_sec_8.asc`).
+
 ![*Figure 3: screenshot of the CIESIN website download options for the population count data used in the ODDRIN software*](https://i.ibb.co/723h9BX/Screenshot-from-2022-01-05-16-20-30.png)
 
 ## Environment Variables

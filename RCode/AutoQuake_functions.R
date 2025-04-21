@@ -61,7 +61,8 @@ prepareODD <- function(dir, input, getGADMregions=T, folder_write='IIDIPUS_Input
   
   if (is.null(input$iso3)){
     #find most common country to name the ODD object
-    input$iso3 = na.omit(names(sort(table(coords2country(lhazSDF[[2]]@coords)), decreasing=T)))[1]
+    coords = xyFromCell(lhazSDF[[2]], 1:ncell(lhazSDF[[2]]))
+    input$iso3 = na.omit(names(sort(table(coords2country( coords)), decreasing=T)))[1]
   } 
   namer<-paste0(lhazSDF$hazard_info$hazard, str_remove_all(as.character.Date(min(lhazSDF$hazard_info$eventdates)),"-"),input$iso3, "_-1")
   saveHAZ(lhazSDF, paste0(dir, folder_write, 'HAZARDobjects/', namer))

@@ -304,7 +304,9 @@ Please run the `InstallationChecks.R` file:
 
 
 ## Usage/Examples
+The files InstallationChecks.R, Main.R, and Autoquake.R provide usage examples.
 
+<!--
 In the folder `IIDIPUS_Input`, there are a few example files, which contain the three different objects used by ODDRIN: `HAZARD`, `ODD` and `BD`, corresponding to the object containing hazard information and raster data, then the principal ODDRIN object that is used to predict population displacement, and the building damage object, respectively. You can have a basic explore using the following:
 
 ```R
@@ -374,5 +376,5 @@ To run the model parameter training algorithm, use the `Main.R` file:
 source('RCode/Main.R')
 output<-IIDIPUSModelTraining()
 
-
 ```
+-->

@@ -82,7 +82,7 @@ IIDIPUSModelTraining<-function(extractedData=T){
                   iVals=iVals,
                   unfinished = F,
                   oldtag=NULL, 
-                  tag_notes=NULL)
+                  tag_notes=tag_notes)
   
   #Alternatively, using ABCSMC:
   # output <- ABCSMC(dir=dir,

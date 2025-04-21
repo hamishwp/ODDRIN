@@ -232,14 +232,14 @@ To install the full ODDRIN package on Windows, first install Ubuntu from the Mic
 Follow all the remaining steps after the setting of the LD_LIBRARY_PATH instruction as detailed in the *'Linux and Mac Installation'* section above, i.e. check that the folder actually exists, restart your computer, etc. For the sudo R CMD, please ensure that R is installed for use on Ubuntu, otherwise you will get a command not found error.
 
 ##### Data to be Downloaded Manually
-
+<!--
 Furthermore, you will also be required to download the following datasets:
 
   - Download the [sub-national GDP dataset](https://datadryad.org/stash/dataset/doi:10.5061/dryad.dk1j0) - Taken from the article by [Kummu, et al, 2020](https://www.nature.com/articles/sdata20184). Once downloaded, place the file called `GDP_per_capita_PPP_1990_2015_v2.nc` in the folder `Demography_Data/SocioEconomic/KUMMU/` which you must create inside the ODDRIN folder such that, from the console, `file.exists(paste0(dir,"Demography_Data/SocioEconomic/KUMMU/GDP_per_capita_PPP_1990_2015_v2.nc"))==TRUE`.
   - Then download the [high resolution population count dataset](https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-adjusted-to-2015-unwpp-country-totals-rev11/data-download) - Taken from the article produced by [Center for International Earth Science Information Network - CIESIN](https://doi.org/10.7927/H4F47M65). Please download **all years via the *Single Year* option, in ASCII format, at a resolution of 30 arc-seconds** as shown in the screenshot below. From what I remember, you may need to download each year at a time, otherwise the CIESIN servers hang. In all cases, you need the 2015 file as this is used to normalise the ODDRIN population values. The ASCII format is to ensure quick computation, and also to ensure that no problems are found when crossing the longitude=0 plane. Once downloaded, place the files in folders separately split by year, such that folders such as `paste0(dir,"Demography_Data/Population/gpw-v4-population-count-2015/")` or `paste0(dir,"Demography_Data/Population/gpw-v4-population-count-2005/")` exist. The files should then exist inside the correct folder under, for example, the name `gpw_v4_population_count_adjusted_to_2015_unwpp_country_totals_rev11_2015_30_sec_1.asc` (for the 2015 year). Please check that there should be 8 files in each folder finishing with the same extension `.asc` but as `...30_sec_2.asc`, `...30_sec_3.asc`, `...30_sec_4.asc` etc.
   - Download the [EM-DAT database](https://public.emdat.be/) using the query tool and selecting `Natural -> Geophysical -> Earthquake` as the Disaster Classification and filtering from 2008 - 2021. Name the file `emdat.xlsx` and save in the folder `Displacement_Data` such that the folder `paste0(dir,"Displacement_Data/emdat.xlsx")` exists.
 
-  ### Required Datasets
+  ### Required Datasets -->
 
 In addition to installing the necessary packages, you are also required to **manually download** several datasets due to licensing and access restrictions. Please follow the instructions below carefully:
 <!--
@@ -273,7 +273,8 @@ In addition to installing the necessary packages, you are also required to **man
   `Hazard_Data/GEM-GSHM_PGA-475y-rock_v2023/`.
 
 - **High-resolution population count dataset**  
-  Does not currently seem available online. If not downloaded, code uses coords2country() in its place (and results should be similar), but download instructions are as follows if it does become available again:
+  Note that the CIESIN data does not currently seem to be available online. This dataset is not necessary as, if not downloaded, coords2country() is instead used to label the country of each grid cell. If the data does become available again, the download instructions are as follows:
+
   Download the [GPWv4 population count dataset](https://sedac.ciesin.columbia.edu/data/set/gpw-v4-population-count-adjusted-to-2015-unwpp-country-totals-rev11/data-download) from [CIESIN](https://doi.org/10.7927/H4F47M65). Use the *Single Year* option and choose the **ASCII format at 30 arc-second resolution**. You will need to download files **year by year** (e.g., 2000, 2005, 2010, 2015), ensuring that each year has its own folder (e.g., `Demography_Data/Population/gpw-v4-population-count-2015/`). For the model, only the 2015 dataset is required, particularly the file named:  
   `gpw_v4_population_count_adjusted_to_2015_unwpp_country_totals_rev11_2015_30_sec_1.asc`  
   Make sure this file exists at:  

@@ -16,7 +16,7 @@ dir<-directory<- "/home/manderso/Documents/GitHub/ODDRIN/" #"./" #"/home/hamishw
 # Set the working directory from your environment variables
 setwd(directory)
 
-packred<-F
+packred<-T
 loadRmpi<-F
 
 # Extract Environment Variables

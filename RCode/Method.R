@@ -1008,7 +1008,7 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
     
   } else { 
     #Collect relevant information from the unfinished sample
-    UnfinishedAlgoResults <- retrieve_UnfinishedAlgoResults_AMCMC3(dir, oldtag, AlgoResults)
+    UnfinishedAlgoResults <- retrieve_UnfinishedAlgoResults_AMCMC(dir, oldtag, AlgoResults)
     AlgoResults <- UnfinishedAlgoResults$AlgoResults
     s_start <- UnfinishedAlgoResults$s_start
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/mcmc_",tag)) 

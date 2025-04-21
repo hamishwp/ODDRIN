@@ -1,5 +1,14 @@
+
+#change the working directory to the location of cloned ODDRIN repository:
+dir<-directory<- "/home/manderso/Documents/ODDRIN-master/" #"./" #"/home/hamishwp/Documents/BEAST/Coding/Oxford/ODDRIN/"
+# Set the working directory from your environment variables
+setwd(directory)
+
+packred<-T
+loadRmpi<-F
+
 # Extract Environment Variables
-source('RCode/GetEnv.R')
+#source('RCode/GetEnv.R')
 # Download and install the necessary packages:
 source('RCode/GetODDPackages.R')
 # Extract model functions and priors
@@ -28,19 +37,27 @@ ODDy%<>%DispX(Omega = Omega,center = Model$center, Method = AlgoParams, output='
 plot(ODDy$SampledMortality)
 plot(ODDy$SampledDisplacement)
 
-# #@@@@@@@@@@@@@@@ TEST 1: DISPLACEMENT PREDICTIONS @@@@@@@@@@@@@@@#
-# if(!(sum(ODDy$Disp)>1e5 & sum(ODDy$Disp)<4e5)) { stop("Test 1 failed - displacement predictions with the example ODD object for HTI EQ 14-08-2021 is erroneous")
-# } else print("Test 1 complete - displacement predictions with the example ODD object for HTI EQ 14-08-2021 are reasonable")
-# #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#
-# 
-# # Building damage assessment data from satellite image data (UNOSAT & Copernicus), in the 'BD' class format
-# BDy<-readRDS(paste0(dir,"IIDIPUS_Input/BDobjects/EQ20210814HTI_10919_example"))
-# # Test to see if the building damage prediction calculations are working
-# BDy%<>%BDX(Omega = Omega,Model = Model, Method = AlgoParams, output='LL')
-# 
-# #@@@@@@@@@@@@@@@ TEST 2: BUILDING DAMAGE PREDICTIONS @@@@@@@@@@@@@@@#
-# if(!(sum(BDy$ClassPred=="moderate")>800 & sum(BDy$ClassPred=="severe")>100)) { stop("Test 2 failed - building damage predictions with the example ODD object for HTI EQ 14-08-2021 is erroneous")
-# } else print("Test 2 complete - building damage predictions with the example ODD object for HTI EQ 14-08-2021 are reasonable")
-# #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#
+
+#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+# Now check ability to download new ODD objects (and run Autoquake.R)
+#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+packred<-F
+loadRmpi<-F
+
+source('RCode/GetODDPackages.R')
+source('RCode/AutoQuake.R')
+
+input<-list(
+  sdate=as.Date("2019-12-13"), # "YYYY-MM-DD"
+  fdate=as.Date("2019-12-17"), # "YYYY-MM-DD"
+  iso3="PHL", # Country code in ISO-3C form
+  datadir=dir, # Location of the main folder to access the data 
+  plotdir="Plots/" # Location for plots as paste0(datadir,plotdir)
+)
+
+ODDy <- AutoQuake(input)
+
+
 
 

@@ -39,7 +39,8 @@ saveHAZ <- function(lhazSDF, path){
     if(class(lhazSDF[[i]])=='HAZARD'){
       haz_list = list()
       slotnames = slotNames(lhazSDF[[i]])
-      for (slot in slotnames[slotnames!='ptr']){
+      pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', ifelse('pnt' %in% slotnames, 'pnt', 'pntr'))
+      for (slot in slotnames[slotnames!=pointer_slot]){
         haz_list[[slot]] = slot(lhazSDF[[i]], slot)
       }
       haz_list$spatrast <- wrap(lhazSDF[[i]])
@@ -55,10 +56,11 @@ readHAZ <- function(path){
     if(!is.null(lhazSDF[[i]]$spatrast)){
       .Object <- new('HAZARD')
       slotnames <- slotNames(lhazSDF[[i]])
-      for (slot in slotnames[slotnames!='ptr']){
+      pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', ifelse('pnt' %in% slotnames, 'pnt', 'pntr'))
+      for (slot in slotnames[slotnames!=pointer_slot]){
         slot(.Object, slot) = lhazSDF[[i]][[slot]]
       }
-      .Object@ptr = unwrap(lhazSDF[[i]]$spatrast)@ptr
+      slot(.Object, pointer_slot) = slot(unwrap(lhazSDF[[i]]$spatrast), pointer_slot)
       lhazSDF[[i]] <- .Object
     }
   }
@@ -103,7 +105,7 @@ setMethod(f="initialize", signature="HAZARD",
               #proj4string(e) <- "+proj=longlat +datum=WGS84 +ellps=WGS84"
 
               obj%<>%terra::crop(extent(c(bbox[c(1,3,2,4)])))
-              .Object@ptr <- obj@ptr
+              .Object@pntr <- obj@pntr
               # .Object@file <- obj@file
               # .Object@data <- obj@data
               # .Object@legend <- obj@legend

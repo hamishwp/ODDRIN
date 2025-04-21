@@ -234,7 +234,7 @@ setMethod(f="initialize", signature="ODD",
             print("Fetching population data")
             #obj <-GetPopulationBbox(.Object@dir,bbox=bbox)
             obj <- getWorldPop_ODD(.Object@dir, year, bbox, agg_level)
-            .Object@ptr <- obj@ptr
+            .Object@pntr <- obj@pntr
             # .Object@file <- obj@file
             # .Object@data <- obj@data
             # .Object@legend <- obj@legend

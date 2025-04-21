@@ -142,7 +142,29 @@ getMissingWID <- function(missing_iso3c, WID, WID_all){
     missing_iso3c <- missing_iso3c[-which(missing_iso3c=='VUT')]
   } 
   if (length(missing_iso3c) > 0){
-    stop(paste('No WID data for', missing_iso3c, 'for', year))
+    #stop(paste('No WID data for', missing_iso3c, 'for', year))
+    if (nrow(WID)>0){
+      #Cannot find WID data. Use WID data from another exposed country instead:
+      iso3_used_instead = WID$iso3[1]
+      WID_copied = WID %>% filter(iso3==iso3_used_instead)
+      for (missing_iso3c_single in c(missing_iso3c)){
+        WID_copied$iso3 = missing_iso3c_single
+        WID %<>% rbind(WID_copied)
+        warning(paste0('No WID (World Inequality Database) data for ', missing_iso3c, ' for ', WID_all$year[1],'. Instead using WID data for ', iso3_used_instead, '.'))
+      }
+    } else {
+      # Cannot find WID data.
+      # Use Mexico 2021 WID data as default (high income inequality so reflects close to worst case scenario)
+      default_WID <- c(0.0001, 0.0029, 0.0137, 0.0220, 0.0304, 0.0408, 0.0546, 0.0815, 0.1395, 0.6145)
+      for (missing_iso3c_single in c(missing_iso3c)){
+        WID_iso3 = data.frame(iso3=missing_iso3c_single,
+                              percentile=Model$WID_perc, 
+                              value = default_WID)
+        WID %<>% rbind(WID_iso3)
+        warning(paste0('No WID (World Inequality Database) data for ', missing_iso3c_single, ' for ', WID_all$year[1],'. Using default (Mexico 2021) instead.'))
+      }
+      
+    }
   }
   return(WID)
 }

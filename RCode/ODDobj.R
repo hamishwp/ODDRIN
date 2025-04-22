@@ -280,13 +280,13 @@ setMethod(f="initialize", signature="ODD",
             if(year==AsYear(Sys.Date())) year<-AsYear(Sys.Date())-1
             print("Extract country indicators - WID:")
             
-            WID<-GetWID_perc(Model$WID_perc,unique(.Object[['ISO3C']])$ISO3C,year)
+            WID<- data.frame() #GetWID_perc(Model$WID_perc,unique(.Object[['ISO3C']])$ISO3C,year)
             
             
             #stop("Add the full variables to the cIndies data.frame")
             # Bind it all together!
             .Object@cIndies<-WID
-            .Object@cIndies$value[which(.Object@cIndies$value==0)] = 0.0001 # 0 values cause issues when applying log transform to GNIc
+            #.Object@cIndies$value[which(.Object@cIndies$value==0)] = 0.0001 # 0 values cause issues when applying log transform to GNIc
             
             # Here we add the vulnerabilities used in the linear predictor
             #.Object@ISO3C <- levels(.Object[['ISO3C']])[[1]][[1]]$VALUE
@@ -325,6 +325,10 @@ setMethod(f="initialize", signature="ODD",
 #   if(!is.null(var)) cIndies%<>%filter(variable%in%var)
 #   cIndies
 # })
+
+#xml, rworldxtra
+#ODDobjects and HAZARDobjects in new events
+
 
 ExtractCIndy<- function(ODD,iso = NULL,var=NULL){
   cIndies<-ODD@cIndies
@@ -385,7 +389,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   
   # Income distribution percentiles & extract income percentile  
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
-  Sinc<-ExtractCIndy(ODD,var = SincN)
+  Sinc<- data.frame() #ExtractCIndy(ODD,var = SincN)
   
   #------------------------- GAUSSIAN PROCESS OVER ERRORS:
   
@@ -657,8 +661,8 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   Dam[notnans,,]<-aperm(simplify2array(lapply(CalcDam_out, function(x) x$samples)), perm=c(3,2,1))
   
   if (output=='SampledFull'){
-    #return(Dam)
-    
+    return(Dam)
+  } else if (output=='ODDyWithSampled'){
     ODDy$SampledDisplacement = Dam[,1,1]
     ODDy$SampledMortality = Dam[,1,2]
     ODDy$SampledBuildDam = Dam[,1,3]

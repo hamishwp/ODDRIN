@@ -55,7 +55,8 @@ input%<>%append(list(Model=Model, # Model parameters - equations, parameters, ..
 AutoQuake<-function(input,predImpact=T, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/'){
   
   # Collect hazard, population and vulnerability data:
-  ODDy_with_namer <- prepareODD(dir, input, getGADMregions=T, folder_write=folder_write)
+  options(timeout = 500)
+  ODDy_with_namer <- prepareODD(dir, input, getGADMregions=F, folder_write=folder_write)
   ODDy = ODDy_with_namer$ODDy
   namer = ODDy_with_namer$namer
   

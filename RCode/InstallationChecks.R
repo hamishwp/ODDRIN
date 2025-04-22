@@ -32,7 +32,7 @@ post_samples = post_samples[max(1, s_finish-1000):s_finish,] #take the last 1000
 Omega = post_samples[sample(1:nrow(post_samples),1),] %>% relist(skeleton=Model$skeleton) %>% addTransfParams()
 
 # Test to see if the displacement prediction calculations are working
-ODDy%<>%DispX(Omega = Omega,center = Model$center, Method = AlgoParams, output='SampledFull')
+ODDy%<>%DispX(Omega = Omega,center = Model$center, Method = AlgoParams, output='ODDyWithSampled')
 
 plot(ODDy$SampledMortality)
 plot(ODDy$SampledDisplacement)

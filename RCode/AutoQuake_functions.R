@@ -47,6 +47,21 @@ prepareODD <- function(dir, input, getGADMregions=T, folder_write='IIDIPUS_Input
   if (!dir.exists(write_loc)) {
     dir.create(write_loc, recursive = TRUE)
   }
+  if (!dir.exists(paste0(write_loc,'HAZARDobjects'))){
+    dir.create(paste0(write_loc,'HAZARDobjects'))
+  }
+  if (!dir.exists(paste0(write_loc,'ODDobjects'))){
+    dir.create(paste0(write_loc,'ODDobjects'))
+  } 
+  if (!dir.exists(paste0(write_loc,'tmp_polygons'))){
+    dir.create(paste0(write_loc,'tmp_polygons'))
+  }
+  if (!dir.exists(paste0(write_loc,'ODDobjectsWithImpact'))){
+    dir.create(paste0(write_loc,'ODDobjectsWithImpact'))
+  }
+  if (!dir.exists(paste0(write_loc,'ODDobjectsWithImpact/sampled_full'))){
+    dir.create(paste0(write_loc,'ODDobjectsWithImpact/sampled_full'))
+  }
   
   #getGADM
   if (!is.null(input$sdate)){ input$sdate %<>% as.Date()}
@@ -77,11 +92,25 @@ prepareODD <- function(dir, input, getGADMregions=T, folder_write='IIDIPUS_Input
     print('Dividing spatial grid-cells into administrative regions')
     gadm_regions <- find_subnat_regions(ODDy, -1)
     polygons_list <- create_polygons_list(gadm_regions)
-    saveRDS(list(gadm_regions=gadm_regions, polygons_list=polygons_list), paste0(dir, folder_write, 'tmp/', namer, 'polygons')) # save intermediary objects just in case something crashes
+    saveRDS(list(gadm_regions=gadm_regions, polygons_list=polygons_list), paste0(dir, folder_write, 'tmp_polygons/', namer, 'polygons')) # save intermediary objects just in case something crashes
     ODDy <- addODDPolygons(ODDy, polygons_list)
     saveODD(ODDy, paste0(dir, folder_write, 'ODDobjects/', namer)) # again, save frequently just in case something crashes
     ODDy <- addPolygonsToImpact(ODDy)
     saveODD(ODDy, paste0(dir, folder_write, 'ODDobjects/', namer))
+  } else {
+    ODDy@impact= data.frame(
+      iso3='TOT',
+      sdate=ODDy@hazdates[1],
+      impact=c('mortality', 'displacement', 'buildDam'),
+      observed=NA,
+      qualifier=NA,
+      inferred=F,
+      MAR=F,
+      build_type=NA,
+      polygon=1
+    )
+    ODDy@polygons = list(list(name='TOTAL', indexes=1:ncell(ODDy), weights=rep(1, ncell(ODDy))))
+    
   }
   
   #plot to make sure all is ok:
@@ -117,11 +146,11 @@ PosteriorImpactPred <- function(ODDy,
   ODDy_with_sampledfull <- sampleImpactODD(ODDy, AlgoResults, N_samples = 100)
   ODDyWithImpact = ODDy_with_sampledfull$ODDy
   sampled_full = ODDy_with_sampledfull$sampled_full
-  saveODD(ODDyWithImpact, paste0(dir,folder_write, namer, '_WithImpactSummaries'))
-  saveRDS(sampled_full, paste0(dir,folder_write,'tmp/', namer, '_fullSampledImpact'))
+  saveODD(ODDyWithImpact, paste0(dir,folder_write, 'ODDobjectsWithImpact/',namer, '_WithImpactSummaries'))
+  saveRDS(sampled_full, paste0(dir,folder_write,'ODDobjectsWithImpact/sampled_full', namer, '_fullSampledImpact'))
   
   ODDyWithAggImpact <- aggregateSampledImpact(ODDyWithImpact, sampled_full)
-  saveODD(ODDyWithAggImpact, paste0(dir, folder_write, "ODDAggobjects/",namer, '_WithImpact200'))
+  saveODD(ODDyWithAggImpact, paste0(dir, folder_write, 'ODDobjectsWithImpact/',namer, '_WithImpact200'))
   
   return(list(sampled_full=sampled_full, ODDyWithImpact=ODDyWithImpact))
   
@@ -816,7 +845,7 @@ ODDRIN_vs_PAGER_hists <- function(ODDy, sampled_full, impact_type = 'mortality')
   #tot_impact = colSums(as.matrix(plot_df[,grep(impact_type_samples, names(plot_df))]))
   impact_i = which(c('displacement', 'mortality', 'buildDam') == impact_type)
   tot_impact = colSums(sampled_full[,impact_i,])
-  folderin_haz <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/HAZARDobjects/'
+  folderin_haz <- paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/HAZARDobjects/')
   ufiles_haz <- na.omit(list.files(path=folderin_haz,pattern=Model$haz,recursive = T,ignore.case = T))
   
 
@@ -831,17 +860,30 @@ ODDRIN_vs_PAGER_hists <- function(ODDy, sampled_full, impact_type = 'mortality')
                             ODDRIN_prob = numeric(),
                             PAGER_prob = numeric())
   
-  prob_mult <- 1/sum(unlist(lapply(HAZy$hazard_info$alertfull[[which.max.mmi]]$bins, function(x) return(x$probability)))) # some sum to 1 and some to 100
+  bins = HAZy$hazard_info$alertfull[[which.max.mmi]]$bins
+  
+  if (is.null(bins)){
+    bins = list(list(min=0, max=1, probability=0),
+                list(min=1, max=10, probability=0),
+                list(min=10, max=100, probability=0),
+                list(min=100, max=1000, probability=0),
+                list(min=1000, max=10000, probability=0),
+                list(min=10000, max=100000, probability=0),
+                list(min=100000, max=10000000, probability=0))
+    prob_mult = 1
+  } else {
+    prob_mult <- 1/sum(unlist(lapply(bins, function(x) return(x$probability)))) # some sum to 1 and some to 100
+  }
   
   for (j in 1:7){
     oddrin_preds <- tot_impact
-    oddrin_prob = mean((oddrin_preds >= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$min) & (oddrin_preds <= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max))
+    oddrin_prob = mean((oddrin_preds >= bins[[j]]$min) & (oddrin_preds <= bins[[j]]$max))
     
     binned_preds %<>% add_row(
-      bin_lower = HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$min,
-      bin_upper = HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max,
-      ODDRIN_prob =  mean((oddrin_preds >= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$min) & (oddrin_preds <= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max)),
-      PAGER_prob = HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$probability * prob_mult
+      bin_lower = bins[[j]]$min,
+      bin_upper = bins[[j]]$max,
+      ODDRIN_prob =  mean((oddrin_preds >= bins[[j]]$min) & (oddrin_preds <= bins[[j]]$max)),
+      PAGER_prob = bins[[j]]$probability * prob_mult
     )
   }
   binned_preds$bin_upper[1] = 0

@@ -83,7 +83,7 @@ LoadLibraries<-function(packred, loadRmpi=F){
     library(lutz)
     library(xml2)
     library(gstat)
-    library(wid)
+    #library(wid)
     library(geojsonio)
     library(jsonlite)
     library(reshape2)
@@ -93,6 +93,9 @@ LoadLibraries<-function(packred, loadRmpi=F){
     library(tidyxl)
     library(grid)
     library(ggmap)
+    library(XML)
+    library(rworldxtra)
+    library(geodata)
     
     # library(doParallel)
     # library(foreach)
@@ -130,7 +133,8 @@ GetODDPackages<-function(packred, loadRmpi=F){
   if(!packred) list.of.packages<-c(list.of.packages,
                                    'sf', 'geojsonR', 'geosphere', 'rworldmap', 'lutz',
                                    'xml2', 'gstat',  'geojsonio', 'jsonlite', 'reshape2',
-                                   'ecochange', 'openxlsx', 'osmdata', 'tidyxl', 'grid')
+                                   'ecochange', 'openxlsx', 'osmdata', 'tidyxl', 'grid',
+                                   'rworldxtra', 'XML', 'geodata')
                                    # "codetools","latex2exp", "geojsonR", 'geojsonio',
                                    # "rJava","devtools","OpenStreetMap","osmdata",
                                    # "tidyRSS","geojsonR", "tiff", "gstat",
@@ -161,10 +165,20 @@ GetODDPackages<-function(packred, loadRmpi=F){
   #if(length(list.of.packages[!("parallelsugar" %in% installed.packages()[,"Package"])])){devtools::install_github('nathanvan/parallelsugar')}
 
   if (!packred){
-    if(length(list.of.packages[!("wid" %in% installed.packages()[,"Package"])])){devtools::install_github("WIDworld/wid-r-tool")}
+    if(length(list.of.packages[!("wid" %in% installed.packages()[,"Package"])])){
+      tryCatch(
+        {
+          devtools::install_github("WIDworld/wid-r-tool")
+        },
+        error = function(e) {
+          message("Primary WID install failed, trying fallback...")
+          devtools::install_github("pachevalier/wid-r-tool")
+        }
+      ) 
+    }
     if(length(list.of.packages[!("ggmap" %in% installed.packages()[,"Package"])])){devtools::install_github("stadiamaps/ggmap")}
-    if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager", repos='http://cran.us.r-project.org')
-    BiocManager::install("Biobase", version = "3.19")
+    #if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager", repos='http://cran.us.r-project.org')
+    #BiocManager::install("Biobase", version = "3.19")
   }
   
   LoadLibraries(packred, loadRmpi)

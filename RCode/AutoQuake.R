@@ -46,6 +46,19 @@ input<-list(USGSid="usp000huvq",
             plotdir="Plots/" # Location for plots as paste0(datadir,plotdir)
 )
 
+input<-list(USGSid="us7000pv06",
+            datadir=dir, # Location of the main folder to access the data 
+            plotdir="Plots/" # Location for plots as paste0(datadir,plotdir)
+)
+
+input<-list(
+  sdate=as.Date("2025-03-27"), # "YYYY-MM-DD"
+  fdate=as.Date("2025-03-29"), # "YYYY-MM-DD"
+  iso3="MMR", # Country code in ISO-3C form
+  datadir=dir, # Location of the main folder to access the data 
+  plotdir="Plots/" # Location for plots as paste0(datadir,plotdir)
+)
+
 #%%%%%%%%%%%%% Variables and functions from IIDIPUS files %%%%%%%%%%%%%%%#
 input%<>%append(list(Model=Model, # Model parameters - equations, parameters, ... (Model.R)
                      PosteriorFileLoc='IIDIPUS_Results/mcmc_2025-04-10', # Location of fitted model (AlgoResults)
@@ -86,6 +99,6 @@ AutoQuake<-function(input,predImpact=T, folder_write='IIDIPUS_Input_Alternatives
 }
 
 # RUN IT! (Cross your fingers that the EQ exist in USGS)
-ODDy<-AutoQuake(input)
+#ODDy<-AutoQuake(input)
 
 

@@ -69,19 +69,19 @@ Model$skeleton <- list(
                   FirstHaz=NA, Night=NA, FirstHaz.Night=NA)
 )
 
-Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
-  Lambda1=list(nu=list(dist='unif', min=6.5, max=10.5), 
-               kappa=list(dist='unif', min=0.25, max=3) #, alpha=list(dist='unif', min=-0.1, max=0.5)
-  ), 
-  Lambda2=list(nu=list(dist='unif', min=9, max=13.5), 
-               kappa=list(dist='unif', min=0.25, max=3)),
-  Lambda3=list(nu=list(dist='unif', min=6.5, max=10), 
+Model$Priors <- list( #All uniform so currently not included in the acceptance probability.
+  Lambda1=list(nu=list(dist='unif', min=6.5, max=10.5),
+               kappa=list(dist='unif', min=0.25, max=2) #, alpha=list(dist='unif', min=-0.1, max=0.5)
+  ),
+  Lambda2=list(nu=list(dist='unif', min=9.5, max=13.5),
+               kappa=list(dist='unif', min=0.25, max=2)),
+  Lambda3=list(nu=list(dist='unif', min=6.5, max=10),
                kappa=list(dist='unif', min=0.25, max=3)),
   eps=list(local=list(dist='unif', min=0, max=2),
            hazard_mort=list(dist='unif', min=0.2, max=1.5),
            hazard_disp=list(dist='unif', min=0.2, max=1.5),
            hazard_bd=list(dist='unif', min=0.2, max=1.5),
-           hazard_cor=list(dist='unif', min=0.2, max=1)),
+           hazard_cor=list(dist='unif', min=0, max=1)),
   vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.2), # 0.35
                   SHDI=list(dist='laplace', location=0, scale=0.2),
                   GNIc=list(dist='laplace', location=0, scale=0.2),
@@ -91,6 +91,29 @@ Model$Priors <- list( #All uniform so currently not included in the acceptance p
                   Night=list(dist='laplace', location=0, scale=0.2),
                   FirstHaz.Night=list(dist='laplace', location=0, scale=0.2))
 )
+
+# Model$Priors <- list( #All uniform so currently not included in the acceptance probability. 
+#   Lambda1=list(nu=list(dist='unif', min=6.5, max=10.5), 
+#                kappa=list(dist='unif', min=0.25, max=3) #, alpha=list(dist='unif', min=-0.1, max=0.5)
+#   ), 
+#   Lambda2=list(nu=list(dist='unif', min=9, max=13.5), 
+#                kappa=list(dist='unif', min=0.25, max=3)),
+#   Lambda3=list(nu=list(dist='unif', min=6.5, max=10), 
+#                kappa=list(dist='unif', min=0.25, max=3)),
+#   eps=list(local=list(dist='unif', min=0, max=2),
+#            hazard_mort=list(dist='unif', min=0.2, max=1.5),
+#            hazard_disp=list(dist='unif', min=0.2, max=1.5),
+#            hazard_bd=list(dist='unif', min=0.2, max=1.5),
+#            hazard_cor=list(dist='unif', min=0.2, max=1)),
+#   vuln_coeff=list(PDens=list(dist='laplace', location=0, scale=0.2), # 0.35
+#                   SHDI=list(dist='laplace', location=0, scale=0.2),
+#                   GNIc=list(dist='laplace', location=0, scale=0.2),
+#                   Vs30=list(dist='laplace', location=0, scale=0.2),
+#                   EQFreq=list(dist='laplace', location=0, scale=0.2),
+#                   FirstHaz=list(dist='laplace', location=0, scale=0.2),
+#                   Night=list(dist='laplace', location=0, scale=0.2),
+#                   FirstHaz.Night=list(dist='laplace', location=0, scale=0.2))
+# )
 
 #Set up the same structure to links, unlinks and acceptance transformations as Model$skeleton
 # Links: transforms the parameters onto a more convenient domain (e.g. for MCMC proposals)
@@ -155,7 +178,7 @@ for (i in 1:length(Model$Priors)){
 # Model$BinR<- "pnorm" #"weibull" # "gompertz" 
 
 # Implement higher order Bayesian priors?
-Model$higherpriors<-FALSE
+Model$higherpriors<-TRUE
 
 Model$center<-ExtractCentering(dir,haz,T)
 
@@ -188,7 +211,7 @@ addTransfParams <- function(Omega, I0=Model$I0){
   Omega$Lambda2$scale <- Omega$Lambda2$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda2$kappa)
   Omega$Lambda3$scale <- Omega$Lambda3$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda3$kappa)
   #Omega$Lambda4$scale <- Omega$Lambda4$kappa #h_10_minus_h_4.5 / (6 * Omega$Lambda4$kappa)
-  if (Omega$eps$hazard_cor < 0){Omega$eps$hazard_cor = 0.001}
+  #if (Omega$eps$hazard_cor < 0){Omega$eps$hazard_cor = 0.001}
   Omega$vuln_coeff_adj <- Omega$vuln_coeff #lapply(Omega$vuln_coeff, function(x) x * Omega$Lambda2$scale)
   Omega$eps_adj <- Omega$eps #lapply(Omega$eps, function(x) x * Omega$Lambda2$scale)
   Omega$eps_adj$local <- Omega$eps$local / Omega$eps$hazard_mort # local mort / hazard wide mort = ratio
@@ -332,9 +355,12 @@ D_Dam_calc <- function(Damage, Omega, stoch_bd=0){
 # Fbdam<-function(PopRem, D_Disp, D_Mort, D_Rem) mapply(rmultinomy, PopRem, D_Disp, D_Mort, D_Rem)
 
 Fbdam <- function(PopRem, D_Disp, D_Mort, D_Rem) {
-   vapply(seq_along(PopRem), function(i) {
-     rmultinom(1, PopRem[i], c(D_Disp[i], D_Mort[i], D_Rem[i]))
-   }, numeric(3))
+  #vapply(seq_along(PopRem), function(i) {
+  #   PopRem[i] * c(D_Disp[i], D_Mort[i], D_Rem[i])
+  #}, numeric(3))
+  vapply(seq_along(PopRem), function(i) {
+      rmultinom(1, PopRem[i], c(D_Disp[i], D_Mort[i], D_Rem[i]))
+    }, numeric(3))
 }
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
@@ -347,6 +373,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
   # We begin by calculating the 1st and 99th percentiles of each vulnerability covariate
   # These values have been hard-coded in for speed, but the code left in comments
   
+  if (Model$higherpriors==F){return(0)}
   ## Calculate the 1st and 99th quantiles of the population density from the training dataset:
   # path<-paste0("/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/")
   # ufiles<-list.files(path=path,pattern=haz,recursive = T,ignore.case = T)
@@ -422,9 +449,9 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     # where DispMort is the sum of the probabilities of displacement and mortality
     # and BuildDam is the sum of the probabilities of building damage and destruction.
     
-    Upp_bounds_4.6 <- c(10^(-6), 0.01, 0.05)
-    Low_bounds_7 <- c(0, 0, 10^(-6))
-    Upp_bounds_7 <- c(0.01, 0.2, 0.4)
+    Upp_bounds_4.5 <- c(10^(-4), 0.01, 0.025)
+    Low_bounds_6 <- c(0, 0, 10^(-6))
+    Upp_bounds_6 <- c(0.02, 0.25, 0.25)
     Low_bounds_9.5 <- c(10^(-6),0.2,0.3)
     
     HLP_impacts <- function(I_ij, lp, Omega){
@@ -435,11 +462,11 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     adder <- 0
     
     #Check upper bounds at I=4.6
-    adder <- sum(apply(HLP_impacts(4.6, lp, Omega), 2, function (x) sum(x > Upp_bounds_4.6))) 
+    adder <- sum(apply(HLP_impacts(4.5, lp, Omega), 2, function (x) sum(x > Upp_bounds_4.5))) 
     
     #Check lower and upper bounds at I=7
-    adder <- adder + sum(apply(HLP_impacts(7, lp, Omega), 2, 
-                               function (x) sum(c(x > Upp_bounds_7, x<Low_bounds_7))))
+    adder <- adder + sum(apply(HLP_impacts(6, lp, Omega), 2, 
+                               function (x) sum(c(x > Upp_bounds_6, x<Low_bounds_6))))
     
     #Check lower bounds at I=9
     adder <- adder + sum(apply(HLP_impacts(9.5, lp, Omega), 2, 
@@ -447,7 +474,7 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
     
     #check that at intensity 8, D_disp > D_mort
     impact_intens_8 <- HLP_impacts(8, lp, Omega)
-    adder <- adder + sum(impact_intens_8[1,] > impact_intens_8[2,])
+    adder <- adder + ifelse(Omega$Lambda1$loc > Omega$Lambda2$loc + 1, 1, 0)#sum(impact_intens_8[1,] > impact_intens_8[2,])
     
     #Print results (helpful for debugging / identifying issue with a proposed Omega)
     # print('Upper bounds at I=4.6:')
@@ -480,7 +507,6 @@ Model$HighLevelPriors <-function(Omega,Model,modifier=NULL){
   }
 }
 
-
 # -------------------------------------------------------------------------------------------------------------------
 # ------------------------------- Pulling out and breaking down the distances ---------------------------------------
 # -------------------------------------------------------------------------------------------------------------------
@@ -492,7 +518,7 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
   
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
   
-  if (tolower(dat)=='train'){
+  if (tolower(dat)=='train' &  length(grep('^Train/' , ufiles, value = TRUE))>0){
     ufiles <- grep('^Train/' , ufiles, value = TRUE)
   } else if (tolower(dat)=='test'){
     ufiles <- grep('^Test/' , ufiles, value = TRUE)
@@ -669,21 +695,71 @@ get_mst_rank_single <- function(df, log=F, noise=NA){
 get_banddepth_rank_single <- function(mat, noise = NA){
   # Calculates the band depth pre-rank of the observation within the set of simulations.
   # Can correlate the noise between current step and proposal to reduce effect of randomness in how ties are broken.
+  #mat = t(rmvnorm(ncol(mat), rep(0,10), matrix(1, nrow=10, ncol=10)))
   m <- NCOL(mat)
   d <- NROW(mat)
   pre_ranks <- c()
   for (j in 1:m){
     sum <- 0
     for (k in 1:d){
-      rank_k <- sum(mat[k,j] <= mat[k,])
-      sum <- sum + rank_k * (m - rank_k) + (rank_k-1) * sum(mat[d,j]==mat[k,])
+     rank_k <- sum(mat[k,j] <= mat[k,])
+     sum <- sum + rank_k * (m - rank_k) + (rank_k-1) * sum(mat[d,j]==mat[k,])
     }
     pre_ranks <- c(pre_ranks, sum /d)
   }
   if (all(!is.na(noise))){
     pre_ranks = pre_ranks + noise / d
   }
+  #pre_ranks = MBD(t(mat), manage_ties=T)
   return(rank(pre_ranks,  ties.method ='random')[1])
+}
+
+get_mmds_rank_single <- function(mat){
+  ranks = c()
+  for (j in 1:NCOL(mat)){
+    ranks = c(ranks, mmds_sample(mat[,j], mat[,-j]))
+  }
+  return(rank(ranks, ties.method='random')[1])
+}
+
+AndersonDarlingTest <- function(x, null='punif') {
+  # Ensure sorted and scaled to [0, 1]
+  x <- sort(x)
+  n <- length(x)
+  
+  if (any(x <= 0 | x >= 1)) {
+    stop("Data must be strictly within the interval (0, 1) for the Anderson-Darling uniformity test.")
+  }
+  
+  i <- 1:n
+  ln_x <- log(x)
+  ln_1_minus_x <- log(1 - rev(x))
+  
+  A2 <- -n - sum((2 * i - 1) * (ln_x + ln_1_minus_x)) / n
+  
+  structure(
+    list(
+      statistic = A2,
+      method = "Anderson-Darling test for uniformity (manual)",
+      data.name = deparse(substitute(x)),
+      note = "No p-value reported; use Monte Carlo to assess significance"
+    ),
+    class = "htest"
+  )
+}
+
+get_mvr_rank_single <- function(mat){
+  pre_ranks = c()
+  if(is.null(dim(mat))){
+    for (j in 1:length(mat)){
+      pre_ranks <- c(pre_ranks, sum(mat[j]<=mat[-j]))
+    }
+  } else {
+    for (j in 1:NCOL(mat)){
+      pre_ranks <- c(pre_ranks, sum(colSums(mat[,j]<= mat[,-j])==NROW(mat)))
+    }
+  }
+  return(rank(pre_ranks, ties.method='random')[1])
 }
 
 CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams, corr_noise = NA, corr_noise2 = NA){
@@ -695,7 +771,7 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams, corr_noise 
   
   observed <- impact_sample_poly[[1]]$observed
 
-  dist_poly <- array(NA, dim=c(AlgoParams$Np,7))
+  dist_poly <- array(NA, dim=c(AlgoParams$Np,8))
   impact_type <- impact_sample_poly[[1]]$impact
   impact_weightings <- unlist(AlgoParams$impact_weights[impact_type])
   event_id <- impact_sample_poly[[1]]$event_id
@@ -709,58 +785,125 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams, corr_noise 
     dist_poly[n,1] <- 0
     
     es_store <- c()
-    vs_store <- c()
-    pre_ranks <- c()
+    mmds_store <- c()
+    mmds_store_nobd <- c()
+    pre_ranks_bd <- c()
+    pre_ranks_mmds <- c()
+    pre_ranks_mvr <- c()
+    pre_ranks_bd_mortdisp <- c()
+    pre_ranks_mmds_mortdisp <- c()
+    pre_ranks_mvr_mortdisp <- c()
     #pre_ranks_average <- c() #can also assess quantiles for uniformity based on the average pre-rank function
     #pre_ranks_mst <- c() #can also assess quantiles for uniformity based on the minimum spanning tree pre-rank function
-    
     for (i in 1:length(grouped_events)){
       #For each event, compute the energy score of the observed data vs the 'prediction' (simulated data)
       #Each impact type is weighted differently, simply multiplying the observation and the simulations by this weight performs the weighting
       obs <- log(observed[grouped_events[[i]]]+AlgoParams$log_offset) *impact_weightings[grouped_events[[i]]]
       sims <- log(samples_combined[grouped_events[[i]],, drop=F]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]
       
-      obs_rh <- log(observed[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]+AlgoParams$log_offset) *impact_weightings[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]
-      sims_rh <- log(samples_combined[intersect(grouped_events[[i]], which(impact_type!='buildDam')),,drop=F]+AlgoParams$log_offset) * impact_weightings[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]
-      # get_mst_rank_single(cbind(obs_mst, sims_mst))
-      
-      #pre_ranks_mst <- c(pre_ranks_mst, get_mst_rank_single(cbind(obs_mst, sims_mst)))
-      pre_ranks <- c(pre_ranks, get_banddepth_rank_single(cbind(obs_rh, sims_rh)))#, noise=corr_noise[i,]))
-      #pre_ranks <- c(pre_ranks, get_mst_rank_single(cbind(obs_rh, sims_rh), noise=corr_noise[i,]))
+      obs_mortdisp <- log(observed[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]+AlgoParams$log_offset) *impact_weightings[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]
+      sims_mortdisp <- log(samples_combined[intersect(grouped_events[[i]], which(impact_type!='buildDam')),,drop=F]+AlgoParams$log_offset) * impact_weightings[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]
+      #obs_unweighted <- log(observed[grouped_events[[i]]]+AlgoParams$log_offset)# * impact_weightings[grouped_events[[i]]]
+      #sims_unweighted <- log(samples_combined[grouped_events[[i]],,drop=F]+AlgoParams$log_offset)# * impact_weightings[grouped_events[[i]]]
 
+      #nrow(sims_rh)
+      #pairs(rbind(t(sims_rh), obs_rh), col=c(rep('black',ncol(sims_rh)), 'red'))
+      #mort_obs1 = which(impact_type[grouped_events[[i]]] == 'mortality')[1]
+      #disp_obs1 = which(impact_type[grouped_events[[i]]] == 'displacement')[1]
+      # 
+      # pairs(rbind(t(sims_rh), obs_rh), col=c(rep('black',ncol(sims_rh)), 'red'))
+      # get_banddepth_rank_single(cbind(obs_rh[2:3], sims_rh[2:3,]))
+      # 
+      # mat = cbind(obs_rh[c(2,4)], sims_rh[c(2,4),])
+      # vss=c()
+      # for (j in 1:ncol(mat)){
+      #   vss = c(vss, mmds_sample(mat[,j], mat[,-j]))
+      # }
+      # plot(vss)
+      # vss[1]
+      # xx = data.frame(x = mat[1,], y=mat[2,], col=vss)
+      # ggplot(xx, aes(x=x, y=y, col=col))+geom_point()
+      # if (length(obs_rh)>5) stop()
+      #if(get_banddepth_rank_single(cbind(obs_rh, sims_rh)) < 2) stop()
       
       if (length(grouped_events[[i]])==1){
         #crps is the univariate case of the energy score, so use when dimension is 1. 
         es_store<- c(es_store, crps_sample(obs, sims))
-        vs_store<- c(vs_store, 0)
+        mmds_store<-c(mmds_store, 0)
+        
+        rank = rank(c(obs,sims), ties.method='random')[1]
+        pre_ranks_bd <- c(pre_ranks_bd, rank)
+        pre_ranks_mmds <- c(pre_ranks_mmds, rank)
+        pre_ranks_mvr <- c(pre_ranks_mvr, rank)
+        pre_ranks_bd_mortdisp <- c(pre_ranks_bd_mortdisp,rank)
+        pre_ranks_mmds_mortdisp <- c(pre_ranks_mmds_mortdisp,rank)
+        pre_ranks_mvr_mortdisp <- c(pre_ranks_mvr_mortdisp,rank)
+        
         next
       } 
-      es_store<- c(es_store, es_sample(obs, sims))
-      w_vs <- sqrt(as.numeric(impact_weightings[grouped_events[[i]]]) %*% t(as.numeric(impact_weightings[grouped_events[[i]]]))) / (length(grouped_events[[i]])^2)
-      if(vs_sample(obs, sims, w_vs = w_vs) > 5000){stop()}
-      vs_store <- c(vs_store, vs_sample(obs, sims, w_vs = w_vs))
-      #pre_ranks_average <- c(pre_ranks_average, get_average_rank_single(cbind(obs, sims)))
-      #pre_ranks_mst <- c(pre_ranks_mst, get_mst_rank_single(cbind(obs,sims)))
+     
+      # if (nrow(sims_rh) > 1){
+      #   plot(t(sims_rh[1:2,]))
+      #   points(t(obs_rh[1:2]), col='red', pch=19)
+      # }
+      
+      es_store <- c(es_store, es_sample(obs, sims))
+      mmds_store <- c(mmds_store, mmds_sample(obs, sims))
+      
+      if (length(obs_mortdisp)==1){
+        obs_sims_mat = cbind(obs,sims)
+        obs_sims_mat_mortdisp = c(obs_mortdisp,sims_mortdisp)
+        rank = rank(obs_sims_mat_mortdisp, ties.method='random')[1]
+        
+        pre_ranks_bd <- c(pre_ranks_bd, get_banddepth_rank_single(obs_sims_mat))
+        pre_ranks_mmds <- c(pre_ranks_mmds, get_mmds_rank_single(obs_sims_mat))
+        pre_ranks_mvr <- c(pre_ranks_mvr, get_mvr_rank_single(obs_sims_mat))
+        
+        pre_ranks_bd_mortdisp <- c(pre_ranks_bd_mortdisp,rank)
+        pre_ranks_mmds_mortdisp <- c(pre_ranks_mmds_mortdisp,rank)
+        pre_ranks_mvr_mortdisp <- c(pre_ranks_mvr_mortdisp,rank)
+      } else {
+        obs_sims_mat = cbind(obs,sims)
+        obs_sims_mat_mortdisp = cbind(obs_mortdisp,sims_mortdisp)
+        
+        pre_ranks_bd <- c(pre_ranks_bd, get_banddepth_rank_single(obs_sims_mat))#, noise=corr_noise[i,]))
+        pre_ranks_bd_mortdisp <- c(pre_ranks_bd_mortdisp, get_banddepth_rank_single(obs_sims_mat_mortdisp))
+
+        pre_ranks_mmds <- c(pre_ranks_mmds, get_mmds_rank_single(obs_sims_mat))
+        pre_ranks_mmds_mortdisp <- c(pre_ranks_mmds_mortdisp, get_mmds_rank_single(obs_sims_mat_mortdisp))
+        
+        pre_ranks_mvr <- c(pre_ranks_mvr, get_mvr_rank_single(obs_sims_mat))#, noise=corr_noise[i,]))
+        pre_ranks_mvr_mortdisp <- c(pre_ranks_mvr_mortdisp, get_mvr_rank_single(obs_sims_mat_mortdisp))
+      }
+      
 
     }
     
-    ranks_std <- (pre_ranks-runif(length(pre_ranks),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_bd_std <- (pre_ranks_bd-runif(length(pre_ranks_bd),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_bd_mortdisp_std <- (pre_ranks_bd_mortdisp -runif(length(pre_ranks_bd_mortdisp),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_mmds_std <- (pre_ranks_mmds-runif(length(pre_ranks_mmds),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_mmds_mortdisp_std <- (pre_ranks_mmds_mortdisp-runif(length(pre_ranks_mmds_mortdisp),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_mvr_std <- (pre_ranks_mvr-runif(length(pre_ranks_mvr),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_mvr_mortdisp_std <- (pre_ranks_mvr_mortdisp-runif(length(pre_ranks_mvr_mortdisp),0,1))/(AlgoParams$m_CRPS + 1)
     #ranks_std <- (pre_ranks-corr_noise2)/(AlgoParams$m_CRPS + 1) #can also correlate the noise added here
-  
+    
     dist_poly[n,1] <- mean(es_store) #mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$impact_weights['mortality'])
-    dist_poly[n,2] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_std, null='punif')$statistic) #3*mean(vs_store) #mean(vs_store)/5
-    dist_poly[n,3] <- 0
+    dist_poly[n,2] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_mvr_std, null='punif')$statistic) #mean(mmds_store) * 10 #AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_std, null='punif')$statistic) #3*mean(vs_store) #mean(vs_store)/5
+    dist_poly[n,3] <- mean(mmds_store) * 10 #mean(vs_store) #0#mean(mmds_store)
     
     ## Ways to assess uniformity of quantiles:
     #ranks_std_average <- (pre_ranks_average-runif(length(pre_ranks_average),0,1))/(AlgoParams$m_CRPS + 1)
     #ranks_std_mst <- (pre_ranks_mst-runif(length(pre_ranks_mst),0,1))/(AlgoParams$m_CRPS + 1)
     #bin_counts <- table(cut(ranks_std_mst, seq(0, 1, 0.1), include.lowest = TRUE, right = FALSE))
     #sum((bin_counts-length(ranks_std_mst)/10)^2)/(length(ranks_std_mst)/10)
-    dist_poly[n,4] <- 0 #sum((bin_counts-length(ranks_std_mst)/10)^2)/(length(ranks_std_mst)/10) #0 #ks.test(ranks_std_average, y='punif')$p.value
-    dist_poly[n,5] <- 0 
-    dist_poly[n,6] <- 0 #0.2*(1 - AndersonDarlingTest(ranks_std_average, null='punif')$p.value) 
-    dist_poly[n,7] <- 0 #0.2*(1 - AndersonDarlingTest(ranks_std_mst, null='punif')$p.value)
-    
+    dist_poly[n,4] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_mvr_mortdisp_std, null='punif')$statistic)
+    dist_poly[n,5] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_bd_std, null='punif')$statistic)
+    dist_poly[n,6] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_bd_mortdisp_std, null='punif')$statistic)
+    dist_poly[n,7] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_mmds_std, null='punif')$statistic)
+    dist_poly[n,8] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_mmds_mortdisp_std, null='punif')$statistic) #sum((bin_counts-length(ranks_std_mst)/10)^2)/(length(ranks_std_mst)/10) #0 #ks.test(ranks_std_average, y='punif')$p.value
+    #dist_poly[n,8] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_bd_unweighted_std, null='punif')$statistic)
+    #dist_poly[n,9] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_mmds_std, null='punif')$statistic) #0.2*(1 - AndersonDarlingTest(ranks_std_average, null='punif')$p.value) 
+    #dist_poly[n,10] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_mmds_unweighted_std, null='punif')$statistic)  #0.2*(1 - AndersonDarlingTest(ranks_std_mst, null='punif')$p.value)
   }
   
   return(dist_poly)
@@ -805,8 +948,8 @@ CalcDistPoint <- function(impact_sample_point, AlgoParams){
 CalcDist <- function(impact_sample, AlgoParams, corr_noise = NA, corr_noise2 = NA){
   if (AlgoParams$kernel == 'energy_score'){
     dist_poly <- CalcDistPoly_EnergyScore(impact_sample$poly, AlgoParams, corr_noise = corr_noise, corr_noise2 = corr_noise2)
-    dist_point <- 0 #CalcDistPoint(impact_sample$point, AlgoParams)
-    dist_tot <- cbind(dist_poly, dist_point)
+    #dist_point <- 0 #CalcDistPoint(impact_sample$point, AlgoParams)
+    dist_tot <- dist_poly #cbind(dist_poly, dist_point)
   } else {
     stop('Currently no other distance functions implemented except the energy score')
   }

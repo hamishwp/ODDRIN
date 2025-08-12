@@ -514,20 +514,32 @@ compare_building_counts <- function(){
   # ODDy %<>% GetOSMbuildingsODD()
   # saveODD(ODDy, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/CaseStudies/EQ20191029PHL_125_3BuildingCounts')
   
-  ODDy <- readODD(ODDy, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/CaseStudies/EQ20191029PHL_125_3BuildingCounts')
+  ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/CaseStudies/EQ20191029PHL_125_3BuildingCounts')
   
   plot_df <- as.data.frame(ODDy[[c('nBuildings', 'OpenBuildings', 'OSM')]])
   plot_df$OpenBuildings[which(is.na(plot_df$OpenBuildings))] = 0
   plot_df$OSM[which(is.na(plot_df$OSM))] = 0
   ggplot(as.data.frame(ODDy[[c('nBuildings', 'OpenBuildings', 'OSM')]])) + 
-    geom_point(aes(x = nBuildings, y = OSM, color = "OSM"), cex = 0.6) + 
-    geom_point(aes(x = nBuildings, y = OpenBuildings, color = "Microsoft Open Buildings"), cex = 0.6) + 
-    geom_abline(slope = 1, intercept = 0) + 
-    scale_color_manual(values = c("OSM" = "blue", "Microsoft Open Buildings" = "red")) + 
+    geom_point(aes(x = nBuildings, y = OSM, color = "OSM"), cex = 1) + 
+    geom_point(aes(x = nBuildings, y = OpenBuildings, color = "Microsoft Open Buildings"), cex = 1) + 
+    geom_abline(slope = 1, intercept = 0, color="#D62728") + 
+    scale_color_manual(values = c("OSM" = "#440154", "Microsoft Open Buildings" = "#1FA187")) + 
     xlab('Building Count: Bing') + 
-    ylab('Building Count: OSM/Microsoft') + 
+    ylab('Building Count: OSM / Microsoft') + 
     theme_minimal() + 
-    labs(color = "")
+      labs(color = "") +
+    theme(
+      axis.title.y = element_text(family = "Times New Roman", size = 12),
+      axis.text.x = element_text(family = "Times New Roman", size = 12),
+      axis.text.y = element_text(family = "Times New Roman", size = 12),
+      axis.title.x = element_text(family = "Times New Roman", size = 12),
+      plot.title = element_text(family = "Times New Roman", size = 14),
+      #panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+      plot.margin = unit(c(0, 20, 0, 15), "pt"),
+      legend.text = element_text(family = "Times New Roman", size = 12),
+      legend.title = element_blank()  # Remove legend title
+    ) 
+  
   #4 x 6, BuildingCountComparison
   
   plot(values(ODDy$nBuildings), values(ODDy$OpenBuildings), pch=19, cex=0.3, xlab='Building Count: Bing', ylab='Building Count: OSM/Microsoft')

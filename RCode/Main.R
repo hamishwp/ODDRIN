@@ -35,10 +35,10 @@ IIDIPUSModelTraining<-function(extractedData=T){
   # Extract Displacement & Hazard data and match & reduce
   ODDpaths<-ExtractData(Model$haz,dir,extractedData)
   # Extract initial parameterisation estimate
-  iVals<-GetInitVals(dir,Model,AlgoParams,usePastPost=T)
-  
+  iVals<-GetInitVals(dir,Model,AlgoParams,usePastPost=F)
+    
   # Parameterise... Here we go!
-  output <- AMCMC(dir=dir,
+  output <- AM_MCMC(dir=dir,
                   AlgoParams=AlgoParams,
                   Model=Model,
                   iVals=iVals)

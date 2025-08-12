@@ -30,15 +30,37 @@ source('RCode/Simulate.R')
 
 #Choose true Omega for Simulated Data
 
-Omega <- Omega_true <- list(Lambda1 = list(nu=8.75, kappa=0.6),
-                            Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
-                            Lambda3 = list(nu=9.55, kappa=0.68),
-                            #Lambda4 = list(nu=9.9, kappa=1.6),
-                            #theta= list(theta1=0.6),
-                            eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
-                            #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                            vuln_coeff = list(PDens=0, SHDI=-0.08, GNIc=-0.02, Vs30=0.01, EQFreq=-0.02, FirstHaz=0.01, Night=0, FirstHaz.Night=0.05))
-                            #check = list(check=0.5))
+Omega <- Omega_true <-  list(Lambda1 = list(nu=7.5, kappa=0.6),
+                                    Lambda2 = list(nu=11.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
+                                    Lambda3 = list(nu=7.9, kappa=0.68),
+                                    #Lambda4 = list(nu=9.9, kappa=1.6),
+                                    #theta= list(theta1=0.6),
+                                    eps=list(local=1.2, hazard_mort=0.4, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.1),
+                                    #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                                    vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+
+Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
+
+# Omega <- Omega_true <-  list(Lambda1 = list(nu=7.5, kappa=0.6),
+#                                     Lambda2 = list(nu=10.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
+#                                     Lambda3 = list(nu=7.9, kappa=0.68),
+#                                     #Lambda4 = list(nu=9.9, kappa=1.6),
+#                                     #theta= list(theta1=0.6),
+#                                     eps=list(local=0.3, hazard_mort=0.55, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.1),
+#                                     #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+#                                     vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+#   
+  
+  
+# Omega = list(Lambda1 = list(nu=7.5, kappa=0.6),
+#              Lambda2 = list(nu=10.7, kappa=0.775), #list(nu=10.65, kappa=1.5), #
+#              Lambda3 = list(nu=7.9, kappa=0.68),
+#              #Lambda4 = list(nu=9.9, kappa=1.6),
+#              #theta= list(theta1=0.6),
+#              eps=list(local=0.4, hazard_mort=0.45, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.65),
+#              #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+#              vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+                            # check = list(check=0.5))
 
 
 HLPrior_samples <- readRDS(paste0(dir, 'IIDIPUS_Input/HLPriorSamples_MCMCOut'))
@@ -102,7 +124,7 @@ diag(cov(samples))
 
 
 set.seed(1)
-simulateDataSet(167, Omega, Model, dir, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/')
+simulateDataSet(167, Omega, Model, dir, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/')
 
 
 AlgoParams$smc_steps <- 2
@@ -276,13 +298,33 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput'
   ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
   ODD_foldertest<-paste0(dir, folder_in, '/ODDobjects/Test/')
   ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
-  i <- 0
+  i <- 1
+  
+  # total_mortalities <- c()
+  # for (file in ufiles){
+  #   ODD <- readODD(paste0(ODD_folderall, file))
+  #   total_mortalities <- c(total_mortalities, max(values(ODD[[grep('hazMean', names(ODD))]])[values(!is.na(ODD$Population) & ODD$Population > 0),], na.rm=t))
+  # }
+  # ufiles <- ufiles[order(total_mortalities, decreasing=T)] # sort by date
+  # 
+  # for (i in 1:length(ufiles)){
+  #   file <- ufiles[i]
+  #   if (i %%3 != 1){next}
+  #   options(warn = 2)
+  #   file.copy(from = paste0(ODD_folderall, file),
+  #             to = paste0(ODD_foldertest, file))
+  #   file.remove(from = paste0(ODD_folderall, file))
+  #   options(warn = 1)
+  # }
+  
   for (file in ufiles){
     i <- i + 1
-    if (i %%3 != 0){next}
+    if (i %%3 != 2){next}
+    options(warn = 2)
     file.copy(from = paste0(ODD_folderall, file),
               to = paste0(ODD_foldertest, file))
     file.remove(from = paste0(ODD_folderall, file))
+    options(warn = 1)
   }
   # BD_folderall<-paste0(dir, folder_in, '/BDobjects/')
   # BD_foldertest<-paste0(dir, folder_in, '/BDobjects/Test/')
@@ -297,10 +339,11 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput'
   # }
   
 }
-moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput')
+
+moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9')
 
 # Collect mortality, building damage, and displacement data for simulated data:
-ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/ODDobjects/", recursive=T))
+ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/", recursive=T))
 df_SimImpact <- data.frame(observed=numeric(),
                            impact=character(),
                            polygon=integer(),
@@ -310,7 +353,7 @@ df_SimImpact <- data.frame(observed=numeric(),
 nHazSim <- c()
 maxIntSim <- c()
 for(i in 1:length(ODDsim_paths)){
-  ODDSim <- readODD(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/ODDobjects/",ODDsim_paths[i]))
+  ODDSim <- readODD(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/",ODDsim_paths[i]))
   if (length(ODDSim@impact$impact)>0){
     nHazSim <- c(nHazSim, length(grep('hazMean', names(ODDSim))))
     maxIntSim <- c(maxIntSim, max(values(ODDSim[[grep('hazMean', names(ODDSim))]]),  na.rm=T))
@@ -519,6 +562,452 @@ ggplot() +
   geom_histogram(data=df_SimImpact %>% filter(impact==impact_type), aes(x=exposure,y=after_stat(count)), alpha=0.3, col='yellow', lwd=0.2, fill='yellow') + 
   scale_x_log10() #+
 #scale_y_continuous(breaks = seq(0, 90, by = 10))
+
+
+#------------------------------------------------------------------------------------------------
+#------------------------------------ CHECK RANKS/PAIRPLOTS -------------------------------------
+#------------------------------------------------------------------------------------------------
+
+#source('RCode/Model.R')
+#source('RCode/Model Variations/ODDobjJune.R')
+
+Omega=list(Lambda1 = list(nu=7.5, kappa=0.6),
+           Lambda2 = list(nu=10.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
+           Lambda3 = list(nu=7.9, kappa=0.68),
+           #Lambda4 = list(nu=9.9, kappa=1.6),
+           #theta= list(theta1=0.6),
+           eps=list(local=0.4, hazard_mort=0.45, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.65),
+           #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+           vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+
+flattenImpactSample2 <- function(sampled_out){
+  df <- data.frame(iso3 = sampled_out[[1]]$iso3,
+                   polygon = sampled_out[[1]]$polygon,
+                   impact = sampled_out[[1]]$impact,
+                   observed = sampled_out[[1]]$observed)#,
+  #n_pixels = impact_sample$poly[[1]]$n_pixels,
+  #max_intensity = impact_sample$poly[[1]]$max_intensity)
+  for (j in 1:length(sampled_out)){
+    df %<>% cbind(sampled_out[[j]]$sampled)
+  }
+  colnames(df)[grep('sampled',names(df))] <- paste0('sampled.', 1:length(sampled_out))
+  return(df)
+}
+
+i = 1
+ufiles = na.omit(list.files(path=paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput6/ODDobjects/'),pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
+ufiles = grep('^Train/' , ufiles, value = TRUE)
+x <- file.info(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput6/ODDobjects/',ufiles))
+ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
+event_ids_all <- as.numeric(sub(".*_(\\d+)$", "\\1", ufiles))
+
+
+par(mfrow=c(5,5), mar=c(0.2, 0.2, 0.2, 0.2))
+for (i in event_ids_all[1:27]){
+  print(i)
+  file = ufiles[which(event_ids_all==i)]
+  ODD <- readODD(paste0('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput7/ODDobjects/', file))
+  
+  Omega$eps$hazard_cor = 0.1
+  sampled_out_single <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+                         replace(which(names(AlgoParams)==c('Np')), 1), 
+                       output='SampledAgg')
+  
+  sampled_out1 <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+                                replace(which(names(AlgoParams)==c('Np')), 100), 
+                              output='SampledAgg')
+  
+  Omega$eps$hazard_cor =0.9
+  sampled_out <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+                         replace(which(names(AlgoParams)==c('Np')), 100), 
+                       output='SampledAgg')
+  
+  impact_mort1 = which(ODD@impact$impact=='buildDam')[1]
+  impact_disp1 = which(ODD@impact$impact=='displacement')[1]
+  if (is.na(impact_mort1) | is.na(impact_disp1)) next
+  
+  impact_sampled_flattened1 = flattenImpactSample2(sampled_out1)
+  impact_sampled_flattened = flattenImpactSample2(sampled_out)
+  
+  combined_df <- cbind(
+    c(log(sampled_out_single[[1]]$sampled[impact_mort1] + 10),
+      log(as.numeric(impact_sampled_flattened[impact_mort1, 5:104]) + 10)),
+    c(log(sampled_out_single[[1]]$sampled[impact_disp1] + 10),
+      log(as.numeric(impact_sampled_flattened[impact_disp1, 5:104]) + 10))
+  )
+  print(get_banddepth_rank_single(t(combined_df)))
+  
+  # Compute MMDs
+  mmds <- c()
+  for (j in 1:101) {
+    mmds <- c(mmds, mmds_sample(combined_df[j, ], t(combined_df[-j, ])))
+  }
+  
+  # Normalize MMDs to a color scale
+  colors <- colorRampPalette(c("blue", "red"))(101)
+  color_indices <- as.numeric(cut(mmds, breaks = 101))
+  point_colors <- colors[color_indices]
+  
+  # Plot base
+  plot(
+    log(as.numeric(impact_sampled_flattened[impact_mort1, 5:104]) + 10),
+    log(as.numeric(impact_sampled_flattened[impact_disp1, 5:104]) + 10),
+    xlab = '', ylab = '', main = file,
+    col = point_colors[2:length(point_colors)], pch = 16
+  )
+  
+  points(
+    log(as.numeric(impact_sampled_flattened1[impact_mort1, 5:104]) + 10),
+    log(as.numeric(impact_sampled_flattened1[impact_disp1, 5:104]) + 10),
+    xlab = '', ylab = '', main = file,
+    col = 'green', pch = 16
+  )
+  
+  # Highlight first point
+  points(
+    log(sampled_out_single[[1]]$sampled[impact_mort1] + 10),
+    log(sampled_out_single[[1]]$sampled[impact_disp1] + 10),
+    pch = 1, cex = 2, col=point_colors[1]
+  )
+}
+
+
+
+Omega <- Omega_true <-  list(Lambda1 = list(nu=7.5, kappa=0.6),
+                             Lambda2 = list(nu=11.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
+                             Lambda3 = list(nu=7.9, kappa=0.68),
+                             #Lambda4 = list(nu=9.9, kappa=1.6),
+                             #theta= list(theta1=0.6),
+                             eps=list(local=1.2, hazard_mort=0.4, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.1),
+                             #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                             vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+
+testing <- function(){
+  ufiles = na.omit(list.files(path=paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput6/ODDobjects/'),pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
+  ufiles = grep('^Train/' , ufiles, value = TRUE)
+  x <- file.info(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput6/ODDobjects/',ufiles))
+  ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
+  event_ids_all <- as.numeric(sub(".*_(\\d+)$", "\\1", ufiles))
+  for (file in ufiles){
+    ODD <- readODD(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput6/ODDobjects/', file))
+    Omega$eps$hazard_cor = -0.4
+    sampled_out_single <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+                                  replace(which(names(AlgoParams)==c('Np')), 2), 
+                                output='SampledAgg')
+    
+    ODD@impact$id <- 1:nrow(ODD@impact)
+    
+    #flats = flattenImpactSample2(sampled_out_single)
+    #plot(log(t(flats[1,5:104])+10), log(t(flats[2,5:104])+10))
+    
+    merged_df <- merge(
+      ODD@impact,
+      sampled_out_single[[1]],
+      by = c('polygon', 'impact', 'iso3', 'observed', 'inferred', 'qualifier', 'sdate')
+    )
+  
+    merged_df <- merged_df[order(merged_df$id), ]
+    
+    ODD@impact$observed = merged_df$sampled
+    
+    #ODD@impact$observed = sampled_out_single[[1]]$sampled
+    saveODD(ODD, paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput7/ODDobjects/', file))
+  }
+  
+  Omega$eps$hazard_cor = -0.4
+  AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput7/'
+  AlgoParams$Np = 1
+  AlgoParams$m_CRPS = 100
+  AlgoParams$cores =2
+  AlgoParams$NestedCores =1
+  impact_sample = SampleImpact(dir, Model, Omega %>% addTransfParams, AlgoParams, dat='Train', output='SampledAgg')
+  CalcDist(impact_sample, AlgoParams)
+  
+  flattened = flattenImpactSample(impact_sample)
+  for (i in event_ids_all[1:27]){
+    combined_df = flattened %>% filter(event_id == i)
+    
+    impact_mort1 = which(combined_df$impact=='buildDam')[1]
+    impact_disp1 = which(combined_df$impact=='displacement')[1]
+    if (is.na(impact_mort1) | is.na(impact_disp1)) next
+    
+    combined_df = combined_df[c(impact_mort1, impact_disp1), 7:NCOL(combined_df)]
+    print(get_banddepth_rank_single(t(combined_df)))
+    
+   plot(log(t(combined_df[1,])+10), log(t(combined_df[2,])+10))
+   points(log(combined_df[1,1]+10), log(combined_df[2,1]+10),col='red', pch=19)
+  }
+  
+  
+  
+  impact_sample = SampleImpact(dir, Model, Omega %>% addTransfParams, AlgoParams, dat='Train', output='SampledAgg')
+  CalcDist(impact_sample, AlgoParams)
+  
+  impact_sample = SampleImpact(dir, Model, Omega %>% addTransfParams, AlgoParams, dat='Train', output='SampledAgg')
+  CalcDist(impact_sample, AlgoParams)
+  
+  
+  
+}
+
+
+
+#### MOST RIGOROUS AS OF 21 JULY #######
+
+Omega <- Omega_true <-  list(Lambda1 = list(nu=7.5, kappa=0.6),
+                             Lambda2 = list(nu=11.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
+                             Lambda3 = list(nu=7.9, kappa=0.68),
+                             #Lambda4 = list(nu=9.9, kappa=1.6),
+                             #theta= list(theta1=0.6),
+                             eps=list(local=1.2, hazard_mort=0.4, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.1),
+                             #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                             vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+
+source(paste0(dir, 'RCode/Unfinished/Model_allRanks.R'))
+testing2 <- function(){
+  #Omega$eps$local = 0.4
+  hazard_cors <- c(0.05, 0.5, 0.95)
+  n_dim <- 9   # dimensions of CalcDist output
+  n_rep <- 20
+  n_hz <- length(hazard_cors)
+  
+  # Initialize 4D array: [dim, repeat, test, gen]
+  results_array <- array(NA, dim = c(n_dim, n_rep, n_hz, n_hz),
+                         dimnames = list(NULL,
+                                         paste0("rep", 1:n_rep),
+                                         paste0("test_", hazard_cors),
+                                         paste0("gen_", hazard_cors)))
+  
+  # Load and order training files
+  ufiles <- na.omit(list.files(path = paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/'),
+                               pattern = Model$haz, recursive = TRUE, ignore.case = TRUE))
+  ufiles <- grep('^Train/', ufiles, value = TRUE)
+  x <- file.info(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/', ufiles))
+  ufiles <- na.omit(ufiles[match(length(ufiles):1, rank(x$size))])
+  event_ids_all <- as.numeric(sub(".*_(\\d+)$", "\\1", ufiles))
+  
+  
+  for (gen_idx in seq_along(hazard_cors)) {
+    gen_hz <- hazard_cors[gen_idx]
+    cat("Generating data for hazard_cor =", gen_hz, "\n")
+    
+    for (rep in 1:n_rep){
+      
+      Omega$eps$hazard_cor <- gen_hz
+      
+      for (file in ufiles) {
+        ODD <- readODD(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/', file))
+        #ODD$Population = ifelse(values(ODD$Population) >7500 & values(ODD$hazMean1)> 8, 15000, 0)
+        #ODD$Population = values(ODD$Population) * exp(values(ODD$Population)/max(values(ODD$Population)))/exp(1)
+        
+        # Omega$eps$hazard_cor = 0.1
+        AlgoParams$cores <- 2
+        AlgoParams$NestedCores <- 1
+        suppressMessages(suppressWarnings(invisible(capture.output({result = DispX(ODD,
+                                                                                   Omega %>% addTransfParams(),
+                                                                                   Model$center,
+                                                                                   AlgoParams %>% replace(which(names(AlgoParams) == 'm_CRPS'), 1) %>%
+                                                                                     replace(which(names(AlgoParams) == 'Np'), 2),
+                                                                                   output = 'SampledAgg')}))))
+        
+        sampled_out_single = result
+        
+        # Omega$eps$hazard_cor = 0.9
+        # suppressMessages(suppressWarnings(invisible(capture.output({result = DispX(ODD,
+        #                                                                            Omega %>% addTransfParams(),
+        #                                                                            Model$center,
+        #                                                                            AlgoParams %>% replace(which(names(AlgoParams) == 'm_CRPS'), 1) %>%
+        #                                                                              replace(which(names(AlgoParams) == 'Np'), 100),
+        #                                                                            output = 'SampledAgg')}))))
+        # 
+        # sampled_out_single2 = result
+        
+        
+        
+        ODD@impact$id <- 1:nrow(ODD@impact)
+        
+        # flattened1 = flattenImpactSample2(sampled_out_single)
+        # flattened2 = flattenImpactSample2(sampled_out_single2)
+        # pairs(log(rbind(t(flattened1[,5:104]), t(flattened2[,5:104]))+10), col=c(rep('red',100), rep('blue',100)))
+        # 
+        
+        merged_df <- merge(
+          ODD@impact,
+          sampled_out_single[[1]],
+          by = c('polygon', 'impact', 'iso3', 'observed', 'inferred', 'qualifier', 'sdate')
+        )
+        
+        merged_df <- merged_df[order(merged_df$id), ]
+        
+        ODD@impact$observed = merged_df$sampled
+        
+        saveODD(ODD, paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput10/ODDobjects/', file))
+      }
+      
+      for (test_idx in seq_along(hazard_cors)) {
+        test_hz <- hazard_cors[test_idx]
+        cat("Testing with hazard_cor =", test_hz, "on gen =", gen_hz, "\n")
+        
+          Omega$eps$hazard_cor <- test_hz
+          AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput10/'
+          AlgoParams$Np <- 1
+          AlgoParams$m_CRPS <- 100
+          AlgoParams$cores <- 2
+          AlgoParams$NestedCores <- 1
+          suppressMessages(suppressWarnings(invisible(capture.output({impact_sample = SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams, dat = 'Train', output = 'SampledAgg')}))))
+          dist_output <- CalcDist(impact_sample, AlgoParams)
+          
+          print(dist_output)
+          
+          # Store in 4D array
+          results_array[, rep, test_idx, gen_idx] <- as.numeric(dist_output)
+          saveRDS(results_array, file = paste0("CalcDist_4D_matrix", Sys.Date(), ".rds"))
+        }
+    }
+  }
+}
+
+
+# results_array <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/CalcDist_4D_matrix2025-07-23.rds')
+par(mfrow=c(2,2), mar = c(4, 4, 2, 1), family="Times")
+method_colors <- c('#440154', '#FDE725FF', '#1FA187')
+method_labels <- c('Method 1', 'Method 2', 'Method 3')
+
+titles <- c('Energy Score', '(a) Multivariate Rank', '(b) MST Rank','MVR MortDisp', '(c) BD Rank', 'BD MortDisp', '(d) Average Rank', 'Ave Rank MortDisp', 'MST rank mortdisp')
+
+for (i in c(2,3,5, 7)) {
+  box_data <- list()
+  box_names <- list()
+  for (j in 1:3) {
+    for (k in 1:3) {
+      box_data[[length(box_data)+1]] = results_array[i, ,j,k] / 0.05
+      box_names[[length(box_names) + 1]] <- substitute(rho[Sim] == x, list(x = hazard_cors[k]))
+    }
+  }
+  
+  group_labels <- lapply(hazard_cors, function(x) substitute(rho[Obs] == y, list(y = x)))
+  
+  ylims <- range(results_array[i,,,]/0.05, na.rm = TRUE) 
+  
+  # Add 10% vertical space on top
+  y_margin <- 0.1 * diff(ylims)
+  ylims[2] <- ylims[2] + y_margin
+  
+  bp <- boxplot(box_data, 
+                col = rep(method_colors, times = 3),
+                xaxt = "n",
+                main = "", #titles[i],
+                ylim = ylims,
+                ylab = "",
+                cex.axis = 1)
+  mtext(titles[i], side = 3, line = 0.5, adj = 0, cex = 0.9, font = 1)
+  
+  # Tick labels for each box
+  tick_labels <- rep(hazard_cors, times = 3)
+  axis(1, at = 1:9, labels = tick_labels, las = 1, cex.axis = 1)
+  
+  # Add x-axis label
+  mtext(expression(rho[Sim]), side = 1, line = 2.5, cex = 1)
+  
+  # Add rho[Obs] inside plot above groups
+  group_positions <- c(mean(1:3), mean(4:6), mean(7:9))
+  usr <- par("usr")
+  y_pos <- usr[4] - 0.07 * diff(usr[3:4])  # inside plot, near top
+  
+  text(x = group_positions, y = y_pos, labels = do.call(expression, group_labels), cex = 1.25)
+  
+  # Optional: Add group separators
+  abline(v = c(3.5, 6.5), lty = 2, col = "grey")
+}
+#8.5 x 6, PreRankComparison.pdf
+
+
+testing3 <- function(){
+  hazard_cors <- c(0.1, 0.5, 0.9)
+  n_dim <- 8   # dimensions of CalcDist output
+  n_rep <- 6
+  n_hz <- length(hazard_cors)
+  
+  # Initialize 4D array: [dim, repeat, test, gen]
+  results_array <- array(NA, dim = c(n_dim, n_rep, n_hz),
+                         dimnames = list(NULL,
+                                         paste0("rep", 1:n_rep),
+                                         paste0("test_", hazard_cors)))
+    
+  for (rep in 1:n_rep){
+    for (test_idx in seq_along(hazard_cors)) {
+      test_hz <- hazard_cors[test_idx]
+      cat("Testing with hazard_cor =", test_hz, "on gen =", 0.1, "\n")
+      
+      Omega$eps$hazard_cor <- test_hz
+      AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput8/'
+      AlgoParams$Np <- 1
+      AlgoParams$m_CRPS <- 100
+      AlgoParams$cores <- 1
+      AlgoParams$NestedCores <- 1
+      suppressMessages(suppressWarnings(invisible(capture.output({ impact_sample = SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams, dat = 'Train', output = 'SampledAgg')}))))
+      dist_output <- CalcDist(impact_sample, AlgoParams)
+      
+      print(dist_output)
+      
+      # Store in 4D array
+      results_array[, rep, test_idx] <- as.numeric(dist_output)
+      saveRDS(results_array, file = paste0("CalcDist_4D_matrix_fixedGenTrain", Sys.Date(), ".rds"))
+    }
+  }
+}
+
+#results_array = readRDS('CalcDist_4D_matrix.rds')
+titles = c('ES', 'MVR Rank', 'MMDS', 'MVR Rank MortDisp', 'BD Rank', 'BD MortDisp', 'MMDs Rank', 'MMDS Ranks MortDisp')
+
+par(mfrow=c(4,3))
+for (j in c(2,5,6,7)){
+  for (gen_idx in 1:3){
+    box_data <- as.list(rep(NA, length(hazard_cors)))
+    for (test_idx in seq_along(hazard_cors)) {
+      box_data[[test_idx]] <- results_array[j, , test_idx, gen_idx]
+    }
+    
+    boxplot(box_data, names = round(hazard_cors, 2), main = paste0('Hazard gen: ', hazard_cors[gen_idx]),
+            xlab = "Hazard Test", ylab = titles[j])
+    
+    #plot(rep(hazard_cors,each=20), c(results_array[j,, ,gen_idx]), main=hazard_cors[gen_idx])
+    #abline(v=hazard_cors[gen_idx])
+  }
+}
+
+par(mfrow=c(3,2))
+for (gen_idx in 1:6){
+  plot(1:n_rep, c(results_array[2,, 1,gen_idx]), ylim=range(results_array[2,,,gen_idx]), col='yellow')
+  #points(1:n_rep, c(results_array[2,,2,gen_idx]), col='orange')
+  points(1:n_rep, c(results_array[2,,3,gen_idx]), col='red')
+  points(1:n_rep, c(results_array[2,,4,gen_idx]), col='darkred')
+  points(1:n_rep, c(results_array[2,,5,gen_idx]), col='purple')
+  points(1:n_rep, c(results_array[2,,6,gen_idx]), col='blue')
+  abline(v=hazard_cors[gen_idx])
+}
+
+par(mfrow=c(4,3))
+for(i in 1:10){
+  for (gen_idx in 1:1){
+    plot(rep(hazard_cors,each=10), c(results_array[i,, ]), main=hazard_cors[gen_idx])
+    abline(v=hazard_cors[gen_idx])
+  }
+}
+
+titles = c('ES', 'MVR Rank', 'MMDS', 'MVR Rank MortDisp', 'BD Rank', 'BD MortDisp', 'MMDs Rank', 'MMDS Ranks MortDisp')
+
+par(mfrow = c(3, 4))
+for (i in 1:10) {
+  box_data <- as.list(rep(NA, length(hazard_cors)))
+  for (gen_idx in seq_along(hazard_cors)) {
+    box_data[[gen_idx]] <- results_array[i, , gen_idx]
+  }
+  
+  boxplot(box_data, names = round(hazard_cors, 2), main = titles[i],
+          xlab = "hazard correlation", ylab = "Value")
+}
+
 
 #------------------------------------------------------------------------------------------------
 #------------------------------------ CHECK HIGH LEVEL PRIORS -----------------------------------
@@ -1074,5 +1563,31 @@ points(as.matrix(sweep(log(df_postpredictive_true[ii,6:55]+AlgoParams$log_offset
 #What do the higher level priors look like?
 
 HLPrior_sample(Model, AlgoParams)
+
+
+# plot(seq(4.5,10,0.01), log(pnorm(seq(4.5,10,0.01), 10,1.05)))
+# lines(seq(4.5,10,0.01), -20+2*seq(4.5,10,0.01))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

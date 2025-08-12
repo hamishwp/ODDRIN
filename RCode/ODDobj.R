@@ -156,7 +156,7 @@ readODD <- function(path){
   for (slot in slotnames[slotnames!=pointer_slot]){
     slot(.Object, slot) = ODD_list[[slot]]
   }
-  slot(.Object, pointer_slot) <- slot(unwrap(ODD_list$spatrast), pointer_slot)
+  slot(.Object, pointer_slot) <- slot(terra::unwrap(ODD_list$spatrast), pointer_slot)
   #.Object@ptr = unwrap(ODD_list$spatrast)@ptr
   names(.Object)[which(names(.Object)=='VALUE')] = 'ISO3C' #sometimes error reading in factor layer
   return(.Object)
@@ -169,7 +169,7 @@ saveODD <- function(ODD, path){
   for (slot in slotnames[slotnames!=pointer_slot]){
     ODD_list[[slot]] = slot(ODD, slot)
   }
-  ODD_list$spatrast <- wrap(ODD)
+  ODD_list$spatrast <- terra::wrap(ODD)
   saveRDS(ODD_list, path)
 }
 
@@ -412,22 +412,33 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   if(is.na(event_i)){
     grid <- as.data.frame(xyFromCell(ODD, 1:ncell(ODD)))  # Extract grid coordinates
     names(grid) <- c("x", "y")  # Name the columns
-    vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+    vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 0.5)
     gstat_mod = gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
     
+    # r <- rast(ODD)
+    # r[['sim']] = as.matrix(predict(gstat_mod, newdata = grid, nsim = 1)[, 3])
+    # plot(r)
     # set.seed(1)
+    RF_local = as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
+    RF_mort = Omega$eps$local * Omega$eps$hazard_mort * RF_local
+    RF_disp = Omega$eps$local * Omega$eps$hazard_disp * ( Omega$eps$hazard_cor * RF_local + sqrt(1-Omega$eps$hazard_cor^2) * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)]))
+    RF_bd = Omega$eps$local * Omega$eps$hazard_bd * ( Omega$eps$hazard_cor * RF_local + sqrt(1-Omega$eps$hazard_cor^2) * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)]))
+
     #RF_local <- as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
     
-    RF_mort <- Omega$eps$local * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
-    RF_disp <- Omega$eps$hazard_cor * RF_mort + sqrt(1-Omega$eps$hazard_cor^2) * Omega$eps$local * Omega$eps$hazard_disp / Omega$eps$hazard_mort * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
-    RF_bd <- Omega$eps$hazard_cor * RF_mort + sqrt(1-Omega$eps$hazard_cor^2) * Omega$eps$local * Omega$eps$hazard_bd / Omega$eps$hazard_mort * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
+    # RF_mort <- Omega$eps$local * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
+    # RF_disp <- Omega$eps$hazard_cor * RF_mort + sqrt(1-Omega$eps$hazard_cor^2) * Omega$eps$local * Omega$eps$hazard_disp / Omega$eps$hazard_mort * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
+    # RF_bd <- Omega$eps$hazard_cor * RF_mort + sqrt(1-Omega$eps$hazard_cor^2) * Omega$eps$local * Omega$eps$hazard_bd / Omega$eps$hazard_mort * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
+    # 
     
   } else {
     #RF_local = Omega$u_local[[event_i]]
     
-    RF_mort <- Omega$eps$local * Omega$u_local[[event_i]][,,1]
-    RF_disp <- Omega$eps$hazard_cor * RF_mort + sqrt(1-Omega$eps$hazard_cor^2) * Omega$eps$local * Omega$eps$hazard_disp / Omega$eps$hazard_mort * Omega$u_local[[event_i]][,,2]
-    RF_bd <- Omega$eps$hazard_cor * RF_mort + sqrt(1-Omega$eps$hazard_cor^2) * Omega$eps$local * Omega$eps$hazard_bd / Omega$eps$hazard_mort * Omega$u_local[[event_i]][,,3]
+    RF_local <- adrop(Omega$u_local[[event_i]][,,1, drop=F], drop=3)
+    RF_mort <- Omega$eps$local * Omega$eps$hazard_mort * RF_local
+    RF_disp = Omega$eps$local * Omega$eps$hazard_disp * ( Omega$eps$hazard_cor * RF_local + sqrt(1-Omega$eps$hazard_cor^2) * adrop(Omega$u_local[[event_i]][,,2, drop=F], drop=3))
+    RF_bd = Omega$eps$local * Omega$eps$hazard_bd * ( Omega$eps$hazard_cor * RF_local + sqrt(1-Omega$eps$hazard_cor^2) * adrop(Omega$u_local[[event_i]][,,3, drop=F], drop=3))
+  
   }
   # RF_mort <- Omega$eps$local * RF_local
   # RF_disp <- Omega$eps$local * Omega$eps$hazard_disp / Omega$eps$hazard_mort * RF_local
@@ -489,7 +500,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   if (is.na(event_i)){
     eps_event <- t(rmvnorm(Method$Np, rep(0, 3), sigma=covar_matrix))
   } else {
-    eps_event <-  chol(covar_matrix) %*% t(Omega$u[event_i,,])
+    eps_event <-  chol(covar_matrix) %*% t(adrop(Omega$u[event_i,,, drop=F], drop=1))
   }
   #eps_event[,] <- 0
   

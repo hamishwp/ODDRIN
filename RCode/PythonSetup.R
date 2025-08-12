@@ -58,7 +58,7 @@ retrieveTotalImpact <- function(ODD){
   return(df_SampledTot)
 }
 
-#input_folder <- "IIDIPUS_Input_Alternatives/Nov24Agg/"
+#input_folder <- "IIDIPUS_Input_Alternatives/July25Agg/"
 collect_data <- function(input_folder, dat='all'){
   folderin<-paste0(dir,input_folder, "ODDobjects/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) 
@@ -112,7 +112,7 @@ collect_data <- function(input_folder, dat='all'){
     impact_all %<>% rbind(impact_total)
   }
   
-  write_feather(impact_all, 'IIDIPUS_Input_Alternatives/Nov24Agg/event_summaries')
+  write_feather(impact_all, 'IIDIPUS_Input_Alternatives/July25Agg/event_summaries')
   
 }
 
@@ -120,7 +120,7 @@ collect_data <- function(input_folder, dat='all'){
 #-------- For saving ODD objects as data frames using feather: -------------------
 # --------------------------------------------------------------------------------
 saveFeather <- function(){
-  input_folder <- "IIDIPUS_Input_Alternatives/Mar25Agg/"
+  input_folder <- "IIDIPUS_Input_Alternatives/July25Agg/"
   folderin<-paste0(dir,input_folder, "ODDobjects/")
   ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
   
@@ -128,6 +128,19 @@ saveFeather <- function(){
   
   impact_observed = data.frame(event_i = numeric(), mort=integer())
   SHDI_df = data.frame(event_i = numeric(), SHDI=numeric())
+  
+  data_grids = data.frame(xmin = numeric(),
+                          xmax = numeric(),
+                          ymin = numeric(),
+                          ymax = numeric(),
+                          ncol = integer(),
+                          nrow = integer(),
+                          res_x = numeric(),
+                          res_y = numeric(),
+                          crs = character())
+  
+  exposed_cells_list = list()
+  
   for (i in event_ids_all){
     filer <- ufiles[which(event_ids_all==i)]
     ODD <- readODD(paste0(folderin, filer))
@@ -146,7 +159,10 @@ saveFeather <- function(){
     exposed_flag = !apply(ODD_df[, grep('hazMean', names(ODD_df)), drop=F],1, function(row) all(is.na(row)))
     
     #ODD_df$hazMax <- apply(ODD_df[,grep('hazMean', names(ODD_df)), drop=F], 1, max, na.rm=T)
-    ODD_df %<>% filter(!is.na(Population) & !is.na(ISO3C) & !is.na(SHDI) & !is.na(EQFreq) & exposed_flag)
+    
+    exposed_cells = which(!is.na(ODD_df$Population) & !is.na(ODD_df$ISO3C) & !is.na(ODD_df$SHDI) & !is.na(ODD_df$EQFreq) & exposed_flag)
+    exposed_cells_list[[i]] = exposed_cells
+    ODD_df = ODD_df[exposed_cells, ]
     ODD_df = ODD_df[, - grep('hazSD', names(ODD_df))]
     
     write_feather(ODD_df, paste0(dir, input_folder, 'ODDobjects_feather/', filer))
@@ -160,7 +176,24 @@ saveFeather <- function(){
     
     write_feather(haz_info_df, paste0(dir, input_folder, 'ODDobjects_feather/hazinfo/', filer))
     
+    data_grids %<>% rbind(data.frame(
+      xmin = ext(ODD)[1],
+      xmax = ext(ODD)[2],
+      ymin = ext(ODD)[3],
+      ymax = ext(ODD)[4],
+      ncol = ncol(ODD),
+      nrow = nrow(ODD),
+      res_x = res(ODD)[1],
+      res_y = res(ODD)[2],
+      crs = crs(ODD, proj=TRUE)
+    ))
+    
+    
   }
+  # Save as Feather
+  write_feather(data_grids, paste0(dir, input_folder, "grid_metadata.feather"))
+  
+  write_json(exposed_cells_list, paste0(dir, input_folder, "exposed_cells.json"))
   
   write_feather(impact_observed, paste0(dir, input_folder, 'ODDobjects_feather/impact_all'))
   
@@ -181,5 +214,88 @@ ODD_all$impact_pred = exp(theta0 + theta1 * 5 + ev_err)* ODD_all$Pop5 +
 plot(log(ODD_all$observed+10), log(ODD_all$impact_pred+10))
 abline(0,1)
 
-  
-  
+
+
+#-----------------------------------------------------------------------------------------------------------------
+#-------------------------------------------- PLOT SBI RESULTS ---------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------
+
+library(arrow)
+
+df <- read_parquet('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/July25Agg/ODDobjects_feather/posterior_samples_2025-08-07_11-59-08.pt')
+
+posterior_samples = matrix(unlist(df), nrow = nrow(df), byrow=T)
+
+AlgoResults = list(
+  Omega_sample_phys = array(0, dim = c(nrow(posterior_samples), length(unlist(Model$skeleton)),2)),
+  W = array(1, dim=c(nrow(posterior_samples), 2))
+)
+
+#add prior samples
+n_x = NCOL(AlgoResults$Omega_sample_phys)
+s <- 1
+for (i in 1:length(Model$Priors)){
+  for (j in 1:length(Model$Priors[[i]])){
+    prior_dist <- Model$Priors[[i]][[j]]
+    AlgoResults$Omega_sample_phys[,s,1] <- do.call(match.fun(paste0('r', prior_dist$dist)), c(list(n=NROW(AlgoResults$Omega_sample_phys)), prior_dist[2:length(prior_dist)]))
+    s <- s + 1
+  }
+}
+
+AlgoResults$Omega_sample_phys[, c(8, 7, 3, 4, 12, 13, 15, 16, 17, 18),2] = posterior_samples
+
+p1 = plot_correlated_posteriors_ggplot(AlgoResults, pairings = rbind(c(3,4), c(8,7), c(15,12), c(13, 14), c(16, 17), c(18, 19)), s_finish=2, plots_ncol = 2)
+p1
+
+#-------- Posterior Predictive Samples:
+
+df_pred <- read_parquet('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/July25Agg/ODDobjects_feather/predictive_samples_2025-08-07_14-11-21.pt')
+
+predictive_samples = exp(matrix(unlist(df_pred), nrow = nrow(df_pred), byrow=T)) - 10
+
+impact_data = read_feather('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/July25Agg/ODDobjects_feather/impact_all')
+
+df_postpredictive = data.frame(event_id=NA,
+                               iso3 = 'AAA',
+                               polygon=0, 
+                               impact='mortality',
+                               observed = impact_data$mort)
+
+y_all_ordered = unlist(read_parquet('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/July25Agg/ODDobjects_feather/y_all_ordered'))
+df_postpredictive$observed = exp(y_all_ordered)-10
+
+sample_column_names <- paste0('sampled.', 1:nrow(predictive_samples))
+df_postpredictive[sample_column_names] <- t(predictive_samples)
+df_postpredictive$train_flag = c(rep('TRAIN', 112), rep('TEST', 57))
+
+input_folder <- "IIDIPUS_Input_Alternatives/July25Agg/ODDobjects_feather/"
+train_dir <- file.path(dir, input_folder, "Train")
+test_dir <- file.path(dir, input_folder, "Test")
+
+# List all files in Train and Test directories
+train_files <- list.files(train_dir, full.names = TRUE)
+test_files <- list.files(test_dir, full.names = TRUE)
+
+# Combine Train and Test files
+files <- c(train_files, test_files)
+
+# Extract event IDs from filenames
+event_ids <- as.integer(str_extract(basename(files), "\\d+$"))
+
+
+p2 = plot_df_postpredictive(df_postpredictive %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none") 
+
+plot_grid(plot_grid(p1[[1]]+ theme(plot.margin = margin(5, 5, 5, 25)), 
+                    p1[[2]]+ theme(plot.margin = margin(5, 5, 5, 25)),
+                     p1[[3]]+ theme(plot.margin = margin(5, 5, 5, 25)), 
+                     p1[[4]]+ theme(plot.margin = margin(5, 5, 5, 25)),
+                     p1[[5]]+ theme(plot.margin = margin(5, 5, 5, 25)), 
+                     p1[[6]]+ theme(plot.margin = margin(5, 5, 5, 25)), ncol=2,
+             labels=c('(a)', '(b)', '(c)', '(d)', '(e)', '(f)'),
+             label_fontfamily = "Times New Roman",
+            label_fontface = "plain"),
+             p2+ theme(plot.margin = margin(10, 20, 10, 10)), labels=c('', '(g)'), ncol=2,
+          label_fontfamily = "Times New Roman",
+          label_fontface = "plain")
+
+#SBI_National.pdf, 10 x 5

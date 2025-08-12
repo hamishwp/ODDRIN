@@ -110,7 +110,7 @@ prepareODD <- function(dir, input, getGADMregions=T, folder_write='IIDIPUS_Input
       polygon=1
     )
     ODDy@polygons = list(list(name='TOTAL', indexes=1:ncell(ODDy), weights=rep(1, ncell(ODDy))))
-    
+    saveODD(ODDy, paste0(dir, folder_write, 'ODDobjects/', namer))
   }
   
   #plot to make sure all is ok:
@@ -143,16 +143,16 @@ PosteriorImpactPred <- function(ODDy,
   AlgoResults <- readRDS(paste0(dir, AlgoResultsFilename))
   #AlgoResults$Omega_sample_phys <- AlgoResults$Omega_sample_phys[, c(1:6, 10:22),]
   
-  ODDy_with_sampledfull <- sampleImpactODD(ODDy, AlgoResults, N_samples = 100)
+  ODDy_with_sampledfull <- sampleImpactODD(ODDy, AlgoResults, N_samples = N_samples)
   ODDyWithImpact = ODDy_with_sampledfull$ODDy
   sampled_full = ODDy_with_sampledfull$sampled_full
   saveODD(ODDyWithImpact, paste0(dir,folder_write, 'ODDobjectsWithImpact/',namer, '_WithImpactSummaries'))
-  saveRDS(sampled_full, paste0(dir,folder_write,'ODDobjectsWithImpact/sampled_full', namer, '_fullSampledImpact'))
+  saveRDS(sampled_full, paste0(dir,folder_write,'ODDobjectsWithImpact/sampled_full/', namer, '_fullSampledImpact'))
   
   ODDyWithAggImpact <- aggregateSampledImpact(ODDyWithImpact, sampled_full)
   saveODD(ODDyWithAggImpact, paste0(dir, folder_write, 'ODDobjectsWithImpact/',namer, '_WithImpact200'))
   
-  return(list(sampled_full=sampled_full, ODDyWithImpact=ODDyWithImpact))
+  return(list(sampled_full=sampled_full, ODDyWithImpact=ODDyWithAggImpact))
   
 }
 
@@ -266,6 +266,7 @@ find_subnat_regions <- function(ODDy, eventid, gadm_levels=c(1,2), print_to_xl=F
   # Find the subnational regions at the provided administrative levels (gadm level 1 or 2)
   # that are exposed to the hazard
   # Find the pixels in the ODD object that are in each region. 
+  sf_use_s2(FALSE)
   iso3_unique <- unique(ODDy$ISO3C)$ISO3C[!is.na(unique(ODDy$ISO3C)$ISO3C)]
   gadm_regions_1 <- data.frame('Country'=character(), 'Region'=character(), 'Subregion'=character())
   gadm_regions_2 <- data.frame('Country'=character(), 'Region'=character(), 'Subregion'=character())
@@ -326,6 +327,7 @@ find_subnat_regions <- function(ODDy, eventid, gadm_levels=c(1,2), print_to_xl=F
       }
     }
   }
+  sf_use_s2(TRUE)
   return(rbind(gadm_regions_1, gadm_regions_2))
 }
 
@@ -428,8 +430,13 @@ sampleImpactODD <- function(ODDy, AlgoResults, N_samples = 100){
   for (i in 1:N_samples){
     print(paste('Sample', i))
     if (length(dim(AlgoResults$Omega_sample_phys))==2){ # MCMC
-      param_sample <- sample(1:1000,1) #sample within the last 1000 iterations
+      param_sample <- sample(1:min(1000, which(is.na(AlgoResults$Omega_sample_phys[1,]))[1]-1),1) #sample within the last 1000 iterations
       proposed = AlgoResults$Omega_sample_phys[,which(is.na(AlgoResults$Omega_sample_phys[1,]))[1]-param_sample] %>% relist(skeleton=Model$skeleton) %>% addTransfParams() #MCMC
+      # while(proposed$Lambda2$nu > 12.5){
+      #   print('Reject')
+      #   param_sample <- sample(1:1000,1) #sample within the last 1000 iterations
+      #   proposed = AlgoResults$Omega_sample_phys[,which(is.na(AlgoResults$Omega_sample_phys[1,]))[1]-param_sample] %>% relist(skeleton=Model$skeleton) %>% addTransfParams() #MCMC
+      # }
     } else { #ABC-SMC
       AlgoResults %<>% addAlgoParams()
       param_sample <- sample(1:AlgoResults$Npart, 1, replace=T, prob=AlgoResults$W[,AlgoResults$s_finish])
@@ -473,10 +480,24 @@ aggregateSampledImpact <- function(ODDyWithImpact, sampled_full){
   
   # i = 1: Displacement; i = 2: Mortality; i = 3: BuildDam
   impact_types = c('displacement', 'mortality', 'buildDam')
+  if(nrow(ODDyWithImpact@impact)==0){
+    ODDyWithImpact@impact= data.frame(
+      iso3='TOT',
+      sdate=ODDyWithImpact@hazdates[1],
+      impact=c('mortality', 'displacement', 'buildDam'),
+      observed=NA,
+      qualifier=NA,
+      inferred=F,
+      MAR=F,
+      build_type=NA,
+      polygon=1
+    )
+    ODDyWithImpact@polygons = list(list(name='TOTAL', indexes=1:ncell(ODDyWithImpact), weights=rep(1, ncell(ODDyWithImpact))))
+  }
   for (i in 1:ifelse('nBuildings' %in% names(ODDyWithImpact), 3,2)){
     impact_sampled <- sampled_full[,i,]#as.data.frame(ODDyWithImpact[[names(ODDyWithImpact)[grep(paste0(impact_types[i], '.s'),names(ODDyWithImpact))]]], na.rm=F)
     for (j in 1:length(ODDyWithImpact@polygons)){
-        sampled_df[nrow(sampled_df)+1,] = c(j, impact_types[i], ODDyWithImpact@polygons[[j]]$name, colSums(impact_sampled[ODDyWithImpact@polygons[[j]]$indexes,]))
+      sampled_df[nrow(sampled_df)+1,] = c(j, impact_types[i], ODDyWithImpact@polygons[[j]]$name, colSums(impact_sampled[ODDyWithImpact@polygons[[j]]$indexes,, drop=F]))
     }
   }
   ODDyWithImpact@impact %<>% merge(sampled_df, by=c('polygon', 'impact'))
@@ -748,9 +769,9 @@ plotODDyImpactQuantile <- function(ODDy, impact_type, quantile, max_break = 500,
       right = FALSE
     )
   } else {
-    breaks = c(-Inf, 1, 10, 50, 100, 500, 1000, 10000, 50000, Inf)
+    #breaks = c(-Inf, 1, 10, 50, 100, 500, 1000, 10000, 50000, Inf)
     if (max_break < 50000 & max_break > 10000){
-      breaks = c(-Inf, 1, 10, 50, 100, 500, 1000, 10000, 50000, Inf)
+      breaks = c(-Inf, 1, 100, 500, 1000, 5000, 10000, Inf)
     }
     plot_df$bin_category <- cut(
       plot_df[[var]], 
@@ -831,6 +852,34 @@ plotODDyImpactQuantile <- function(ODDy, impact_type, quantile, max_break = 500,
   # }
   # p
 }
+
+#plot_df$Population[which(is.na(plot_df$Population))] = 0
+# breaks = c(-Inf, 1, 10, 50, 100, 500, 1000, 10000, 50000, Inf)
+# plot_df$bin_category <- cut(
+#   plot_df[['Population']], 
+#   breaks = breaks, 
+#   labels = c(0, paste0(breaks[2:(length(breaks)-2)], ' - ', breaks[3:(length(breaks)-1)]-1), paste0(breaks[length(breaks)-1], '+')), #c("0", "1-2", "2-5", "5-10", "10-20", "20-50", "50-100", "100-500","500+"),
+#   right = FALSE
+# )
+# bin_colors <- viridis::viridis(length(levels(plot_df$bin_category)))
+# p + 
+#   geom_raster(data = plot_df, aes(x = Longitude, y = Latitude, fill = Population), alpha = 0.75) + 
+#   coord_equal() +
+#   scale_x_continuous(expand = c(0,0)) + 
+#   scale_y_continuous(expand = c(0,0)) +
+#   theme_minimal() + 
+#   theme(
+#     axis.title = element_text(family = "Liberation Serif", size = 12),  
+#     legend.text = element_text(family = "Liberation Serif", size = 11),
+#     legend.title = element_text(family = "Liberation Serif", size = 12)
+#   ) + 
+#   geom_contour(data = plot_df, aes(Longitude, Latitude, z = hazMean1, colour = ..level..),
+#                alpha = 0.7, lwd = 0.8) +
+#   scale_color_gradientn(colors = c("transparent", "#fc9272", "#ef3b2c")) +
+#   labs(colour = "Hazard Intensity") + 
+#   scale_fill_viridis(trans = "log10", labels = function(x) sprintf("%.0f", x))
+#   scale_fill_manual(name = paste0(toupper(substr(impact_type, 1, 1)), substr(impact_type, 2, nchar(impact_type))),#paste0(toupper(substr(impact_type, 1, 1)), substr(impact_type, 2, nchar(impact_type)),' ', quantile,'% Quantile'), 
+#                     values = bin_colors, na.value = "transparent") # Discrete color scale # Discrete color scale
 
 #plotODDyImpactQuantile(ODDyAggWithImpact, impact_type='mortality', quantile=5, max_break = 500)
 
@@ -995,9 +1044,9 @@ plot_predictive_panel <- function(ODDyAggWithImpact, sampled_full){
   ODDRIN_mortpred.50 = plotODDyImpactQuantile(ODDyAggWithImpact, impact='mortality', quantile=50, max_break = 150) + ggtitle("Mortality 50% Quantile")
   ODDRIN_mortpred.95 = plotODDyImpactQuantile(ODDyAggWithImpact, impact='mortality', quantile=95, max_break = 150) + ggtitle("Mortality 95% Quantile") 
   
-  ODDRIN_disppred.05 = plotODDyImpactQuantile(ODDyAggWithImpact, impact='displacement', quantile=5) + ggtitle("Displacement 5% Quantile")
-  ODDRIN_disppred.50 = plotODDyImpactQuantile(ODDyAggWithImpact, impact='displacement', quantile=50) + ggtitle("Displacement 50% Quantile")
-  ODDRIN_disppred.95 = plotODDyImpactQuantile(ODDyAggWithImpact, impact='displacement', quantile=95) + ggtitle("Displacement 95% Quantile") 
+  ODDRIN_disppred.05 = plotODDyImpactQuantile(ODDyAggWithImpact, impact='displacement', quantile=5, max_break=10001) + ggtitle("Displacement 5% Quantile")
+  ODDRIN_disppred.50 = plotODDyImpactQuantile(ODDyAggWithImpact, impact='displacement', quantile=50, max_break=10001) + ggtitle("Displacement 50% Quantile")
+  ODDRIN_disppred.95 = plotODDyImpactQuantile(ODDyAggWithImpact, impact='displacement', quantile=95, max_break=10001) + ggtitle("Displacement 95% Quantile") 
   
   legendmort <- get_plot_component(ODDRIN_mortpred.95, 'guide-box', return_all=T)[[1]]
   
@@ -1135,7 +1184,6 @@ plot_GADM_impact_polygons <- function(ODDy, polygons_list, gadm_level = 2, impac
     theme_minimal() +
     labs(title = "Impact by Region", fill = paste(impact_type, summary)) + 
     xlim(ext(ODDy)[c(1,2)]) + ylim(ext(ODDy)[c(3,4)])
-  
   
 }
 # library(shiny)

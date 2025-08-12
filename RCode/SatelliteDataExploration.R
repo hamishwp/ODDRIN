@@ -674,7 +674,7 @@ for (i in 1:length(ufiles_BD)){
   # BDy$hazard <- hazard
   BDy_df$intensity <- round(BDy_df$hazard*2)/2
 
-  plot_bd_df_int %<>% add_row((BDy_df %>% group_by(intensity) %>% dplyr::summarise(event_name=file,
+  plot_bd_df_int %<>% add_row((BDy_df %>% dplyr::group_by(intensity) %>% dplyr::summarise(event_name=file,
                                                                                     obs_prop_bd = mean(grading !='notaffected'),
                                                                                     tot_obs=n())))
   
@@ -741,7 +741,7 @@ p7 <- ggplot(plot_bd_df_int %>% filter(!is.na(plot_bd_df_int$obs_prop_bd)),
 input_folder <- 'IIDIPUS_Input_Alternatives/Aug24/BDobjects/'
 #plot intensity vs observed proportion damaged for all BD objects in a file
 
-plot_bd_df_int <- data.frame(event_name = character(), intensity=numeric(), obs_prop_bd=numeric(), tot_obs=integer())
+plot_bd_df_int2 <- data.frame(event_name = character(), intensity=numeric(), obs_prop_bd=numeric(), tot_obs=integer())
 
 ufiles_BD <- list.files(path=input_folder,pattern=Model$haz,recursive = T,ignore.case = T)
 build_all <- data.frame(event_name=character(), grading=character())
@@ -774,7 +774,7 @@ for (i in 1:length(ufiles_BD)){
   }
   groupedBDy_df <- BDy_df %>%
     group_by(!!!syms(grouping_vars)) %>%
-    mutate(group_id = cur_group_id(), MAR=F) %>% group_split()
+    dplyr::mutate(group_id = cur_group_id(), MAR=F) %>% group_split()
   
   for (i in 1:length(groupedBDy_df)){
     if (NROW(groupedBDy_df[[i]]) < 5) next
@@ -806,7 +806,7 @@ for (i in 1:length(ufiles_BD)){
   # }
   # BDy$hazard <- hazard
   MAR_groupedBDy_df$intensity <- MAR_groupedBDy_df$rounded_intensity
-  plot_bd_df_int %<>% add_row((MAR_groupedBDy_df %>% group_by(intensity) %>% dplyr::summarise(event_name=file,
+  plot_bd_df_int2 %<>% add_row((MAR_groupedBDy_df %>% group_by(intensity) %>% dplyr::summarise(event_name=file,
                                                                                        obs_prop_bd = mean(grading !='notaffected'),
                                                                                        tot_obs=n())))
   
@@ -816,15 +816,15 @@ BDy_HTI2021 <- readBD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alte
 BDy_df <- as.data.frame(BDy_HTI2021)
 BDy_df %<>% filter(grading != 'possible')
 BDy_df$intensity <- round(apply(BDy_df[,grep('hazMean', names(BDy_df))],1,max, na.rm=T)*2)/2
-plot_bd_df_int %<>% add_row((BDy_df %>% group_by(intensity) %>% dplyr::summarise(event_name='EQ20210814HTI_164',
+plot_bd_df_int2 %<>% add_row((BDy_df %>% group_by(intensity) %>% dplyr::summarise(event_name='EQ20210814HTI_164',
                                                                           obs_prop_bd = mean(grading !='notaffected'),
                                                                           tot_obs=n())))
 
 
 color_palette['2021-08-14, HTI'] = '#f21818'
 
-plot_bd_df_int$event_name_fct <- extract_country_date(plot_bd_df_int$event_name)
-plot_bd_df_int$event_name_fct <- factor(plot_bd_df_int$event_name_fct, 
+plot_bd_df_int2$event_name_fct <- extract_country_date(plot_bd_df_int2$event_name)
+plot_bd_df_int2$event_name_fct <- factor(plot_bd_df_int2$event_name_fct, 
                                         levels=c("2013-09-24, PAK", "2015-04-25, NPL", "2016-04-16, ECU", 
                                                  "2016-08-24, ITA", "2016-10-26, ITA", "2017-09-19, MEX",
                                                  "2017-09-07, MEX", "2017-11-12, IRN", "2022-06-22, AFG", 
@@ -832,9 +832,28 @@ plot_bd_df_int$event_name_fct <- factor(plot_bd_df_int$event_name_fct,
                                                  "2023-02-06, TUR",
                                                  black_events))
 
-plot_bd_df_int_filtered <- plot_bd_df_int %>% filter(!is.na(plot_bd_df_int$obs_prop_bd))
-linetype_palette <- rep("solid", length(unique(plot_bd_df_int_filtered$event_name_fct)))  # Start with all solid
-linetype_palette[which(unique(plot_bd_df_int_filtered$event_name_fct) == "2021-08-14, HTI")] <- "dashed"  # Set the specific event to dashed
+plot_bd_df_int_filtered <- plot_bd_df_int2 %>% filter(!is.na(plot_bd_df_int2$obs_prop_bd))
+
+#linetype_palette <- rep("solid", length(unique(plot_bd_df_int_filtered$event_name_fct)))  # Start with all solid
+#linetype_palette[which(unique(plot_bd_df_int_filtered$event_name_fct) == "2021-08-14, HTI")] <- "dashed"  # Set the specific event to dashed
+linetype_palette <- rep("solid", length(color_palette))  # Start with all solid
+linetype_palette[length(linetype_palette)] <- "dashed"
+
+
+#- Remove if you don't want in legend. Also remove drop=F in plot
+missing_levels <- setdiff(levels(plot_bd_df_int$event_name_fct),
+                          unique(plot_bd_df_int_filtered$event_name_fct))
+
+if (length(missing_levels) > 0) {
+  dummy_df <- data.frame(
+    intensity = NA,
+    obs_prop_bd = NA,
+    event_name_fct = factor(missing_levels, levels = levels(plot_bd_df_int$event_name_fct))
+  )
+  
+  plot_bd_df_int_filtered <- bind_rows(plot_bd_df_int_filtered, dummy_df)
+}
+# ---------------------------
 
 # Create a ggplot with shaded region
 p8 <- ggplot(plot_bd_df_int_filtered, 
@@ -846,10 +865,10 @@ p8 <- ggplot(plot_bd_df_int_filtered,
   labs(#title = "Line with Shaded Region for 3 Standard Deviations",
     x = "Exposed Hazard Intensity",
     y = "Observed Proportion Buildings Damaged") + ggtitle('') + ylim(0,1) +
-  scale_color_manual(values=color_palette) + 
+  scale_color_manual(values=color_palette, drop=F) + 
   #scale_linetype_manual(values = linetype_palette) + 
   labs(color = "Event") + 
-  scale_linetype_manual(values = linetype_palette) +
+  scale_linetype_manual(values = linetype_palette, drop=F) +
   guides(
     color = guide_legend("Event", override.aes = list(linetype=linetype_palette, lwd = 1)),  # Single legend with "Event" label
     linetype = "none"  # Remove the separate linetype legend
@@ -864,10 +883,10 @@ p8 <- ggplot(plot_bd_df_int_filtered,
         legend.title = element_text(family = "Liberation Serif", size=12),
         legend.key.width=unit(2,"lines"))
 
-p8
-plot_grid( p7, p8, align = 'vh', nrow = 2)
 
-#PointDatIntensity.pdf, 10 x 8
+plot_grid( p7 + theme(legend.position = "none"), p8, nrow = 1, rel_widths=c(0.4,0.6))
+
+#PointDatIntensity.pdf, 5 x 8
 
 #------------------------------------------------------------------------------------------
 #----------------------------------------Figure J------------------------------------------
@@ -894,15 +913,15 @@ for (i in 1:nSamps) {
 #AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
 #AlgoResults$s_finish <- 160
 #AlgoResults$Omega_sample_phys <- AlgoResults$Omega_sample_phys[,c(1:6, 10:22),]
-AlgoResults <-  readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-12-10_060355_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2')
+AlgoResults <-  readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2025-08-03_093559.602748__July25Agg_NormalCDF_ESplus0.05MVR_RF_kappa0.5_range0.5')
 
-set.seed(1)
+set.seed(123)
 for (i in 1:length(ufiles_BD)){
   file <- ufiles_BD[i]
   if (file == "EQ20210814HTI_164") next
   BDy <- readBD(paste0(input_folder, file))
   
-  Omega <- relist(AlgoResults$Omega_sample_phys[sample(1:1000,1),,163], skeleton=Model$skeleton)
+  Omega <- relist(AlgoResults$Omega_sample_phys[sample(1:1000,1),,200], skeleton=Model$skeleton)
   #Omega <- relist(AlgoResults$Omega_sample_phys[,sample(1500:2000,1)], skeleton=Model$skeleton)
   pDamSamp <- BDX(BDy,Omega %>% addTransfParams(),Model,Method = list(Np = 1, cores=2), output='results_analysis')
   pDamSamp$intensity <- apply(pDamSamp[,grep('hazMean', names(pDamSamp))], 1, max, na.rm=T)
@@ -910,7 +929,7 @@ for (i in 1:length(ufiles_BD)){
   pDamSamp$event_name = file
   
   for (j in 2:nSamps){
-    Omega <- relist(AlgoResults$Omega_sample_phys[sample(1:1000,1),,163], skeleton=Model$skeleton)
+    Omega <- relist(AlgoResults$Omega_sample_phys[sample(1:1000,1),,200], skeleton=Model$skeleton)
     #Omega <- relist(AlgoResults$Omega_sample_phys[,sample(1500:2000,1)], skeleton=Model$skeleton)
     pDamSamp_j <- BDX(BDy,Omega %>% addTransfParams(),Model,Method = list(Np = 1, cores=2), output='results_analysis')
     pDamSamp %<>% add_column(!!paste0('pDamSamp.', j) := pDamSamp_j$pDamSamp.1)
@@ -927,7 +946,7 @@ for (i in 1:length(ufiles_BD)){
 }
 
 bd_df_int_real$rounded_intensity <- round(bd_df_int_real$intensity*2)/2
-plot_bd_df_int_real = bd_df_int_real %>% group_by(event_name, rounded_intensity) %>% 
+plot_bd_df_int_real = bd_df_int_real %>% dplyr::group_by(event_name, rounded_intensity) %>% 
   dplyr::summarise(upd_mean=sum(tot_obs*obs_prop_bd)/sum(tot_obs),
             intensity=unique(rounded_intensity),
             across(starts_with("pDamSamp"), ~ sum(.x * tot_obs) / sum(tot_obs), .names = "{col}")
@@ -976,7 +995,7 @@ plot_bd_df_int_real$pDamSamp_q95 <- apply(plot_bd_df_int_real[,grep('pDamSamp.',
 linetype_palette <- setNames(c('solid', 'dashed'), 
                              c('Observed Damage Proportion', 'Posterior Probability of Damage'))
 # Create a ggplot with shaded region
-ggplot(plot_bd_df_int_real[!is.na(plot_bd_df_int_real$upd_mean),], 
+post_median_probs = ggplot(plot_bd_df_int_real[!is.na(plot_bd_df_int_real$upd_mean),], 
        aes(x = intensity, y = upd_mean, group = event_name_fct, color = event_name_fct, linetype='Observed Damage Proportion')) +
   geom_line(lwd=1) +
   geom_line(aes(x=intensity, y=pDamSamp_median, group=event_name_fct, color=event_name_fct, linetype='Posterior Probability of Damage')) +
@@ -995,9 +1014,10 @@ ggplot(plot_bd_df_int_real[!is.na(plot_bd_df_int_real$upd_mean),],
         plot.title=element_text(hjust=-.07, family = "Liberation Serif"), 
         axis.title = element_text(family = "Liberation Serif", size=12),  
         legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
-        legend.title = element_text(family = "Liberation Serif", size=12))
+        legend.title = element_text(family = "Liberation Serif", size=12)) + 
+  scale_y_continuous(limits=c(0, 0.62), expand=expansion(mult=c(0.01, 0.01)))
 
-#PostMedianProbs.pdf, 6 x 10
+#PostMedianProbs.pdf, 3.5 x 7
 
 plot_bd_df_int_real2 = plot_bd_df_int_real %>% filter(event_name != "EQ20210814HTI_164")
 plot(plot_bd_df_int_real2$pDamSamp_median, plot_bd_df_int_real2$upd_mean)
@@ -1189,7 +1209,7 @@ abline(h=sum(ROC_calc$obs_prop_bd * ROC_calc$tot_obs)/sum(ROC_calc$tot_obs),lty=
 abline(h=sum(ROC_calc_sim$obs_prop_bd * ROC_calc_sim$tot_obs)/sum(ROC_calc_sim$tot_obs),col='blue',lty=2)
 
 
-ggplot() + 
+ROCcurves = ggplot() + 
   geom_line(data=Prec_Recall, aes(x=FPR, y=TPR, col='Real Data')) +
   geom_line(data=Prec_Recall2, aes(x=FPR, y=TPR, col='Simulated Data')) + 
   theme_minimal() + xlab('False Positive Rate') + ylab('True Positive Rate') + 
@@ -1202,7 +1222,8 @@ ggplot() +
         axis.title = element_text(family = "Liberation Serif", size=12),  
         legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
         legend.title = element_text(family = "Liberation Serif", size=12)) +
-  geom_abline(slope=1,intercept=0, col='grey', linetype='dashed')
+  geom_abline(slope=1,intercept=0, col='grey', linetype='dashed') +
+  theme(legend.position = 'bottom')
 
 plot(Prec_Recall$FPR, Prec_Recall$TPR, type='l', col='black', xlab='False Positive Rate', ylab='True Positive Rate')
 lines(Prec_Recall2$FPR, Prec_Recall2$TPR, type='l',col='blue', xlab='False Positive Rate', ylab='True Positive Rate')
@@ -1210,8 +1231,23 @@ abline(a=0, b=1, col='red')
 
 AUC_Real <-sum(abs(Prec_Recall$TPR[2:NROW(Prec_Recall)]*(Prec_Recall$FPR[2:NROW(Prec_Recall)] - Prec_Recall$FPR[1:(NROW(Prec_Recall)-1)])))
 AUC_Sim <-sum(abs(Prec_Recall2$TPR[2:NROW(Prec_Recall2)]*(Prec_Recall2$FPR[2:NROW(Prec_Recall2)] - Prec_Recall2$FPR[1:(NROW(Prec_Recall2)-1)])))
-
 #ROCcurves.pdf, 4 x 6 inches
+
+plots <- plot_grid(
+  post_median_probs,
+  ROCcurves+ theme(plot.margin = margin(10, 10, 0, 10)),
+  ncol = 2,
+  labels = c('(a)', '(b)'),
+  label_fontfamily = "Times New Roman",
+  label_fontface = "plain",
+  label_x = c(0, -0.05),  # Move label to the left
+  rel_widths = c(1.5,1)
+)
+
+plots
+# PointDataResults.pdf, 4 x 12
+
+
 
 # 
 # plot(ROC_scores$FP, ROC_scores$TP, xlab='False Positive Rate', ylab='True Positive Rate')

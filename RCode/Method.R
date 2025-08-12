@@ -228,12 +228,11 @@ initialise_particles <- function(dir, Model, AlgoParams, AlgoResults){
       start_time <- Sys.time()
       impact_sample <- SampleImpact(dir = dir,Model = Model,
                                     proposed = AlgoResults$Omega_sample_phys[n,,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
-                                    AlgoParams = AlgoParams,
-                                    dat=dat)
+                                    AlgoParams = AlgoParams, dat='Train')
       
       d_prop <- CalcDist(impact_sample, AlgoParams)
     }
-     
+    
     AlgoResults$d[n,,1] <- rowSums(d_prop)
     min.d.part <- which.min(AlgoResults$d[n,,1])
     
@@ -241,7 +240,7 @@ initialise_particles <- function(dir, Model, AlgoParams, AlgoResults){
       AlgoResults$d_full = array(NA, dim=c(AlgoParams$smc_Npart, AlgoParams$Np, NCOL(d_prop), AlgoParams$smc_steps))
     }
     AlgoResults$d_full[n,,,1] <- d_prop
-  
+    
     ##currently not storing sampled_full due to the space it takes up:
     
     # if (n == 1){
@@ -286,7 +285,7 @@ initialise_particles_Rmpi <- function(dir, Npart, n_nodes){
       #calculate distance
       impact_sample <- SampleImpact(dir = dir, Model = Model,
                                     proposed = Omega_sample_phys_node[n,] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), 
-                                    AlgoParams = AlgoParams)
+                                    AlgoParams = AlgoParams, dat='Train')
       d_prop = CalcDist(impact_sample, AlgoParams) 
     }
     d_node[n,] = rowSums(d_prop)
@@ -294,8 +293,8 @@ initialise_particles_Rmpi <- function(dir, Npart, n_nodes){
     # min.d.part <- which.min(d_node[n,])
     # 
     if (n == 1){
-       d_full = array(NA, dim=c(n_allocated, AlgoParams$Np, NCOL(d_prop)))
-    #   sampled_full = array(NA, dim=c(n_allocated, NROW(impact_sample$poly[[1]]), AlgoParams$m_CRPS))
+      d_full = array(NA, dim=c(n_allocated, AlgoParams$Np, NCOL(d_prop)))
+      #   sampled_full = array(NA, dim=c(n_allocated, NROW(impact_sample$poly[[1]]), AlgoParams$m_CRPS))
     }
     d_full[n,,] <- d_prop
     #sampled_full[n,,] = matrix(unlist(lapply(impact_sample$poly[((min.d.part-1)*AlgoParams$m_CRPS+1):(min.d.part*AlgoParams$m_CRPS)], function(x) x$sampled)), nrow=NROW(impact_sample$poly[[1]])) #take sampled values for the sample with the smallest distance
@@ -344,11 +343,12 @@ AlgoStep1 <- function(dir, AlgoParams, AlgoResults){
   AlgoResults$tolerancestore[1] <- max(AlgoResults$d[,,1]) + 1 # set tolerance to larger than maximum distance
   AlgoResults$accrate_store[1] <- 1
   end_time <- Sys.time()
+  print(paste('Time:', end_time-start_time))
   
   ## Currently just applying an equal weight of 1 to all elements of the distance
-  rel_weights <- rep(1, length(AlgoResults$d_full[1,1,,1]))
+  rel_weights <- c(rep(1,2), rep(0, length(AlgoResults$d_full[1,1,,1])-2))
   AlgoResults$rel_weights = rel_weights
-
+  
   d_full_weighted <- sweep(adrop(AlgoResults$d_full[,,,1, drop=F], drop=4), 3, rel_weights, FUN = "*")
   AlgoResults$d[,,1] <- apply(d_full_weighted, c(1,2), sum)
   
@@ -377,8 +377,8 @@ perturb_particles <- function(s, propCOV, AlgoParams, tolerance_s, W_s, Omega_sa
       if (HP> AlgoParams$ABC & Model$higherpriors) next
       
       impact_sample <- SampleImpact(dir = dir,Model = Model,
-                                proposed = Omega_prop_phys %>% addTransfParams(), 
-                                AlgoParams = AlgoParams)
+                                    proposed = Omega_prop_phys %>% addTransfParams(), 
+                                    AlgoParams = AlgoParams, dat='Train')
       d_prop <- CalcDist(impact_sample, AlgoParams)
       if (AlgoParams$Np > 1){
         d_prop_tot <- rowSums(sweep(d_prop, 2, rel_weights, FUN = "*"))
@@ -396,7 +396,7 @@ perturb_particles <- function(s, propCOV, AlgoParams, tolerance_s, W_s, Omega_sa
       
       #calculate the acceptance probability:
       acc <- (sum(d_prop_tot<tolerance_s)/length(d_prop_tot))/(sum(d_curr<tolerance_s)/length(d_curr)) * modifyAcc(Omega_prop, Omega_sample_s[n,], Model, propCOV)
-        
+      
       u <- runif(1)
       if(u < acc){
         min.d.part <- which.min(d_prop_tot)
@@ -449,8 +449,8 @@ perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omeg
       if (HP> AlgoParams$ABC & Model$higherpriors) next
       
       impact_sample <-  SampleImpact(dir = dir, Model = Model,
-                            proposed = Omega_prop_phys %>% addTransfParams(), 
-                            AlgoParams = AlgoParams) 
+                                     proposed = Omega_prop_phys %>% addTransfParams(), 
+                                     AlgoParams = AlgoParams, dat='Train') 
       d_prop <- CalcDist(impact_sample, AlgoParams)
       
       if(AlgoParams$Np > 1){
@@ -458,7 +458,7 @@ perturb_particles_Rmpi <- function(dir, Npart, n_nodes, W_curr, Omega_curr, Omeg
       } else {
         d_prop_tot <- sum(d_prop * rel_weights)
       }
-     
+      
       if(d_prop[1]==Inf){
         d_prop <- Inf
       } 
@@ -522,10 +522,10 @@ update_tolerance_and_weights <- function(s, alpha, AlgoResults){
   toleranceold <- AlgoResults$tolerancestore[s-1]
   d_old <- adrop(AlgoResults$d[,,s-1,drop=FALSE], drop = 3)
   reflevel <- alpha * tpa(toleranceold, d_old)
-
+  
   tolerance<-uniroot(function(tolerance) tpa(tolerance,d=d_old)-reflevel,c(0,toleranceold*3))$root
   print(paste('      Step:', s, ', New tolerance is:', tolerance))
-
+  
   AlgoResults$tolerancestore[s] <- tolerance
   AlgoResults$essstore[s-1]<- 1/sum(AlgoResults$W[,s-1]^2) #effective sample size
   
@@ -564,31 +564,34 @@ resample_particles <- function(s, N_T, Npart, AlgoResults){
 calc_propCOV <- function(s, n_x, Npart, AlgoResults){
   #calculate perturbation covariance based on Filippi et al., 2012
   
-  tilda_i <- which(rowSums(adrop(AlgoResults$d[,,s-1, drop=F], drop=3)<AlgoResults$tolerancestore[s])>0)
-  Omega_tilda <- AlgoResults$Omega_sample[tilda_i,,s-1] 
-  W_tilda <- AlgoResults$W[tilda_i,s-1]
-  W_tilda <- W_tilda/sum(W_tilda) #normalise weights
-  
-  # When Npart > 2000, sometimes calculate the covariance just using the first 2000 to speed things up a bit!
-  
-  #check that the indexes are right here!
-  propCOV <- matrix(0, nrow=n_x, ncol=n_x)
-  #tilda_i <- tilda_i[tilda_i<2000]
-  #for (n in 1:min(2000, Npart)){
-  for (n in 1:Npart){
-    for(k in 1:length(tilda_i)){
-      propCOV <- propCOV + AlgoResults$W[n,s] * W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]))
-    }
-  }
-  
-  ## Local alternative (different covariance per particle), but no longer reversible steps so doesn't seem to work:
-  # propCOV <- list()
+  # tilda_i <- which(rowSums(adrop(AlgoResults$d[,,s-1, drop=F], drop=3)<AlgoResults$tolerancestore[s])>0)
+  # Omega_tilda <- AlgoResults$Omega_sample[tilda_i,,s-1] 
+  # W_tilda <- AlgoResults$W[tilda_i,s-1]
+  # W_tilda <- W_tilda/sum(W_tilda) #normalise weights
+  # 
+  # # When Npart > 2000, sometimes calculate the covariance just using the first 2000 to speed things up a bit!
+  # 
+  # #check that the indexes are right here!
+  # propCOV <- matrix(0, nrow=n_x, ncol=n_x)
+  # #tilda_i <- tilda_i[tilda_i<2000]
+  # #for (n in 1:min(2000, Npart)){
   # for (n in 1:Npart){
-  #   propCOV[[n]] <- matrix(0, n_x, n_x)
   #   for(k in 1:length(tilda_i)){
-  #     propCOV[[n]] <- propCOV[[n]] + W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]))
+  #     propCOV <- propCOV + AlgoResults$W[n,s] * W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]))
   #   }
   # }
+  # 
+  # ## Local alternative (different covariance per particle), but no longer reversible steps so doesn't seem to work:
+  # # propCOV <- list()
+  # # for (n in 1:Npart){
+  # #   propCOV[[n]] <- matrix(0, n_x, n_x)
+  # #   for(k in 1:length(tilda_i)){
+  # #     propCOV[[n]] <- propCOV[[n]] + W_tilda[k] * ((Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]) %*% t(Omega_tilda[k,]-AlgoResults$Omega_sample[n,,s]))
+  # #   }
+  # # }
+  # 
+  
+  propCOV =  2.38^2/n_x * cov(AlgoResults$Omega_sample[,,s])
   
   return(propCOV)
 }
@@ -698,7 +701,7 @@ ABCSMC <- function(dir, AlgoParams, Model, unfinished=F, oldtag=NULL, tag_notes=
       }
     } else {
       step_s_results <- perturb_particles(s, propCOV, AlgoParams, AlgoResults_small$tolerance_s, AlgoResults_small$W_s, AlgoResults_small$Omega_sample_s, AlgoResults_small$Omega_sample_phys_s,
-                        AlgoResults_small$d_s, AlgoResults_small$d_full_s, AlgoResults_small$sampled_full_s, rel_weights = AlgoResults_small$rel_weights)
+                                          AlgoResults_small$d_s, AlgoResults_small$d_full_s, AlgoResults_small$sampled_full_s, rel_weights = AlgoResults_small$rel_weights)
       AlgoResults <- readRDS(paste0(dir,"IIDIPUS_Results/abcsmc_start_step_",tag))
       AlgoResults$Omega_sample[,,s] <- step_s_results$Omega_sample_s
       AlgoResults$Omega_sample_phys[,,s] <- step_s_results$Omega_sample_phys_s
@@ -708,7 +711,7 @@ ABCSMC <- function(dir, AlgoParams, Model, unfinished=F, oldtag=NULL, tag_notes=
     }
     AlgoResults$propCOV[,,s] <- propCOV
     AlgoResults$accrate_store[s] <- mean(AlgoResults$Omega_sample_phys[which(AlgoResults$W[,s]>0),1,s]!=AlgoResults_small$Omega_sample_phys_s[which(AlgoResults$W[,s]>0),1])
-
+    
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/abcsmc_",tag))
     
     print(s)
@@ -865,7 +868,7 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
       grid <- as.data.frame(crds(r))
       names(grid) <- c("x", "y")  # Name the columns
       
-      vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+      vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 0.5)
       gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
       
       RF_local <- array(
@@ -892,7 +895,7 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
     cat('   Sampling from model given parameterisation and errors\n')
     impact_sample = SampleImpact(dir, Model, proposed %>% addTransfParams(), AlgoParams, dat=dat)
     loss_prop_all = CalcDist(impact_sample, AlgoParams)
-    AlgoResults$loss[1] = sum(loss_prop_all)
+    AlgoResults$loss[1] = sum(loss_prop_all[1:2])
     AlgoResults$u_selected[,1] = c(AlgoResults$u[1,1,1,1],AlgoResults$u[2,2,2,1],AlgoResults$u[3,3,3,1])
     cat(paste0('   Loss: ', AlgoResults$loss[1],'\n'))
     
@@ -936,7 +939,7 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
         names(grid) <- c("x", "y")
         
         # Define variogram model
-        vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+        vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 0.5)
         gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
         
         # Generate random field perturbation
@@ -964,7 +967,7 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
                                     AlgoParams = AlgoParams,
                                     dat=dat)
       loss_prop_all <- CalcDist(impact_sample, AlgoParams)#, corr_noise = pnorm(u_rh_prop), corr_noise2 = pnorm(u_rh2_prop))
-      loss_prop <- sum(loss_prop_all)
+      loss_prop <- sum(loss_prop_all[1:2])
       cat(paste0('   Loss: ', loss_prop, '\n'))
       
       #calculate the acceptance probability:
@@ -1041,6 +1044,9 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
     } else {
       proposed = Omega_prop_phys %>% addTransfParams()
       
+      #perturb event-level error:
+      cat('   Sampling local and event wide error terms\n')
+      
       #perturb local errors:
       perturbate_random_field <- function(event_i) {
         # Create raster grid
@@ -1049,7 +1055,7 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
         names(grid) <- c("x", "y")
         
         # Define variogram model
-        vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 1)
+        vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 0.5)
         gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
         
         # Generate random field perturbation
@@ -1064,8 +1070,6 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
       RF_prop <- mclapply(seq_along(ext_all), perturbate_random_field, mc.cores = AlgoParams$cores, mc.preschedule=F)
       proposed$u_local = RF_prop
       
-      #perturb event-level error:
-      cat('   Sampling local and event wide error terms\n')
       epsilon <- rnorm(length(AlgoResults$u[,,,ifelse((s-1) %% 3==0, 3, (s-1)%%3)]))
       u_prop <- AlgoParams$rho * c(AlgoResults$u[,,,ifelse((s-1) %% 3==0, 3, (s-1)%%3)]) + sqrt(1-AlgoParams$rho^2) * epsilon
       proposed$u = array(u_prop, dim=c(n_events, AlgoParams$m_CRPS*AlgoParams$Np, 3))
@@ -1077,7 +1081,7 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
                                     AlgoParams = AlgoParams,
                                     dat=dat)
       loss_all_prop <- CalcDist(impact_sample, AlgoParams) #, corr_noise = pnorm(u_rh_prop), corr_noise2 = pnorm(u_rh2_prop))
-      loss_prop <- sum(loss_all_prop)
+      loss_prop <- sum(loss_all_prop[1:2])
       cat(paste0('   Loss: ', loss_prop, '\n'))
       
       #calculate the acceptance probability:
@@ -1093,7 +1097,7 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
         AlgoResults$Omega_sample_phys[,s] = unlist(Omega_prop_phys)
         AlgoResults$loss[s] = loss_prop
         AlgoResults$es_score[s] = loss_all_prop[1]
-        AlgoResults$rh_score[s] = loss_all_prop[2]
+        AlgoResults$rh_score[s] = loss_all_prop[3]
         AlgoResults$u[,,,ifelse(s %% 3==0, 3, s%%3)] = proposed$u
         AlgoResults$u_selected[,s] =  c(proposed$u[1,1,1],proposed$u[2,2,2],proposed$u[3,3,3])
         AlgoResults$RF_current = RF_prop

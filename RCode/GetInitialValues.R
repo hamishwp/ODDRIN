@@ -112,20 +112,23 @@ GetInitVals<-function(ODDpath, Model, AlgoParams, usePastPost=T, pastPostFile='m
     if(length(pastPostFile)==0){
       stop('Please provide AlgoResults file from which to obtain the posterior')
     }
-    post_samples <- t(readRDS(paste0(dir, 'IIDIPUS_Results/', pastPostFile))$Omega_sample)
+    #post_samples <- t(readRDS(paste0(dir, 'IIDIPUS_Results/', pastPostFile))$Omega_sample)
+    post_samples <- t(readRDS(paste0(dir, 'IIDIPUS_Results/', pastPostFile))$Omega_sample_phys)
+    #post_samples = t(apply(post_samples[1000:10000,], 1, function(x) unlist(Physical2Proposed(x %>% relist(skeleton=Model$skeleton), Model))))
+    
     s_finish = which(is.na(post_samples)[,1])[1] - 1
-    post_samples = post_samples[max(1, s_finish-1000):s_finish,]
+    post_samples = post_samples[max(1, s_finish-3000):s_finish,]
     propCOV = cov(post_samples)
-    init_value = post_samples[nrow(post_samples),]
-    iVals = list(x0 = init_value, COV=propCOV/10)
+    init_value = post_samples[sample(1:nrow(post_samples), 1),]
+    iVals = list(x0 = init_value, COV=propCOV)
     
   } else {
-    n_samples <- 500
+    n_samples <- 2000
     hp_samples <- array(NA, dim=c(n_samples,length(Model$par_lb)))
     for (i in 1:n_samples){
       hp_samples[i, ] = HLPrior_sample(Model, AlgoParams)
     }
-    iVals = list(x0=hp_samples[1,],COV=cov(hp_samples)/10)
+    iVals = list(x0=hp_samples[1,],COV=cov(hp_samples))
   }
   return(iVals)
 }

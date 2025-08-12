@@ -239,6 +239,18 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     if(lenny<=1 | !any(ids==USGSid)) {
       lhazdat<-list(hazard_info=list(bbox=bbox,sdate=sdate,fdate=fdate,NumEvents=1,
                                      hazard="EQ",I0=I0,eventdates=sdate),hazsdf)
+      
+      lhazdat$hazard_info$eventdates%<>%as.Date()
+      lhazdat$hazard_info$fdate<-max(lhazdat$hazard_info$eventdates)
+      lhazdat$hazard_info$first_event <- check_preceding_hazards(lhazdat)
+      lhazdat$hazard_info$alertlevel%<>%c(hazsdf@alertlevel)
+      lhazdat$hazard_info$depths%<>%c(hazsdf@depth)
+      lhazdat$hazard_info$magnitudes%<>%c(hazsdf@magnitude)
+      lhazdat$hazard_info$max_mmi%<>%c(hazsdf@max_mmi)
+      lhazdat$hazard_info$eventtimes%<>%c(hazsdf@eventtime)
+      lhazdat$hazard_info$usgs_ids%<>%c(hazsdf@USGS_id)
+      lhazdat$hazard_info$alertfull[[length(lhazdat$hazard_info$alertfull)+1]] <- hazsdf@alertfull
+      
       # lhazdat<-c(list(bbox=bbox,sdate=sdate,fdate=fdate,
       #               NumEvents=1,hazard="EQ",I0=I0,eventdates=sdate,hazsdf))
       return(lhazdat)

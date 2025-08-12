@@ -45,7 +45,7 @@ setMethod(f="initialize", signature="ODDSim",
             PopSim <-c(PopSim, ISO3C)
             names(PopSim) <- c('Population', 'ISO3C')
             
-            .Object@ptr <- PopSim@ptr
+            .Object@pntr <- PopSim@pntr
             # .Object@file <- obj@file
             # .Object@data <- obj@data
             # .Object@legend <- obj@legend
@@ -355,7 +355,7 @@ setMethod(f="initialize", signature="BDSim",
             Damage <- vect(x=as.matrix(Damage[,c('Longitude', 'Latitude')]), type='points',
                            atts = Damage[, c('grading', 'Confidence')], crs=crs(ODD))
             
-            .Object@ptr <- Damage@ptr
+            .Object@pntr <- Damage@pntr
            
             # .Object@data <- Damage@data
             # .Object@coords.nrs <-Damage@coords.nrs
@@ -619,7 +619,7 @@ simulateODDSim <- function(miniDam, Model, I0=4.5){
   return(ODDSim)
 }
 
-simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5, folder_write='IIDIPUS_SimInput/'){
+simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.3, folder_write='IIDIPUS_SimInput/'){
   # Input:
   # - nEvents: The number of ODDSim objects to generate
   # - Omega: The model parameterisation
@@ -677,6 +677,7 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.5
   ODDpaths <-na.omit(list.files(path=paste0(folder_write,"ODDobjects/")))
   BDpaths <-na.omit(list.files(path=paste0(folder_write, "BDobjects/")))
   k <- 10
+  set.seed(1)
   intensities <- c() #store eq intensities
   #now loop through each event and simulate the displacement, mortality, and building destruction using DispX()
   for(i in 1:length(ODDpaths)){
@@ -1159,4 +1160,75 @@ plot_sim_event <- function(ODDy){
 #              plotODDy(ODDSim, var='nBD') + xlim(-0.25,0.25) + ylim(-0.25,0.25), nrow=1)
 
 
+simulated_data_plot <- function(){
+  
+  # folderin<-paste0(dir,"IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/")
+  # ufiles<-list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)
+  # x <- file.info(paste0(folderin,ufiles))
+  # ufiles<-na.omit(ufiles[match(length(ufiles):1,rank(x$size))])
+  # 
+  # for (file in ufiles){
+    # print(file)
+    # ODDy <- readODD(paste0(dir,"IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/", file))
+  
+  ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/Train/EQ20120129ABC_3')
+    for (impact_type in c('mortality', 'displacement', 'buildDam')){
+      ODDy[[paste0(impact_type, 'AggRegion')]] = NA
+      j = 1
+      for (i in 1:NROW(ODDy@impact)){
+        if (ODDy@impact$impact[i] == impact_type){
+          ODDy[[paste0(impact_type, 'AggRegion')]][ODDy@polygons[[ODDy@impact$polygon[i]]]$indexes] = j
+          j = j + 1
+        }
+      }
+    }
+    
+    dev.off()
+    par(mfrow = c(3, 3), cex = 1.05,   # reduce inner margins
+        oma = c(0, 0, 0, 0) )
+    par(family = "Times")
+    
+    # Plot first figure
+    plot(ODDy$Population, main = "Population", font.main = 1, cex.main = 1)
+    mtext("(a)", side = 3, line = 2.45, adj = -0.05, cex = 1)
+    
+    plot(ODDy$nBuildings, main = "Building Count", font.main = 1, cex.main = 1)
+    mtext("(b)", side = 3, line = 2.45, adj = -0.05, cex = 1)
+    
+    plot(ODDy$hazMean1, main = "Hazard 1 MMI", font.main = 1, cex.main = 1)
+    mtext("(c)", side = 3, line = 2.45, adj = -0.05, cex = 1)
+    
+    # plot(ODDy$hazMean2, main = "Hazard 2 MMI", font.main = 1, cex.main = 1)
+    # mtext("(d)", side = 3, line = 2.45, adj = -0.05, cex = 1)
+    
+    #plot(ODDy$hazMean2, main = "Hazard 2 MMI", font.main = 1, cex.main = 1)
+    #mtext("(d)", side = 3, line = 2.45, adj = -0.05, cex = 1)
+    
+    plot(ODDy$SHDI, main = "SHDI", type = 'continuous', font.main = 1, cex.main = 1)
+    mtext("(d)", side = 3, line = 2.45, adj = -0.1, cex = 1)
+    
+    plot(ODDy$GNIc, main = "GNIc", type = 'continuous', font.main = 1, cex.main = 1)
+    mtext("(e)", side = 3, line =  2.45, adj = -0.05, cex = 1)
+    
+    plot(ODDy$EQFreq, main = "EQFreq", font.main = 1, cex.main = 1)
+    mtext("(f)", side = 3, line = 2.45, adj = -0.05, cex = 1)
+    
+    plot(ODDy$Vs30, main = "Vs30", font.main = 1, cex.main = 1)
+    mtext("(g)", side = 3, line = 2.45, adj = -0.05, cex = 1)
+    
+    plot(ODDy$mortalityAggRegion, main = "Mort. Region", font.main = 1, cex.main = 1)
+    mtext("(h)", side = 3, line = 2.45, adj = -0.05, cex = 1)
+    
+    plot(ODDy$displacementAggRegion, main = "Disp. Region", font.main = 1, cex.main = 1)
+    mtext("(i)", side = 3, line = 2.45, adj = -0.05, cex = 1)
+    
+    #SimEventExample.pdf, 8.5 x 7
+    
+    # plot(ODDy$buildDamAggRegion, main = "BuildDam agg. region", font.main = 1, cex.main = 1)
+    # mtext("(m)", side = 3, line = 2.45, adj = -0.05, cex = 1)
+    # 
+  #   readline(prompt = "Press [Enter] to continue to next plot...")
+  #   
+  # }
 
+}

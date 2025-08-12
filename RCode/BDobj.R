@@ -121,7 +121,8 @@ setMethod(f="initialize", signature="BD",
 saveBD <- function(BD, path){
   BD_list = list()
   slotnames = slotNames(BD)
-  for (slot in slotnames[slotnames!='ptr']){
+  pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', ifelse('pnt' %in% slotnames, 'pnt', 'pntr'))
+  for (slot in slotnames[slotnames!=pointer_slot]){
     BD_list[[slot]] = slot(BD, slot)
   }
   BD_list$spatvector <- wrap(BD)
@@ -132,10 +133,11 @@ readBD <- function(path){
   .Object = new('BD')
   BD_list = readRDS(path)
   slotnames <- slotNames(.Object)
-  for (slot in slotnames[slotnames!='ptr']){
+  pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', ifelse('pnt' %in% slotnames, 'pnt', 'pntr'))
+  for (slot in slotnames[slotnames!=pointer_slot]){
     slot(.Object, slot) = BD_list[[slot]]
   }
-  .Object@ptr = unwrap(BD_list$spatvector)@ptr
+  slot(.Object, pointer_slot) = slot(terra::unwrap(BD_list$spatvector), pointer_slot) 
   names(.Object)[which(names(.Object)=='VALUE')] = 'ISO3C'
   return(.Object)
 }
@@ -435,7 +437,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8), outpu
   BD_df$LP <- LP
   BD_pixellated <- BD_df %>%
     group_by(spatial_pixel) %>%                    
-    summarise(
+    dplyr::summarise(
       tot_obs = n(),                     
       obs_prop_bd = 1 - mean(grading == 'notaffected'),
       LP = unique(LP),

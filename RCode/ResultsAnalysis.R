@@ -1,242 +1,300 @@
 
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-06-24_121215_alpha0.95_M60_Npart990RealAgg3')
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#--------------------------------------------------------------------------------------------------
+#------------------------------ Simulated Data Results Analysis -----------------------------------
+#--------------------------------------------------------------------------------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-AlgoResults$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg3/'
+source('RCode/ResultsAnalysisFunctions.R')
+library(patchwork)
 
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-07-10_192933_alpha0.9_M60_Npart1000RealAgg5')
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-07-29_140215_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
-AlgoResults$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/'
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2025-10-18_084656.908241_SimInput13_NormalCDF_ESplus0.1AVE_RF_range1')
+#plot(AlgoResults$tolerancestore[2:length(AlgoResults$tolerancestore)]/AlgoResults$tolerancestore[1:(length(AlgoResults$tolerancestore)-1)], ylim=c(0.99,1))
 
-AlgoResultsSMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-08-18_204305_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
-
-AlgoResultsMCMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-08-19_075743_MCMC_RealAgg5_Trial_LR40_Rho0.975propCOVdiv12')
-
-
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-09-07_081752_alphaAdaptive_M100_Npart1000_Sim50by50_propCOVmult0.2')
-AlgoParams$cores <- 1
-AlgoParams$NestedCores <- 4
-AlgoParams$Np <- 1
-AlgoParams$m_CRPS <- 100
-AlgoParams$smc_Npart <- 50
-AlgoParams$rel_weightings <- c(1,1)
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput2/'
-dists <- array(NA, dim=c(100, 2))
-for (i in 1:100){
-  print(i)
-  proposed<- Omega_true 
-  proposed$eps$hazard_cor = i/100
-  impact_sample <- SampleImpact(dir, Model, proposed %>% addTransfParams(), AlgoParams)
-  dists[i,] = CalcDist(impact_sample, AlgoParams)[1:2]
-}
-
-#Simulated correlated vuln
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-09-22_151452_alphaAdaptive_M100_Npart1000_Sim50by50_propCOVmult0.2')
-plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)), 
-                           Omega=list(Lambda1 = list(nu=8.75, kappa=0.6),
-                                      Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), 
-                                      Lambda3 = list(nu=8.55, kappa=0.8),
-                                      Lambda4 = list(nu=9.9, kappa=1.6),
-                                      theta= list(theta1=0.6),
-                                      eps=list(local=0.8, hazard_mort=0.48, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
-                                      #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                                      vuln_coeff = list(PDens=0, SHDI=-0.3, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
-                                      check = list(check=0.5)))
-plot_d_vs_step(AlgoResults, ymax=6)
+AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13/'
 
 
-#AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-09-15_204947_alphaAdaptive_M100_Npart1000_Sim50by50_propCOVmult0.2')
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-09-18_080708_alphaAdaptive_M100_Npart1000_Sim50by50_propCOVmult0.2')
-plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)), 
-                           Omega=list(Lambda1 = list(nu=8.75, kappa=0.6),
-                                      Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
-                                      Lambda3 = list(nu=8.7, kappa=0.7),
-                                      Lambda4 = list(nu=9.9, kappa=1.6),
-                                      theta= list(theta1=0.6),
-                                      eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
-                                      #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                                      vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
-                                      check = list(check=0.5)))
-#SimPosteriors.pdf, 7 x 9 inches
-
-
-
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-09-18_080708_alphaAdaptive_M100_Npart1000_Sim50by50_propCOVmult0.2')
-plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(18,15), c(16,17), c(19,8)), 
-                           Omega=list(Lambda1 = list(nu=8.75, kappa=0.6),
-                                      Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
-                                      Lambda3 = list(nu=8.7, kappa=0.7),
-                                      Lambda4 = list(nu=9.9, kappa=1.6),
-                                      theta= list(theta1=0.6),
-                                      eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
-                                      #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                                      vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
-                                      check = list(check=0.5)), subfig_title_adj=-0.2)
-#SimPosteriors.pdf, 7 x 9 inches
-
-
-plot_d_vs_step(AlgoResults, ymax=6)
-points(AlgoResults$tolerancestore, pch=20, col='red')
-#DvsStep.pdf, 6 x 9 inches
-
-df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
-                                                           M=100, output='SampledAgg')
-
-
-df_postpredictive_sampled_true <- create_df_postpredictive(AlgoResults, single_particle=T, 
-                                                           Omega =list(Lambda1 = list(nu=8.75, kappa=0.6),
-                                                                       Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
-                                                                       Lambda3 = list(nu=8.7, kappa=0.7),
-                                                                       Lambda4 = list(nu=9.9, kappa=1.6),
-                                                                       theta= list(theta1=0.6),
-                                                                       eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
-                                                                       #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                                                                       vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
-                                                                       check = list(check=0.5)),
-                                                           M=100, output='SampledAgg')
-
-saveRDS(df_postpredictive_sampled_best, 'SimPostPredictive23rdSept')
-saveRDS(df_postpredictive_sampled_true, 'SimTruePredictive23rdSept')
-
-df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SimPostPredictive16thSept')
-df_postpredictive_sampled_true <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SimTruePredictive16thSept')
-
-plot_df_postpredictive_compare(df_postpredictive_sampled_true %>% filter(train_flag=='TEST'),
-                               df_postpredictive_sampled_best %>% filter(train_flag=='TEST'), 'mortality')
-#PostPredSim.pdf, 5 x 9 inches
-
-
-plot_correlated_posteriors_ggplot(AlgoResults,  pairings = rbind(c(1,2), c(3,4), c(5,6), c(7,9),  c(10,11), c(15,12), c(13, 14), c(16,17), c(18,19)), 
-                                      Omega=list(Lambda1 = list(nu=7.5, kappa=0.6),
-                                                 Lambda2 = list(nu=10.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
-                                                 Lambda3 = list(nu=7.9, kappa=0.68),
-                                                 #Lambda4 = list(nu=9.9, kappa=1.6),
-                                                 #theta= list(theta1=0.6),
-                                                 eps=list(local=0.4, hazard_mort=0.45, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.65),
-                                                 #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                                                 vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15)), subfig_title_adj=-0.8)
+plot_correlated_posteriors_ggplot(AlgoResults,  pairings = rbind(c(1,2), c(3,4), c(5,6), c(8,7), c(9,10), c(9,11), c(15,12), c(13, 14), c(16,17), c(18,19)), 
+                                  Omega = list(Lambda1 = list(nu=7.5, kappa=0.6),
+                                               Lambda2 = list(nu=12.3, kappa=1.4),#Lambda2 = list(nu=10.6, kappa=0.95),
+                                               Lambda3 = list(nu=7.9, kappa=0.68),
+                                               eps=list(local=0.3, hazard_mort=0.4, hazard_disp=0.55, hazard_bd=0.5, hazard_cor=0.6),
+                                               vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15)), subfig_title_adj=-0.8,
+                                  s_finish=350)
 #SimPosteriors2.pdf, 5 x 12 inches
 
+AlgoResults_real <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2025-10-11_174442.924329_Sept25_NormalCDF_ESplus0.1AVE_RFwithTot_range1')
+plot(AlgoResults$tolerancestore[2:length(AlgoResults$tolerancestore)]/AlgoResults$tolerancestore[1:(length(AlgoResults$tolerancestore)-1)], ylim=c(0.99, 1))
+points(AlgoResults_real$tolerancestore[2:length(AlgoResults_real$tolerancestore)]/AlgoResults_real$tolerancestore[1:(length(AlgoResults_real$tolerancestore)-1)], ylim=c(0.99, 1), col='red')
 
-#-----------------------------------------------------------------------------------------------------
-#--------------------------------- SIMULATED DATA PAPER VERSION 2 ------------------------------------
-#-----------------------------------------------------------------------------------------------------
+plot(AlgoResults$accrate_store, ylim=c(0, 0.2))
+points(AlgoResults_real$accrate_store, col='red')
 
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
-AlgoResults$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput6/'
-AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput6/'
+plot(AlgoResults$accrate_store, ylim=c(0, 0.2))
+plot(AlgoResults$tolerancestore, ylim=c(0, 5))
+
+
+AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13/'
+AlgoResults$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13/'
+
+df_postpredictive_sampled <- create_df_postpredictive(AlgoResults, single_particle=F, 
+                                                      M=200, output='SampledTotal', s_finish = 350)
+
 df_postpredictive_sampled_true <- create_df_postpredictive(AlgoResults, single_particle=T, 
-                                                           Omega = list(Lambda1 = list(nu=7.5, kappa=0.6),
-                                                                Lambda2 = list(nu=10.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
+                                                           list(Lambda1 = list(nu=7.5, kappa=0.6),
+                                                                Lambda2 = list(nu=12.3, kappa=1.4),#Lambda2 = list(nu=10.6, kappa=0.95),
                                                                 Lambda3 = list(nu=7.9, kappa=0.68),
-                                                                #Lambda4 = list(nu=9.9, kappa=1.6),
-                                                                #theta= list(theta1=0.6),
-                                                                eps=list(local=0.4, hazard_mort=0.45, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.65),
-                                                                #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                                                                eps=list(local=0.3, hazard_mort=0.4, hazard_disp=0.55, hazard_bd=0.5, hazard_cor=0.6),
                                                                 vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15)),
-                                                           M=20, output='SampledTotal')
+                                                           M=200, output='SampledTotal')
 
-plot_df_postpredictive(df_postpredictive_sampled_true %>% filter(train_flag=='TEST'), impact_type='mortality')
+saveRDS(df_postpredictive_sampled_true, 'IIDIPUS_Results/SimPostPredictiveOct22_2025')
+saveRDS(df_postpredictive_sampled, 'IIDIPUS_Results/SimTruePredictiveOct22_2025')
 
-#----------------------------------------------------------------------------------------------------
-#------------------------------ OLD REAL DATA RESULTS -----------------------------------------------
-#----------------------------------------------------------------------------------------------------
+#df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SimPostPredictiveAug2025')
+#df_postpredictive_sampled_true <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/SimTruePredictiveAug2025')
 
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
-plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(9,23)))#, c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
-#RealPosteriors.pdf, 5 x 10 inches
+plot_df_postpredictive(df_postpredictive_sampled_true, 'mortality')
 
-
-#plot_vuln(AlgoResults)#, c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
-#RealPosteriors.pdf, 5 x 10 inches
-library(grid)
-Model$skeleton <- list(Lambda1=list(nu=NA,kappa=NA), Lambda2=list(nu=NA,kappa=NA),
-                       Lambda3=list(nu=NA,kappa=NA), Lambda4=list(nu=NA,kappa=NA),
-                       eps=list(local=NA,hazard_mort=NA, hazard_disp=NA, hazard_bd=NA, hazard_cor=NA),
-                       theta=list(theta=NA),
-                       vuln_coeff=list(PDens=NA, SHDI=NA, GNIc=NA, Vs30=NA, EQFreq=NA, #Mag=NA,
-                       FirstHaz=NA, Night=NA, FirstHaz.Night=NA), check=list(check=NA)
+df_plot <- bind_rows(
+  df_postpredictive_sampled_true %>%
+    filter(impact == "mortality") %>%
+    transmute(val = log10(observed+10), source = "postpredictive"),
+  sampled_best_realdat %>%
+    filter(impact == "mortality") %>%
+    transmute(val = log10(observed+10), source = "realdat")
 )
-plot_vuln_posteriors(AlgoResults)
-#VulnPosteriors.pdf, 6.5 x 12 inches
+
+ggplot(df_plot, aes(val, fill = source)) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 30) +
+  labs(x = "log10(observed)", y = "count", title = "Overlayed histograms") +
+  theme_minimal()
+
+plot_df_postpredictive_compare(df_postpredictive_sampled_true %>% filter(train_flag=='TEST'),
+                               df_postpredictive_sampled %>% filter(train_flag=='TEST'), 'mortality')
+
+#PostPredictiveCompare.pdf, 8 x 5
+
+df_postpredictive_sampled_best %<>% filter(observed>0)
+df_postpredictive_sampled_true %<>% filter(observed>0)
+plot_df_postpredictive_compare(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),
+                               df_postpredictive_sampled_true %>% filter(train_flag=='TEST'), 'mortality')
+#PostPredSim.pdf, 5 x 9 inches
+
+# mat <- df_postpredictive_sampled_true %>%
+#   filter(impact == "mortality") %>%
+#   dplyr::select(5:105) %>%
+#   as.matrix()
+# 
+# # rank of the FIRST row within each column
+# r_first <- apply(mat, 1, function(x) rank(x, ties.method = "random")[1])
 
 
-AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/'
-df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
-                                                           M=50, output='SampledTotal')
 
-df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledBest18thSept')
-df_postpredictive_sampled_best1 = df_postpredictive_sampled_best
-df_postpredictive_sampled_best1$observed[which(df_postpredictive_sampled_best1$observed == 17899)] = 8957
-plot_df_postpredictive_PAGER_coloured(df_postpredictive_sampled_best1, 'mortality')
+#--------------------------------------------------------------------------------------------------
+#-------------------------------------- Simulated Trace Plots -------------------------------------
+#--------------------------------------------------------------------------------------------------
 
-quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='mortality'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/101
-hist(quants)
-mean(quants>0.05 & quants < 0.95)
-quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='displacement'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/101
-hist(quants)
-mean(quants>0.05 & quants < 0.95)
-quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='buildDam'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/101
-hist(quants)
-mean(quants>0.05 & quants < 0.95)
+source('RCode/ResultsAnalysisFunctions.R')
+library(patchwork)
 
-hist(quants/101)
-df_postpredictive_sampled_best[1,]
+mcmc_sim1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-10-27_155104.365377__Sim13_NormalCDF_ESplus.1AVErank_RFwithTot_range1_Chain1_backup')
+mcmc_sim2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-10-27_155036.357656__Sim13_NormalCDF_ESplus.1AVErank_RFwithTot_range1_Chain2_backup')
+mcmc_sim3 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-10-27_155247.811179__Sim13_NormalCDF_ESplus.1AVErank_RFwithTot_range1_Chain3')
 
-library(grid)
-mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none") 
-disp_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'displacement')  + guides(color="none")
-buildDam_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'buildDam')  + guides(color="none") #+ 
-#scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma, limits=c(50,100000))
+mcmc_trace(mcmc_sim1, mcmc_sim2, mcmc_sim3, var_plot=1:19, xlim=c(1,25000), Omega=Omega_true)
+#MCMC_Sim_Trace.pdf, 9 x 9
 
 
-p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0, "npc"), y = unit(-0.3, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0, "npc"), y = unit(-0.3, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0, "npc"), y = unit(-0.3, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+library(coda)
 
-grid.arrange(p1, p2, p3, ncol=3)
-#PostPredReal.png, 1180 x 400 # PostPredReal.pdf, 4 x 12.1 inches
+# matrices: iterations x variables for each chain
+mat1 <- t(mcmc_sim1$Omega_sample_phys[, seq(20001, 25000, 10), drop = FALSE])
+mat2 <- t(mcmc_sim2$Omega_sample_phys[, seq(20001, 25000, 10), drop = FALSE])
+mat3 <- t(mcmc_sim3$Omega_sample_phys[, seq(20001, 25000, 10), drop = FALSE])
 
-AlgoResults %<>% addAlgoParams(s_finish=NULL)
-for (i in c(16,)){
-  p_H_given_y = sum(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish]>0)/length(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish])
-  p_H = sum(AlgoResults$Omega_sample_phys[,i,1]>0)/length(AlgoResults$Omega_sample_phys[,i,1])
-  print(paste('Bayes factor for', names(unlist(Omega))[i], ':', round(p_H_given_y * (1-p_H)/((1-p_H_given_y)*p_H), 3)))
-  print(paste('Post. prob of greater than 0:', sum(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish]>0)/length(AlgoResults$Omega_sample_phys[,i,AlgoResults$s_finish])))
+gd <- gelman.diag(mcmc.list(mcmc(mat1), mcmc(mat2), mcmc(mat3)),
+                  autoburnin = FALSE, multivariate = FALSE)
+rhat_vec <- gd$psrf[, "Point est."]                # one per parameter
+rhat_vec
+
+plot_correlated_posteriors_ggplot(AlgoResults, include_priors=T, Omega = list(Lambda1 = list(nu=7.5, kappa=0.6),
+                                                                                    Lambda2 = list(nu=12.3, kappa=1.4),#Lambda2 = list(nu=10.6, kappa=0.95),
+                                                                                    Lambda3 = list(nu=7.9, kappa=0.68),
+                                                                                    eps=list(local=0.3, hazard_mort=0.4, hazard_disp=0.55, hazard_bd=0.5, hazard_cor=0.6),
+                                                                                    vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15)),
+                                  pairings = rbind(c(1,2), c(3,4), c(5,6), c(8,7), c(9,10), c(9,11), c(15,12), c(13, 14), c(16,17), c(18,19)), s_finish=350, 
+                                  AlgoResultsMCMC=list(mcmc_sim1, mcmc_sim2, mcmc_sim3), subfig_title_adj=-0.3, mcmc_warmup = 20000, plots_ncol=4)
+
+# MCMC_SMC_Compare.pdf, 9 x 7
+
+
+#---------------------Compare with and without rank histograms-----------
+
+
+ESonly1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-10-23_142412.52814__Sim13_NormalCDF_ESonly_RFwithTot_range1_Chain1')
+ESonly2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-10-23_142548.329482__Sim13_NormalCDF_ESonly_RFwithTot_range1_Chain2')
+
+mcmc_trace(ESonly1, ESonly2, var_plot=1:19, xlim=c(1, 15000))
+
+
+xlim = 20001:25000
+xlim_esonly = 8001:12000
+hist(c(ESonly1$Omega_sample_phys[11,xlim_esonly], ESonly2$Omega_sample_phys[11,xlim_esonly]))
+hist(c(mcmc_sim1$Omega_sample_phys[11, xlim], mcmc_sim2$Omega_sample_phys[11, xlim], mcmc_sim3$Omega_sample_phys[11, xlim]))
+
+
+
+plot_correlated_posteriors_ggplot(AlgoResults, include_priors=T, 
+                                  pairings = rbind(c(1,2), c(3,4), c(5,6), c(8,7), c(9,10), c(9,11), c(15,12), c(13, 14), c(16,17), c(18,19)), 
+                                  Omega = list(Lambda1 = list(nu=7.5, kappa=0.6),
+                                               Lambda2 = list(nu=12.3, kappa=1.4),#Lambda2 = list(nu=10.6, kappa=0.95),
+                                               Lambda3 = list(nu=7.9, kappa=0.68),
+                                               eps=list(local=0.3, hazard_mort=0.4, hazard_disp=0.55, hazard_bd=0.5, hazard_cor=0.6),
+                                               vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15)), 
+                                  s_finish=350, 
+                                  AlgoResultsMCMC=list(ESonly1, ESonly2), subfig_title_adj=-0.3, mcmc_warmup = 10000)
+
+plot_compare_two_mcmc_posteriors_ggplot(AlgoResults,
+                                        include_priors = TRUE,
+                                        Omega = list(Lambda1 = list(nu=7.5, kappa=0.6),
+                                                     Lambda2 = list(nu=12.3, kappa=1.4),#Lambda2 = list(nu=10.6, kappa=0.95),
+                                                     Lambda3 = list(nu=7.9, kappa=0.68),
+                                                     eps=list(local=0.3, hazard_mort=0.4, hazard_disp=0.55, hazard_bd=0.5, hazard_cor=0.6),
+                                                     vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15)),
+                                        pairings = rbind(c(1,2), c(3,4), c(5,6), c(8,7), c(9,10), c(9,11), c(15,12), c(13, 14), c(16,17), c(18,19)),
+                                        s_finish = NULL,
+                                        AlgoResultsMCMC_ES = list(ESonly1, ESonly2),   # Energy Score Only
+                                        AlgoResultsMCMC_RH = list(mcmc_sim1, mcmc_sim2, mcmc_sim3),   # with Rank Histogram
+                                        mcmc_warmup = 20000,
+                                        mcmc_warmup_es = 15000,
+                                        subfig_title_adj = -0.4,
+                                        plots_ncol = 4)
+# MCMC_RankHist_Compare.pdf, 9 x 7
+
+p <- make_param_hist_overlay_linear(
+  ESonly1, ESonly2, mcmc_sim1, mcmc_sim2, mcmc_sim3,
+  i = 11, xlim_esonly = 15001:20000, xlim_mcmc = 20001:25000,
+  nbins = 20
+)
+print(p)
+
+post_samples = 15001:20000
+low_rho_i = which.min(ESonly1$Omega_sample_phys[11,post_samples])
+Omega_low_rho = ESonly1$Omega_sample_phys[,post_samples[low_rho_i]] %>% relist(skeleton=Model$skeleton)
+AlgoParams$input_folder = "IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13/"
+AlgoParams$cores = 1
+AlgoParams$NestedCores = 1
+sampled_impact = SampleImpact(dir, Model, Omega_low_rho %>% addTransfParams(), AlgoParams)
+ranks = ReturnRankHist(sampled_impact$poly, AlgoParams)
+
+ranks1 = plot_ranks(ranks)
+
+post_samples = 18001:20000
+high_rho_i = which.max(ESonly1$Omega_sample_phys[11,post_samples])
+Omega_high_rho = ESonly1$Omega_sample_phys[,post_samples[high_rho_i]] %>% relist(skeleton=Model$skeleton)
+sampled_impact2 = SampleImpact(dir, Model, Omega_high_rho %>% addTransfParams(), AlgoParams)
+ranks_high = ReturnRankHist(sampled_impact2$poly, AlgoParams)
+
+ranks2 = plot_ranks(ranks_high)
+
+plot_grid(p, plot_grid(ranks1, ranks2, nrow=1,
+                       labels=c('(b)', '(c)'),
+                       label_fontfamily = "Times New Roman",
+                       label_fontface = "plain",
+                       label_x = -0.02, 
+                       label_y = 1), nrow=2, rel_heights = c(0.6, 0.4),
+          labels=c('(a)', ''),
+          label_fontfamily = "Times New Roman",
+          label_fontface = "plain",
+          label_x = 0, 
+          label_y = 0.96)
+
+# RankHistResults.pdf, 8.5 x 7.5
+
+#------------------------------------------------------------------------
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#--------------------------------------------------------------------------------------------------
+#------------------------------ Real Data Results Analysis ----------------------------------------
+#--------------------------------------------------------------------------------------------------
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+source('RCode/ResultsAnalysisFunctions.R')
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2025-10-11_174442.924329_Sept25_NormalCDF_ESplus0.1AVE_RFwithTot_range1')
+AlgoResults$s_finish = 250
+
+#df <- as.data.frame(AlgoResults$Omega_sample_phys[, 12:19,AlgoResults$s_finish])
+#ggpairs(df)
+
+#points(AlgoResults$tolerancestore[2:length(AlgoResults$tolerancestore)]/AlgoResults$tolerancestore[1:(length(AlgoResults$tolerancestore)-1)], ylim=c(0.99,1), col='red')
+
+#check variability in loss at posterior:
+AlgoParams$cores = 1
+AlgoParams$NestedCores = 1
+nreps = 10
+dists = array(NA, dim=nreps)
+AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/Sept25/'
+for (i in 1:nreps){
+  impact_sample = SampleImpact(dir, Model, proposed = AlgoResults$Omega_sample_phys[2,,250] %>% 
+                                                          relist(skeleton=Model$skeleton) %>%
+                                                          addTransfParams(), AlgoParams)
+  dists[i] = sum(CalcDist(impact_sample, AlgoParams)[1:2])
 }
+# source('RCode/Model Variations/ODDobj_NoTot.R')
+# 
+# source('RCode/Model Variations/ODDobjJune.R')
+# source('RCode/Model Variations/Model_Logistic2.R')
+# AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-06-12_115400.392519__Apr25Agg_LogLinMort_ESplus0.05BD_RFwithTot_range.5_kappa.5_withHLPriors_flexHLP_backup')
+# #AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-12-10_060355_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2')
+# 
+# 
+# source('RCode/ODDobj.R')
+# source('RCode/Model Variations/Model_MVRrank.R')
+# AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-06-17_151849.678089__Apr25Agg_LogNormal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_withHLPriors_flexHLP')
+# #AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-12-10_060355_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2')
+# 
+# source('RCode/ODDobj.R')
+# source('RCode/Model.R')
+# AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-07-08_110537.972824__Apr25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_backup')
+
+plot_correlated_posteriors_ggplot(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(8, 7), c(8,9), c(10,11)), plots_ncol=3, s_finish=250)
+#RealPosteriors.pdf, 9 x 5.5 inches
 
 
-#----------------------------------------------------------------------------------------------------
-#------------------------------ UPDATED REAL DATA RESULTS -------------------------------------------
-#----------------------------------------------------------------------------------------------------
 
-
-source('RCode/Model Variations/ODDobj_NoTot.R')
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2025-05-27_200747.620558__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_kappa0.5_range0.5_flexHLP')
-#AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-12-10_060355_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2')
-
-plot_correlated_posteriors_ggplot(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(7,9), c(10,11)))
-#RealPosteriors.pdf, 3 x 14 inches
 
 library(grid)
 plot_vuln_posteriors(AlgoResults)
-#VulnPosteriors.pdf, 6.5 x 12 inches
+#VulnPosteriors.pdf, 9 x 4.5 inches
 
-AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Nov24Agg/'
+#AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-07-13_234229.627104__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_Chain2_backup')
+AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Sept25/'
 df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
-                                                           M=50, output='SampledTotal')
-df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledBest10thDec')
+                                                           M=200, output='SampledTotal')
+saveRDS(df_postpredictive_sampled_best, 'IIDIPUS_Results/fit_MVR_Oct18_Total')
+#saveRDS(df_postpredictive_sampled_best, 'SampledTotal8June')
 
-#df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledBest18thSept')
+df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
+                                                           M=200, output='SampledAgg')
+saveRDS(df_postpredictive_sampled_best, 'IIDIPUS_Results/fit_MVR_Oct18_Agg')
 
-quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='mortality' & df_postpredictive_sampled_best$train_flag=='TEST'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/51
+#df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/fit_MVR_June18')
+
+quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='mortality'& df_postpredictive_sampled_best$train_flag=='TRAIN'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/(length(grep('sampled.', names(df_postpredictive_sampled_best)))+1)
 hist(quants)
-mean(quants>0.05 & quants < 0.95)
-quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='displacement'& df_postpredictive_sampled_best$train_flag=='TEST'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/51
+mean(quants>0.025 & quants < 0.975)
+
+quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='mortality'& df_postpredictive_sampled_best$train_flag=='TEST'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/(length(grep('sampled.', names(df_postpredictive_sampled_best)))+1)
 hist(quants)
-mean(quants>0.05 & quants < 0.95)
-quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='buildDam'& df_postpredictive_sampled_best$train_flag=='TRAIN'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/51
+mean(quants>0.025 & quants < 0.975)
+quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='displacement'& df_postpredictive_sampled_best$train_flag=='TEST'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/(length(grep('sampled.', names(df_postpredictive_sampled_best)))+1)
 hist(quants)
-mean(quants>0.05 & quants < 0.95)
+mean(quants>0.025 & quants < 0.975)
+quants <- apply(df_postpredictive_sampled_best[which(df_postpredictive_sampled_best$impact=='buildDam'& df_postpredictive_sampled_best$train_flag=='TEST'),c(grep('observed', names(df_postpredictive_sampled_best)), grep('sampled.', names(df_postpredictive_sampled_best)))], 1, function(x){sample_quant(x)})/(length(grep('sampled.', names(df_postpredictive_sampled_best)))+1)
+hist(quants)
+mean(quants>0.025 & quants < 0.975)
 
 library(grid)
 mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none") 
@@ -249,950 +307,200 @@ p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0.025, "npc"), y = u
 p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
 p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
 
+plot_grid(mort_test, disp_test, buildDam_test, nrow=2, labels=c('(a)', '(b)', '(c)'),
+          label_fontfamily = "Times New Roman",
+          label_fontface = "plain",
+          label_x = -0.025, 
+          label_y = 0.99)
+
+#PostPredReal.pdf, 8 x 8
+
 grid.arrange(p1, p2, p3, ncol=3)
 #PostPredReal.pdf, 4 x 12.1 inches
 
 
-#MCMC:
 
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-11_141748_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat1')
-AlgoResults$Omega_sample_phys <- AlgoResults$Omega_sample_phys[c(1:6, 10:22),]
+#--------------------------------------------------------------------------------------------------
+#------------------------------ Residuals by Region -----------------------------------------------
+#--------------------------------------------------------------------------------------------------
 
-#plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(10,11), c(12,13), c(11, 14), c(9,23)))#, c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
-#RealPosteriors.pdf, 5 x 10 inches
+df_postpredictive_sampled_best <- readRDS('IIDIPUS_Results/fit_MVR_Oct17')
 
+df_post_with_covar = add_covar( df_postpredictive_sampled_best, covars=c('hazMean', 'EQFreq', 'Vs30', 'SHDI', 'PDens', 'region', 'shakeSD'), dat='all')
 
-#plot_vuln(AlgoResults)#, c(18,15), c(16,17), c(19,20), c(21,22), c(9,23)))
-#RealPosteriors.pdf, 5 x 10 inches
-#library(grid)
-#plot_vuln_posteriors(AlgoResults)
-#VulnPosteriors.pdf, 6.5 x 12 inches
-AlgoResults$Sigma_store <- AlgoResults$Sigma_store[c(1:6, 10:22),c(1:6, 10:22),]
+df_post_with_covar %<>% filter(train_flag=='TEST')
+impact_type ='mortality'
 
-init_cov <- cov(readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/HLPriorSamples'))
-init_cov2 <- cov(readRDS(paste0(dir, 'IIDIPUS_Input/HLPriorSamples2')))
-init_cov <- init_cov[c(1:6, 10:22),c(1:6, 10:22)]
-param <- 12
-plot(AlgoResults$Sigma_store[param,param,], ylim=range(c(init_cov[param,param], init_cov2[param, param], AlgoResults$Sigma_store[param,param,]), na.rm=T))
-points(1, init_cov[param,param], col='red')
-abline(h=init_cov2[param, param]/5, col='blue')
-
-AlgoParams$input_folder <- AlgoResults$input_folder
-df_postpredictive_sampled_best <- create_df_postpredictive_MCMC(AlgoResults, single_particle=F, Omega=NULL, particle_best=F,
-                                                           M=20, output='SampledTotal')
-
-df_postpredictive_sampled_best_old <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledBest18thSept')
-
-#hist(quants/101)
-#df_postpredictive_sampled_best[1,]
-
-library(grid)
-
-df_postpredictive_sampled_best$train_flag2 <- 'TRAIN'
-ufiles<-list.files(path=paste0(dir, 'IIDIPUS_Input_Alternatives/Nov24Agg/ODDobjects/Test'),pattern=Model$haz,recursive = T,ignore.case = T)
-test_id = as.numeric(sub(".*_", "", ufiles))
-for (i in 1:length(df_postpredictive_sampled_best$train_flag2)){
-  if (df_postpredictive_sampled_best$event_id[i] %in% test_id){
-    df_postpredictive_sampled_best$train_flag2[i] <- 'TEST'
-  }
+resample_obs_quant = function(df_poly){
+  df_poly$obs_quant = apply(df_poly[, c('observed', grep('sampled.', names(df_poly), value=T, fixed=T))],1, function(x) sample_quant(x))
+  df_poly$obs_quant = (df_poly$obs_quant - runif(length(df_poly$obs_quant), 0, 1))/length(c('observed', grep('sampled.', names(df_poly), value=T, fixed=T)))
+  return(df_poly)
 }
 
-df_postpredictive_sampled_best$train_flag=df_postpredictive_sampled_best$train_flag2
-mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best%>% filter(train_flag=='TEST'),'mortality' )  + guides(color="none") 
-disp_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'displacement')  + guides(color="none")
-buildDam_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'buildDam')  + guides(color="none") + 
-  scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma, limits=c(50,100000))
-
-
-p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-
-mort_test
-disp_test
-buildDam_test
-
-
-#-----
-source('RCode/ODDobj_noRF.R')
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-12-10_060355_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2')
-AlgoResults %<>% addAlgoParams()
-AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Mar25Agg/'
-
-Omega_trial <- list(Lambda1 = list(nu=8.75, kappa=0.6),
-                            Lambda2 = list(nu=12, kappa=1), #list(nu=10.65, kappa=1.5), #
-                            Lambda3 = list(nu=9.55, kappa=0.68),
-                            #Lambda4 = list(nu=9.9, kappa=1.6),
-                            #theta= list(theta1=0.6),
-                            eps=list(local=0.25, hazard_mort=1, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
-                            #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                            vuln_coeff = list(PDens=-0.1239836, SHDI=-0.6717716, GNIc=0.1994072, Vs30=0.473589, EQFreq=-0.5352366, FirstHaz=0.08874202, Night=0.03315047, FirstHaz.Night=-0.1316748))
-
-df_postpredictive_sampled_total <- create_df_postpredictive(AlgoResults, single_particle=T, 
-                                                           M=100, output='SampledTotal', 
-                                                           Omega = Omega_trial %>% addTransfParams())
-
-plot_df_postpredictive(df_postpredictive_sampled_total %>% filter(train_flag=='TRAIN'),'mortality')  + guides(color="none") 
-
-
-#--------------------------------------------------------------------------------------------------------------
-#------------------------------ UPDATED SIMULATED DATA RESULTS JUNE 2025 -------------------------------------------
-#--------------------------------------------------------------------------------------------------------------
-
-#Simulated data:
-
-source('RCode/Model Variations/ODDobj_NoTot.R')
-
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2025-05-29_015736.204632__Sim_NormalCDF_ESplus0.05BD_RFNoTot_kappa0.5_range0.5_flexHLP')
-
-plot_correlated_posteriors_ggplot(AlgoResults,  pairings = rbind(c(1,2), c(3,4), c(5,6), c(7,9),  c(10,11), c(15,12), c(13, 14), c(16,17), c(18,19)), 
-                                  Omega=list(Lambda1 = list(nu=7.5, kappa=0.6),
-                                             Lambda2 = list(nu=10.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
-                                             Lambda3 = list(nu=7.9, kappa=0.68),
-                                             #Lambda4 = list(nu=9.9, kappa=1.6),
-                                             #theta= list(theta1=0.6),
-                                             eps=list(local=0.4, hazard_mort=0.45, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.65),
-                                             #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                                             vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15)), subfig_title_adj=-0.8)
-#SimPosteriors2.pdf, 5 x 12 inches
-
-AlgoResults$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput6/'
-AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput6/'
-
-df_postpredictive_sampled_true <- create_df_postpredictive(AlgoResults, single_particle=T, 
-                                                           Omega =list(Lambda1 = list(nu=7.5, kappa=0.6),
-                                                                       Lambda2 = list(nu=10.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
-                                                                       Lambda3 = list(nu=7.9, kappa=0.68),
-                                                                       #Lambda4 = list(nu=9.9, kappa=1.6),
-                                                                       #theta= list(theta1=0.6),
-                                                                       eps=list(local=0.4, hazard_mort=0.45, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.65),
-                                                                       #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                                                                       vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15)),
-                                                           M=100, output='SampledAgg')
-
-df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, 
-                                                           M=100, output='SampledAgg')
-
-saveRDS(df_postpredictive_sampled_best, 'SimPostPredictive23rdSept')
-saveRDS(df_postpredictive_sampled_true, 'SimTruePredictive23rdSept')
-
-df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SimPostPredictive16thSept')
-df_postpredictive_sampled_true <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SimTruePredictive16thSept')
-
-plot_df_postpredictive_compare(df_postpredictive_sampled_true %>% filter(train_flag=='TEST'),
-                               df_postpredictive_sampled_best %>% filter(train_flag=='TEST'), 'mortality')
-#PostPredSim.pdf, 5 x 9 inches
-
-
-#Real data:
-
-
-#----------------------------------------------------------------------------------------------------
-#------------------------------ Band Depth Score Results  -------------------------------------------
-#----------------------------------------------------------------------------------------------------
-
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-02-27_162932.543295_MCMC_BDScore.05nocorr_LR40_M100_Npart1000NovAgg5_RandomFieldThree')
-AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Nov24Agg/'
-AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Mar25Agg/'
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Mar25Agg/'
-df_postpredictive_sampled <- create_df_postpredictive_MCMC(AlgoResults, single_particle=F, 
-                                                           M=100, output='SampledTotal')
-
-#saveRDS(df_postpredictive_sampled, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledAggBandDepth24thMarch')
-#saveRDS(df_postpredictive_sampled, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledTotalBandDepth25thMarch')
-
-library(plotly)
-df_postpredictive_sampled <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledTotalBandDepth25thMarch')
-plot_df_postpredictive_PAGER_coloured(df_postpredictive_sampled2 %>% filter(train_flag=='TEST'), 'mortality', interactive=T) 
-
-
-
-plot(density(rnorm(10000)), freq=F)
-lines(density(rt(10000,3)*0.7), freq=F, col='red')
-
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-02-27_162932.543295_MCMC_BDScore.05nocorr_LR40_M100_Npart1000NovAgg5_RandomFieldThree')
-AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/Nov24Agg/'
-proposed = AlgoResults$Omega_sample_phys[,1] %>% relist(skeleton=Model$skeleton) %>% addTransfParams()
-xx <- SampleImpact(dir, Model, proposed, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 2) %>% 
-               replace(which(names(AlgoParams)==c('Np')), 1),)
-
-n_post_samples = 10
-ODD <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/ODDAggobjects/EQ20230908MAR_-1_AggLevel5')
-for (i in 1:n_post_samples){
-  
-  #plot: 
-  #grid.arrange(plotODDy_GADM(ODD, 'ISO3C', gadm_level=2, haz_legend=T, var_legend=T, var_discrete=T),plotODDy_GADM(ODD, 'Population', gadm_level=2, haz_legend=T, var_legend=T, var_discrete=F, log_legend=T), ncol=2)
-  Omega = AlgoResults$Omega_sample_phys[,1] %>% relist(skeleton=Model$skeleton)
-  sampled_out <- DispX(ODD, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
-                         replace(which(names(AlgoParams)==c('Np')), 1), 
-                       output='Sampled')
-}
-
-
-#-------------------------------------
-#------------No RF Total--------------
-#-------------------------------------
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-04-21_202717.886201_backup')
-AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-
-AlgoResults_noTotErr1 <- readRDS('')
-AlgoResults_noTotErr <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-15_211657.809776__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain_backup')
-AlgoResults_noTotErr$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-source('RCode/Model Variations/ODDobj_NoTot.R')
-
-df_postpredictive_sampled <- create_df_postpredictive_MCMC(AlgoResults_noTotErr, single_particle=F, 
-                                                           M=100, output='SampledTotal')
-
-saveRDS(df_postpredictive_sampled, paste0(dir, 'IIDIPUS_Results/Sampled100_RFnoTot_May15'))
-
-library(grid)
-mort_test <- plot_df_postpredictive(df_postpredictive_sampled %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none") 
-disp_test <- plot_df_postpredictive(df_postpredictive_sampled %>% filter(train_flag=='TEST'),'displacement')  + guides(color="none")
-buildDam_test <- plot_df_postpredictive(df_postpredictive_sampled %>% filter(train_flag=='TEST'),'buildDam')  + guides(color="none") #+ 
-#scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma, limits=c(50,100000))
-
-
-p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0, "npc"), y = unit(-0.3, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0, "npc"), y = unit(-0.3, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0, "npc"), y = unit(-0.3, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-
-grid.arrange(p1, p2, p3, ncol=3)
-
-
-plot_df_postpredictive(df_postpredictive_sampled %>% filter(train_flag=='TEST'),'displacement')  + guides(color="none")
-
-plot(AlgoResults$es_score*20, type='l', xlim=c(0,3500))
-lines(AlgoResults_noTotErr$es_score*20, col='blue', xlim=c(0,3500))
-
-
-AlgoResults_chain1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-15_211657.809776__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain')
-AlgoResults_chain2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-15_211354.026585__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain2')
-AlgoResults_chain3 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-15_210710.825899__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain3')
-
-mcmc_trace(AlgoResults_chain1, AlgoResults_chain2, AlgoResults_chain3, var_plot=1:19, xlim=c(1, 6000))
-
-
-
-
-
-#----------------------------------------------------------------------------------------------------
-#------------------------------ Model Comparison -------------------------------------------
-#----------------------------------------------------------------------------------------------------
-AlgoResults_pnorm <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-04-27_015007.755409__Apr25Agg_NormalCDF_ESplus0.05BD_RFwithTot')
-AlgoResults_loglinear <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-04-27_014331.085601__Apr25Agg_Logistic_ESplus0.05BD_RFwithTot_backup')
-AlgoResults_plnorm <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-04-27_014135.935892__Apr25Agg_Lognormal_ESplus0.05BD_RFwithTot_backup')
-
-AlgoResults_kappa0.2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-04-28_203305.949572__Apr25Agg_NormalCDF_ESplus0.05BD_RFwithTot_RFsmooth0.2')
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-AlgoResults_kappa0.2$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-
-SampledImpact = SampleImpact(dir, Model, proposed = AlgoResults_kappa0.2$Omega_sample_phys[,2148] %>% relist(skeleton=Model$skeleton) %>% addTransfParams()
-                             , AlgoParams)
-
-AlgoResults_noTotErr <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-04-21_203713.178972_backup_NoTot')
-AlgoResults_noTotErr$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-source('RCode/Model Variations/ODDobj_NoTot.R')
-
-SampledImpact = SampleImpact(dir, Model, proposed = AlgoResults_noTotErr$Omega_sample_phys[,2000] %>% relist(skeleton=Model$skeleton) %>% addTransfParams()
-                             , AlgoParams)
-
-AlgoResults_loglinear <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-04-27_014331.085601__Apr25Agg_Logistic_ESplus0.05BD_RFwithTot_backup')
-AlgoResults_loglinear$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-source('RCode/ODDobj.R')
-source('RCode/Model Variations/Model_Loglinear.R')
-
-SampledImpact = SampleImpact(dir, Model, proposed = AlgoResults_loglinear$Omega_sample_phys[,2000] %>% relist(skeleton=Model$skeleton) %>% addTransfParams()
-                             , AlgoParams)
-
-AlgoResults_pnorm$input_folder = 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-SampledImpact = SampleImpact(dir, Model, proposed = AlgoResults_pnorm$Omega_sample_phys[,3000] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), AlgoParams, dat='Test')
-
-
-impact_sample_poly = SampledImpact$poly
-observed <- impact_sample_poly[[1]]$observed
-n=1
-dist_poly <- array(NA, dim=c(AlgoParams$Np,7))
-impact_type <- impact_sample_poly[[1]]$impact
-impact_weightings <- unlist(AlgoParams$impact_weights[impact_type])
-event_id <- impact_sample_poly[[1]]$event_id
-grouped_events <- split(seq_along(event_id), event_id)
-
-samples_allocated <- ((n-1)*AlgoParams$m_CRPS+1):(n*AlgoParams$m_CRPS)
-samples_combined <- sapply(impact_sample_poly[samples_allocated], function(x){x$sampled}) #doesn't work if samples_allocated is length 1
-
-dist_poly[n,1] <- 0
-
-es_store <- c()
-vs_store <- c()
-pre_ranks <- array(NA, length(grouped_events))
-#pre_ranks_average <- c() #can also assess quantiles for uniformity based on the average pre-rank function
-#pre_ranks_mst <- c() #can also assess quantiles for uniformity based on the minimum spanning tree pre-rank function
-
-for (i in 1:length(grouped_events)){
-  #For each event, compute the energy score of the observed data vs the 'prediction' (simulated data)
-  #Each impact type is weighted differently, simply multiplying the observation and the simulations by this weight performs the weighting
-  if(names(grouped_events[i])=="31"){stop()}
-  obs <- log(observed[grouped_events[[i]]]+AlgoParams$log_offset) *impact_weightings[grouped_events[[i]]]
-  sims <- log(samples_combined[grouped_events[[i]],, drop=F]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]
-  pairs(rbind(t(sims), obs),  
-        pch=rep(c(1,2), c(nrow(t(sims)), 3)), 
-        col=rep(c(1,2), c(nrow(t(sims)), 3)))
-  
-  obs_rh <- log(observed[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]+AlgoParams$log_offset) *impact_weightings[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]
-  sims_rh <- log(samples_combined[intersect(grouped_events[[i]], which(impact_type!='buildDam')),,drop=F]+AlgoParams$log_offset) * impact_weightings[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]
-  # get_mst_rank_single(cbind(obs_mst, sims_mst))
-  
-  pairs(rbind(t(sims_rh), obs_rh),  
-        pch=rep(c(1,2), c(nrow(t(sims_rh)), 3)), 
-        col=rep(c(1,2), c(nrow(t(sims_rh)), 3)))
-  
-  #pre_ranks_mst <- c(pre_ranks_mst, get_mst_rank_single(cbind(obs_mst, sims_mst)))
-  #if (get_banddepth_rank_single(cbind(obs_rh, sims_rh)) > 98) stop()
-  pre_ranks <- c(pre_ranks, get_banddepth_rank_single(cbind(obs_rh, sims_rh)))#, noise=corr_noise[i,]))
-  #pre_ranks <- c(pre_ranks, get_mst_rank_single(cbind(obs_rh, sims_rh), noise=corr_noise[i,]))
-  
-  
-  if (length(grouped_events[[i]])==1){
-    #crps is the univariate case of the energy score, so use when dimension is 1. 
-    es_store<- c(es_store, crps_sample(obs, sims))
-    vs_store<- c(vs_store, 0)
-    next
-  } 
-  es_store<- c(es_store, es_sample(obs, sims))
-  w_vs <- sqrt(as.numeric(impact_weightings[grouped_events[[i]]]) %*% t(as.numeric(impact_weightings[grouped_events[[i]]]))) / (length(grouped_events[[i]])^2)
-  if(vs_sample(obs, sims, w_vs = w_vs) > 5000){stop()}
-  vs_store <- c(vs_store, vs_sample(obs, sims, w_vs = w_vs))
-  #pre_ranks_average <- c(pre_ranks_average, get_average_rank_single(cbind(obs, sims)))
-  #pre_ranks_mst <- c(pre_ranks_mst, get_mst_rank_single(cbind(obs,sims)))
-  
-}
-ranks_std <- (pre_ranks-runif(length(pre_ranks),0,1))/(AlgoParams$m_CRPS + 1)
-
-dist_poly[n,1] <- mean(es_store) #mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$impact_weights['mortality'])
-dist_poly[n,2] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_std, null='punif')$statistic) 
-
-
-
-df_postpredictive_sampled <- create_df_postpredictive_MCMC(AlgoResults_kappa0.2, single_particle=T, 
-                                                           M=100, output='SampledAgg')
-
-
-mcmc_trace(AlgoResults_pnorm, AlgoResults_loglinear, AlgoResults_plnorm,  var_plot=1:19, xlim=c(1, 3500))
-plot(AlgoResults_pnorm$loss, col='red', type='l', ylim=c(3, 4.5),xlim=c(2000,6000))
-lines(AlgoResults_loglinear$loss, col='blue')
-lines(AlgoResults_plnorm$loss, col='green')
-
-plot(0,0, xlim=c(4.5, 14), ylim=c(-12, 0))
-for (i in sample(1:500,100)){
-  Damage = seq(4.5, 13, 0.01)
-  Omega_pnorm = AlgoResults_pnorm$Omega_sample_phys[,3000+i] %>% relist(skeleton = Model$skeleton) %>% addTransfParams()
-  mortdisp = D_MortDisp_calc(Damage, Omega_pnorm)
-  lines(Damage, log(mortdisp[2,]), col='red')
-  lines(Damage, log(mortdisp[1,]), col='yellow')
-  Omega_logistic = AlgoResults_loglinear$Omega_sample_phys[,3000 +i] %>% relist(skeleton = Model$skeleton) %>% addTransfParams()
-  mortdisp = D_MortDisp_calc_logistic(Damage, Omega_logistic)
-  lines(Damage, log(mortdisp[2,]), col='blue')
-  lines(Damage, log(mortdisp[1,]), col='green')
-}
-
-source('RCode/Model Variations/Model_Logistic.R')
-AlgoResults_loglinear <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-04-27_014331.085601__Apr25Agg_Logistic_ESplus0.05BD_RFwithTot_backup')
-AlgoResults_loglinear$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-
-
-df_postpredictive_sampled <- create_df_postpredictive_MCMC(AlgoResults_loglinear, single_particle=F, 
-                                                           M=200, output='SampledTotal')
-saveRDS(df_postpredictive_sampled, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/LogisticSampledTotalImpactApr28')
-
-plot_df_postpredictive_PAGER_coloured(df_postpredictive_sampled, 'buildDam', interactive=T) 
-plot_df_postpredictive(df_postpredictive_sampled %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none") 
-
-plot(seq(4.5,10,0.01),pnorm(seq(4.5,10,0.01), 7.51604980, 1.46455802))
-
-
-df_postpredictive_sampled <- create_df_postpredictive_MCMC(AlgoResults_loglinear, single_particle=F, 
-                                                           M=200, output='SampledAgg')
-saveRDS(df_postpredictive_sampled, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/LogisticSampledImpactApr28')
-
-
-#----------------------------------------------------------------------------------------------------
-#------------------------------ Displacement Only  -------------------------------------------
-#----------------------------------------------------------------------------------------------------
-
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-04-21_005554.153622_MCMC_BDScore.05_M100AprAgg5_RandomFieldThree_DispOnly_backup')
-AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-df_postpredictive_sampled <- create_df_postpredictive_MCMC(AlgoResults, single_particle=F, 
-                                                           M=100, output='SampledAgg')
-
-saveRDS(df_postpredictive_sampled, paste0(dir, 'IIDIPUS_Results/SampledAgg_DispOnlyModel'))
-disp_test <- plot_df_postpredictive(df_postpredictive_sampled %>% filter(train_flag=='TEST'),'displacement', label_points=T)  + guides(color="none")
-disp_test
-
-mcmc_trace(AlgoResults, var_plot=1:19, xlim=c(1,3000))
-
-disp_test
-
-
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-13_174845.756216__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_AM')
-plot(AlgoResults$loss, xlim=c(0, 1500), ylim=c(4, 6), type='l')
-
-mcmc_trace(AlgoResults, AlgoResults2, var_plot = 1:19, xlim = c(1, 5000))
-
-# hlp_samples = array(0, dim=c(1000, 19))
-# for (i in 1:nrow(hlp_samples)){
-#   print(i)
-#   hlp_samples[i,] = HLPrior_sample(Model, AlgoParams) %>% Array2Physical(Model) %>% unlist()
-# }
-# plot(hlp_samples[,3], hlp_samples[,4], xlim=c(6, 13.5), ylim=c(0.2, 2.5))
-# points(AlgoResults2$Omega_sample_phys[3,], AlgoResults2$Omega_sample_phys[4,], col='blue')
-# points(AlgoResults$Omega_sample_phys[3,], AlgoResults$Omega_sample_phys[4,], col='red')
-# 
-# 
-# plot_priors = function(n_samples){
-#   I_ij <- seq(4.5, 10, 0.01)
-#   n_samples = 20
-#   # Collect results into a tidy data frame
-#   plot_data <- map_dfr(1:n_samples, function(i) {
-#     params <- HLPrior_sample(Model, AlgoParams)
-#     Omega <- params %>%
-#       Array2Physical(Model) %>%
-#       addTransfParams()
-#     Omega2 = AlgoResults2$Omega_sample_phys[,1600-i*4] %>% relist(skeleton=Model$skeleton) %>% addTransfParams()
-#     
-#     MortDisp <- D_MortDisp_calc(h_0(I_ij, Model$I0, Omega = Omega), Omega)
-#     BuildDam <- D_Dam_calc(h_0(I_ij, Model$I0, Omega = Omega), Omega)
-#     
-#     MortDisp2 <- D_MortDisp_calc(h_0(I_ij, Model$I0, Omega = Omega2), Omega2)
-#     BuildDam2 <- D_Dam_calc(h_0(I_ij, Model$I0, Omega = Omega2), Omega2)
-#     
-#     tibble(
-#       I = I_ij,
-#       Mort = MortDisp[1,],
-#       Disp = MortDisp[2,],
-#       Mort2 = MortDisp2[1,],
-#       Disp2 = MortDisp2[2,],
-#       BuildDam = BuildDam,
-#       BuildDam2 = BuildDam2,
-#       sample = i
-#     )
-#   })
-#   
-#   ggplot() +
-#     geom_line(data = plot_data, aes(x = I, y = Mort, group = sample, color = "Mortality"), alpha = 0.5) +
-#     geom_line(data = plot_data, aes(x = I, y = Disp, group = sample, color = "Displacement"), alpha = 0.5) +
-#     geom_line(data = plot_data, aes(x = I, y = BuildDam, group = sample, color = "Building Damage"), alpha = 0.5) +
-#     geom_line(data = plot_data, aes(x = I, y = Mort2, group = sample, color = "Mortality 2"), alpha = 0.5) +
-#     geom_line(data = plot_data, aes(x = I, y = Disp2, group = sample, color = "Displacement 2"), alpha = 0.5) +
-#     geom_line(data = plot_data, aes(x = I, y = BuildDam2, group = sample, color = "Building Damage 2"), alpha = 0.5) +
-#     scale_color_manual(
-#       name = NULL,
-#       values = c(
-#         "Mortality" = "#440154",
-#         "Displacement" = "#1FA187",
-#         "Building Damage" = "#FDE725",
-#         "Mortality 2" = "pink",
-#         "Displacement 2" = "cyan",
-#         "Building Damage 2" = "orange"
-#       ),
-#       guide = guide_legend(override.aes = list(size = 4, alpha=1))  # Thicker lines in legend
-#     ) +
-#     labs(x = "MMI", y = "Impact Probability") +
-#     coord_cartesian(xlim = c(4.5, 10), ylim = c(0, 1)) +
-#     theme_minimal(base_family = "Times New Roman") +
-#     theme(
-#       legend.position = "bottom",
-#       text = element_text(family = "Times New Roman")
-#     )
-# }
-# plot_priors(50)
-
-#----------------------------------------------------------------------------------------------------
-#----------------------------------------------------------------------------------------------------
-#----------------------------------------------------------------------------------------------------
-
-mcmc_trace <- function(..., var_plot = 7:10, xlim = c(4000, 8000)) {
-  
-  chains <- list(...)
-  num_chains <- length(chains)
-  
-  if (num_chains < 1) {
-    stop("At least one chain must be provided.")
-  }
-  
-  # Define subfigure labels (a), (b), (c), ...
-  subfig_labels <- letters[1:20]
-  plot_list <- list()
-  
-  for (i in seq_along(var_plot)) {
-    var <- var_plot[i]
+df_post_with_covar %<>% resample_obs_quant()
+ggplot(df_post_with_covar %>% filter(impact==impact_type), aes(y = obs_quant)) +
+  geom_point(aes(x = shakeSD,            color = "Maximum uncertainty")) +
+  geom_point(aes(x = shakeSD_epicentre,  color = "Uncertainty at epicentre")) +
+  scale_color_manual(
+    name = "",
+    values = c("Maximum uncertainty" = "#440154", "Uncertainty at epicentre" = "#1FA187")
+  ) +
+  ggtitle('') +
+  ylab('Observation Quantile') + xlab('ShakeMap Uncertainty') +
+  theme_minimal(base_family = "Times New Roman", base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 55, vjust = 1, hjust = 1),
+    legend.position = 'right',
+    panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+    legend.text      = ggplot2::element_text(family = "Liberation Serif", size = 13)
+  ) +
+  coord_cartesian(clip = "off") +
+  theme(plot.margin = margin(10, 0, 10, 10)) +
+  scale_y_continuous(expand = c(0, 0))
+
+#ShakeSDvsQuantile.pdf, 7.5 x 4
+
+
+#df_post_with_covar$sampled_median = apply(df_post_with_covar[, grep('sampled', names(df_post_with_covar))], 1, median)
+
+#df_post_with_covar$log_dif = log(df_post_with_covar$observed+10) - log(df_post_with_covar$sampled_median+10)
+
+p1 = ggplot(df_post_with_covar %>% filter(impact==impact_type), aes(x=region, y=obs_quant)) +
+  #geom_point(aes(color=as.factor(train_flag))) + 
+  geom_point(col='#440154') +
+  #geom_point() + 
+  scale_color_viridis() +
+  ggtitle('') +
+  ylab('Observation Quantile') + xlab('') +
+  theme_minimal(base_family = "Times New Roman", base_size = 14) + 
+  theme(axis.text.x = element_text(angle = 55, vjust = 1, hjust=1), 
+        legend.position='none',
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5))+ #geom_text(hjust=0, vjust=0.5, size=3, alpha=0.5) + 
+  coord_cartesian(clip="off")+
+  theme(plot.margin = margin(10, 50, 10, 10)) + scale_y_continuous(expand=c(0,0))
+# Region vs Residual, 8.5 x 5
+
+p2 <- ggplot() +
+  borders("world", colour = "gray80", fill = "gray80") +
+  geom_point(
+    data = df_post_with_covar,
+    aes(x = lon, y = lat, color = obs_quant),
+    size = 2.5, alpha = 0.8
+  ) +
+  scale_color_viridis(name = "Observation\nQuantile") +
+  #scale_color_gradientn(
+    #colors = c("darkgreen", "chartreuse3", "gold", "orange", "red"),
+    #colors = c("purple", "white", "green"),
+    #name = "Observation\nQuantile"
+  #) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme_minimal(base_family = "Liberation Serif", base_size = 14) +
+  theme(
+    #axis.title  = element_text(size = 12.5),
+    #legend.title = element_text(size = 12.5),
+    #legend.text  = element_text(size = 12.5),
     
-    # Create base data frame with x values
-    post_samples <- data.frame(x = (xlim[1]:xlim[2]) - xlim[1])
+    # place legend INSIDE the plotting area
+    legend.position = c(0.025, 0.1),          # (x, y) in NPC; tweak as needed
+    legend.justification = c(0, 0),           # anchor bottom-left of the legend box
     
-    # Loop through each chain and add its samples to the data frame
-    for (j in seq_along(chains)) {
-      chain_name <- paste0("Chain", j)
-      post_samples[[chain_name]] <- chains[[j]]$Omega_sample_phys[var, xlim[1]:xlim[2]]
-    }
+    # add border and background to the legend box
+    legend.background = element_rect(
+      fill = alpha("white", 0.85),
+      colour = "black",
+      linewidth = 0.5
+    ),
+    legend.box.margin = margin(0, 0, 0, 0),
+    legend.margin = margin(4, 6, 4, 6),
     
-    # Convert to long format
-    post_samples_long <- post_samples %>%
-      pivot_longer(cols = -x, names_to = "Parameter", values_to = "Value")
-    
-    
-    if (length(grep('vuln_coeff.', names(unlist(Model$skeleton))[var])>0)){
-      y_lb = -1
-      y_ub = 1
-    } else {
-      y_lb = Model$par_lb[var]
-      y_ub = Model$par_ub[var]
-    }
-    
-    # Plot the lines
-    plot <- ggplot(data = post_samples_long, aes(x = x, y = Value, color = Parameter)) +
-      labs(y = get_greek_titles(names(unlist(Model$skeleton))[var]),
-           x = 'Post warmup iteration') +
-      scale_y_continuous(limits = c(y_lb, y_ub), expand = c(0.01, 0.01)) +
-      geom_line(alpha = 0.8) +
-      theme_minimal() +
-      scale_color_viridis(discrete = TRUE) +
-      theme(
-        axis.title.y = element_text(family = "Times New Roman", size = 12),
-        axis.text.x = element_text(family = "Times New Roman", size = 12),
-        axis.text.y = element_text(family = "Times New Roman", size = 12),
-        axis.ticks.y = element_blank(),
-        axis.title.x = element_text(family = "Times New Roman", size = 12),
-        plot.title = element_text(family = "Times New Roman", size = 14),
-        panel.border = element_rect(color = "black", fill = NA, size = 0.5),
-        plot.margin = unit(c(0, 20, 0, 15), "pt"),
-        legend.position = "none"
-      )
-    
-    # Add subfigure label
-    plot_with_label <- arrangeGrob(
-      plot,
-      top = textGrob(paste0("(", subfig_labels[i], ")"),
-                     x = unit(0.0, "npc"), y = unit(1, "npc"),
-                     just = c("left", "top"),
-                     gp = gpar(fontsize = 14, fontfamily = "Times New Roman"))
-    )
-    
-    plot_list[[i]] <- plot_with_label
-  }
-  
-  # Arrange plots in a 1-row grid
-  grid.arrange(grobs = plot_list, ncol = 4)
-}
-
-#--------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-#MCMC Single:
-
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-10-21_120105_MCMC_RealAgg5_LR40_Rho0.9_adaptive')
-plot(AlgoResults$loss[100:which(!is.finite(AlgoResults$loss))[1]], type='l')
-
-#SMC:
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-10-01_223810_alphaAdaptivePropCOV0.2_M100_Npart1000SimInput')
-
-#MCMC:
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-07_103308_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP')
-
-AlgoResults2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2024-11-06_143442_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV')
-
-AlgoResults2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-10-12_222810_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive')
-plot(AlgoResults$loss, type='l', ylim=c(2.2, 5))
-points(AlgoResults$loss, type='l', col='red')
-
-par(mfrow=c(2,2))
-params <- c(9,23)
-plot(AlgoResults2$Omega_sample_phys[params[1],], AlgoResults2$Omega_sample_phys[params[2],], type='l')
-points(AlgoResults2$Omega_sample_phys[params[1],1], AlgoResults2$Omega_sample_phys[params[2],1], col='blue', pch=19)
-
-params <- c(9,23)
-plot(AlgoResults$Omega_sample_phys[params[1],2000:5000], AlgoResults$Omega_sample_phys[params[2],2000:5000], type='l')
-plot(AlgoResults$Omega_sample_phys[params[2],], type='l', xlim=c(4000,5000))
-plot(AlgoResults$Sigma_store[params[2],params[2],]* AlgoResults$lambda_store, type='l', ylim=c(0,0.5))
-
-
-
-
-
-
-
-
-
-
-plot(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[19,19,], type='l', xlim=c(0,1000))
-
-xlim=range(AlgoResults2$Omega_sample_phys[params[1],], AlgoResults$Omega_sample_phys[params[1],],na.rm=T)
-ylim=range(AlgoResults2$Omega_sample_phys[params[2],], AlgoResults$Omega_sample_phys[params[2],], na.rm=T)
-plot(AlgoResults2$Omega_sample_phys[params[1],10000:12000], AlgoResults2$Omega_sample_phys[params[2],10000:12000], xlim=xlim, ylim=ylim,type='l')
-points(AlgoResults$Omega_sample_phys[params[1],1:6000], AlgoResults$Omega_sample_phys[params[2],1:6000], type='l', col='red')
-
-xlim=range(AlgoResults$Omega_sample_phys[params[1],], AlgoResults$Omega_sample_phys[params[1],],na.rm=T)
-ylim=range(AlgoResults2$Omega_sample_phys[params[2],], AlgoResults$Omega_sample_phys[params[2],], na.rm=T)
-plot(AlgoResults2$Omega_sample_phys[params[1],10000:12000], AlgoResults2$Omega_sample_phys[params[2],10000:12000], xlim=xlim, ylim=ylim,type='l')
-points(AlgoResults$Omega_sample_phys[params[1],1:6000], AlgoResults$Omega_sample_phys[params[2],1:6000], type='l', col='red')
-xlim=range(AlgoResults2$Omega_sample[params[1],], AlgoResults$Omega_sample[params[1],],na.rm=T)
-ylim=range(AlgoResults2$Omega_sample[params[2],], AlgoResults$Omega_sample[params[2],], na.rm=T)
-plot(AlgoResults2$Omega_sample[params[1],], AlgoResults2$Omega_sample[params[2],], xlim=xlim, ylim=ylim,type='l')
-points(AlgoResults$Omega_sample[params[1],1:6000], AlgoResults$Omega_sample[params[2],1:6000], type='l', col='red')
-plot(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[params[1],params[1],],type='l', ylim=c(0,0.5))
-lines(AlgoResults$lambda_store * AlgoResults$Sigma_store[params[1],params[1],],type='l', col='red')
-
-
-params <- c(22,23)
-xlim=range(AlgoResults2$Omega_sample_phys[params[1],], AlgoResults$Omega_sample_phys[params[1],],na.rm=T)
-ylim=range(AlgoResults2$Omega_sample_phys[params[2],], AlgoResults$Omega_sample_phys[params[2],], na.rm=T)
-plot(AlgoResults2$Omega_sample_phys[params[1],10000:14000], AlgoResults2$Omega_sample_phys[params[2],10000:14000], xlim=xlim, ylim=ylim,type='l')
-points(unlist(Omega)[params[1]], unlist(Omega)[params[2]], col='red', pch=19)
-
-plot(AlgoResults$lambda_store)
-points(AlgoResults2$lambda_store, col='red')
-
-par(mfrow=c(2,1))
-plot(AlgoResults$lambda_store * AlgoResults$Sigma_store[1,1,])
-points(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[1,1,], col='red')
-plot(AlgoResults$lambda_store * AlgoResults$Sigma_store[7,7,])
-points(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[7,7,], col='red')
-
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-09-24_121551_MCMC_SimCorrVuln_Trial_LR40_Rho0.9_adaptive_backup')
-Prior <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HLPriorSamples')
-prior_phys <- Prior
-for (i in 1:NROW(Prior)){
-  prior_phys[i, ] <- Proposed2Physical(Prior[i,] %>% relist(skeleton=Model$skeleton) %>% unlist(), Model) %>% unlist()
-}
-
-
-params <- c(15,16)
-plot(prior_phys[,params[1]], prior_phys[,params[2]])
-points(AlgoResults$Omega_sample_phys[params[1],1], AlgoResults$Omega_sample_phys[params[2],1], col='red', pch=19)
-lines(AlgoResults$Omega_sample_phys[params[1],], AlgoResults$Omega_sample_phys[params[2],], col='blue')
-
-
-#plot_df_postpredictive(df_postpredictive_sampled_true %>% filter(train_flag=='TEST'), 'mortality')
-#plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'), 'mortality')
-
-
-plot(AlgoResultsMCMC$loss, type='l')
-
-plot(AlgoResultsSMC$Omega_sample_phys[,16,1], AlgoResultsSMC$Omega_sample_phys[,17,1], col='blue', xlab='SHDI.coef', ylab='GNIc.coef')
-points(AlgoResultsSMC$Omega_sample_phys[,16,163], AlgoResultsSMC$Omega_sample_phys[,17,163], pch=19)
-points(AlgoResultsMCMC$Omega_sample_phys[16,], AlgoResultsMCMC$Omega_sample_phys[17,], col='red', pch=19)
-
-
-#compare MCMC and ABC-SMC:
-AlgoResults_smc <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2024-11-14_224431_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2')
-AlgoResults_mcmc <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-16_172107_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat1_backup')
-stop <- which(is.na(AlgoResults_mcmc$Omega_sample_phys[1,]))[1]
-params <- c(12,15)
-plot(AlgoResults_smc$Omega_sample_phys[,params[1],1], AlgoResults_smc$Omega_sample_phys[,params[2],1], col='blue',xlab=names(unlist(Omega))[params[1]], ylab=names(unlist(Omega))[params[2]])
-points(AlgoResults_smc$Omega_sample_phys[,params[1],60], AlgoResults_smc$Omega_sample_phys[,params[2],60], col='red')
-points(AlgoResults_mcmc$Omega_sample_phys[params[1],(stop-3000):stop], AlgoResults_mcmc$Omega_sample_phys[params[2],(stop-3000):stop], col='green')
-
-
-#which(AlgoResults$d==min(AlgoResults$d), arr.ind=T)
-Omega_best <- AlgoResults$Omega_sample_phys[192,,61] %>% relist(skeleton=Model$skeleton)
-Omega_best <- AlgoResults$Omega_sample_phys[466,,71] %>% relist(skeleton=Model$skeleton)
-Omega_best <- AlgoResults$Omega_sample_phys[466,,71] %>% relist(skeleton=Model$skeleton)
-Omega_best <- AlgoResults$Omega_sample_phys[626,,80] %>% relist(skeleton=Model$skeleton) # min mst
-Omega_best <- AlgoResults$Omega_sample_phys[489,,80] %>% relist(skeleton=Model$skeleton)
-
-Omega_best <- AlgoResults$Omega_sample_phys[401,,130] %>% relist(skeleton=Model$skeleton)
-
-loss_store <- c()
-AlgoParams$Np <- 1
-AlgoParams$m_CRPS <- 60
-for (i in 1:10){
-  imp_best <- SampleImpact(dir, Model, Omega_best %>% addTransfParams(), AlgoParams, dat='Train')
-  es_sample <- CalcDist(imp_best, AlgoParams)[1]
-  loss_store <- c(loss_store, es_sample)
-}
-var(exp(-8*loss_store[1:5])/exp(-8*loss_store[6:10])) # learning rate of 8 seems pretty reasonable, but only estimating variance using a sample of 5!
-
-  
-Omega_best <- AlgoResults$Omega_sample_phys[984,,120] %>% relist(skeleton=Model$skeleton)
-Omega_best <- AlgoResults$Omega_sample_phys[401,,130] %>% relist(skeleton=Model$skeleton)
-AlgoParams$input_folder='IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/'
-AlgoParams$Np <- 1
-AlgoParams$m_CRPS <- 100
-imp_best <- SampleImpact(dir, Model, Omega_best %>% addTransfParams(), AlgoParams, dat='All')
-
-imp_best_plot <- create_df_postpredictive_from_impact_sample(imp_best)
-plot_df_postpredictive(imp_best_plot, 'mortality')
-
-#generic plots
-plot_posteriors(AlgoResults, 15:22)
-plot_acc_prob(AlgoResults); abline(h=0.05)
-
-
-plot_correlated_posteriors(AlgoResults, pairings = rbind(c(1,2), c(3,4), c(5,6), c(9,10), c(11,12), c(13,14)))
-
-#plot posterior predictive distributions
-
-#df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=F, M=100, output='SampledTotal')
-df_postpredictive_sampled_best <- create_df_postpredictive(AlgoResults, single_particle=T, 
-                                                           Omega = AlgoResults$Omega_sample_phys[401,,130] %>% relist(skeleton=Model$skeleton),
-                                                           M=100, output='SampledTotal')
-
-#saveRDS(df_postpredictive_sampled_best, paste0(dir, 'IIDIPUS_Results/', 'sampledpost', gsub(gsub(gsub(Sys.time(), pattern = " ", replacement = "_"), pattern = ":", replacement = ""), pattern = "\\..*", replacement = "")))
-
-plot_df_postpredictive(df_postpredictive_sampled_best, 'mortality')
-plot_df_postpredictive(df_postpredictive_sampled_best, 'displacement')
-plot_df_postpredictive(df_postpredictive_sampled_best, 'buildDam')
-
-plot_cor_posts_poster(AlgoResults)
-
-plot_df_postpredictive_PAGER_coloured(df_postpredictive_sampled_best, 'mortality') #8 x 6.pdf
-
-
-# obs_sampled <- as.numeric(df_postpredictive_sampled_best[106,c(grep('observed',names(df_postpredictive_sampled_best)),grep('sampled',names(df_postpredictive_sampled_best)))])
-# plot(obs_sampled, col=c('red',rep('blue', length(obs_sampled)-1)), pch=19)
-
-#MCMC single:
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-10_084817_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP')
-params <- c(9,23)
-stop1 <- which(is.na(AlgoResults1$Omega_sample_phys[params[1],]))[1]-1
-plot(AlgoResults1$Omega_sample_phys[params[1],(stop1-3000):stop1], AlgoResults1$Omega_sample_phys[params[2],(stop1-3000):stop1],type='l',
-     xlab ='Dummy 3', ylab='Dummy 4') #names(unlist(Omega))[params[1]], ylab = names(unlist(Omega))[params[2]])
-abline(h=0)
-abline(v=0)
-plot(AlgoResults2$Omega_sample_phys[params[2],], type='l')
-
-#MCMC compare:
-AlgoResults1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-20_163934_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat1')
-AlgoResults2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-20_163933_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat2_backup')
-
-param = 3
-plot(AlgoResults1$lambda_store* AlgoResults1$Sigma_store[param, param,], xlim=c(0, 9000))
-lines(AlgoResults2$lambda_store* AlgoResults2$Sigma_store[param, param, ], col='red')
-
-plot(AlgoResults1$loss, type='l', ylim=c(3.5, 5), xlim=c(0,8000))
-points(AlgoResults2$loss, type='l', col='red')
-
-plot(AlgoResults2$Omega_sample_phys[5,1000:2000], AlgoResults2$loss[1000:2000])
-
-par(mfrow=c(2,2))
-params <- c(11,12)
-xlim=range(AlgoResults1$Omega_sample_phys[params[1],], AlgoResults2$Omega_sample_phys[params[1],],na.rm=T)
-ylim=range(AlgoResults1$Omega_sample_phys[params[2],], AlgoResults2$Omega_sample_phys[params[2],], na.rm=T)
-stop1 <- which(is.na(AlgoResults1$Omega_sample_phys[params[1],]))[1]-1
-stop2 <- which(is.na(AlgoResults2$Omega_sample_phys[params[1],]))[1]-1
-plot(AlgoResults1$Omega_sample_phys[params[1],(stop1-4000):stop1], AlgoResults1$Omega_sample_phys[params[2],(stop1-4000):stop1], xlim=xlim, ylim=ylim,type='l',
-     xlab = names(unlist(Omega))[params[1]], ylab = names(unlist(Omega))[params[2]] )
-#points(AlgoResults1$Omega_sample_phys[params[1],1], AlgoResults1$Omega_sample_phys[params[2],1], xlim=xlim, ylim=ylim,pch=19, col='green')
-points(AlgoResults2$Omega_sample_phys[params[1],(stop2-4000):stop2], AlgoResults2$Omega_sample_phys[params[2],(stop2-4000):stop2], type='l', col='blue')
-#points(AlgoResults2$Omega_sample_phys[params[1],1], AlgoResults2$Omega_sample_phys[params[2],1], col='green', pch=19)
-points(AlgoResults1$Omega_sample_phys[params[1],stop1], AlgoResults1$Omega_sample_phys[params[2],stop1], xlim=xlim, ylim=ylim,pch=19, col='red')
-points(AlgoResults2$Omega_sample_phys[params[1],stop2], AlgoResults2$Omega_sample_phys[params[2],stop2], xlim=xlim, ylim=ylim,pch=19, col='red')
-
-params[1] <- 4
-plot(AlgoResults1$Omega_sample_phys[params[1],], type='l')
-lines(AlgoResults2$Omega_sample_phys[params[1],], type='l', col='blue')
-
-
-#compare to previous abc smc results:
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/abcsmc_start_step_2024-11-26_030403_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2')
-par(mfrow=c(2,1))
-params[1] = 2
-hist(AlgoResults$Omega_sample_phys[,params[1],115], type='l', freq=F)
-lines(density(AlgoResults$Omega_sample_phys[,params[1],1]), type='l', freq=F, col='blue')
-lines(density(AlgoResults1$Omega_sample_phys[params[1],4000:6000]), type='l', col='red')
-lines(density(AlgoResults2$Omega_sample_phys[params[1],4000:6000]), type='l', col='red')
-plot(AlgoResults$Omega_sample_phys[,params[1],115], AlgoResults$d[,1,115])
-
-
-
-
-xlim=range(AlgoResults1$Omega_sample[params[1],], AlgoResults2$Omega_sample[params[1],],na.rm=T)
-ylim=range(AlgoResults1$Omega_sample[params[2],], AlgoResults2$Omega_sample[params[2],], na.rm=T)
-plot(AlgoResults1$Omega_sample[params[1],3500:4500], AlgoResults1$Omega_sample[params[2],3500:4500], xlim=xlim, ylim=ylim,type='l')
-points(AlgoResults2$Omega_sample[params[1],], AlgoResults2$Omega_sample[params[2],], type='l', col='red')
-points(AlgoResults1$Omega_sample[params[1],stop], AlgoResults1$Omega_sample[params[2],stop], xlim=xlim, ylim=ylim,pch=19, col='blue')
-
-HLPrior_sample <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/HLPriorSamples')
-param <- 16
-plot(seq(1,3600, length.out=500), HLPrior_sample[,param], ylab='SHDI Coefficient (untransformed)')
-lines(AlgoResults1$Omega_sample[param,], col='red', type='l')
-
-
-plot(AlgoResults1$loss, type='l', ylim=c(3.8, 4.5))
-lines(AlgoResults2$loss, type='l', col='red')
-AlgoResults1$loss 
-plot(AlgoResults1$lambda_store * AlgoResults1$Sigma_store[23,23,], type='l', ylim=c(0,3.5))
-points(AlgoResults2$lambda_store * AlgoResults2$Sigma_store[23,23,], col='red', type='l')
-
-mean(AlgoResults1$accprob_store[1:500], na.rm=T)
-
-par(mfrow=c(2,1))
-plot(log(AlgoResults1$lambda_store), xlim=c(0,2500), ylim=c(-2.5,0))
-#plot(log(AlgoResults1$lambda_store), xlim=c(0,2000))
-abline(h=-log(2.5))
-#abline(h=-log(3))
-abline(h=-2*log(2.5))
-abline(v=125)
-lines(log(AlgoResults2$lambda_store), col='red')
-accprob_mean <- cumsum(AlgoResults1$accprob_store)/seq_along(AlgoResults1$accprob_store)
-plot(rollmean(AlgoResults1$accprob_store, 21, fill=NA, align='center'), xlim=c(0, 6000), type='l', ylab='Rolling Mean of Acceptance Probability')
-abline(h=0.234)
-
-plot(AlgoResults1$lambda_store * AlgoResults1$Sigma_store[23,23,])
-#plot(log(AlgoResults1$lambda_store), xlim=c(0,2000))
-lines(AlgoResults2$lambda_store* AlgoResults2$Sigma_store[23,23,], col='red')
-
-plot(log(AlgoResults1$lambda_store))
-
-HLP_vals <- c()
-for (i in 1:8000){
-  HLP_vals <- c(HLP_vals,Model$HighLevelPriors(AlgoResultsMCMC$Omega_sample_phys[,i] %>% 
-                                      relist(skeleton=Model$skeleton) %>% 
-                                      addTransfParams(),
-                                    Model))
-}
-plot(HLP_vals, type='l')
-
-#MCMC Compare Euclidean distance to Scoring Rule Posterior
-# EucDist1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-25_151709_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat_EuclDist_backup')
-# EucDist2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2024-12-01_010730.812193_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat_EuclDist2')
-# SR1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180047_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat2')
-# SR2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180050_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat1_backup')
-EucDist1 <- readRDS('')
-EucDist2 <- readRDS('')
-SR1 <- readRDS('')
-SR2 <- readRDS('')
-
-plot_mcmc_compare = function(EucDist1, EucDist2, SR1, SR2, xlim=c(4000, 8000)){
-  
-  # Define subfigure labels (a), (b), (c), ...
-  subfig_labels <- letters[1:8]
-  plot_list <- list()
-  var_plot <- 7:10
-  # Loop through the variables and generate each plot
-  for (i in seq_along(var_plot)){#seq_along(vuln_var)) {
-    #var <- vuln_var[i]
-    var <- var_plot[i]
-    
-    post_samples <- data.frame(
-                        x=(xlim[1]:xlim[2])-xlim[1],
-                        Euc1_param <- EucDist1$Omega_sample_phys[var,xlim[1]:xlim[2]],
-                        Euc2_param <- EucDist2$Omega_sample_phys[var,xlim[1]:xlim[2]],
-                        SR1_param <- SR1$Omega_sample_phys[var,xlim[1]:xlim[2]],
-                        SR2_param <-SR2$Omega_sample_phys[var,xlim[1]:xlim[2]])
-    
-    post_samples_long <- post_samples %>%
-      pivot_longer(cols = -x, names_to = "Parameter", values_to = "Value")
-    
-    # Plot the lines
-    plot <- ggplot(data = post_samples_long, aes(x = x, y = Value, color = Parameter)) +
-      labs(y = get_greek_titles(names(unlist(Model$skeleton))[var]),
-           x= 'Post warmup iteration') +
-      scale_y_continuous(limits = c(Model$par_lb[var], Model$par_ub[var]), expand = c(0.01, 0.01)) +
-      geom_line(alpha=0.8) +
-      theme_minimal() +
-      scale_color_viridis(discrete = TRUE) +
-      theme(
-        axis.title.y = element_text(family = "Times New Roman", size = 12),  # Change y-axis title font
-        axis.text.x = element_text(family = "Times New Roman", size = 12),   # Change x-axis text font
-        axis.text.y = element_text(family = "Times New Roman", size = 12),  # Remove y-axis text (numbers)
-        axis.ticks.y = element_blank(), # Remove y-axis ticks
-        axis.title.x = element_text(family = "Times New Roman", size = 12),  # Change x-axis title font
-        plot.title = element_text(family = "Times New Roman", size = 14),
-        panel.border = element_rect(color = "black", fill = NA, size = 0.5),
-        plot.margin = unit(c(0, 20, 0, 15), "pt"),
-        legend.position = "none"
-      )
-    
-    # Add subfigure label to each plot
-    plot_with_label <- arrangeGrob(plot, #padding = unit(c(0, 20), "pt"),
-                                   top = textGrob(paste0("(", subfig_labels[i], ")"),
-                                                  x = unit(0.0, "npc"), y = unit(1, "npc"), just = c("left", "top"),
-                                                  gp = gpar(fontsize = 14, fontfamily = "Times New Roman"))
-    )
-    
-    # Store the labeled plot in the list
-    plot_list[[i]] <- plot_with_label
-  }
-  
-  # Arrange all 8 plots in a 2x4 grid
-  grid.arrange(grobs = plot_list, ncol = 4, nrow = 1)
-  #Trace_EuclDist.pdf, 12 x 9 (or 13 x 3 for single row)
-}
-
-#Postpredictive comparison
-AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Nov24Agg/'
-
-df_postpredictive_sampled_best <- create_df_postpredictive_MCMC(EucDist1, single_particle=F, Omega=NULL, particle_best=F,
-                                                                M=50, output='SampledTotal')
-saveRDS(df_postpredictive_sampled_best, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/EuclDist25thNov')
-df_postpredictive_sampled_bestEuc <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/EuclDist25thNov')
-
-df_postpredictive_sampled_bestSR <- create_df_postpredictive_MCMC(SR1, single_particle=F, Omega=NULL, particle_best=F,
-                                                                M=50, output='SampledTotal')
-saveRDS(df_postpredictive_sampled_bestSR, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SR25thNov')
-df_postpredictive_sampled_bestSR <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SR25thNov')
-
-mort_test <- plot_df_postpredictive_compare(df_postpredictive_sampled_bestEuc %>% filter(train_flag=='TEST'),
-                                            df_postpredictive_sampled_bestSR %>% filter(train_flag=='TEST'), 'mortality')  + guides(color="none") 
-disp_test <- plot_df_postpredictive_compare(df_postpredictive_sampled_bestEuc %>% filter(train_flag=='TEST'),
-                                            df_postpredictive_sampled_bestSR %>% filter(train_flag=='TEST'), 'displacement')+ guides(color="none") 
-# buildDam_test <- plot_df_postpredictive_compare(df_postpredictive_sampled_bestEuc %>% filter(train_flag=='TEST'),
-#                                                 df_postpredictive_sampled_bestSR %>% filter(train_flag=='TEST'), 'buildDam')
-
-p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-#p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
-
-grid.arrange(p1, p2, ncol=2)
-#EucDist_PostPred.pdf, 12 x 6
-
-
-# df_postpredictive_sampled_true <- create_df_postpredictive(AlgoResults, single_particle=T, 
-#                                                            Omega =list(Lambda1 = list(nu=8.75, kappa=0.6),
-#                                                                        Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
-#                                                                        Lambda3 = list(nu=8.7, kappa=0.7),
-#                                                                        Lambda4 = list(nu=9.9, kappa=1.6),
-#                                                                        theta= list(theta1=0.6),
-#                                                                        eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
-#                                                                        #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-#                                                                        vuln_coeff = list(PDens=0, SHDI=-0.18, GNIc=-0.05, Vs30=0.1, EQFreq=-0.12, FirstHaz=0.05, Night=0, FirstHaz.Night=0.1),
-#                                                                        check = list(check=0.5)),
-#                                                            M=100, output='SampledAgg')
-# 
-# saveRDS(df_postpredictive_sampled_best, 'SimPostPredictive23rdSept')
-# saveRDS(df_postpredictive_sampled_true, 'SimTruePredictive23rdSept')
-
-# df_postpredictive_sampled_best <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SimPostPredictive16thSept')
-# df_postpredictive_sampled_true <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SimTruePredictive16thSept')
-
-plot_df_postpredictive_compare(df_postpredictive_sampled_bestEuc %>% filter(train_flag=='TEST'),
-                               df_postpredictive_sampled_bestSR %>% filter(train_flag=='TEST'), 'buildDam')
-
-# param = 5
-# for (param in 1:length(unlist(Omega))){
-#   plot(EucDist1$Omega_sample_phys[param,], type='l', lwd=1,col='#440154', xlim=c(5000,10000)) # Dark Purple
-#   lines(EucDist2$Omega_sample_phys[param,], type='l', col='#31688E') # Blue
-#   lines(SR1$Omega_sample_phys[param,], type='l', col='#35B779') # Greenish Teal
-#   lines(SR2$Omega_sample_phys[param,], type='l', col='#FDE725') # Yellow
-# }
-
-#Compare ABC-SMC and MCMC
-
-#SR1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-12-08_171036_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat2')
-#SR2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180050_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat1_backup')
-#SR3 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-12-08_180223_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat3_backup')
-
-SR1 <- readRDS('')
-SR2 <- readRDS('')
-SR3 <- readRDS('')
-
-
-plot_mcmc_compare = function(SR1, SR2, SR3, xlim=c(1, 9000)){
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
+  ) +
+  guides(color = guide_colorbar(
+    title.position = "top",
+    barheight = unit(50, "pt"),
+    barwidth  = unit(8, "pt"),
+    ticks = TRUE
+  )) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0))
+
+plot_grid(p1 +
+            theme(
+              plot.margin = margin(t = -10, b = -20, l = 7, r = 7) # 20pt top and bottom margin
+            )
+          ,p2,  nrow=2, rel_heights = c(1.1, 0.8),
+          labels=c('(a)', '(b)'),
+          label_fontfamily = "Times New Roman",
+          label_fontface = "plain",
+          label_x = c(-0.01, -0.01), 
+          label_y = c(1,1))
+
+#Residual_Map.pdf, 7.5 x 9.5 portrait
+
+#RSS 2:
+
+plot_grid(p1 +
+            theme(
+              plot.margin = margin(t = -10, b = -20, l = 7, r = 7) # 20pt top and bottom margin
+            )
+          ,p2,  nrow=1, rel_widths = c(1.1, 0.8),
+          labels=c('(a)', '(b)'),
+          label_fontfamily = "Times New Roman",
+          label_fontface = "plain",
+          label_x = c(-0.01, -0.01), 
+          label_y = c(1,1))
+
+#Residual_Map_Flat.pdf, 18 x 5
+
+
+#----------- Residuals by date, RSS: ------------
+
+subnatData = readSubNatData('EQ_SubNational.xlsx')
+subnatData_dates = subnatData[, c('EventID', 'sdate')] %>% unique()
+
+df_post_with_covar %<>% merge(subnatData_dates, by.x='event_id', by.y='EventID')
+
+ggplot(df_post_with_covar %>% filter(impact==impact_type), aes(x=sdate, y=obs_quant)) +
+  #geom_point(aes(color=as.factor(train_flag))) + 
+  geom_point(col='#440154') +
+  #geom_point() + 
+  scale_color_viridis() +
+  scale_x_date(
+    limits = as.Date(c("2011-01-01", "2023-12-31")),
+    date_breaks = "1 year",
+    date_labels = "%Y"
+  ) +
+  ggtitle('') +
+  ylab('Observation Quantile') + xlab('Event Date') +
+  theme_minimal(base_family = "Times New Roman", base_size = 14) + 
+  theme(axis.text.x = element_text(angle = 55, vjust = 1, hjust=1), 
+        legend.position='none',
+        panel.border = element_rect(color = "black", fill = NA, size = 0.4))+ #geom_text(hjust=0, vjust=0.5, size=3, alpha=0.5) + 
+  coord_cartesian(clip="off")+
+  theme(plot.margin = margin(10, 50, 10, 10)) + scale_y_continuous(expand=c(0,0))
+
+#Residual_Time.pdf, 9 x 5
+
+#------------------------------------------------
+
+
+
+#--------------------------------------------------------------------------------------------------
+#------------------------------ ABC-MCMC Trace (and comparison to ABC-SMC)-------------------------
+#--------------------------------------------------------------------------------------------------
+
+SR1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-08-03_092825.199826__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_Chain1_backup')
+#SR2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-07-16_213626.504342__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_Chain2')
+#SR3 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-07-22_094221.160343__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_Chain3')
+SR3 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-08-06_112257.598195__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_Chain3')
+SR4 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-08-03_101635.044837__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_Chain4')
+#/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-07-22_094221.160343__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_Chain3
+#/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-07-23_121212.470563__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_Chain4
+
+#SR1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-07-31_094827.645236__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_Chain2_backup')
+plot_mcmc_compare(SR1, SR3, SR4, xlim=c(1, 15000))
+
+plot_mcmc_compare = function(SR1, SR2, SR3, xlim=c(1, 10000)){
   
   # Define subfigure labels (a), (b), (c), ...
   subfig_labels <- letters[1:19]
@@ -1208,8 +516,8 @@ plot_mcmc_compare = function(SR1, SR2, SR3, xlim=c(1, 9000)){
     post_samples <- data.frame(
       x=(xlim[1]:xlim[2])-xlim[1],
       SR1_param <- SR1$Omega_sample_phys[var,xlim[1]:xlim[2]],
-      SR2_param <-SR2$Omega_sample_phys[var,xlim[1]:xlim[2]])#,
-      #SR3_param <-SR3$Omega_sample_phys[var,xlim[1]:xlim[2]])
+      SR2_param <-SR2$Omega_sample_phys[var,xlim[1]:xlim[2]],
+      SR3_param <-SR3$Omega_sample_phys[var,xlim[1]:xlim[2]])
     
     post_samples_long <- post_samples %>%
       pivot_longer(cols = -x, names_to = "Parameter", values_to = "Value")
@@ -1255,172 +563,104 @@ plot_mcmc_compare = function(SR1, SR2, SR3, xlim=c(1, 9000)){
   #Trace_MCMC.pdf, 12 x 9
 }
 
-#AlgoResultsABC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-12-10_060355_alphaAdaptive_M100_Npart1000NovAgg5_propCOVmult0.2_further')
-AlgoResultsABC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2025-05-27_200747.620558__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_kappa0.5_range0.5_flexHLP')
+AlgoResultsABC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2025-08-03_093559.602748__July25Agg_NormalCDF_ESplus0.05MVR_RF_kappa0.5_range0.5')
 
-param=10
-hist(AlgoResultsABC$Omega_sample_phys[,param,163], freq=F)
-lines(density(SR1$Omega_sample_phys[param,], na.rm=T))
-lines(density(SR2$Omega_sample_phys[param,], na.rm=T), col='blue')
-
-AlgoResultsMCMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180050_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat1_backup')
-
-#AlgoResultsMCMC <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180047_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat2')
-AlgoResultsMCMC$HLP_vals <- rep(1, length(AlgoResultsMCMC$loss))
-for (i in 1:8000){
-  AlgoResultsMCMC$HLP_vals[i] = Model$HighLevelPriors(AlgoResultsMCMC$Omega_sample_phys[,i] %>% 
-                                                 relist(skeleton=Model$skeleton) %>% 
-                                                 addTransfParams(),
-                                               Model)
+SR1$HLP_vals = rep(Inf, length(SR1$loss))
+SR3$HLP_vals = rep(Inf, length(SR3$loss))
+SR4$HLP_vals = rep(Inf, length(SR4$loss))
+for (i in 1:15000){
+  if (!is.na(SR1$Omega_sample_phys[1,i])){
+    SR1$HLP_vals[i] <- Model$HighLevelPriors(SR1$Omega_sample_phys[,i] %>% 
+                                               relist(skeleton=Model$skeleton) %>% 
+                                               addTransfParams(),
+                                             Model)
+  }
+  if (!is.na(SR3$Omega_sample_phys[1,i])){
+    SR3$HLP_vals[i] <- Model$HighLevelPriors(SR3$Omega_sample_phys[,i] %>% 
+                                                   relist(skeleton=Model$skeleton) %>% 
+                                                   addTransfParams(),
+                                                 Model)
+  }
+  if (!is.na(SR4$Omega_sample_phys[1,i])){
+    SR4$HLP_vals[i] <- Model$HighLevelPriors(SR4$Omega_sample_phys[,i] %>% 
+                                                   relist(skeleton=Model$skeleton) %>% 
+                                                   addTransfParams(),
+                                                 Model)
+  }
 }
 
-darker_colors <- c("yellow", "red", "blue")  # Darker shades of blue, green, purple
-
-# Ensure HLP_vals is mapped to these colors
-point_colors <- darker_colors[as.factor(AlgoResultsMCMC$HLP_vals)]
-plot(
-  AlgoResultsMCMC$Omega_sample_phys[5,],
-  AlgoResultsMCMC$Omega_sample_phys[6,],
-  col = point_colors)
-
-plot_correlated_posteriors(AlgoResultsABC, include_priors=T, Omega=NULL,
-                                pairings=rbind(c(1,2), c(3,4), c(5,6), c(7,8), c(9,10), c(11,10), c(15,12), c(13,14), c(16, 17), c(18,19)), s_finish=NULL, 
-                                AlgoResultsMCMC, subfig_title_adj=-0.3)
-#MCMCvsSMC.pdf, 9 x 10.5 (7 x 12 for wider)
+plot_correlated_posteriors_ggplot(AlgoResultsABC, include_priors=T, Omega=NULL,
+                                  pairings = rbind(c(1,2), c(3,4), c(5,6), c(8,7), c(8,9),  c(10,11), c(15,12), c(13, 14), c(16,17), c(18,19)), s_finish=NULL, 
+                                  AlgoResultsMCMC=list(SR1, SR3, SR4), subfig_title_adj=-0.3, mcmc_warmup = 13000)
+#MCMCvsSMC.pdf, 5 x 13
 # 7 x 13 for presentation plot
 
+#------------------------------------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------- Euclidean Distance Plots -------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------------------------
+
+source('RCode/ResultsAnalysisFunctions.R')
+EucDist1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-10-07_164759.048116__Sept25_NormalCDF_EuclDist_RFwithTot_range1_Chain1_Np10_backup')
+EucDist2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-10-07_164114.99222__Sept25_NormalCDF_EuclDist_RFwithTot_range1_Chain2_Np10_backup')
+EucDist3 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-10-08_100845.107303__Sept25_NormalCDF_EuclDist_RFwithTot_range1_Chain3_Np10_backup')
+
+EucDist_combined = EucDist1
+EucDist_combined$Omega_sample_phys = EucDist_combined$Omega_sample_phys[,1:15000]
+EucDist_combined$Omega_sample_phys[,1:5000] = EucDist2$Omega_sample_phys[,5001:10000]
+EucDist_combined$Omega_sample_phys[,5001:10000] = EucDist3$Omega_sample_phys[,5001:10000]
+EucDist_combined$Omega_sample_phys[,1:15000] = EucDist_combined$Omega_sample_phys[,sample(1:1500, 1500, replace=F)]
+EucDist_combined$Omega_sample_phys[,15000] = NA
+
+df_postpredictive_euc <- create_df_postpredictive_MCMC(EucDist_combined, single_particle=F, Omega=NULL, particle_best=F,
+                                                                M=100, output='SampledTotal')
+
+saveRDS(df_postpredictive_euc, 'IIDIPUS_Results/df_postpredictive_euc_Oct25')
+
+p_mort = plot_df_postpredictive(df_postpredictive_euc %>% filter(train_flag=='TEST'), impact_type='mortality')
+p_disp = plot_df_postpredictive(df_postpredictive_euc %>% filter(train_flag=='TEST'), impact_type='displacement')
+
+p_mort + theme(legend.position = "none")
+p_disp + theme(legend.position = "none")
+
+plot_grid(p_mort + theme(legend.position = "none"), p_disp + theme(legend.position = "none"), 
+          labels=c('(a)', '(b)'), label_fontfamily = "Times New Roman", label_fontface = "plain", 
+          label_size = 13, label_x = -0.015, label_y = 0.98)
+
+# EucDistPred.pdf, 8 x 4.1
+
+mcmc_trace(EucDist1, EucDist2, EucDist3, var_plot=c(1:19), xlim=c(1,10000))
 
 
+quants <- apply(df_postpredictive_euc[which(df_postpredictive_euc$impact=='mortality'& df_postpredictive_euc$train_flag=='TEST'),c(grep('observed', names(df_postpredictive_euc)), grep('sampled.', names(df_postpredictive_euc)))], 1, function(x){sample_quant(x)})/(length(grep('sampled.', names(df_postpredictive_euc)))+1)
+hist(quants)
+mean(quants>0.025 & quants < 0.975)
+quants <- apply(df_postpredictive_euc[which(df_postpredictive_euc$impact=='displacement'& df_postpredictive_euc$train_flag=='TEST'),c(grep('observed', names(df_postpredictive_euc)), grep('sampled.', names(df_postpredictive_euc)))], 1, function(x){sample_quant(x)})/(length(grep('sampled.', names(df_postpredictive_euc)))+1)
+hist(quants)
+mean(quants>0.025 & quants < 0.975)
 
 
-#Compare LogNormal and Normal Models
+#---------------------------------------------------------------------------------------------------
 
-Normal1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180047_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat2')
-Normal2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180050_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat1_backup')
-LogNormal <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2024-12-07_203532.216188_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat1_LogNormal_backup')
+traces = plot_mcmc_compare(EucDist1, EucDist2, SR1, SR4, xlimEuc = c(5000, 10000), xlimSR = c(10000, 15000))
 
-plot(LogNormal$loss, ylim=c(3.5, 5), type='l')
-lines(Normal1$loss, ylim=c(3.5, 5), type='l', col='red')
-lines(Normal2$loss, ylim=c(3.5, 5), type='l', col='green')
 
-#Distance measure exploration:
-plot_distance_measure_exp <- function(){
-  
-  impact_type='mortality'
-  df_poly_jitter <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/sampledBest18thSept') %>% filter(train_flag=='TEST')
-  #plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'mortality')  + guides(color="none") 
-  
-  jitter_val <- function(x){
-    return_arr <- c()
-    for (x_i in x){
-      if(x_i==0){return_arr <- c(return_arr, runif(1,0.2, 0.3))}
-      else {return_arr <- c(return_arr, runif(1, x_i-0.5, x+0.5))}
-    }
-    return(return_arr)
-  }
-  #df_poly_jitter[which(df_poly_jitter==0, arr.ind=T)] = 0.1
-  df_poly_jitter$observed <- sapply(df_poly_jitter$observed, jitter_val)
-  df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1:2,jitter_val)
-  
-  
-  df_poly_jitter[,grep('sampled', names(df_poly_jitter))] <- t(apply(df_poly_jitter[,grep('sampled', names(df_poly_jitter))],1,sort))
-  M <- length(grep('sampled', names(df_poly_jitter)))
-  M_lower <- round(quantile(1:M, 0.05))
-  M_lower <- ifelse(M_lower==0, 1, M_lower)
-  M_median <- round(quantile(1:M, 0.5))
-  M_upper <- round(quantile(1:M, 0.95))
-  df_poly_jitter$medians_sampled <- apply(df_poly_jitter[,grep("sampled",names(df_poly_jitter),value = T)], 1, median)
-  
-  
-  
-  df_poly_filt <- df_poly_jitter %>% filter(impact==impact_type)
-  mean(df_poly_filt$observed <= df_poly_filt[,paste0('sampled.', M_lower)]) + mean(df_poly_filt$observed >= df_poly_filt[,paste0('sampled.', M_upper)])
-  
-  # 
-  SS_res_raw = sum((df_poly_filt$observed-df_poly_filt$medians_sampled)^2)
-  R_squared_raw = 1-SS_res_raw/SS_tot_raw
-  print(paste('R squared raw', R_squared_raw))
-  
-  k <- 10
-  SS_res_log = sum((log(df_poly_filt$observed+k)-log(df_poly_filt$medians_sampled+k))^2)
-  SS_tot_log = sum((log(df_poly_filt$observed+k)-mean(log(df_poly_filt$observed+k)))^2)
-  R_squared_log = 1-SS_res_log/SS_tot_log
-  print(paste('R squared log', R_squared_log))
-  
-  
-  ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), 
-                                                                     ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-    #ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-    geom_point(aes(col='black')) + 
-    scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
-    scale_y_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
-    #geom_pointrange(aes(col=train_flag)) + 
-    geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
-    ylab(paste('Sampled', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + xlab(paste('Observed', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + scale_color_manual(values = c('red', 'blue')) + 
-    theme_bw() +
-    theme(axis.title = element_text(family = "Liberation Serif", size=12),  
-          legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
-          legend.title = element_text(family = "Liberation Serif", size=12)) + guides(color="none") 
-  
-  g1 <- ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)))) + 
-                                                                     #ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-    #ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-    geom_point() + 
-    scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
-    scale_y_continuous(trans='log10', limits=c(0.25, 100000),breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
-    #geom_pointrange(aes(col=train_flag)) + 
-    geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
-    ylab(paste('Sampled', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + xlab(paste('Observed', ifelse(impact_type=='buildDam', 'building damage', impact_type))) +#+ scale_color_manual(values = c('red', 'blue')) + 
-    theme_bw() +
-    theme(axis.title = element_text(family = "Liberation Serif", size=12),  
-          legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
-          legend.title = element_text(family = "Liberation Serif", size=12)) + guides(color="none") +
-    geom_point(data=data.frame(x=17899, y=2058), aes(x=x, y=y), col='red') +
-    geom_point(data=data.frame(x=17899, y=rlnorm(15, log(2058), 0.5)), aes(x=x, y=y), col='red')
-  
-  g2 <- ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)))) + 
-    #ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-    #ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
-    geom_point() + 
-    scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
-    scale_y_continuous(trans='log10', limits=c(0.25, 100000),breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma) + 
-    #geom_pointrange(aes(col=train_flag)) + 
-    geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
-    ylab(paste('Sampled', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + xlab(paste('Observed', ifelse(impact_type=='buildDam', 'building damage', impact_type))) +#+ scale_color_manual(values = c('red', 'blue')) + 
-    theme_bw() +
-    theme(axis.title = element_text(family = "Liberation Serif", size=12),  
-          legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
-          legend.title = element_text(family = "Liberation Serif", size=12)) + guides(color="none") +
-    geom_point(data=data.frame(x=17899, y=2058), aes(x=x, y=y), col='red') +
-    geom_point(data=data.frame(x=17899, y=rlnorm(15, log(2058), 2)), aes(x=x, y=y), col='red')
-  
-  grid.arrange(g1, g2, ncol=2)
-  #5 x 11, Sim_vs_obs_calibration
-  
-  
-}
-
-#Scoring rule with and without variogram score
-SR1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180047_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat2')
-SR2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2024-11-21_180050_MCMC_RealAgg5_LR40_Rho0.9_15v0_adaptive_noHLP_smallerStartPropCOV_NovDat1_backup')
-SR_vs <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-01-10_181501_MCMC_VariogramScore_M100_Npart1000NovAgg5_propCOVmult0.2')
-
-plot_mcmc_compare = function(SR1, SR2, SR_vs, xlim=c(1, 10000)){
+plot_mcmc_compare = function(EucDist1, EucDist2, SR1, SR2, xlimEuc=c(8000, 10000), xlimSR=c(13000, 15000)){
   
   # Define subfigure labels (a), (b), (c), ...
-  subfig_labels <- letters[1:16]
+  subfig_labels <- letters[1:8]
   plot_list <- list()
-  var_plot <- 12:19
+  var_plot <- c(8,9,10, 7)
   # Loop through the variables and generate each plot
   for (i in seq_along(var_plot)){#seq_along(vuln_var)) {
     #var <- vuln_var[i]
     var <- var_plot[i]
     
     post_samples <- data.frame(
-      x=(xlim[1]:xlim[2])-xlim[1],
-      SR1_param <- SR1$Omega_sample_phys[var,xlim[1]:xlim[2]],
-      SR2_param <-SR2$Omega_sample_phys[var,xlim[1]:xlim[2]],
-      SRvs_param <-SR_vs$Omega_sample_phys[var,xlim[1]:xlim[2]])
+      x=(xlimSR[1]:xlimSR[2])-xlimSR[1],
+      Euc1_param <- EucDist1$Omega_sample_phys[var,xlimEuc[1]:xlimEuc[2]],
+      Euc2_param <- EucDist2$Omega_sample_phys[var,xlimEuc[1]:xlimEuc[2]],
+      SR1_param <- SR1$Omega_sample_phys[var,xlimSR[1]:xlimSR[2]],
+      SR2_param <-SR2$Omega_sample_phys[var,xlimSR[1]:xlimSR[2]])
     
     post_samples_long <- post_samples %>%
       pivot_longer(cols = -x, names_to = "Parameter", values_to = "Value")
@@ -1429,8 +669,7 @@ plot_mcmc_compare = function(SR1, SR2, SR_vs, xlim=c(1, 10000)){
     plot <- ggplot(data = post_samples_long, aes(x = x, y = Value, color = Parameter)) +
       labs(y = get_greek_titles(names(unlist(Model$skeleton))[var]),
            x= 'Post warmup iteration') +
-      scale_y_continuous(limits = c(-1,1), expand = c(0.01, 0.01)) +
-      #scale_y_continuous(limits = c(Model$par_lb[var], Model$par_ub[var]), expand = c(0.01, 0.01)) +
+      scale_y_continuous(limits = c(Model$par_lb[var], Model$par_ub[var]), expand = c(0.01, 0.01)) +
       geom_line(alpha=0.8) +
       theme_minimal() +
       scale_color_viridis(discrete = TRUE) +
@@ -1458,137 +697,620 @@ plot_mcmc_compare = function(SR1, SR2, SR_vs, xlim=c(1, 10000)){
   }
   
   # Arrange all 8 plots in a 2x4 grid
-  grid.arrange(grobs = plot_list, ncol = 4, nrow = 2)
+  grid.arrange(grobs = plot_list, ncol = 2, nrow = 2)
   #Trace_EuclDist.pdf, 12 x 9 (or 13 x 3 for single row)
 }
 
-# AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-01-25_125459_MCMC_VariogramScore_M100_Npart1000NovAgg5_RandomField_backup')
-# HLPrior_samples <- t(AlgoResults$Omega_sample[,300:900])
-# cov(HLPrior_samples)
-# Proposed2Physical(HLPrior_samples[300,] %>% relist(skeleton=Model$skeleton) %>% unlist(), Model)
-# saveRDS(HLPrior_samples, paste0(dir, 'IIDIPUS_Input/HLPriorSamples_MCMCOut'))
 
-#------------------ Prediction updating Myanmar using Microsoft building damage -----------------------------
+df_postpredictive_sampled_best <- create_df_postpredictive_MCMC(EucDist1, single_particle=F, Omega=NULL, particle_best=F,
+                                                                M=100, output='SampledTotal')
 
-ODDyWithImpact <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/EQ20250328MMR_-1_WithBuildings_WithImpactSummaries')
-sampled_full <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/tmp/EQ20250328MMR_-1_WithBuildings_fullSampledImpact')
+#saveRDS(df_postpredictive_sampled_best, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/EuclDistAug7')
+df_postpredictive_sampled_bestEuc <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/EuclDistAug7')
 
-mandalay_dam = st_read("/home/manderso/Downloads/skysat_20250329_080228_predictions_merged.gpkg")
-bbox_obsdam = project(ext(mandalay_dam), from=crs(mandalay_dam), to="EPSG:4326")
+df_postpredictive_sampled_bestSR = df_postpredictive_sampled
+df_postpredictive_sampled_bestSR <- readRDS('fit_MVR_August6')
 
-overlapping_cells = cells(ODDyWithImpact, bbox_obsdam)
-plot(t(sampled_full[overlapping_cells[c(1,2)],3,]))
+mort_test <- plot_df_postpredictive_compare(df_postpredictive_sampled_bestEuc %>% filter(train_flag=='TEST'),
+                                            df_postpredictive_sampled_bestSR %>% filter(train_flag=='TEST'), 'mortality')  + guides(color="none") 
+disp_test <- plot_df_postpredictive_compare(df_postpredictive_sampled_bestEuc %>% filter(train_flag=='TEST'),
+                                            df_postpredictive_sampled_bestSR %>% filter(train_flag=='TEST'), 'displacement')+ guides(color="none") 
+buildDam_test <- plot_df_postpredictive_compare(df_postpredictive_sampled_bestEuc %>% filter(train_flag=='TEST'),
+                                                df_postpredictive_sampled_bestSR %>% filter(train_flag=='TEST'), 'buildDam')+ guides(color="none") + ylab('Sampled building damage') + xlab('Observed building damage')
 
-ODD_cropped <- crop(ODDyWithImpact, bbox_obsdam)
+p1 <- arrangeGrob(mort_test + theme(plot.margin = unit(c(0, 0.1, 1, 1), "lines")), top = textGrob("(a)", x = unit(0.025, "npc"), y = unit(0, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+p2 <- arrangeGrob(disp_test + theme(plot.margin = unit(c(0, 0.1, 1, 1), "lines")), top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(0, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+p3 <- arrangeGrob(buildDam_test + theme(plot.margin = unit(c(0, 0.1, 1, 1), "lines")), top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(0, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
 
-project(mandalay_dam, from=crs(mandalay_dam), to="EPSG:4326")
-mandalay_dam_v <- project(vect(mandalay_dam),crs(ODD_cropped))
-mandalay_dam_v$cond_1 <- as.numeric(mandalay_dam_v$damage_pct_0m > 0 & mandalay_dam_v$unknown_pct < .50)
-mandalay_dam_v$cond_2 <- as.numeric(mandalay_dam_v$unknown_pct > .50)
+grid.arrange(p1, p2, p3, ncol=3)
+#EucDist_PostPred.pdf, 17 x 5.5
 
-dam_agg = data.frame(
-  cell = numeric(),
-  n_buildings = numeric(),
-  damage_count = numeric(),
-  unknown_count = numeric()
-)
 
-for (cell_num in overlapping_cells){
 
-  xy <- xyFromCell(ODDyWithImpact, cell=cell_num)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+################################################################################################################################################
+
+
+
+
+
+
+
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-20_053958.556514__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain')
+AlgoResults_Logistic <- AlgoResults
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-04-27_014135.935892__Apr25Agg_Lognormal_ESplus0.05BD_RFwithTot_backup')
+AlgoResults_Logistic <- AlgoResults
+
+get_tangent_7.5 <- function(mu, sigma){
+  x0 <- 7.5
+  z <- (x0 - mu) / sigma
   
-  # Cell resolution
-  res_x <- res(ODDyWithImpact)[1]
-  res_y <- res(ODDyWithImpact)[2]
+  g <- log(pnorm(z))                # log CDF value at 7.5
+  gp <- dnorm(z) / (sigma * pnorm(z))  # derivative at 7.5
   
-  # Calculate extent: xmin, xmax, ymin, ymax
-  cell_ext <- ext(
-    xy[1] - res_x / 2,
-    xy[1] + res_x / 2,
-    xy[2] - res_y / 2,
-    xy[2] + res_y / 2
-  )
-  
-  cropped_builds = crop(mandalay_dam_v, cell_ext)
-  dam_agg %<>% add_row(
-    cell = cell_num,
-    n_buildings = length(cropped_builds$cond_1),
-    damage_count = sum(cropped_builds$cond_1, na.rm=T),
-    unknown_count = sum(cropped_builds$cond_2, na.rm=T))
-  
-}
-cells_plot = c(15,6)
-plot(t(sampled_full[overlapping_cells[cells_plot],3,]/values(ODDyWithImpact$nBuildings)[overlapping_cells[cells_plot]]),
-     xlab='Prop Dam Cell 1',
-     ylab='Prop Dam Cell 2')
-true_prop = dam_agg[cells_plot,'damage_count']/dam_agg[cells_plot,'n_buildings']
-points(ifelse(is.na(true_prop[1]), 0, true_prop[1]), ifelse(is.na(true_prop[2]), 0, true_prop[2]), col='red', pch=19)
-
-plot(colSums(sampled_full[overlapping_cells, 3, ])/sum(values(ODDyWithImpact$nBuildings)[overlapping_cells], na.rm=T), 
-     colSums(sampled_full[,3,]),
-     xlab='Prop Dam Mandalay', ylab='Total Buildings Damaged')
-abline(v=sum(dam_agg$damage_count)/sum(dam_agg$n_buildings), col='red')
-
-plot(colSums(sampled_full[overlapping_cells, 3, ])/sum(values(ODDyWithImpact$nBuildings)[overlapping_cells], na.rm=T), 
-     colSums(sampled_full[,1,]),
-     xlab='Prop Dam Mandalay', ylab='Total Population Displacement')
-abline(v=sum(dam_agg$damage_count)/sum(dam_agg$n_buildings), col='red')
-
-ODDyWithImpact <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/EQ20250328MMR_-1_WithBuildings_WithImpactSummaries')
-sampled_full <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/tmp/EQ20250328MMR_-1_WithBuildings_fullSampledImpact')
-
-
-#-----------------------------------
-
-naypyidaw_dam = st_read("/home/manderso/Downloads/naypyidaw_myanmar_results_03313025_skysat.gpkg")
-bbox_loc2 = project(ext(naypyidaw_dam), from=crs(naypyidaw_dam), to="EPSG:4326")
-
-overlapping_cells2 = cells(ODDyWithImpact, bbox_loc2)
-plot(t(sampled_full[overlapping_cells2[c(1,2)],3,]))
-
-ODD_cropped2 <- crop(ODDyWithImpact, bbox_loc2)
-
-project(naypyidaw_dam, from=crs(naypyidaw_dam), to="EPSG:4326")
-naypyidaw_dam_v <- project(vect(naypyidaw_dam),crs(ODD_cropped))
-naypyidaw_dam_v$cond_1 <- as.numeric(naypyidaw_dam_v$damage_pct_0m > 0 & naypyidaw_dam_v$unknown_pct < .50)
-naypyidaw_dam_v$cond_2 <- as.numeric(naypyidaw_dam_v$unknown_pct > .50)
-
-dam_agg2 = data.frame(
-  cell = numeric(),
-  n_buildings = numeric(),
-  damage_count = numeric(),
-  unknown_count = numeric()
-)
-
-for (cell_num in overlapping_cells2){
-  
-  xy <- xyFromCell(ODDyWithImpact, cell=cell_num)
-  
-  # Cell resolution
-  res_x <- res(ODDyWithImpact)[1]
-  res_y <- res(ODDyWithImpact)[2]
-  
-  # Calculate extent: xmin, xmax, ymin, ymax
-  cell_ext <- ext(
-    xy[1] - res_x / 2,
-    xy[1] + res_x / 2,
-    xy[2] - res_y / 2,
-    xy[2] + res_y / 2
-  )
-  
-  cropped_builds = crop(naypyidaw_dam_v, cell_ext)
-  dam_agg2 %<>% add_row(
-    cell = cell_num,
-    n_buildings = length(cropped_builds$cond_1),
-    damage_count = sum(cropped_builds$cond_1, na.rm=T),
-    unknown_count = sum(cropped_builds$cond_2, na.rm=T))
-  
+  a <- g - gp * (x0 - 7)  # intercept at (x - 7)
+  b <- gp                # slope
+  return(c(a,b))
 }
 
-plot(colSums(sampled_full[overlapping_cells, 3,])/sum(values(ODDyWithImpact$nBuildings)[overlapping_cells]), 
-     colSums(sampled_full[overlapping_cells2, 3,])/sum(values(ODDyWithImpact$nBuildings)[overlapping_cells2]), 
-     xlab='Mandalay Dam Prop', ylab='Naypyidaw Dam Prop')
-points(sum(dam_agg$damage_count)/sum(dam_agg$n_buildings), sum(dam_agg2$damage_count)/sum(dam_agg2$n_buildings),
-     col='red', pch=19)
+
+D_MortDisp_calc <- function(Damage, Omega, stoch_event=rbind(0,0)){
+  D_Mort_and_Disp <- pnorm(Damage + stoch_event[2,], mean = Omega$Lambda1$loc, sd = Omega$Lambda1$scale)
+  D_Mort <- pmin(exp(Omega$Lambda2$nu + Omega$Lambda2$kappa * (Damage + stoch_event[1,] - 7)), 1-1e-6)
+  D_Disp <- D_Mort_and_Disp - D_Mort
+  D_Disp <- ifelse(D_Disp<0, 10^(-60), D_Disp)
+  return(rbind(D_Mort, D_Disp))
+}
+
+fit_log_linear_mort_to_pnorm <- function(omega_pnorm, damage_range = seq(6, 9, 0.1)) {
+  # True probabilities from pnorm model
+  D_Mort_and_Disp <- pnorm(damage_range, mean = omega_pnorm[1], sd = omega_pnorm[2])
+  D_Mort <- pnorm(damage_range, mean = omega_pnorm[3], sd = omega_pnorm[4])
+  D_Disp <- pmax(D_Mort_and_Disp - D_Mort, 1e-12)
+  D_True <- rbind(D_Mort, D_Disp)
+  
+  # Loss function: linear-on-log mortality
+  loss_fn <- function(par) {
+    a <- par[1]  # intercept for log mortality
+    b <- par[2]  # slope for log mortality
+    nu_disp <- par[3]
+    kappa_disp <- par[4]
+    
+    # Log-linear mortality
+    P_mort <- pmin(exp(a + b * (damage_range - 7)), 1-1e-6)
+    
+    # Logistic model for displacement (residual probability from non-mortality)
+    P_dispmort = pnorm(damage_range, nu_disp, kappa_disp)
+    # 1 / (1 + exp(-(nu_disp + kappa_disp * (damage_range - 7))))
+    P_disp = pmax(P_dispmort-P_mort, 1e-12)
+    
+    D_hat <- rbind(P_mort, P_disp)
+    loss <- sum((log(D_hat) - log(D_True))^2)
+    return(loss)
+  }
+  
+  # Initial guess
+  init <- c(-8, 1.5, 7.5, 2)
+  
+  # Optimization
+  fit <- optim(init, loss_fn, method = "BFGS")
+  
+  # Return parameters
+  list(
+    mortality = list(a = fit$par[1], b = fit$par[2]),
+    displacement = list(nu = fit$par[3], kappa = fit$par[4]),
+    convergence = fit$convergence,
+    loss = fit$value
+  )
+}
+  
+for (i in 1:NCOL(AlgoResults_Logistic$Omega_sample_phys)){
+  print(i)
+  fitted_vals = fit_log_linear_mort_to_pnorm(AlgoResults$Omega_sample_phys[,i])
+  
+    # Get tangents and update logistic Omega to match slope & intercept at x = 7.5
+  tang_params_disp <- get_tangent_7.5(AlgoResults$Omega_sample_phys[1,i], AlgoResults$Omega_sample_phys[2,i])
+  AlgoResults_Logistic$Omega_sample_phys[1,i] <- fitted_vals$displacement$nu #-4 #tang_params_disp[1]
+  AlgoResults_Logistic$Omega_sample_phys[2,i] <- fitted_vals$displacement$kappa #4.5 #tang_params_disp[2]
+  
+  tang_params_mort <- get_tangent_7.5(AlgoResults$Omega_sample_phys[3,i], AlgoResults$Omega_sample_phys[4,i])
+  AlgoResults_Logistic$Omega_sample_phys[3,i] <- fitted_vals$mortality$a#tang_params_mort[1]
+  AlgoResults_Logistic$Omega_sample_phys[4,i] <- fitted_vals$mortality$b# tang_params_mort[2]
+  
+  #tang_params_bd <- get_tangent_7.5(AlgoResults$Omega_sample_phys[5,i], AlgoResults$Omega_sample_phys[6,i])
+  #AlgoResults_Logistic$Omega_sample_phys[5,i] <- tang_params_bd[1]
+  #AlgoResults_Logistic$Omega_sample_phys[6,i] <- tang_params_bd[2]
+    
+    # Plot for visual comparison
+  # curve_x <- seq(4.5, 10, 0.1)
+  # plot(curve_x, log(pnorm(curve_x, AlgoResults$Omega_sample_phys[3,i], AlgoResults$Omega_sample_phys[4,i])),
+  #      type = "l", col = "black", ylab = "log prob", main = paste("Sample", i), ylim=c(-20,0))
+  # lines(curve_x, log(pnorm(curve_x, AlgoResults$Omega_sample_phys[1,i], AlgoResults$Omega_sample_phys[2,i])),
+  #       type = "l", col = "black")
+  # # Compute Mort/Disp from logistic softmax
+  # MortDisp <- D_MortDisp_calc(curve_x, AlgoResults_Logistic$Omega_sample_phys[,i] %>% 
+  #                               relist(skeleton = Model$skeleton) %>%
+  #                               addTransfParams())
+  # lines(curve_x, log(MortDisp[1,]), col = "red")
+  # lines(curve_x, log(MortDisp[2,]), col = "blue")
+}
+
+
+hlps <- c()
+for (i in 1:NCOL(AlgoResults_Logistic$Omega_sample_phys)){
+  hlps <- c(hlps, Model$HighLevelPriors(AlgoResults_Logistic$Omega_sample_phys[,i] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), Model))
+}
+plot(hlps)
+
+saveRDS(AlgoResults_Logistic, paste0(dir, 'IIDIPUS_Results/Logistic_Artificial'))
+
+Logistic_Artificial = readRDS(paste0(dir, 'IIDIPUS_Results/Logistic_Artificial'))
+Logistic_Artificial$Omega_sample_phys[8,]= Logistic_Artificial$Omega_sample_phys[8,] / 3 + 0.5 
+saveRDS(Logistic_Artificial,  'IIDIPUS_Results/Logistic_Artificial2')
+
+
+AlgoResults_Logistic = readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-04-24_181652.03706__Apr25Agg_Logistic_ESplus0.05BD_RFwithTot_backup')
+hlps <- c()
+for (i in 1:NCOL(AlgoResults_Logistic$Omega_sample_phys)){
+  hlps <- c(hlps, Model$HighLevelPriors(AlgoResults_Logistic$Omega_sample_phys[,i] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), Model))
+}
+
+
+moveSubFiles <- function(filepath='IIDIPUS_Input_Alternatives/Sept25/ODDobjects'){
+  all_files <- list.files(path = filepath, recursive = TRUE, full.names = TRUE)
+  file_paths <- all_files[file.info(all_files)$isdir == FALSE]
+  
+  # Move each file to the current directory
+  file.rename(from = file_paths,
+              to = file.path(filepath, basename(file_paths)))
+}
+
+
+moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/Sept25'){
+  
+    if (!dir.exists(paste0(dir, folder_in, '/ODDobjects/Test/'))) {
+      dir.create(paste0(dir, folder_in, '/ODDobjects/Test/'))
+    } 
+    if (!dir.exists(paste0(dir, folder_in, '/ODDobjects/Train/'))){
+      dir.create(paste0(dir, folder_in, '/ODDobjects/Train/'))
+    }
+    
+    ODD_folderall<-paste0(dir, folder_in, '/ODDobjects/')
+    ODD_foldertest<-paste0(dir, folder_in, '/ODDobjects/Test/')
+    ODD_foldertrain<-paste0(dir, folder_in, '/ODDobjects/Train/')
+    
+    ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
+    #set.seed(1)
+    #ufiles <- ufiles[sample(1:length(ufiles), length(ufiles), replace=F)]
+    total_mortalities <- c()
+    #sort by mortality
+    for (file in ufiles){
+      ODD <- readODD(paste0(ODD_folderall, file))
+      #total_mortalities <- c(total_mortalities, max(values(ODD[[grep('hazMean', names(ODD))]])[values(!is.na(ODD$Population))], na.rm=T))
+      #[values(!is.na(ODD$Population) & ODD$Population > 100),], na.rm=T))
+      #total_mortalities <- c(total_mortalities, max(values(ODD[[grep('hazMean', names(ODD))]])[values(!is.na(ODD$Population))], na.rm=T))#[values(!is.na(ODD$Population) & ODD$Population > 100),], na.rm=T))
+      polygon_names <- unlist(lapply(ODD@polygons[ODD@impact$polygon], function(x) x$name))
+      if (any(tolower(polygon_names[which(ODD@impact$impact=='mortality')]) %in% c('tot', 'total'))){
+        nonmatch <- which(!tolower(polygon_names[which(ODD@impact$impact=='mortality')]) %in% c('tot', 'total'))
+        if (length(nonmatch)>0){
+          ODD@impact <- ODD@impact[-which(ODD@impact$impact=='mortality')[nonmatch],] # in the case of total and subnational data, remove the subnational
+        }
+      }
+      total_mortality <- sum(ODD@impact$observed[which(ODD@impact$impact=='mortality')])
+      total_mortalities <- c(total_mortalities, total_mortality)
+    }
+    ufiles <- ufiles[order(total_mortalities, decreasing=T)] # sort by date
+
+    for (i in 1:length(ufiles)){
+      file <- ufiles[i]
+      #if (i < 2/3 * length(ufiles)){ #next
+      if (i %%3 != 1){
+        options(warn = 2)
+        file.copy(from = paste0(ODD_folderall, file),
+                  to = paste0(ODD_foldertrain, file))
+        file.remove(from = paste0(ODD_folderall, file))
+        options(warn = 1)
+        next
+      }
+      options(warn = 2)
+      file.copy(from = paste0(ODD_folderall, file),
+                to = paste0(ODD_foldertest, file))
+      file.remove(from = paste0(ODD_folderall, file))
+      options(warn = 1)
+    }
+}
+
+df_postpredictive_sampled_best = readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/fit_MVR_August6')
+df_postpredictive_sampled_best %<>% add_row( event_id = 171, 
+                                            iso3='MAR',
+                                            polygon=0,
+                                            impact='mortality', 
+                                            observed = 2933,
+                                            obs_id = 1000,
+                                            crps=100,
+                                            train_flag='TRAIN', 
+                                            train_flag2='TRAIN')
+df_postpredictive_sampled_best[nrow(df_postpredictive_sampled_best), grep('sampled', names(df_postpredictive_sampled_best))] = rnorm(100, 1000, 100)
+df_postpredictive_sampled_best$train_flag2 <- 'TRAIN'
+ufiles<-list.files(path=paste0(dir, 'IIDIPUS_Input_Alternatives/Sept25/ODDobjects/Test'),pattern=Model$haz,recursive = T,ignore.case = T)
+test_id = as.numeric(sub(".*_", "", ufiles))
+for (i in 1:length(df_postpredictive_sampled_best$train_flag2)){
+  if (df_postpredictive_sampled_best$event_id[i] %in% test_id){
+    df_postpredictive_sampled_best$train_flag2[i] <- 'TEST'
+  }
+}
+
+df_postpredictive_sampled_best$train_flag=df_postpredictive_sampled_best$train_flag2
+mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'mortality' )  + guides(color="none") 
+mort_all <- plot_df_postpredictive(df_postpredictive_sampled_best,'mortality' )  + guides(color="none") 
+mort_all
+grid.arrange(mort_test, mort_all, ncol=2)
+disp_test <- plot_df_postpredictive(df_postpredictive_sampled_best,'displacement')  + guides(color="none")
+buildDam_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'buildDam')  + guides(color="none") #+ 
+  #scale_x_continuous(trans='log10', breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), labels = scales::comma, limits=c(50,100000))
+
+
+p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+
+grid.arrange(p1,p2,p3, nrow=1)
+
+mort_test
+mort_all
+disp_test
+buildDam_test
+
+
+
+
+
+
+
+
+plot_df_postpredictive(df_postpredictive_sampled_best,'mortality', label_points=T)
+
+
+plot(seq(4.5, 10,0.01), log(pnorm(seq(4.5, 10,0.01), AlgoResults$Omega_sample_phys[1,3,120],  AlgoResults$Omega_sample_phys[1,4,120])), ylim=c(-20,-1))
+for (i in 1:100){
+  lines(seq(4.5, 10,0.01), log(pnorm(seq(4.5, 10,0.01), AlgoResults$Omega_sample_phys[i,3,120],  AlgoResults$Omega_sample_phys[i,4,120])))
+  lines(seq(4.5, 10,0.01), 2.6*seq(4.5, 10,0.01)-27.5, col='red')
+}
+
+mort_df = df_postpredictive_sampled_best %>% filter(impact=='mortality')
+mort_df$sampled.median= apply(mort_df[,grep('sampled.', names(mort_df))], 1, median)
+mort_df$obs_quant = apply(cbind(mort_df$observed, mort_df[,grep('sampled.', names(mort_df))]), 1, function(x) rank(x, ties.method='random')[1])
+hist(mort_df$obs_quant[mort_df$sampled.median>100])
+
+plot(log(mort_df$observed+10), log(mort_df$sampled.median+10), col=ifelse(mort_df$train_flag=='TRAIN', 'blue', 'red'))
+abline(0, 1)
+
+
+plot(log(mort_df$sampled.median+10), mort_df$obs_quant, col=ifelse(mort_df$train_flag=='TRAIN', 'blue', 'red'))
+
+
+ODDy <-readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/Apr25Agg/ODDobjects/Test/EQ20220622AFG_165')
+ODDy2 <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/Apr25Agg/ODDobjects/Train/EQ20210213JPN_155')
+plot(values(ODD1$hazMean1), log(values(ODD1$Population)), ylim=c(2, 15))
+points(values(ODD2$hazMean1), values(log(ODD2$Population)), col='red')
+
+
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-06-11_114651.469474__June25Agg_LogLinMort_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain3')
+
+source('RCode/Model Variations/ODDobj_NoTot.R')
+source('RCode/Model Variations/Model_Logistic2.R')
+
+AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
+df_postpredictive_sampled_best <- create_df_postpredictive_MCMC(AlgoResults, single_particle=F, 
+                                                           M=50, output='SampledTotal')
+
+mort_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag == 'TEST'),'mortality' )  + guides(color="none") 
+mort_test
+
+disp_test <- plot_df_postpredictive(df_postpredictive_sampled_best%>% filter(train_flag == 'TEST'),'displacement', label_points=T)  + guides(color="none")
+disp_test
+
+bd_test <- plot_df_postpredictive(df_postpredictive_sampled_best %>% filter(train_flag=='TEST'),'buildDam')  + guides(color="none")
+bd_test
+
+
+#--------------------------------------------------------------------------------------------------
+#------------------------------ Model Comparison --------------------------------------------------
+#--------------------------------------------------------------------------------------------------
+flattenImpactSample2 <- function(sampled_out){
+  df <- data.frame(iso3 = sampled_out[[1]]$iso3,
+                   polygon = sampled_out[[1]]$polygon,
+                   impact = sampled_out[[1]]$impact,
+                   observed = sampled_out[[1]]$observed)#,
+  #n_pixels = impact_sample$poly[[1]]$n_pixels,
+  #max_intensity = impact_sample$poly[[1]]$max_intensity)
+  for (j in 1:length(sampled_out)){
+    df %<>% cbind(sampled_out[[j]]$sampled)
+  }
+  colnames(df)[grep('sampled',names(df))] <- paste0('sampled.', 1:length(sampled_out))
+  return(df)
+}
+
+#Normal CDF (misnamed)
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-06-17_151849.678089__Apr25Agg_LogNormal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_withHLPriors_flexHLP')
+
+AlgoResultsLogLin <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-06-12_115400.392519__Apr25Agg_LogLinMort_ESplus0.05BD_RFwithTot_range.5_kappa.5_withHLPriors_flexHLP_backup')
+plot(AlgoResultsLogLin$loss)
+
+source('RCode/Model Variations/Model_Logistic2.R')
+source('RCode/ODDobj.R')
+
+AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/Apr25Agg/'
+xx1 = SampleImpact(dir, Model, proposed = AlgoResultsLogLin$Omega_sample_phys[,940] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+dist1 = CalcDist(xx1, AlgoParams)
+print(dist1)
+
+xx2 = SampleImpact(dir, Model, proposed = AlgoResultsLogLin$Omega_sample_phys[,940] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+dist2 = CalcDist(xx2, AlgoParams)
+print(dist2)
+
+xx3 = SampleImpact(dir, Model, proposed = AlgoResultsLogLin$Omega_sample_phys[,940] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+dist3 = CalcDist(xx3, AlgoParams)
+print(dist3)
+
+xx4 = SampleImpact(dir, Model, proposed = AlgoResultsLogLin$Omega_sample_phys[,940] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+dist4 = CalcDist(xx4, AlgoParams)
+print(dist4)
+
+yy1 = SampleImpact(dir, Model, proposed = AlgoResultsLogLin$Omega_sample_phys[,940] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+disty1 = CalcDist(yy1, AlgoParams)
+print(disty1)
+
+yy2 = SampleImpact(dir, Model, proposed = AlgoResultsLogLin$Omega_sample_phys[,940] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+disty2 = CalcDist(yy2, AlgoParams)
+print(disty2)
+
+Omega_alt = AlgoResultsLogLin$Omega_sample_phys[,940] %>% relist(skeleton=Model$skeleton)
+Omega_alt$Lambda2$nu = -12.3
+Omega_alt$Lambda2$kappa = 3.45
+plot(seq(4.5, 12, 0.01), log( 1/(1+exp(-(-12.02085 + 2.447839 * (seq(4.5, 12, 0.01)- 7))))))
+lines(seq(4.5, 12, 0.01), log( 1/(1+exp(-(-12.3 + 3.45 * (seq(4.5, 12, 0.01)- 7))))))
+
+zz1 = SampleImpact(dir, Model, proposed = Omega_alt %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+distz1 = CalcDist(zz1, AlgoParams)
+print(distz1)
+
+
+Omega_alt2 = AlgoResultsLogLin$Omega_sample_phys[,940] %>% relist(skeleton=Model$skeleton)
+#Omega_alt2$Lambda2$nu = -12.3
+#Omega_alt2$Lambda2$kappa = 3.45
+plot(seq(4.5, 12, 0.01), log( 1/(1+exp(-(-12.02085 + 2.447839 * (seq(4.5, 12, 0.01)- 7))))))
+lines(seq(4.5, 12, 0.01), log( 1/(1+exp(-(Omega_alt2$Lambda2$nu + Omega_alt2$Lambda2$kappa * (seq(4.5, 12, 0.01)- 7))))))
+lines(seq(4.5, 12, 0.01), log( 1/(1+exp(-(Omega_alt2$Lambda2$nu + Omega_alt2$Lambda2$kappa * (seq(4.5, 12, 0.01)+1- 7))))), col='red')
+lines(seq(4.5, 12, 0.01), log( 1/(1+exp(-(Omega_alt2$Lambda2$nu + Omega_alt2$Lambda2$kappa * (seq(4.5, 12, 0.01)-1- 7))))), col='red')
+a = 0.001
+b = 6.93
+Damage_tranf = exp(a*seq(4.5, 12, 0.01)+b)
+Damage_transf_perturbed = Damage_tranf + 1
+Damage_transf_perturbed2 = Damage_tranf - 1
+Damage_untransf = (log(Damage_transf_perturbed)-b)/a
+Damage_untransf2 = (log(Damage_transf_perturbed2)-b)/a
+lines(seq(4.5, 12, 0.01), log( 1/(1+exp(-(Omega_alt2$Lambda2$nu + Omega_alt2$Lambda2$kappa * (Damage_untransf- 7))))), col='blue')
+lines(seq(4.5, 12, 0.01), log( 1/(1+exp(-(Omega_alt2$Lambda2$nu + Omega_alt2$Lambda2$kappa * (Damage_untransf2 - 7))))), col='blue')
+
+
+aa1 = SampleImpact(dir, Model, proposed = Omega_alt2 %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+dista1 = CalcDist(aa1, AlgoParams)
+print(dista1)
+
+
+
+mort_test <- plot_df_postpredictive(flattenImpactSample2(zz1$poly) %>% add_column(train_flag='TRAIN'),'mortality')  + guides(color="none")
+mort_test2 <- plot_df_postpredictive(flattenImpactSample2(xx1$poly) %>% add_column(train_flag='TRAIN'),'mortality')  + guides(color="none")
+mort_test3 <- plot_df_postpredictive(flattenImpactSample2(aa1$poly) %>% add_column(train_flag='TRAIN'),'mortality')  + guides(color="none") 
+grid.arrange(mort_test2, mort_test3, ncol=2)
+
+zz2 = SampleImpact(dir, Model, proposed = Omega_alt %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+distz2 = CalcDist(zz2, AlgoParams)
+print(distz2)
+
+xx3 = SampleImpact(dir, Model, proposed = AlgoResultsLogLin$Omega_sample_phys[,940] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+dist3 = CalcDist(xx3, AlgoParams)
+print(dist3)
+
+xx4 = SampleImpact(dir, Model, proposed = AlgoResultsLogLin$Omega_sample_phys[,940] %>% relist(skeleton=Model$skeleton) %>% addTransfParams(), AlgoParams, dat = 'Train', output='SampledAgg')
+dist4 = CalcDist(xx4, AlgoParams)
+print(dist4)
+
+
+
+
+
+
+
+#AlgoResults <- readRDS('IIDIPUS_Results/mcmc_2025-05-05_225121.802448__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5')
+#AlgoResults2 <- readRDS('IIDIPUS_Results/HPC/mcmc_2025-05-15_211354.026585__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain2')
+#AlgoResults3 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-06-12_115400.392519__Apr25Agg_LogLinMort_ESplus0.05BD_RFwithTot_range.5_kappa.5_withHLPriors_flexHLP_backup')
+
+# plot(AlgoResults2$loss, ylim=c(3, 5))
+# lines(AlgoResults$loss)
+# 
+# param=13
+# plot(AlgoResults2$Omega_sample_phys[param,], ylim=c(Model$par_lb[param],Model$par_ub[param] ))
+# lines(AlgoResults$Omega_sample_phys[param,], col='red')
+# 
+# 
+# plot(0, 0, xlim=c(4.5, 12), ylim=c(-15, 0))
+# for (i in 1:1300){
+#   lines(seq(4.5, 12, 0.01), log(pnorm(seq(4.5, 12, 0.01), AlgoResults$Omega_sample_phys[3,i], AlgoResults$Omega_sample_phys[4,i])))
+#   lines(seq(4.5, 12, 0.01), log(pnorm(seq(4.5, 12, 0.01), AlgoResults2$Omega_sample_phys[3,i+3000], AlgoResults2$Omega_sample_phys[4,i+3000])), col='blue')
+#   lines(seq(4.5, 12, 0.01), log(1/(1+exp(-(AlgoResults3$Omega_sample_phys[3,i]+AlgoResults3$Omega_sample_phys[4,i]*(seq(4.5, 12, 0.01)-7))))), col='red')
+#   # if ( AlgoResults$Omega_sample_phys[3,i] > 12.5){
+#   #   lines(seq(4.5, 12, 0.01), log(pnorm(seq(4.5, 12, 0.01), AlgoResults$Omega_sample_phys[3,i], AlgoResults$Omega_sample_phys[4,i])), col='blue')
+#   # } else {
+#   #   lines(seq(4.5, 12, 0.01), log(pnorm(seq(4.5, 12, 0.01), AlgoResults$Omega_sample_phys[3,i], AlgoResults$Omega_sample_phys[4,i])))
+#   # }
+# }
+# lines(seq(4.5, 12,0.01), -10 + 3 * (seq(4.5, 12,0.01)-7))
+# abline(v=8.7)
+
+#--------------------------------------------------------------------------------------------------
+#------------------------------ Euclidean Distance Comparison -------------------------------------
+#--------------------------------------------------------------------------------------------------
+
+# MCMC Compare Euclidean distance to Scoring Rule Posterior:
+EucDist1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-24_022553.767998__Apr25Agg_NormalCDF_EuclDist_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain1')
+EucDist2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-24_023053.892028__Apr25Agg_NormalCDF_EuclDist_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain2')
+SR1 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-20_053958.556514__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain')
+SR2 <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-20_054516.483032__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain2')
+
+plot_mcmc_compare = function(EucDist1, EucDist2, SR1, SR2, xlim=c(5000, 10000)){
+  
+  # Define subfigure labels (a), (b), (c), ...
+  subfig_labels <- letters[1:8]
+  plot_list <- list()
+  var_plot <- c(7, 9, 10)
+  # Loop through the variables and generate each plot
+  for (i in seq_along(var_plot)){#seq_along(vuln_var)) {
+    #var <- vuln_var[i]
+    var <- var_plot[i]
+    
+    post_samples <- data.frame(
+      x=(xlim[1]:xlim[2])-xlim[1],
+      Euc1_param <- EucDist1$Omega_sample_phys[var,xlim[1]:xlim[2]],
+      Euc2_param <- EucDist2$Omega_sample_phys[var,xlim[1]:xlim[2]],
+      SR1_param <- SR1$Omega_sample_phys[var,xlim[1]:xlim[2]],
+      SR2_param <-SR2$Omega_sample_phys[var,xlim[1]:xlim[2]])
+    
+    post_samples_long <- post_samples %>%
+      pivot_longer(cols = -x, names_to = "Parameter", values_to = "Value")
+    
+    # Plot the lines
+    plot <- ggplot(data = post_samples_long, aes(x = x, y = Value, color = Parameter)) +
+      labs(y = get_greek_titles(names(unlist(Model$skeleton))[var]),
+           x= 'Post warmup iteration') +
+      scale_y_continuous(limits = c(Model$par_lb[var], Model$par_ub[var]), expand = c(0.01, 0.01)) +
+      geom_line(alpha=0.8) +
+      theme_minimal() +
+      scale_color_viridis(discrete = TRUE) +
+      theme(
+        axis.title.y = element_text(family = "Times New Roman", size = 12),  # Change y-axis title font
+        axis.text.x = element_text(family = "Times New Roman", size = 12),   # Change x-axis text font
+        axis.text.y = element_text(family = "Times New Roman", size = 12),  # Remove y-axis text (numbers)
+        axis.ticks.y = element_blank(), # Remove y-axis ticks
+        axis.title.x = element_text(family = "Times New Roman", size = 12),  # Change x-axis title font
+        plot.title = element_text(family = "Times New Roman", size = 14),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+        plot.margin = unit(c(0, 20, 0, 15), "pt"),
+        legend.position = "none"
+      )
+    
+    # Add subfigure label to each plot
+    plot_with_label <- arrangeGrob(plot, #padding = unit(c(0, 20), "pt"),
+                                   top = textGrob(paste0("(", subfig_labels[i], ")"),
+                                                  x = unit(0.0, "npc"), y = unit(1, "npc"), just = c("left", "top"),
+                                                  gp = gpar(fontsize = 14, fontfamily = "Times New Roman"))
+    )
+    
+    # Store the labeled plot in the list
+    plot_list[[i]] <- plot_with_label
+  }
+  
+  # Arrange all 8 plots in a 2x4 grid
+  grid.arrange(grobs = plot_list, ncol = 3, nrow = 1)
+  #Trace_EuclDist.pdf, 10 x 3
+}
+
+#Postpredictive comparison
+AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
+source('RCode/Model Variations/ODDobj_NoTot.R')
+
+df_postpredictive_sampled_best <- create_df_postpredictive_MCMC(EucDist1, single_particle=F, Omega=NULL, particle_best=F,
+                                                                M=100, output='SampledTotal')
+saveRDS(df_postpredictive_sampled_best, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/EuclDistJune2025')
+df_postpredictive_sampled_bestEuc <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/EuclDistJune2025')
+
+df_postpredictive_sampled_bestSR <- create_df_postpredictive_MCMC(SR1, single_particle=F, Omega=NULL, particle_best=F,
+                                                                M=100, output='SampledTotal')
+saveRDS(df_postpredictive_sampled_bestSR, '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SRJune2025')
+df_postpredictive_sampled_bestSR <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/SRJune2025')
+
+mort_test <- plot_df_postpredictive_compare(df_postpredictive_sampled_bestEuc %>% filter(train_flag=='TEST'),
+                                            df_postpredictive_sampled_bestSR %>% filter(train_flag=='TEST'), 'mortality')  + guides(color="none") 
+disp_test <- plot_df_postpredictive_compare(df_postpredictive_sampled_bestEuc %>% filter(train_flag=='TEST'),
+                                            df_postpredictive_sampled_bestSR %>% filter(train_flag=='TEST'), 'displacement')+ guides(color="none") 
+# buildDam_test <- plot_df_postpredictive_compare(df_postpredictive_sampled_bestEuc %>% filter(train_flag=='TEST'),
+#                                                 df_postpredictive_sampled_bestSR %>% filter(train_flag=='TEST'), 'buildDam')
+
+p1 <- arrangeGrob(mort_test, top = textGrob("(a)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+p2 <- arrangeGrob(disp_test, top = textGrob("(b)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+#p3 <- arrangeGrob(buildDam_test, top = textGrob("(c)", x = unit(0.025, "npc"), y = unit(1, "npc"), just = c("left", "top"), gp = gpar(fontsize = 13)))
+
+grid.arrange(p1, p2, ncol=2)
+#EucDist_PostPred.pdf, 12 x 6
+
+#---------------------------------------------------------------------------------------------
+#------------  Compare Fit with and without rank histogram tests -----------------------------
+#---------------------------------------------------------------------------------------------
+
+source('RCode/Model Variations/ODDobj_NoTot.R')
+
+AlgoResults_bd <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-20_053958.556514__Apr25Agg_NormalCDF_ESplus0.05BD_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain')
+Omega_bd <- AlgoResults_bd$Omega_sample_phys[,5001] %>% relist(skeleton=Model$skeleton)
+AlgoParams$input_folder <- "IIDIPUS_Input_Alternatives/Apr25Agg/"
+AlgoResults_bd$input_folder <- "IIDIPUS_Input_Alternatives/Apr25Agg/"
+AlgoParams$Np <- 1
+AlgoParams$m_CRPS <- 100
+set.seed(123)
+impact_sample_bd <- SampleImpact(dir, Model, Omega_bd %>% addTransfParams(), AlgoParams, dat='Train')
+#impact_sample_rf <- SampleImpact(dir, Model, Omega_rf %>% addTransfParams(), AlgoParams, dat='Train', output='SampledTotal')
+#saveRDS(impact_sample_rf, paste0(dir, 'IIDIPUS_Results/impact_sample_rf_vs_score_fitted_6Feb_TotImpact'))
+df_bd <- flattenImpactSample(impact_sample_bd)
+ranks_bdpth <- get_banddepth_rank(df_bd, log=T)
+hist(ranks_bdpth, main='Banddepth Rank Scores')
+
+
+
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-05-24_023914.521443__Apr25Agg_NormalCDF_ESOnly_RFNoTot_range.5_kappa.5_withHLPriors_flexHLP_chain1')
+Omega <- AlgoResults$Omega_sample_phys[,4001] %>% relist(skeleton=Model$skeleton)
+AlgoParams$input_folder <- "IIDIPUS_Input_Alternatives/Apr25Agg/"
+AlgoResults$input_folder <- "IIDIPUS_Input_Alternatives/Apr25Agg/"
+AlgoParams$Np <- 1
+AlgoParams$m_CRPS <- 100
+impact_sample <- SampleImpact(dir, Model, Omega %>% addTransfParams(), AlgoParams, dat='Train')
+#impact_sample_rf <- SampleImpact(dir, Model, Omega_rf %>% addTransfParams(), AlgoParams, dat='Train', output='SampledTotal')
+#saveRDS(impact_sample_rf, paste0(dir, 'IIDIPUS_Results/impact_sample_rf_vs_score_fitted_6Feb_TotImpact'))
+df_low <- flattenImpactSample(impact_sample)
+ranks_bdpth_og <- get_banddepth_rank(df_low, log=T)
+hist(ranks_bdpth_og, main='Banddepth Rank Scores')
+
+
+par(family = "Times")
+par(mfrow=c(1,2))
+par(mar = c(4.5, 4, 0, 2)) 
+hist(ranks_bdpth, col = "#c3b1c7",  # light purple fill
+     border = "#440154",
+     xlab='BD Ranks (loss function with rank testing)', freq=T, ylab='Frequency', main='',cex.main = 1.2, font.main = 1,  ylim=c(0,32))
+mtext("(a)", side = 3,  line = -1, adj = -0.2,  font = 1, cex = 1.2)
+
+hist(ranks_bdpth_og, col = "#c3b1c7",  # light purple fill
+     border = "#440154", xlab='BD Ranks (loss function without rank testing)', freq=T, ylab='Frequency', main='',font.main = 1, ylim=c(0,32))
+mtext("(b)", side = 3, line = -1, adj = -0.2, font = 1, cex = 1.2)
 
 

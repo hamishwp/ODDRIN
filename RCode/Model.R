@@ -214,7 +214,7 @@ addTransfParams <- function(Omega, I0=Model$I0){
   #if (Omega$eps$hazard_cor < 0){Omega$eps$hazard_cor = 0.001}
   Omega$vuln_coeff_adj <- Omega$vuln_coeff #lapply(Omega$vuln_coeff, function(x) x * Omega$Lambda2$scale)
   Omega$eps_adj <- Omega$eps #lapply(Omega$eps, function(x) x * Omega$Lambda2$scale)
-  Omega$eps_adj$local <- Omega$eps$local / Omega$eps$hazard_mort # local mort / hazard wide mort = ratio
+  #Omega$eps_adj$local <- Omega$eps$local / Omega$eps$hazard_mort # local mort / hazard wide mort = ratio
   return(Omega)
 }
 
@@ -246,7 +246,7 @@ GetLP<-function(ODD_df,Omega,Params,Sinc,notnans, split_GNI=T){
   
   #GNIc:
   if (split_GNI==F){ #don't split into the eight GNIc deciles:  
-    LP_ij[notnans] <-  LP_ij[notnans] + Omega$vuln_coeff_adj$GNIc * log(ODD_df$GNIc[notnans])
+    LP_ij[notnans] <-  LP_ij[notnans] + Omega$vuln_coeff_adj$GNIc * (log(ODD_df$GNIc[notnans]) - Params$center$GNIc$mean)/Params$center$GNIc$sd
     return(LP_ij)
   }
   
@@ -569,6 +569,7 @@ SamplePolyImpact <-function(dir,Model,proposed,AlgoParams, dat='Train', output='
     for (file_i in 2:length(ufiles)){
       impact_sample_poly <- pmap(list(impact_sample_poly, tmpFn(ufiles[file_i])), rbind)
     }
+    return(impact_sample_poly)
   }
 }
 
@@ -790,6 +791,7 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams, corr_noise 
     pre_ranks_bd <- c()
     pre_ranks_mmds <- c()
     pre_ranks_mvr <- c()
+    pre_ranks_ave <- c()
     pre_ranks_bd_mortdisp <- c()
     pre_ranks_mmds_mortdisp <- c()
     pre_ranks_mvr_mortdisp <- c()
@@ -838,6 +840,7 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams, corr_noise 
         pre_ranks_bd_mortdisp <- c(pre_ranks_bd_mortdisp,rank)
         pre_ranks_mmds_mortdisp <- c(pre_ranks_mmds_mortdisp,rank)
         pre_ranks_mvr_mortdisp <- c(pre_ranks_mvr_mortdisp,rank)
+        pre_ranks_ave <- c(pre_ranks_ave, rank)
         
         next
       } 
@@ -858,6 +861,7 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams, corr_noise 
         pre_ranks_bd <- c(pre_ranks_bd, get_banddepth_rank_single(obs_sims_mat))
         pre_ranks_mmds <- c(pre_ranks_mmds, get_mmds_rank_single(obs_sims_mat))
         pre_ranks_mvr <- c(pre_ranks_mvr, get_mvr_rank_single(obs_sims_mat))
+        pre_ranks_ave <- c(pre_ranks_ave, get_average_rank_single(obs_sims_mat))
         
         pre_ranks_bd_mortdisp <- c(pre_ranks_bd_mortdisp,rank)
         pre_ranks_mmds_mortdisp <- c(pre_ranks_mmds_mortdisp,rank)
@@ -874,6 +878,8 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams, corr_noise 
         
         pre_ranks_mvr <- c(pre_ranks_mvr, get_mvr_rank_single(obs_sims_mat))#, noise=corr_noise[i,]))
         pre_ranks_mvr_mortdisp <- c(pre_ranks_mvr_mortdisp, get_mvr_rank_single(obs_sims_mat_mortdisp))
+        
+        pre_ranks_ave <- c(pre_ranks_ave, get_average_rank_single(obs_sims_mat))
       }
       
 
@@ -885,10 +891,12 @@ CalcDistPoly_EnergyScore <- function(impact_sample_poly, AlgoParams, corr_noise 
     ranks_mmds_mortdisp_std <- (pre_ranks_mmds_mortdisp-runif(length(pre_ranks_mmds_mortdisp),0,1))/(AlgoParams$m_CRPS + 1)
     ranks_mvr_std <- (pre_ranks_mvr-runif(length(pre_ranks_mvr),0,1))/(AlgoParams$m_CRPS + 1)
     ranks_mvr_mortdisp_std <- (pre_ranks_mvr_mortdisp-runif(length(pre_ranks_mvr_mortdisp),0,1))/(AlgoParams$m_CRPS + 1)
+    
+    ranks_ave_std <- (pre_ranks_ave-runif(length(pre_ranks_ave),0,1))/(AlgoParams$m_CRPS + 1)
     #ranks_std <- (pre_ranks-corr_noise2)/(AlgoParams$m_CRPS + 1) #can also correlate the noise added here
     
     dist_poly[n,1] <- mean(es_store) #mean(crps_store[which(impact_type=='mortality')]) * unlist(AlgoParams$impact_weights['mortality'])
-    dist_poly[n,2] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_mvr_std, null='punif')$statistic) #mean(mmds_store) * 10 #AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_std, null='punif')$statistic) #3*mean(vs_store) #mean(vs_store)/5
+    dist_poly[n,2] <- AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_ave_std, null='punif')$statistic) #mean(mmds_store) * 10 #AlgoParams$W_rankhist * (AndersonDarlingTest(ranks_std, null='punif')$statistic) #3*mean(vs_store) #mean(vs_store)/5
     dist_poly[n,3] <- mean(mmds_store) * 10 #mean(vs_store) #0#mean(mmds_store)
     
     ## Ways to assess uniformity of quantiles:

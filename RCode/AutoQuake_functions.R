@@ -135,7 +135,8 @@ PosteriorImpactPred <- function(ODDy,
                                 AlgoResultsFilename='IIDIPUS_Results/mcmc_2025-04-10',#'HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2',
                                 folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/', 
                                 namer = namer,
-                                N_samples = 100){
+                                N_samples = 100,
+                                s_finish=NULL){
   #AlgoResultsFilename should direct to a file within .../IIDIPUS_Results/ that contains an AlgoResults object
   #The AlgoResults object must have been be fitted using the same model as the one currently used to issue predictions 
   #The aggregation of ODD objects used here should also match that of the ODD objects used to fit AlgoResults
@@ -143,7 +144,7 @@ PosteriorImpactPred <- function(ODDy,
   AlgoResults <- readRDS(paste0(dir, AlgoResultsFilename))
   #AlgoResults$Omega_sample_phys <- AlgoResults$Omega_sample_phys[, c(1:6, 10:22),]
   
-  ODDy_with_sampledfull <- sampleImpactODD(ODDy, AlgoResults, N_samples = N_samples)
+  ODDy_with_sampledfull <- sampleImpactODD(ODDy, AlgoResults, N_samples = N_samples, s_finish=s_finish)
   ODDyWithImpact = ODDy_with_sampledfull$ODDy
   sampled_full = ODDy_with_sampledfull$sampled_full
   saveODD(ODDyWithImpact, paste0(dir,folder_write, 'ODDobjectsWithImpact/',namer, '_WithImpactSummaries'))
@@ -422,7 +423,7 @@ addPolygonsToImpact <- function(ODDy){
   return(ODDy)
 }
 
-sampleImpactODD <- function(ODDy, AlgoResults, N_samples = 100){
+sampleImpactODD <- function(ODDy, AlgoResults, N_samples = 100, s_finish=NULL){
   #Sample from the posterior predictive distribution for the event's impact
   AlgoParamsPostPredict <- list(Np = 1, m_CRPS=1, cores=1, NestedCores=1)
   params_sampled <- rep(NA, N_samples)
@@ -438,7 +439,7 @@ sampleImpactODD <- function(ODDy, AlgoResults, N_samples = 100){
       #   proposed = AlgoResults$Omega_sample_phys[,which(is.na(AlgoResults$Omega_sample_phys[1,]))[1]-param_sample] %>% relist(skeleton=Model$skeleton) %>% addTransfParams() #MCMC
       # }
     } else { #ABC-SMC
-      AlgoResults %<>% addAlgoParams()
+      AlgoResults %<>% addAlgoParams(s_finish=s_finish)
       param_sample <- sample(1:AlgoResults$Npart, 1, replace=T, prob=AlgoResults$W[,AlgoResults$s_finish])
       params_sampled[i] <- param_sample
       proposed = AlgoResults$Omega_sample_phys[param_sample,,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton) %>% addTransfParams()

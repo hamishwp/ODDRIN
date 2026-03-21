@@ -32,7 +32,7 @@ source('RCode/Method.R')
 
 # Methodology parameters required
 AlgoParams<-list(#Data:
-  input_folder = 'IIDIPUS_Input_Alternatives/Apr25Agg/', # Directory of input data, allows you to vary between simulated input, aggregated input, etc.
+  input_folder = 'IIDIPUS_Input_Alternatives/Sept25/', # Directory of input data, allows you to vary between simulated input, aggregated input, etc.
   
   #Compute Parameters:
   Np=1, # Number of Monte Carlo particles
@@ -72,7 +72,7 @@ IIDIPUSModelTraining<-function(extractedData=T){
   # Extract Displacement & Hazard data and match & reduce
   ODDpaths<-ExtractData(Model$haz,dir,extractedData)
   # Extract initial parameterisation estimate
-  iVals<-GetInitVals(dir,Model,AlgoParams,usePastPost=T)
+  iVals<-GetInitVals(dir,Model,AlgoParams,usePastPost=T, pastPostFile = 'HPC/abcsmc_2025-10-13_103454.286991_SimInput13_NormalCDF_ESplus0.1AVE_RF_range1')
   
   tag_notes = paste0('_Apr25Agg_NormalCDF_ESplus0.05BD_RFwithTot')
   # Parameterise... Here we go!

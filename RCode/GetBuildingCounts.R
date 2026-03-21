@@ -433,12 +433,14 @@ getBingBuildingsFromTiles <- function(bbox, event_id=NA, file_write='IIDIPUS_Inp
   missing_quadkeys_flag <- F
   
   for (quad_key in quad_keys) {
+    print(paste('Quad key', which(quad_keys==quad_key), 'of', length(quad_keys) ))
     rows <- df[df$QuadKey == quad_key, ]
     if (nrow(rows) >= 1) {
       for (url in rows$Url){
         tmp <- tempfile()
         #download.file(url, destfile =tmp,quiet = FALSE, mode = "wb")
         #out <- lapply(readLines(tmp), fromJSON)
+        
         tryCatch({
           download.file(url, destfile = tmp, quiet = FALSE, mode = "wb")
           out <- lapply(readLines(tmp), fromJSON)
@@ -503,7 +505,6 @@ getBingBuildingsGlobal <- function(ODD, event_id, file_write='IIDIPUS_Input/Buil
   return(ODD)
 }
 
-
 #------------------------------------------------------------------------------------------
 #----------------------COMPARE BUILDING COUNTS FOR PHL EVENT-------------------------------
 #------------------------------------------------------------------------------------------
@@ -520,12 +521,13 @@ compare_building_counts <- function(){
   plot_df$OpenBuildings[which(is.na(plot_df$OpenBuildings))] = 0
   plot_df$OSM[which(is.na(plot_df$OSM))] = 0
   ggplot(as.data.frame(ODDy[[c('nBuildings', 'OpenBuildings', 'OSM')]])) + 
-    geom_point(aes(x = nBuildings, y = OSM, color = "OSM"), cex = 1) + 
-    geom_point(aes(x = nBuildings, y = OpenBuildings, color = "Microsoft Open Buildings"), cex = 1) + 
-    geom_abline(slope = 1, intercept = 0, color="#D62728") + 
-    scale_color_manual(values = c("OSM" = "#440154", "Microsoft Open Buildings" = "#1FA187")) + 
+    geom_point(aes(x = nBuildings, y = OSM, color = "Bing vs OSM"), cex = 1) + 
+    geom_point(aes(x = nBuildings, y = OpenBuildings, color = "Bing vs Google"), cex = 1) + 
+    geom_abline(slope = 1, intercept = 0, color="#D62728", lty=2, lwd=1.2) + 
+    scale_color_manual(values = c("Bing vs OSM" = "#440154", "Bing vs Google" = "#1FA187"),
+                       guide  = guide_legend( override.aes = list(size = 2))) + 
     xlab('Building Count: Bing') + 
-    ylab('Building Count: OSM / Microsoft') + 
+    ylab('Building Count: Google/OSM') + 
     theme_minimal() + 
       labs(color = "") +
     theme(
@@ -537,8 +539,17 @@ compare_building_counts <- function(){
       #panel.border = element_rect(color = "black", fill = NA, size = 0.5),
       plot.margin = unit(c(0, 20, 0, 15), "pt"),
       legend.text = element_text(family = "Times New Roman", size = 12),
-      legend.title = element_blank()  # Remove legend title
-    ) 
+      legend.title = element_blank(),  # Remove legend title
+      panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+      legend.position = c(0.33, 0.8),
+      legend.justification = c(1, 0),
+      legend.box = "horizontal",
+      legend.background = element_rect(
+        fill = scales::alpha("white", 0.8),
+        color = "black",
+        linewidth = 0.3
+      ),
+    ) + scale_x_continuous(limits=c(0, 30000), expand=c(0.005, 0))+ scale_y_continuous(expand=c(0.005,0), limits=c(0, 70000))
   
   #4 x 6, BuildingCountComparison
   

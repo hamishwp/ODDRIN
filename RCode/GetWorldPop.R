@@ -69,7 +69,7 @@ WorldPopURL<-function(iso3c,year,constrained=T,kmres=T,unadj=T,BGSM=T){
 
 # Extract the required URL link to WorldPop and build the file names
 CheckWPop_API<-function(iso3c,year,folder="./",constrained=T,kmres=T,unadj=T){
-  options(timeout=180)
+  options(timeout=2000)
   # Main host URL
   url<-WorldPopURL(iso3c,year,constrained,kmres,unadj)
   # File name to be saved
@@ -105,7 +105,7 @@ GetWorldPopISO3C<-function(iso3c,year=NULL,folder="./Data/Exposure/PopDemo/",con
       if(is.na(checker[1])) {yr<-yr-1; next} else extracter<-F
     }
   } else {
-    if (year > 2022) year = 2022;
+    if (year > 2024) year = 2024;
     checker<-tryCatch(CheckWPop_API(iso3c,year,folder,constrained,kmres,unadj),error = function(e) NA)
   }
   # If nothing happened... FML

@@ -20,7 +20,7 @@ extract_country_date <- function(filename) {
   return(result)
 }
 
-input_folder <- 'IIDIPUS_Input_Alternatives/Aug24/BDobjects/'
+input_folder <- 'IIDIPUS_Input_Alternatives/Sept25/BDobjects/'
 BD_count_per_event <- function(input_folder){
   ufiles <- list.files(path=paste0(dir, input_folder),recursive = T,ignore.case = T)
   BD_dat_all <- data.frame(event_name=character(),
@@ -42,25 +42,64 @@ BD_count_per_event <- function(input_folder){
                                                       'possible' = 'Possibly damaged',
                                                       'notaffected' = 'Unaffected'))
   
-  p0 <- ggplot(BD_dat_all, aes(x = as.factor(event_name), fill = grading)) +
-    geom_bar(position = "stack") +
+  levels_grading <- c(
+    "Unaffected","Possibly damaged","Moderate damage","Damaged",
+    "Severe damage","Destroyed","Missing building footprints"
+  )
+  
+  df <- BD_dat_all %>%
+    mutate(grading = factor(grading, levels = levels_grading)) %>%
+    count(event_name, grading, name = "n") %>%
+    complete(event_name, grading, fill = list(n = 0))
+  
+  # 2) Plot with geom_col (uses your counts), thin borders to reveal slivers
+  p0 <- ggplot(df, aes(x = factor(event_name), y = n, fill = grading)) +
+    geom_col(color = "black", linewidth = 0.2) +
     labs(x = "Event", y = "Building Count", fill = "Grading") +
-    theme_minimal() + 
-    scale_fill_manual(
-      values = c('Unaffected'='#99D097',
-                 'Possibly damaged'='#ef9f00',
-                 'Moderate damage'='#EF6200',
-                 'Damaged'='#D50000',
-                 'Severe damage' = '#b00041',
-                 'Destroyed' = '#80002a',
-                 'Missing building footprints'='#CECECE')
-    ) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, family = "Times New Roman", size=10),
-          axis.title = element_text(family = "Times New Roman", size=12),  # Optional: Set specifically for axis titles
-          plot.title = element_text(family = "Times New Roman"),   # Optional: Set specifically for plot titles
-          legend.text = element_text(family = "Times New Roman", size=11),    # Legend text
-          legend.title = element_text(family = "Times New Roman", size=12) )
-  p0
+    theme_minimal() +
+    scale_fill_manual(values = c(
+      'Unaffected'='#99D097',
+      'Possibly damaged'='#ef9f00',
+      'Moderate damage'='#EF6200',
+      'Damaged'='#D50000',
+      'Severe damage'='#b00041',
+      'Destroyed'='#80002a'
+    )) +
+    # 3) Clean y-scale; small padding only (no big 'add' at bottom)
+    scale_y_continuous(expand = expansion(mult = c(0, 0.05), add=c(500,50))) +
+    theme(
+      axis.text.x  = element_text(angle = 45, hjust = 1, family = "Times New Roman", size = 10),
+      axis.title   = element_text(family = "Times New Roman", size = 12),
+      plot.title   = element_text(family = "Times New Roman"),
+      legend.text  = element_text(family = "Times New Roman", size = 11),
+      legend.title = element_text(family = "Times New Roman", size = 12),
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)
+    )
+
+
+  # p0 <- ggplot(BD_dat_all, aes(x = as.factor(event_name), fill = grading)) +
+  #   geom_bar(position = "stack") +
+  #   labs(x = "Event", y = "Building Count", fill = "Grading") +
+  #   theme_minimal() + 
+  #   scale_fill_manual(
+  #     values = c('Unaffected'='#99D097',
+  #                'Possibly damaged'='#ef9f00',
+  #                'Moderate damage'='#EF6200',
+  #                'Damaged'='#D50000',
+  #                'Severe damage' = '#b00041',
+  #                'Destroyed' = '#80002a',
+  #                'Missing building footprints'='#CECECE')
+  #   ) +
+  #   scale_y_continuous(expand=expansion(mult = c(0, .05), add=c(100,100))) +
+  #   theme(axis.text.x = element_text(angle = 45, hjust = 1, family = "Times New Roman", size=10),
+  #         axis.title = element_text(family = "Times New Roman", size=12),  # Optional: Set specifically for axis titles
+  #         plot.title = element_text(family = "Times New Roman"),   # Optional: Set specifically for plot titles
+  #         legend.text = element_text(family = "Times New Roman", size=11),    # Legend text
+  #         legend.title = element_text(family = "Times New Roman", size=12),
+  #         panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+  #         panel.grid.major = element_blank(),
+  #         panel.grid.minor = element_blank())
+  # p0
   return(p0)
   #Proportion 'possibly damaged':
   # MAR_first_cull <- BD_dat_all %>% group_by(event_id) %>%
@@ -70,7 +109,7 @@ BD_count_per_event <- function(input_folder){
 }
 
 BD_count_per_event(input_folder)
-#PointSummary.pdf, 10 x 6
+#PointSummary.pdf, 8 x 4
 
 collect_BD_shapefiles <- function(BDy){
   BDy_date <- BDy@hazdates
@@ -530,11 +569,15 @@ legend <- get_plot_component(p2 +
 plot_grid( plot_grid( p1  + theme(legend.position="none") , p2  + theme(legend.position="none"), 
                       p3  + theme(legend.position="none"), p4 + theme(legend.position="none"),align = 'vh', nrow = 2),legend, ncol = 1, rel_heights=c(1,0.1))
 
-plot_grid( plot_grid(p2  + theme(legend.position="none"), 
-                     p4 + theme(legend.position="none"),
-                     align = 'vh', nrow = 1),legend, ncol = 1, rel_heights=c(1,0.1))
+plot_grid( plot_grid(p2  + theme(legend.position="none") + scale_x_continuous(breaks = seq(-72.86,-72.76, by = 0.04), limits=c(-72.87, -72.759)) + ylim(c(19.908, 19.954)) + ggtitle('Haiti, 06-10-2018'), 
+                     p4 + theme(legend.position="none") +  scale_x_continuous(breaks = seq(83.96,84.02, by = 0.02), limits=c(83.957, 84.022)) + ggtitle('Nepal, 25-04-2015'),
+                     align = 'vh', nrow = 1,
+                     labels=c('(a)', '(b)'),
+                     label_fontfamily = "Times New Roman",
+                     label_fontface = "plain", label_size=12.5,
+                     label_x = -0.05),legend, ncol = 1, rel_heights=c(1,0.2))
 
-#BuildPoint.pdf, 10 x 4.25
+#BuildPoint.pdf, 7.5 x 3.5
 
 #------------------------------------------------------------------------------------------
 #--------------------------------Figures E, F and G----------------------------------------
@@ -587,8 +630,8 @@ p5 <- ggplot() +
         axis.title = element_text(family = "Liberation Serif", size=12),  
         legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
         legend.title = element_text(family = "Liberation Serif", size=11)) + 
-  geom_point(aes(x=107.0446, y=-6.82125), shape="\u2605", size=10, fill='blue', color='blue') +
-  scale_x_continuous(breaks = seq(107.02,107.18, by = 0.04), limits=c(107.035, 107.17)) +
+  geom_point(aes(x=107.0446, y=-6.82125), shape="\u2605", size=10, fill='#440154', color='#440154') +
+  scale_x_continuous(breaks = seq(107.02,107.18, by = 0.06), limits=c(107.035, 107.17)) +
   scale_y_continuous(breaks = seq(-6.9,-6.74, by = 0.04), limits=c(-6.88, -6.75)) +
   #xlim(107.035, 107.17) + ylim(-6.88, -6.75) +
   ggtitle('(a) All Damage Data')
@@ -600,7 +643,7 @@ p6 <- ggplot() +
   geom_point(data=plot_df %>% filter(grading=='Unaffected' & or_source_nam=='Open Street Map'), aes(x=Longitude, y=Latitude, color=grading),size=1) + theme_minimal() +
   geom_point(data=plot_df %>% filter(grading!='Unaffected'& or_source_nam=='Open Street Map'), aes(x=Longitude, y=Latitude, color=grading),size=1) + theme_minimal() +
   scale_color_manual(values = col_values) + 
-  scale_x_continuous(breaks = seq(107.02,107.18, by = 0.04), limits=c(107.035, 107.17)) +
+  scale_x_continuous(breaks = seq(107.02,107.18, by = 0.06), limits=c(107.035, 107.17)) +
   scale_y_continuous(breaks = seq(-6.9,-6.74, by = 0.04), limits=c(-6.88, -6.75)) +
   labs(color = "Damage Classification") + 
   guides(color = guide_legend(override.aes = list(size = 1.5))) + 
@@ -610,7 +653,7 @@ p6 <- ggplot() +
         axis.title = element_text(family = "Liberation Serif", size=12),  
         legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
         legend.title = element_text(family = "Liberation Serif", size=11)) + 
-  geom_point(aes(x=107.0446, y=-6.82125), shape="\u2605", size=10, fill='blue', color='blue') +
+  geom_point(aes(x=107.0446, y=-6.82125), shape="\u2605", size=10, fill='#440154', color='#440154') +
   ggtitle('(b) Pre-event source: Open Street Map')
 
 
@@ -620,7 +663,7 @@ p7 <- ggplot() +
   geom_point(data=plot_df %>% filter(grading=='Unaffected' & or_source_nam=='WorldView-2'), aes(x=Longitude, y=Latitude, color=grading),size=1) + theme_minimal() +
   geom_point(data=plot_df %>% filter(grading!='Unaffected'& or_source_nam=='WorldView-2'), aes(x=Longitude, y=Latitude, color=grading),size=1) + 
   scale_color_manual(values = col_values) + 
-  scale_x_continuous(breaks = seq(107.02,107.18, by = 0.04), limits=c(107.035, 107.17)) +
+  scale_x_continuous(breaks = seq(107.02,107.18, by = 0.06), limits=c(107.035, 107.17)) +
   scale_y_continuous(breaks = seq(-6.9,-6.74, by = 0.04), limits=c(-6.88, -6.75)) +
   labs(color = "Damage Classification") + 
   guides(color = guide_legend(override.aes = list(size = 1.5))) + 
@@ -630,7 +673,7 @@ p7 <- ggplot() +
         axis.title = element_text(family = "Liberation Serif", size=12),  
         legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
         legend.title = element_text(family = "Liberation Serif", size=11)) + 
-  geom_point(aes(x=107.0446, y=-6.82125), shape="\u2605", size=10, fill='blue', color='blue')  +
+  geom_point(aes(x=107.0446, y=-6.82125), shape="\u2605", size=10, fill='#440154', color='#440154')  +
   ggtitle('(c) Pre-event source: WorldView-2')
 
 
@@ -638,11 +681,16 @@ p7 <- ggplot() +
 legend <- get_plot_component(p5 +
                                theme(legend.position="bottom"), 'guide-box', return_all=T)[[3]]
 
-plot_grid( plot_grid( p5  + theme(legend.position="none"), p6  + theme(legend.position="none"), 
-                      p7  + theme(legend.position="none"), align = 'vh', nrow = 1),legend, ncol = 1, rel_heights=c(1,0.1))
+plot_grid( plot_grid( p5  + theme(legend.position="none") + ggtitle(''), p6  + theme(legend.position="none") + ggtitle(''), 
+                      p7  + theme(legend.position="none") + ggtitle(''), align = 'vh', nrow = 1, 
+                      labels=c('(a)  All Damage Data', '(b)  Pre-event source: OSM', '(c)  Pre-event source: WorldView-2'),
+                      label_fontfamily = "Times New Roman",
+                      label_fontface = "plain",
+                      label_x = c(-0.235, -0.32, -0.41), label_size=12),
+                      legend, ncol = 1, rel_heights=c(1,0.2))
 
 
-#12 x 5, IDNcopernicus.pdf
+#8 x 3, IDNcopernicus.pdf
 
 
 #------------------------------------------------------------------------------------------
@@ -723,7 +771,7 @@ p7 <- ggplot(plot_bd_df_int %>% filter(!is.na(plot_bd_df_int$obs_prop_bd)),
   #geom_ribbon(aes(ymin = obs_prop_bd - 3 * std_dev, ymax = obs_prop_bd + 3 * std_dev, fill = event_name), alpha=0.1, color=NA) +
   labs(#title = "Line with Shaded Region for 3 Standard Deviations",
     x = "Exposed Hazard Intensity",
-    y = "Observed Proportion Buildings Damaged") + ggtitle('') + ylim(0,1) +
+    y = "Building Damage Proportion") + ggtitle('') + ylim(0,1) +
   scale_color_manual(values=color_palette) + 
   labs(color = "Event") + 
   guides(color = guide_legend(override.aes = list(lwd = 1))) + 
@@ -864,13 +912,13 @@ p8 <- ggplot(plot_bd_df_int_filtered,
   #geom_ribbon(aes(ymin = obs_prop_bd - 3 * std_dev, ymax = obs_prop_bd + 3 * std_dev, fill = event_name), alpha=0.1, color=NA) +
   labs(#title = "Line with Shaded Region for 3 Standard Deviations",
     x = "Exposed Hazard Intensity",
-    y = "Observed Proportion Buildings Damaged") + ggtitle('') + ylim(0,1) +
+    y = "Building Damage Proportion") + ggtitle('') + ylim(0,1) +
   scale_color_manual(values=color_palette, drop=F) + 
   #scale_linetype_manual(values = linetype_palette) + 
   labs(color = "Event") + 
   scale_linetype_manual(values = linetype_palette, drop=F) +
   guides(
-    color = guide_legend("Event", override.aes = list(linetype=linetype_palette, lwd = 1)),  # Single legend with "Event" label
+    color = guide_legend("Event", override.aes = list(linetype=linetype_palette, lwd = 1), ncol = 1),  # Single legend with "Event" label
     linetype = "none"  # Remove the separate linetype legend
   ) +
   ggtitle('(b) Filtered Data') + 
@@ -881,12 +929,28 @@ p8 <- ggplot(plot_bd_df_int_filtered,
         axis.title = element_text(family = "Liberation Serif", size=12),  
         legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
         legend.title = element_text(family = "Liberation Serif", size=12),
-        legend.key.width=unit(2,"lines"))
+        legend.key.width=unit(2,"lines"), 
+        legend.spacing.y  = unit(4, "pt"),
+        legend.key.height = unit(14, "pt"))
 
 
 plot_grid( p7 + theme(legend.position = "none"), p8, nrow = 1, rel_widths=c(0.4,0.6))
 
-#PointDatIntensity.pdf, 5 x 8
+
+legend <- get_plot_component(p8 +
+                               theme(legend.position="right"), 'guide-box', return_all=T)[[1]]
+
+plot_grid(plot_grid( p7 + theme(legend.position = "none") + ggtitle('') + scale_y_continuous(limits=c(0,1), expand=c(0.005,0.01)) + scale_x_continuous(limits=c(4.5, 9), expand=c(0.005,0.005)), 
+                     p8 + theme(legend.position="none") + ggtitle('') + scale_y_continuous(limits=c(0,1), expand=c(0.005,0.01)) + scale_x_continuous(limits=c(4.5, 9), expand=c(0.005,0.005)), 
+                     nrow = 2, rel_widths=c(0.4,0.6),
+                     labels=c('(a)      All Data', '(b)     Filtered Data'),
+                     label_fontfamily = "Times New Roman",
+                     label_fontface = "plain",
+                     label_x = c(-0.085, -0.11), 
+                     label_size=12), 
+          legend, ncol=2, rel_widths=c(0.7, 0.3))
+
+#PointDatIntensity.pdf, 7.5 x 6.5
 
 #------------------------------------------------------------------------------------------
 #----------------------------------------Figure J------------------------------------------
@@ -913,7 +977,8 @@ for (i in 1:nSamps) {
 #AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2024-08-20_051627_alpha0.9_M60_Npart1000RealAgg5_propCOVmult0.2')
 #AlgoResults$s_finish <- 160
 #AlgoResults$Omega_sample_phys <- AlgoResults$Omega_sample_phys[,c(1:6, 10:22),]
-AlgoResults <-  readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2025-08-03_093559.602748__July25Agg_NormalCDF_ESplus0.05MVR_RF_kappa0.5_range0.5')
+AlgoResults <-  readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2025-10-11_174442.924329_Sept25_NormalCDF_ESplus0.1AVE_RFwithTot_range1')
+AlgoResults$s_finish=250
 
 set.seed(123)
 for (i in 1:length(ufiles_BD)){
@@ -921,17 +986,17 @@ for (i in 1:length(ufiles_BD)){
   if (file == "EQ20210814HTI_164") next
   BDy <- readBD(paste0(input_folder, file))
   
-  Omega <- relist(AlgoResults$Omega_sample_phys[sample(1:1000,1),,200], skeleton=Model$skeleton)
+  Omega <- relist(AlgoResults$Omega_sample_phys[sample(1:nrow(AlgoResults$W),1, prob=AlgoResults$W[,AlgoResults$s_finish]),,AlgoResults$s_finish], skeleton=Model$skeleton)
   #Omega <- relist(AlgoResults$Omega_sample_phys[,sample(1500:2000,1)], skeleton=Model$skeleton)
-  pDamSamp <- BDX(BDy,Omega %>% addTransfParams(),Model,Method = list(Np = 1, cores=2), output='results_analysis')
+  pDamSamp <- BDX(BDy,Omega %>% addTransfParams(),Model,Method = list(Np = 1, cores=1), output='results_analysis')
   pDamSamp$intensity <- apply(pDamSamp[,grep('hazMean', names(pDamSamp))], 1, max, na.rm=T)
   pDamSamp <- pDamSamp[, !names(pDamSamp) %in% c('LP', 'spatial_pixel', 'spatial_pixel_id', grep('hazMean', names(pDamSamp), value = TRUE))]
   pDamSamp$event_name = file
   
   for (j in 2:nSamps){
-    Omega <- relist(AlgoResults$Omega_sample_phys[sample(1:1000,1),,200], skeleton=Model$skeleton)
+    Omega <- relist(AlgoResults$Omega_sample_phys[sample(1:nrow(AlgoResults$W),1, prob=AlgoResults$W[,AlgoResults$s_finish]),,AlgoResults$s_finish], skeleton=Model$skeleton)
     #Omega <- relist(AlgoResults$Omega_sample_phys[,sample(1500:2000,1)], skeleton=Model$skeleton)
-    pDamSamp_j <- BDX(BDy,Omega %>% addTransfParams(),Model,Method = list(Np = 1, cores=2), output='results_analysis')
+    pDamSamp_j <- BDX(BDy,Omega %>% addTransfParams(),Model,Method = list(Np = 1, cores=1), output='results_analysis')
     pDamSamp %<>% add_column(!!paste0('pDamSamp.', j) := pDamSamp_j$pDamSamp.1)
   }
   bd_df_int_real %<>% rbind(pDamSamp)
@@ -1001,8 +1066,8 @@ post_median_probs = ggplot(plot_bd_df_int_real[!is.na(plot_bd_df_int_real$upd_me
   geom_line(aes(x=intensity, y=pDamSamp_median, group=event_name_fct, color=event_name_fct, linetype='Posterior Probability of Damage')) +
   #geom_ribbon(aes(ymin = obs_prop_bd - 3 * std_dev, ymax = obs_prop_bd + 3 * std_dev, fill = event_name), alpha=0.1, color=NA) +
   labs(#title = "Line with Shaded Region for 3 Standard Deviations",
-    x = "Exposed Hazard Intensity",
-    y = "Observed Proportion Buildings Damaged") + ggtitle('') + ylim(0,1) +
+    x = "Exposed hazard intensity",
+    y = "Observed proportion of buildings damaged") + ggtitle('') + ylim(0,1) +
   scale_color_manual(values=color_palette) + 
   scale_linetype_manual(values=linetype_palette) + 
   labs(color = "Event") + 
@@ -1017,7 +1082,7 @@ post_median_probs = ggplot(plot_bd_df_int_real[!is.na(plot_bd_df_int_real$upd_me
         legend.title = element_text(family = "Liberation Serif", size=12)) + 
   scale_y_continuous(limits=c(0, 0.62), expand=expansion(mult=c(0.01, 0.01)))
 
-#PostMedianProbs.pdf, 3.5 x 7
+#PostMedianProbs.pdf, 4 x 7
 
 plot_bd_df_int_real2 = plot_bd_df_int_real %>% filter(event_name != "EQ20210814HTI_164")
 plot(plot_bd_df_int_real2$pDamSamp_median, plot_bd_df_int_real2$upd_mean)
@@ -1110,7 +1175,7 @@ for(threshold in exp(seq(-100, 0, 0.02))){
 
 
 # SIM DATA: 
-input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/BDobjects/'#
+input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13_BDCorrected/BDobjects/'#
 ufiles_BD <- list.files(path=input_folder,pattern=Model$haz,recursive = T,ignore.case = T)
 #plot intensity vs observed proportion damaged for all BD objects in a file
 
@@ -1125,15 +1190,12 @@ for (i in 1:nSamps) {
 }
 
 
-Omega <- Omega_true <- list(Lambda1 = list(nu=8.75, kappa=0.6),
-                            Lambda2 = list(nu=11.7, kappa=0.75), #list(nu=10.65, kappa=1.5), #
-                            Lambda3 = list(nu=9.55, kappa=0.68),
-                            #Lambda4 = list(nu=9.9, kappa=1.6),
-                            #theta= list(theta1=0.6),
-                            eps=list(local=0.8, hazard_mort=0.45, hazard_disp=0.6, hazard_bd=0.5, hazard_cor=0.55),
-                            #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                            vuln_coeff = list(PDens=0, SHDI=-0.08, GNIc=-0.02, Vs30=0.01, EQFreq=-0.02, FirstHaz=0.01, Night=0, FirstHaz.Night=0.05))
-                            #check = list(check=0.5))
+Omega <- Omega_true <-  list(Lambda1 = list(nu=7.5, kappa=0.6),
+                             Lambda2 = list(nu=12.3, kappa=1.4),#Lambda2 = list(nu=10.6, kappa=0.95),
+                             Lambda3 = list(nu=7.9, kappa=0.68),
+                             eps=list(local=0.3, hazard_mort=0.4, hazard_disp=0.55, hazard_bd=0.5, hazard_cor=0.6),
+                             vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+
 
 for (i in 1:length(ufiles_BD)){
   file <- ufiles_BD[i]
@@ -1210,10 +1272,10 @@ abline(h=sum(ROC_calc_sim$obs_prop_bd * ROC_calc_sim$tot_obs)/sum(ROC_calc_sim$t
 
 
 ROCcurves = ggplot() + 
-  geom_line(data=Prec_Recall, aes(x=FPR, y=TPR, col='Real Data')) +
-  geom_line(data=Prec_Recall2, aes(x=FPR, y=TPR, col='Simulated Data')) + 
+  geom_line(data=Prec_Recall, aes(x=FPR, y=TPR, col='Real Data'), lwd=1.2) +
+  geom_line(data=Prec_Recall2, aes(x=FPR, y=TPR, col='Simulated Data'), lwd=1.2) + 
   theme_minimal() + xlab('False Positive Rate') + ylab('True Positive Rate') + 
-  scale_color_manual(values=setNames(c('black', 'blue'), c('Real Data', 'Simulated Data')),
+  scale_color_manual(values=setNames(c('#440154', '#1FA187'), c('Real Data', 'Simulated Data')),
                      name = NULL  ) +
   scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) +
@@ -1221,9 +1283,14 @@ ROCcurves = ggplot() +
         #axis.text.x = element_text(angle = 45, hjust = 1, family = "Liberation Serif", size=10),
         axis.title = element_text(family = "Liberation Serif", size=12),  
         legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
-        legend.title = element_text(family = "Liberation Serif", size=12)) +
+        legend.title = element_text(family = "Liberation Serif", size=12),
+        plot.margin = margin(10, 10, 10, r=20)) +
   geom_abline(slope=1,intercept=0, col='grey', linetype='dashed') +
-  theme(legend.position = 'bottom')
+  theme(legend.position = 'right')
+
+
+ROCcurves
+#ROCcurves.pdf, 6.5 x 4
 
 plot(Prec_Recall$FPR, Prec_Recall$TPR, type='l', col='black', xlab='False Positive Rate', ylab='True Positive Rate')
 lines(Prec_Recall2$FPR, Prec_Recall2$TPR, type='l',col='blue', xlab='False Positive Rate', ylab='True Positive Rate')

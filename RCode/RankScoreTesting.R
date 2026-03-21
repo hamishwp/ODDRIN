@@ -345,11 +345,19 @@ for (gen_i in seq_along(gen_cor_all)){
         # 
         # plot(tests)
         # points(testsother, col='red')
+        Sigma <- (1 - gen_cor) * diag(ndim) + gen_cor * matrix(1, ndim, ndim)  # all off-diagonals = gen_cor
+        #obs <- t(rmvnorm(1, rep(0, ndim), 2*Sigma))
+        #obs <- t(rmvnorm(1, c(0,2),0.5*Sigma))
+        obs <- t(rmvnorm(1, c(2,0),0.5 * Sigma))
         
-        obs = t(rmvnorm(1,c(2,0.5), cbind(c(1,test_cor),c(test_cor,1))))
+        #obs = t(rmvnorm(1,c(2,0.5), cbind(c(1,gen_cor),c(gen_cor,1))))
         obs[obs < 0] = 0
         
-        tests = rmvnorm(100,c(2,0.5), cbind(c(1,gen_cor),c(gen_cor,1)))
+        Sigma <- (1 - test_cor) * diag(ndim) + test_cor * matrix(1, ndim, ndim)  # all off-diagonals = gen_cor
+        #tests <- t(rmvnorm(100, c(0,2), 0.5*Sigma))
+        tests <- t(rmvnorm(100, c(2,0), 0.5 * Sigma))
+        
+        #tests = rmvnorm(100,c(2,0.5), cbind(c(1,test_cor),c(test_cor,1)))
         tests[tests < 0] = 0
         
         # obs1 <- rnorm(1) * 2  # Var = 4
@@ -420,10 +428,10 @@ for (gen_i in seq_along(gen_cor_all)){
         # obs_probs =  c(obs_probs, 1-sum(obs_probs))
         # obs = as.matrix(log(rmultinom(1, N, obs_probs) + 10)[1:2], nrow=1)
         
-        es_stores = c(es_stores,  es_sample(c(obs), t(tests)))
-        vs_stores = c(vs_stores,  vs_sample(c(obs), t(tests)))
-        mmds_stores = c(mmds_stores,  mmds_sample(c(obs), t(tests)))
-        dat= cbind(obs, t(tests))
+        es_stores = c(es_stores,  es_sample(c(obs), tests))
+        vs_stores = c(vs_stores,  vs_sample(c(obs), tests))
+        mmds_stores = c(mmds_stores,  mmds_sample(c(obs), tests))
+        dat= cbind(obs, tests)
         
         pre_ranks_mmd = c(pre_ranks_mmd, get_mmds_rank_single(dat))
         pre_ranks_mst = c(pre_ranks_mst, get_mst_rank_single(dat))
@@ -446,6 +454,11 @@ for (gen_i in seq_along(gen_cor_all)){
   }
 }
 
+saveRDS(results_store, 'IIDIPUS_Results/ScoreComparisons_20clippedbivar_0.5Sigma_2')
+#saveRDS(results_store, 'IIDIPUS_Results/ScoreComparisons_20clippedbivar')
+#saveRDS(results_store, 'IIDIPUS_Results/ScoreComparisons')
+#results_store = readRDS('IIDIPUS_Results/ScoreComparisons')
+
 par(mfrow = c(2, 5), mar = c(4, 4, 2, 1))
 titles = c('ES', 'VS', 'MMDS', 'MMD Rank', 'MST Rank', 'BD Rank', 'AVE Rank', 'MVR Rank')
 for (i in 1:8){
@@ -454,55 +467,106 @@ for (i in 1:8){
   points(rep(gen_cor_all, n_rep), results_store[i,,3,], col='yellow')
 }
 
-par(mfrow = c(2, 4), mar = c(4, 4, 2, 1))
-titles <- c('(b) Energy Score', '(c) Variogram Score', '(d) MMD Kernel Score', 'MMD Rank', 'MST Rank', 'BD Rank', 'AVE Rank', ' (e) MVR Rank Hist. Test')
-
+#par(mfrow = c(2, 4), mar = c(8, 4, 2, 1))
+titles <- c('Energy Score', 'Variogram Score', 'MMD Kernel Score', 'MMD Rank', 'MST Rank', 'BD Rank', 'AVE Rank', 'MVR Rank Hist. Test')
+labels = c('(b)', '(c)', '(d)', '', '', '', '', '(e)')
 # Colors for 3 methods
 layout_matrix <- matrix(c(1, 2, 3,
                           1, 4, 5), ncol = 3, byrow = TRUE)
 
-layout(layout_matrix, widths = c(1.5, 1))
+layout_matrix <- matrix(c(1, 2, 
+                          3, 4,
+                          5, 6), ncol = 2, byrow = TRUE)
+
+
+layout(layout_matrix, widths = c(1, 1))
 
 # Adjust margins if needed:
-par(mar = c(4, 4, 2, 1), family="Times")
+par(mar = c(4, 6, 2, 1), family="Times")
 
+## add space on the right + allow drawing outside plot panel
+op <- par(mar = c(4, 6, 2, 1), xpd = NA)
 
 cor_gens <- c(0.05, 0.5, 0.95)
 n <- 100
 
 tests_list <- lapply(cor_gens, function(cor) {
   
-  dat = rmvnorm(n,c(2,0), cbind(c(1,cor),c(cor,1)))
+  Sigma <- (1 - cor) * diag(ndim) + cor * matrix(1, ndim, ndim)
+  dat = rmvnorm(n,c(2,0), 0.5*Sigma)
   dat[dat < 0] = 0
   
   return(dat)
 })
 
-# Combine for limits
 all_tests <- do.call(rbind, tests_list)
-xlim <- range(all_tests[, 1]) + c(-0.5, 0.5)
-ylim <- range(all_tests[, 2]) + c(-0.5, 0.5)
+xlim <- range(all_tests[, 1]) + c(-0.25, 0.25)
+ylim <- range(all_tests[, 2]) + c(-0.25, 0.25)
 
-# Plot
 plot(tests_list[[1]], col = '#440154', pch = 19,
      xlim = xlim, ylim = ylim,
-     xlab = expression(x[1]), ylab = expression(x[2]), cex.lab = 1.5)
+     xlab = expression(x[1]), ylab = expression(x[2]),
+     cex.lab = 1.7, cex.axis = 1.3)
 
 points(tests_list[[2]], col = '#FDE725FF', pch = 19)
 points(tests_list[[3]], col = '#1FA187', pch = 19)
 
-legend("topleft",
-       legend = c(
-         expression(rho == 0.05),
-         expression(rho == 0.5),
-         expression(rho == 0.95)
-       ),
+## place legend just outside the right edge
+legend('topleft', #x = 0,#par("usr")[2] + 0.05 * diff(xlim),   # a bit to the right of the box
+       #y = 2.5,#par("usr")[4] - 0.05 * diff(ylim),   # near top; use mean(ylim) to center vertically
+       legend = c(expression(rho == 0.05),
+                  expression(rho == 0.5),
+                  expression(rho == 0.95)),
        col = c('#440154', '#FDE725FF', '#1FA187'),
-       pch = 19,
-       bty = "n",
-       cex = 1.5,          
-       y.intersp = 1.5)
-mtext('(a) Simulated Data Under Varying Correlations', side = 3, line = 0.5, adj = 0, cex = 0.9, font = 1)
+       pch = 19, bty = "n", cex = 1.5,
+       y.intersp = 1.5, xjust = 0, yjust = 0)
+
+mtext('(a)', side = 3, line = 0.5, adj = -0.1, cex = 1.05, font = 1)
+mtext('Simulated Data Under Varying Correlations', side = 3, line = 0.5, adj = 0, cex = 1.05, font = 1)
+
+par(op)  # restore
+
+# 
+# cor_gens <- c(0.05, 0.5, 0.95)
+# n <- 100
+# 
+# tests_list <- lapply(cor_gens, function(cor) {
+#   
+#   dat = rmvnorm(n,c(2,0), cbind(c(1,cor),c(cor,1)))
+#   dat[dat < 0] = 0
+#   
+#   return(dat)
+# })
+# 
+# # Combine for limits
+# all_tests <- do.call(rbind, tests_list)
+# xlim <- range(all_tests[, 1]) + c(-0.5, 0.5)
+# ylim <- range(all_tests[, 2]) + c(-0.2, 0.2)
+# 
+# # Plot
+# plot(tests_list[[1]], col = '#440154', pch = 19,
+#      xlim = xlim, ylim = ylim,
+#      xlab = expression(x[1]), ylab = expression(x[2]), cex.lab = 1.7, cex.axis=1.3)
+# 
+# points(tests_list[[2]], col = '#FDE725FF', pch = 19)
+# points(tests_list[[3]], col = '#1FA187', pch = 19)
+# 
+# legend("topleft",
+#        legend = c(
+#          expression(rho == 0.05),
+#          expression(rho == 0.5),
+#          expression(rho == 0.95)
+#        ),
+#        col = c('#440154', '#FDE725FF', '#1FA187'),
+#        pch = 19,
+#        bty = "n",
+#        cex = 1.5,          
+#        y.intersp = 1.5)
+# mtext('(a)', side = 3, line = 0.5, adj = -0.18, cex = 1.05, font = 1)
+# mtext('Simulated Data Under Varying Correlations', side = 3, line = 0.5, adj = 0, cex = 1.05, font = 1)
+# 
+
+results_store
 
 method_colors <- c('#440154', '#FDE725FF', '#1FA187')
 method_labels <- c('Method 1', 'Method 2', 'Method 3')
@@ -515,7 +579,7 @@ for (i in c(1:3, 8)) {
       if (i <= 3) {
         box_data[[length(box_data) + 1]] <- results_store[i, j, k, ]
       } else {
-        box_data[[length(box_data) + 1]] <- results_store[i, j, k, ] * 0.05
+        box_data[[length(box_data) + 1]] <- results_store[i, j, k, ] * 0.1
       }
       box_names[[length(box_names) + 1]] <- substitute(rho[Sim] == x, list(x = test_cor_all[k]))
     }
@@ -524,10 +588,11 @@ for (i in c(1:3, 8)) {
   group_labels <- lapply(gen_cor_all, function(x) substitute(rho[Obs] == y, list(y = x)))
   
   ylims <- range(results_store[i,,,], na.rm = TRUE)
-  if (i > 3) ylims <- ylims * 0.05
+  if (i > 3) ylims <- ylims * 0.1
   
   # Add 10% vertical space on top
-  y_margin <- 0.1 * diff(ylims)
+  y_margin <- 0.15 * diff(ylims)
+  if (i == 1) y_margin = 0.05 *  diff(ylims)
   ylims[2] <- ylims[2] + y_margin
   
   bp <- boxplot(box_data, 
@@ -536,15 +601,16 @@ for (i in c(1:3, 8)) {
                 main = "", #titles[i],
                 ylim = ylims,
                 ylab = "",
-                cex.axis = 1)
-  mtext(titles[i], side = 3, line = 0.5, adj = 0, cex = 0.9, font = 1)
+                cex.axis = 1.2)
+  mtext(titles[i], side = 3, line = 0.5, adj = 0, cex = 1.05, font = 1)
+  mtext(labels[i], side = 3, line = 0.5, adj = -0.1, cex = 1.05, font = 1)
   
   # Tick labels for each box
   tick_labels <- rep(test_cor_all, times = 3)
-  axis(1, at = 1:9, labels = tick_labels, las = 1, cex.axis = 1)
+  axis(1, at = 1:9, labels = tick_labels, las = 1, cex.axis = 1.15)
   
   # Add x-axis label
-  mtext(expression(rho[Sim]), side = 1, line = 2.5, cex = 1)
+  mtext(expression(rho[Sim]), side = 1, line = 2.5, cex = 1.2)
   
   # Add rho[Obs] inside plot above groups
   group_positions <- c(mean(1:3), mean(4:6), mean(7:9))
@@ -556,6 +622,165 @@ for (i in c(1:3, 8)) {
   # Optional: Add group separators
   abline(v = c(3.5, 6.5), lty = 2, col = "grey")
 }
+
+#ScoreComparisons.pdf, 8.5 x 8
+
+
+
+#-------------------------- RSS --------------------------------
+
+layout_matrix <- matrix(c(1, 2, 3,
+                          1, 4, 5), ncol = 3, byrow = TRUE)
+
+
+layout(layout_matrix, widths = c(1.5, 1))
+
+# Adjust margins if needed:
+par(mar = c(4, 6, 2, 1), family="Times")
+
+## add space on the right + allow drawing outside plot panel
+op <- par(mar = c(4, 6, 2, 1), xpd = NA)
+
+cor_gens <- c(0.05, 0.5, 0.95)
+n <- 100
+
+tests_list <- lapply(cor_gens, function(cor) {
+  
+  Sigma <- (1 - cor) * diag(ndim) + cor * matrix(1, ndim, ndim)
+  dat = rmvnorm(n,c(2,0), 0.5*Sigma)
+  dat[dat < 0] = 0
+  
+  return(dat)
+})
+
+all_tests <- do.call(rbind, tests_list)
+xlim <- range(all_tests[, 1]) + c(-0.25, 0.25)
+ylim <- range(all_tests[, 2]) + c(-0.25, 0.25)
+
+plot(tests_list[[1]], col = '#440154', pch = 19,
+     xlim = xlim, ylim = ylim,
+     xlab = expression(x[1]), ylab = expression(x[2]),
+     cex.lab = 1.7, cex.axis = 1.3)
+
+points(tests_list[[2]], col = '#FDE725FF', pch = 19)
+points(tests_list[[3]], col = '#1FA187', pch = 19)
+
+## place legend just outside the right edge
+legend('topleft', #x = 0,#par("usr")[2] + 0.05 * diff(xlim),   # a bit to the right of the box
+       #y = 2.5,#par("usr")[4] - 0.05 * diff(ylim),   # near top; use mean(ylim) to center vertically
+       legend = c(expression(rho == 0.05),
+                  expression(rho == 0.5),
+                  expression(rho == 0.95)),
+       col = c('#440154', '#FDE725FF', '#1FA187'),
+       pch = 19, bty = "n", cex = 1.5,
+       y.intersp = 1.5, xjust = 0, yjust = 0)
+
+mtext('(a)', side = 3, line = 0.5, adj = -0.1, cex = 1.05, font = 1)
+mtext('Simulated Data Under Varying Correlations', side = 3, line = 0.5, adj = 0, cex = 1.05, font = 1)
+
+par(op)  # restore
+
+# 
+# cor_gens <- c(0.05, 0.5, 0.95)
+# n <- 100
+# 
+# tests_list <- lapply(cor_gens, function(cor) {
+#   
+#   dat = rmvnorm(n,c(2,0), cbind(c(1,cor),c(cor,1)))
+#   dat[dat < 0] = 0
+#   
+#   return(dat)
+# })
+# 
+# # Combine for limits
+# all_tests <- do.call(rbind, tests_list)
+# xlim <- range(all_tests[, 1]) + c(-0.5, 0.5)
+# ylim <- range(all_tests[, 2]) + c(-0.2, 0.2)
+# 
+# # Plot
+# plot(tests_list[[1]], col = '#440154', pch = 19,
+#      xlim = xlim, ylim = ylim,
+#      xlab = expression(x[1]), ylab = expression(x[2]), cex.lab = 1.7, cex.axis=1.3)
+# 
+# points(tests_list[[2]], col = '#FDE725FF', pch = 19)
+# points(tests_list[[3]], col = '#1FA187', pch = 19)
+# 
+# legend("topleft",
+#        legend = c(
+#          expression(rho == 0.05),
+#          expression(rho == 0.5),
+#          expression(rho == 0.95)
+#        ),
+#        col = c('#440154', '#FDE725FF', '#1FA187'),
+#        pch = 19,
+#        bty = "n",
+#        cex = 1.5,          
+#        y.intersp = 1.5)
+# mtext('(a)', side = 3, line = 0.5, adj = -0.18, cex = 1.05, font = 1)
+# mtext('Simulated Data Under Varying Correlations', side = 3, line = 0.5, adj = 0, cex = 1.05, font = 1)
+# 
+
+results_store
+
+method_colors <- c('#440154', '#FDE725FF', '#1FA187')
+method_labels <- c('Method 1', 'Method 2', 'Method 3')
+
+for (i in c(1:3, 8)) {
+  box_data <- list()
+  box_names <- list()
+  for (j in 1:3) {
+    for (k in 1:3) {
+      if (i <= 3) {
+        box_data[[length(box_data) + 1]] <- results_store[i, j, k, ]
+      } else {
+        box_data[[length(box_data) + 1]] <- results_store[i, j, k, ] * 0.1
+      }
+      box_names[[length(box_names) + 1]] <- substitute(rho[Sim] == x, list(x = test_cor_all[k]))
+    }
+  }
+  
+  group_labels <- lapply(gen_cor_all, function(x) substitute(rho[Obs] == y, list(y = x)))
+  
+  ylims <- range(results_store[i,,,], na.rm = TRUE)
+  if (i > 3) ylims <- ylims * 0.1
+  
+  # Add 10% vertical space on top
+  y_margin <- 0.15 * diff(ylims)
+  if (i == 1) y_margin = 0.05 *  diff(ylims)
+  ylims[2] <- ylims[2] + y_margin
+  
+  bp <- boxplot(box_data, 
+                col = rep(method_colors, times = 3),
+                xaxt = "n",
+                main = "", #titles[i],
+                ylim = ylims,
+                ylab = "",
+                cex.axis = 1.2)
+  mtext(titles[i], side = 3, line = 0.5, adj = 0, cex = 1.05, font = 1)
+  mtext(labels[i], side = 3, line = 0.5, adj = -0.1, cex = 1.05, font = 1)
+  
+  # Tick labels for each box
+  tick_labels <- rep(test_cor_all, times = 3)
+  axis(1, at = 1:9, labels = tick_labels, las = 1, cex.axis = 1.15)
+  
+  # Add x-axis label
+  mtext(expression(rho[Sim]), side = 1, line = 2.5, cex = 1.2)
+  
+  # Add rho[Obs] inside plot above groups
+  group_positions <- c(mean(1:3), mean(4:6), mean(7:9))
+  usr <- par("usr")
+  y_pos <- usr[4] - 0.07 * diff(usr[3:4])  # inside plot, near top
+  
+  text(x = group_positions, y = y_pos, labels = do.call(expression, group_labels), cex = 1.25)
+  
+  # Optional: Add group separators
+  abline(v = c(3.5, 6.5), lty = 2, col = "grey")
+}
+
+
+#14 x 5.5, ScoreCompare_RSS.pdf
+
+#---------------------------------------------------------------
 
 # for (i in c(1:3, 8)) {
 #   # Collect boxplot data
@@ -603,15 +828,42 @@ for (i in c(1:3, 8)) {
 #-------------------Rank Histogram Comparison Trace Plots --------------------------------
 #------------------------------------------------------------------------------------------
 
-BD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-08-09_151133.450368__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_RankBD')
-MST <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-08-09_090443.45158__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_RankMST_backup')
-AVE <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-08-09_091042.264797__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_RankAVE')
+#BD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-08-09_151133.450368__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_RankBD')
+MST <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-09-12_220428.726063__July25Agg_Normal_ESplus0.5MSTrank_RFwithTot_range.5_kappa.5_RankMST_backup')
+#MVR <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-09-09_142553.590128__July25Agg_Normal_ESplus1MVRrank_RFwithTot_range.5_kappa.5_RankMVR_backup')
+BD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-09-12_220640.09661__July25Agg_Normal_ESplus0.5BDrank_RFwithTot_range.5_kappa.5_RankBD')
+AVE <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-09-12_220130.020992__July25Agg_Normal_ESplus0.5AVErank_RFwithTot_range.5_kappa.5_RankAVE_backup')
 
-par(mfrow=c(2,2))
-plot(BD$Omega_sample_phys[1,], type='l'); lines(MST$Omega_sample_phys[1,], type='l', col='red'); 
-plot(BD$Omega_sample_phys[2,], type='l'); lines(MST$Omega_sample_phys[2,], type='l', col='red'); 
-plot(BD$Omega_sample_phys[3,], type='l'); lines(MST$Omega_sample_phys[3,], type='l', col='red'); 
-plot(BD$Omega_sample_phys[4,], type='l'); lines(MST$Omega_sample_phys[4,], type='l', col='red'); 
+
+AVE <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-09-23_164922.353298__Sim11_NormalCDF_ESplus.1AVErank_RFwithTot_range1_Chain1')
+BD <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-09-23_165215.20338__Sim11_NormalCDF_ESplus.1AVErank_RFwithTot_range1_Chain2_backup')
+MST <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-09-24_134124.422363__Sim11_NormalCDF_ESplus.1AVErank_RFwithTot_range1_Chain3')
+
+plot(MST$es_score)
+plot(MST$rh_score)
+
+c = 2.38^2 / dim(AVE$Omega_sample_phys)[1]
+
+par(mfrow=c(4,4))
+for (i in 1:16){
+  ylim= range(c(c * BD$lambda_store[1200:2000] * BD$Sigma_store[i,i,1200:2000],c * AVE$lambda_store[1200:2000] * AVE$Sigma_store[i,i,1200:2000], c * MST$lambda_store[1200:2000] * MST$Sigma_store[i,i,1200:2000]), na.rm=T)
+  plot(c * BD$lambda_store * BD$Sigma_store[i,i,], type='l', ylim=ylim); lines(c * AVE$lambda_store * AVE$Sigma_store[i,i,], type='l', col='red'); lines(c * MST$lambda_store * MST$Sigma_store[i,i,], type='l', col='blue');
+}
+
+par(mfrow=c(4,4))
+for (i in 1:16){
+  ylim= range(c(AVE$Omega_sample[i,],BD$Omega_sample[i,]) , MST$Omega_sample[i,], na.rm=T)
+  plot(BD$Omega_sample[i,], type='l', ylim=ylim, xlim=c(0,2500)); lines(AVE$Omega_sample[i,], type='l', col='red'); lines(MST$Omega_sample[i,], type='l', col='blue');
+}
+
+plot(BD$Omega_sample_phys[1,], type='l', ylim=c(6.5, 11)); lines(AVE$Omega_sample_phys[1,], type='l', col='red'); lines(MST$Omega_sample_phys[1,], type='l', col='blue');
+plot(BD$Omega_sample[2,], type='l'); lines(AVE$Omega_sample[2,], type='l', col='red'); lines(MST$Omega_sample[2,], type='l', col='blue');
+plot(BD$Omega_sample[3,], type='l'); lines(AVE$Omega_sample[3,], type='l', col='red'); lines(MST$Omega_sample[3,], type='l', col='blue');
+plot(MVR$Omega_sample_phys[5,], type='l'); lines(MST$Omega_sample_phys[5,], type='l', col='red'); 
+
+plot(AVE$Sigma_store[1,15,]* AVE$lambda_store)
+lines(MVR$Sigma_store[15,15,]* MVR$lambda_store)
+lines(MVR$Sigma_store[1,1,]* MVR$lambda_store)
 
 #------------------------------------------------------------------------------------------
 
@@ -666,7 +918,7 @@ arrows(x0 = -3, y0 = 1, x1 = -1.75, y1 = 1,
 
 i = 31
 #c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135, 139, 164, 170)
-AlgoParams$input_folder <- "IIDIPUS_Input_Alternatives/July25Agg/"
+AlgoParams$input_folder <- "IIDIPUS_Input_Alternatives/Sept25/"
 
 folderin<-paste0(dir,AlgoParams$input_folder, "ODDobjects/")
 ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T))
@@ -700,17 +952,17 @@ ODD <- readODD(paste0(folderin, ufiles[which(event_ids_all==i)]))
 
 obs1_i = 1
 obs2_i = 4
-N_postpred_samples = 2000
+N_postpred_samples = 1000
 
 # Independent errors
 source('RCode/Model Variations/ODDobj_IndErr.R')
-AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2025-07-31_093541.918622__July25Agg_NormalCDF_ESplus0.05MVR_RF_kappa0.5_range0.5')
+#AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2025-07-31_093541.918622__July25Agg_NormalCDF_ESplus0.05MVR_RF_kappa0.5_range0.5')
+AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2025-10-11_174442.924329_Sept25_NormalCDF_ESplus0.1AVE_RFwithTot_range1')
 AlgoResults %<>% addAlgoParams()
-AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/July25Agg/'
+AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Sept25/'
 
-#Omega = AlgoResults$Omega_sample_phys[order(AlgoResults$Omega_sample_phys[,7,AlgoResults$s_finish])[111],,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
-Omega = AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,7,AlgoResults$s_finish]* AlgoResults$Omega_sample_phys[,8,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
-#Omega = AlgoResults$Omega_sample_phys[order(AlgoResults$Omega_sample_phys[,7,AlgoResults$s_finish]/AlgoResults$Omega_sample_phys[,8,AlgoResults$s_finish])[500],,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+#Omega = AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,7,AlgoResults$s_finish]* AlgoResults$Omega_sample_phys[,8,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+Omega = AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,7,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
 Omega$eps$local
 Omega$eps$hazard_mort
 
@@ -725,7 +977,7 @@ pairplot_regions(impact_sample_flattened[1:min(10, nrow(impact_sample_flattened)
 
 joint_pred1 = data.frame(
   sample = 1:length(sampled_out1),
-  india_disp_sampled = unlist(lapply(sampled_out1, function(x) x$sampled[obs1_i])),
+  nepal_disp_sampled = unlist(lapply(sampled_out1, function(x) x$sampled[obs1_i])),
   china_disp_sampled = unlist(lapply(sampled_out1, function(x) x$sampled[obs2_i])),
   class = 'Independent errors'
 )
@@ -735,11 +987,8 @@ source('RCode/ODDobj.R')
 #AlgoResults <- readRDS(paste0(dir, 'IIDIPUS_Results/mcmc_2025-04-21_005554.153622_MCMC_BDScore.05_M100AprAgg5_RandomFieldThree_DispOnly_backup'))
 #AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/mcmc_2025-04-10')
 #AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Apr25Agg/'
-Omega_rf = AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,7,AlgoResults$s_finish]* AlgoResults$Omega_sample_phys[,8,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
-#Omega_rf = AlgoResults$Omega_sample_phys[,which.max(AlgoResults$Omega_sample_phys[7,]/AlgoResults$Omega_sample_phys[8,]*AlgoResults$Omega_sample_phys[9,])] %>% relist(skeleton=Model$skeleton)
-#Omega_rf = AlgoResults$Omega_sample_phys[,which.max(AlgoResults$Omega_sample_phys[7,]/AlgoResults$Omega_sample_phys[8,])] %>% relist(skeleton=Model$skeleton)
-#Omega_rf = AlgoResults$Omega_sample_phys[,which(AlgoResults$Omega_sample_phys[7,]/AlgoResults$Omega_sample_phys[8,] * AlgoResults$Omega_sample_phys[9,]> 1.5 & AlgoResults$Omega_sample_phys[1,]>9.5 & AlgoResults$Omega_sample_phys[2,]<1.8)[1]] %>% relist(skeleton=Model$skeleton)
-#Omega_rf = AlgoResults$Omega_sample_phys[,which(AlgoResults$Omega_sample_phys[7,]/AlgoResults$Omega_sample_phys[8,] * AlgoResults$Omega_sample_phys[9,]> 1 & AlgoResults$Omega_sample_phys[2,]<1.35)[1]] %>% relist(skeleton=Model$skeleton)
+Omega_rf = Omega
+#Omega_rf = AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,7,AlgoResults$s_finish]* AlgoResults$Omega_sample_phys[,8,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
 # Omega_rf$Lambda1$nu = 9
 # Omega_rf$Lambda1$kappa = 0.8
 # Omega_rf$eps$local = 0.7
@@ -755,7 +1004,7 @@ sampled_out2 <- DispX(ODD, Omega_rf %>% addTransfParams(), Model$center, AlgoPar
 
 joint_pred2 = data.frame(
   sample = 1:length(sampled_out2),
-  india_disp_sampled = unlist(lapply(sampled_out2, function(x) x$sampled[obs1_i])),
+  nepal_disp_sampled = unlist(lapply(sampled_out2, function(x) x$sampled[obs1_i])),
   china_disp_sampled = unlist(lapply(sampled_out2, function(x) x$sampled[obs2_i])),
   class = 'Spatially correlated errors'
 )
@@ -766,17 +1015,17 @@ impact_sample_flattened2$polygon_name = paste0(impact_sample_flattened2$impact, 
 pairplot_regions(impact_sample_flattened2[1:min(10, nrow(impact_sample_flattened2)),])#[1:10,])#[1:10,])
 
 joint_pred = rbind(joint_pred1, joint_pred2)
-saveRDS(joint_pred, paste0(dir, 'IIDIPUS_Results/NPL_jointpred2000'))
+saveRDS(joint_pred, paste0(dir, 'IIDIPUS_Results/NPL_jointpred1000_Oct23'))
 
 #joint_pred500 = readRDS(paste0(dir, 'IIDIPUS_Results/NPL_jointpred'))
 #joint_pred2000 = readRDS(paste0(dir, 'IIDIPUS_Results/NPL_jointpred2000'))
 
-p1 <- ggplot(joint_pred, aes(x = india_disp_sampled, y = china_disp_sampled, color = class)) +
+p1 <- ggplot(joint_pred[c(sample(1:1000, 300), sample(1001:2000, 300)),], aes(x = china_disp_sampled, y = nepal_disp_sampled, color = class)) +
   geom_point(alpha = 0.8) +
   theme_minimal() +
-  geom_point(aes(x = sampled_out1[[1]]$observed[obs1_i], y = sampled_out1[[1]]$observed[obs2_i], color = "Observed"), size = 4, shape = 4) +  # Crimson red point
-  xlab("Population Displacement (India)") +
-  ylab("Population Displacement (China)") +
+  geom_point(aes(x = sampled_out1[[1]]$observed[obs2_i], y = sampled_out1[[1]]$observed[obs1_i]),color = "#D62728", size = 4, shape = 4) +  # Crimson red point
+  xlab("Population Displacement (China)") +
+  ylab("Population Displacement (Nepal)") +
   theme(
     axis.title.y = element_text(family = "Times New Roman", size = 12),
     axis.text.x = element_text(family = "Times New Roman", size = 12),
@@ -803,18 +1052,19 @@ p1 <- ggplot(joint_pred, aes(x = india_disp_sampled, y = china_disp_sampled, col
   scale_color_manual(
     values = c(
       "Independent errors" = "#1FA187",           # Viridis green
-      "Spatially correlated errors" = "#440154",  # Viridis purple
-      "Observed" = "#D62728"                      # Crimson red last
+      "Spatially correlated errors" = "#440154"#,  # Viridis purple
+     # "Observed" = "#D62728"                      # Crimson red last
     ),
     breaks = c("Independent errors", "Spatially correlated errors", "Observed")  # Control order
   )
 
-p2 <- ggplot(joint_pred, aes(x = china_disp_sampled, color = class, fill = class)) +
+p2 <- ggplot(joint_pred, aes(x = nepal_disp_sampled, color = class, fill = class)) +
   geom_density(alpha = 0.2, adjust = 1) +
-  scale_x_log10(labels = scales::comma_format()) +
-  xlab("Predicted Population Displacement in China") +
+  scale_x_log10(labels = scales::comma_format(), expand=c(0,0)) +
+  xlab("Predicted Population Displacement in Nepal") +
   ylab("Density") +
   theme_minimal() +
+  scale_y_continuous(expand = expansion(mult=c(0,0.05))) +
   scale_color_manual(
     values = c(
       "Independent errors" = "#1FA187",
@@ -830,17 +1080,20 @@ p2 <- ggplot(joint_pred, aes(x = china_disp_sampled, color = class, fill = class
   theme(
     text = element_text(family = "Times New Roman", size = 12),
     legend.title = element_blank(),
-    legend.text = element_text(family = "Times New Roman", size = 12)
+    legend.text = element_text(family = "Times New Roman", size = 12),
+    panel.border = element_rect(color = "black", fill = NA, size = 0.5)
   ) + 
-  geom_vline(xintercept = sampled_out1[[1]]$observed[obs2_i], color = "#D62728", size = 1)
+  geom_vline(xintercept = sampled_out1[[1]]$observed[obs1_i], color = "#D62728", size = 1)
 
-filtered_df <- joint_pred %>% filter(india_disp_sampled > 10000 & india_disp_sampled < 50000)
+filtered_df <- joint_pred %>% filter(china_disp_sampled > 2000 & china_disp_sampled < 10000)
+#table(filtered_df$class)
 
 # Plot conditional densities
-p3 <- ggplot(filtered_df, aes(x = china_disp_sampled, color = class, fill = class)) +
+p3 <- ggplot(filtered_df, aes(x = nepal_disp_sampled, color = class, fill = class)) +
   geom_density(alpha = 0.2, adjust = 0.8) +
-  scale_x_log10(labels = scales::comma_format()) +
-  xlab("Predicted Pop Disp in China (given Pop Disp in India)") +
+  scale_x_log10(labels = scales::comma_format(), expand=c(0,0)) +
+  xlab("Predicted Pop Disp in Nepal (given Pop Disp in China)") +
+  scale_y_continuous(expand = expansion(mult=c(0,0.05))) +
   ylab("Density") +
   theme_minimal() +
   scale_color_manual(
@@ -858,64 +1111,78 @@ p3 <- ggplot(filtered_df, aes(x = china_disp_sampled, color = class, fill = clas
   theme(
     text = element_text(family = "Times New Roman", size = 12),
     legend.text = element_text(family = "Times New Roman", size = 12),
-    legend.title = element_blank()
+    legend.title = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, size = 0.5)
   ) + 
-  geom_vline(xintercept = sampled_out1[[1]]$observed[obs2_i], color = "#D62728", size = 1)
+  geom_vline(xintercept = sampled_out1[[1]]$observed[obs1_i], color = "#D62728", size = 1)
 
 plot_grid(
   p1 + theme(
     legend.position = "bottom",
-    legend.spacing = unit(2, "cm")
+    legend.spacing = unit(1, "cm"),
+    plot.margin = unit(c(10, 20, 5, 5), "pt")
   ),
   plot_grid(
-    p2, p3,
+    p2 + theme(
+      legend.position = "none",
+      plot.margin = unit(c(0, 5, 5, 5), "pt")
+    ), p3 + theme(
+      legend.position = "bottom",
+      #legend.spacing = unit(2, "cm"),
+      legend.spacing.x = unit(0.01, "cm"),
+      legend.spacing.y = unit(0.1, "cm")
+    ),
     nrow = 2,
+    rel_heights = c(0.45, 0.55),
     labels = c('(b)', '(c)'),
     label_fontfamily = "Times New Roman",
     label_fontface = "plain",
-    align = "v"
+    align = "v",
+    label_x = -0.03, label_y = c(1.025, 1)
   ),
   labels = c('(a)', '', ''),
   ncol = 2,
   nrow = 1,
-  rel_widths = c(0.5, 0.5),
+  rel_widths = c(0.55, 0.5),
   align = "h",
   axis = "t",  # <-- This aligns top of p1 and p2 nicely
   label_fontfamily = "Times New Roman",
-  label_fontface = "plain"
+  label_fontface = "plain",
+  label_y = 0.98,
+  label_x=-0.02
 )
-# NPL_Disp_Correlations.pdf,14 x 6
+# NPL_Disp_Correlations.pdf,9 x 5
 
-#-----------------------------------------------------------------------------------------
-#---------------------- ESTIMATING BEST MATERN PARAMS ------------------------------------
-#-----------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
+#---------------------- ESTIMATING BEST EXPONENTIAL RANGE PARAM ------------------------------------
+#---------------------------------------------------------------------------------------------------
 
-library(geoR)
-library(fields)
-ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/July25Agg/ODDobjects/Train/EQ20140801DZA_24')
-
-AlgoParams$input_folder <- "IIDIPUS_Input_Alternatives/July25Agg/"
-folderin<-paste0(dir,AlgoParams$input_folder, "ODDobjects/")
-ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
-ufiles <- grep('^Train/' , ufiles, value = TRUE)
-
-for (file in ufiles){
-  ODDy = readODD(paste0(folderin, file))
-  
-  coords <- crds(ODDy, na.rm=F)
-  values <- as.numeric(values(ODDy$hazMean1,na.rm=F))
-  df <- data.frame(x = coords[,1], y = coords[,2], z = values)
-  df = df[!is.na(df$z),]
-  
-  # Convert to spatial object
-  coordinates(df) <- ~x + y
-  vg_emp <- variogram(z ~ 1, data = df)
-  plot(vg_emp)
-  vg_fit <- fit.variogram(vg_emp, model = vgm("Mat"), fit.kappa=T)
-  plot(vg_emp, vg_fit, main = "Fitted Exponential Variogram")
-  vg_fit$kappa
-  vg_fit$range
-}
+# library(geoR)
+# library(fields)
+# ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/July25Agg/ODDobjects/Train/EQ20140801DZA_24')
+# 
+# AlgoParams$input_folder <- "IIDIPUS_Input_Alternatives/July25Agg/"
+# folderin<-paste0(dir,AlgoParams$input_folder, "ODDobjects/")
+# ufiles<-na.omit(list.files(path=folderin,pattern=Model$haz,recursive = T,ignore.case = T)) #looseend
+# ufiles <- grep('^Train/' , ufiles, value = TRUE)
+# 
+# for (file in ufiles){
+#   ODDy = readODD(paste0(folderin, file))
+#   
+#   coords <- crds(ODDy, na.rm=F)
+#   values <- as.numeric(values(ODDy$hazMean1,na.rm=F))
+#   df <- data.frame(x = coords[,1], y = coords[,2], z = values)
+#   df = df[!is.na(df$z),]
+#   
+#   # Convert to spatial object
+#   coordinates(df) <- ~x + y
+#   vg_emp <- variogram(z ~ 1, data = df)
+#   plot(vg_emp)
+#   vg_fit <- fit.variogram(vg_emp, model = vgm("Mat"), fit.kappa=T)
+#   plot(vg_emp, vg_fit, main = "Fitted Exponential Variogram")
+#   vg_fit$kappa
+#   vg_fit$range
+# }
 
 grid <- as.data.frame(xyFromCell(ODDy, 1:ncell(ODDy)))  # Extract grid coordinates
 names(grid) <- c("x", "y")  # Name the columns
@@ -961,41 +1228,390 @@ summary(fit)
 
 
 
+#-----------------------------------------------------------------------------------------------------------------------
+#------------------------------- Compare different ranges --------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------------
+flattenImpactSample2 <- function(sampled_out){
+  df <- data.frame(iso3 = sampled_out[[1]]$iso3,
+                   polygon = sampled_out[[1]]$polygon,
+                   impact = sampled_out[[1]]$impact,
+                   observed = sampled_out[[1]]$observed)
+  for (j in 1:length(sampled_out)){
+    df %<>% cbind(sampled_out[[j]]$sampled)
+  }
+  colnames(df)[grep('sampled',names(df))] <- paste0('sampled.', 1:length(sampled_out))
+  return(df)
+}
 
+pairplot_regions_compare <- function(impact_mort){
+  
+  sampled_df <- (impact_mort %>%
+                   dplyr::select(polygon_name, starts_with("sampled.")) %>%
+                   pivot_longer(cols = -polygon_name, names_to = "sample", values_to = "value") %>%
+                   pivot_wider(names_from = polygon_name, values_from = value) %>%
+                   mutate(type = "Sampled"))[,-1]
+  
+  sampled_df[1:(ncol(sampled_df)-1)] <- lapply(sampled_df[1:(ncol(sampled_df)-1)], as.numeric)
+  
+  # Step 2: Get observed values, same format
+  observed_row <- impact_mort %>%
+    dplyr::select(polygon_name, observed) %>%
+    pivot_wider(names_from = polygon_name, values_from = observed) %>%
+    mutate(type = "Observed")
+  
+  # Step 3: Ensure column types match
+  # Make sure all except `type` are numeric
+  observed_row[1:(ncol(observed_row)-1)] <- lapply(observed_row[1:(ncol(observed_row)-1)], as.numeric)
+  
+  # Step 4: Combine
+  plot_df <- bind_rows(sampled_df, observed_row)
+  
+  obs_vals <- filter(plot_df, type == "Observed")
+  
+  # Function to overlay observed points
+  overlay_observed <- function(data, mapping, ...) {
+    ggplot(data = data, mapping = mapping) +
+      geom_point(alpha = 0.7, size = 0.5, color = "#440154", ...) +
+      geom_point(data = obs_vals, mapping = mapping, color = "red", size = 3, shape=4, stroke = 1.5)
+  }
+  # overlay_observed <- function(data, mapping, ...) {
+  #   ggplot(data = data, mapping = mapping) +
+  #     geom_density_2d_filled(alpha = 0.8, contour_var = "density") +
+  #     geom_point(data = obs_vals, mapping = mapping, color = "red", size = 3, shape = 4, stroke = 1.5)
+  # }
+  
+  gpairs_lower <- function(g){
+    g$plots <- g$plots[-(1:g$nrow)]
+    g$yAxisLabels <- g$yAxisLabels[-1]
+    g$nrow <- g$nrow -1
+    
+    g$plots <- g$plots[-(seq(g$ncol, length(g$plots), by = g$ncol))]
+    g$xAxisLabels <- g$xAxisLabels[-g$ncol]
+    g$ncol <- g$ncol - 1
+    
+    g
+  }
+  
+  # Pair plot with custom overlay
+  g <- ggpairs(plot_df %>% dplyr::select(-type),
+               upper = list(continuous = "blank"),
+               lower = list(continuous = overlay_observed),
+               diag = list(continuous = "blankDiag"), 
+               showStrips=T
+  ) +
+    theme_minimal(base_family = "Times") +
+    theme(strip.text = element_text(size = 10),
+          panel.border = element_rect(color = "black", fill = NA, linewidth = 1)) + 
+    scale_x_continuous(
+      trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+      breaks = c(0, 10, 100, 1000),
+      labels = expression(phantom(1) * 0^phantom(0),phantom(1) * 10^phantom(1),10^2,10^3),
+      minor_breaks = NULL
+    ) + 
+    scale_y_continuous(
+      trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+      breaks = c(0, 10, 100, 1000),
+      labels = expression(phantom(1) * 0^phantom(0),phantom(1) * 10^phantom(1),10^2,10^3),
+      minor_breaks = NULL
+    )
+  
+  gpairs_lower(g)
+}
 
+pairplot_regions_compare3 <- function(impact_mort_a,
+                                      impact_mort_b,
+                                      impact_mort_c,
+                                      labels = c("Set 1","Set 2","Set 3"),
+                                      cols = c("Set 1" = "#440154",
+                                               "Set 2" = "#21908C",
+                                               "Set 3" = "#FDE725"),
+                                      legend_place = c("panel", "right", "bottom"),
+                                      strip_size = 13,
+                                      axis_text_size = 10,
+                                      legend_text_size = 12,
+                                      legend_height = 0.12) {  # fraction of figure height when bottom
+  legend_place <- match.arg(legend_place)
+  stopifnot(length(labels) == 3)
+  
+  prep_one <- function(df, lab){
+    sampled_df <- (df %>%
+                     dplyr::select(polygon_name, dplyr::starts_with("sampled.")) %>%
+                     tidyr::pivot_longer(cols = -polygon_name, names_to = "sample", values_to = "value") %>%
+                     tidyr::pivot_wider(names_from = polygon_name, values_from = value) %>%
+                     dplyr::mutate(kind = "Sampled", set = lab))
+    sampled_df[ , !(names(sampled_df) %in% c("kind","set"))] <-
+      lapply(sampled_df[ , !(names(sampled_df) %in% c("kind","set"))], as.numeric)
+    
+    observed_row <- df %>%
+      dplyr::select(polygon_name, observed) %>%
+      tidyr::pivot_wider(names_from = polygon_name, values_from = observed) %>%
+      dplyr::mutate(kind = "Observed", set = lab)
+    observed_row[ , !(names(observed_row) %in% c("kind","set"))] <-
+      lapply(observed_row[ , !(names(observed_row) %in% c("kind","set"))], as.numeric)
+    
+    list(sampled = sampled_df, observed = observed_row)
+  }
+  
+  a <- prep_one(impact_mort_a, labels[1])
+  b <- prep_one(impact_mort_b, labels[2])
+  c <- prep_one(impact_mort_c, labels[3])
+  
+  samples_all  <- dplyr::bind_rows(a$sampled, b$sampled, c$sampled)
+  observed_all <- dplyr::bind_rows(a$observed, b$observed, c$observed)
+  
+  poly_cols <- setdiff(names(samples_all), c("kind","set","sample"))
+  plot_df   <- samples_all
+  obs_vals  <- observed_all
+  
+  overlay_three <- function(data, mapping, ...){
+    ggplot(data = data, mapping = mapping) +
+      geom_point(alpha = 0.6, size = 0.5, ...) +
+      geom_point(data = obs_vals, mapping = mapping,
+                 inherit.aes = TRUE, color = "red",
+                 size = 2.5, shape = 4, stroke = 1.2)
+  }
+  
+  gpairs_lower <- function(g){
+    g$plots <- g$plots[-(1:g$nrow)]
+    g$yAxisLabels <- g$yAxisLabels[-1]
+    g$nrow <- g$nrow - 1
+    
+    g$plots <- g$plots[-(seq(g$ncol, length(g$plots), by = g$ncol))]
+    g$xAxisLabels <- g$xAxisLabels[-g$ncol]
+    g$ncol <- g$ncol - 1
+    g
+  }
+  
+  g <- GGally::ggpairs(
+    plot_df %>% dplyr::select(dplyr::all_of(c(poly_cols, "set"))),
+    columns = poly_cols,
+    mapping = ggplot2::aes(color = .data$set),
+    upper = list(continuous = "blank"),
+    lower = list(continuous = overlay_three),
+    diag  = list(continuous = "blankDiag"),
+    showStrips = TRUE
+  ) +
+    ggplot2::theme_minimal(base_family = "Times") +
+    ggplot2::theme(
+      strip.text.x = ggplot2::element_text(size = strip_size),
+      strip.text.y = ggplot2::element_text(size = strip_size),
+      axis.text    = ggplot2::element_text(size = axis_text_size),
+      panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 1),
+      legend.position = if (legend_place == "right") "right" else "none",
+      legend.text  = ggplot2::element_text(size = legend_text_size),
+      legend.title = ggplot2::element_text(size = legend_text_size)
+    ) +
+    ggplot2::scale_color_manual(values = cols, name = NULL) +
+    ggplot2::scale_x_continuous(
+      trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+      breaks = c(0, 10, 100, 1000, 10000, 100000, 1e6, 1e7),
+      labels = expression(phantom(1) * 0^phantom(0), phantom(1) * 10^phantom(1),
+                          10^2, 10^3, 10^4, 10^5, 10^6, 10^7),
+      minor_breaks = NULL
+    ) +
+    ggplot2::scale_y_continuous(
+      trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+      breaks = c(0, 10, 100, 1000, 10000, 100000, 1e6, 1e7),
+      labels = expression(phantom(1) * 0^phantom(0), phantom(1) * 10^phantom(1),
+                          10^2, 10^3, 10^4, 10^5, 10^6, 10^7),
+      minor_breaks = NULL
+    )
+  
+  g <- gpairs_lower(g)
+  
+  if (legend_place == "panel") {
+    legend_df <- data.frame(set = factor(labels, levels = labels), x = 1, y = 1)
+    legend_plot <-
+      ggplot2::ggplot(legend_df, ggplot2::aes(x, y, color = set)) +
+      ggplot2::geom_point(alpha = 0) +
+      ggplot2::scale_color_manual(values = cols, name = NULL) +
+      ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(alpha = 1, size = 3))) +
+      ggplot2::theme_void() +
+      ggplot2::theme(
+        legend.position = c(0.98, 0.98),
+        legend.justification = c("right", "top"),
+        legend.background = ggplot2::element_rect(fill = scales::alpha("white", 0.7), color = NA),
+        legend.text = ggplot2::element_text(size = legend_text_size),
+        legend.title = ggplot2::element_text(size = legend_text_size)
+      )
+    g <- GGally::putPlot(g, legend_plot, 1, g$ncol)
+    
+  } else if (legend_place == "bottom") {
+    library(grid)       # grobHeight, unit
+    library(gridExtra)  # grid.arrange
+    library(gtable)
+    
+    # 1) Build a tiny plot that DEFINITELY has a legend
+    legend_df <- data.frame(set = factor(labels, levels = labels),
+                            x = seq_along(labels), y = 1)
+    legend_plot <-
+      ggplot2::ggplot(legend_df, ggplot2::aes(x, y, color = set)) +
+      ggplot2::geom_point(size = 3) +
+      ggplot2::scale_color_manual(values = cols, name = NULL) +
+      ggplot2::theme_void() +
+      ggplot2::theme(legend.position = "bottom",
+                     legend.direction = "horizontal",
+                     legend.text = ggplot2::element_text(size = legend_text_size, family = 'Times'),
+                     legend.title = ggplot2::element_text(size = legend_text_size, family = 'Times'))
+    
+    # 2) Extract legend using ggplotGrob (more reliable than get_legend here)
+    g_legend <- function(p) {
+      gp <- ggplot2::ggplotGrob(p)
+      idx <- which(sapply(gp$grobs, function(z) z$name) == "guide-box")
+      if (length(idx) == 0) return(NULL)
+      gp$grobs[[idx[length(idx)]]]  # take the last if multiple
+    }
+    leg <- g_legend(legend_plot)
+    
+    # 3) Convert ggmatrix to a gtable (no legends in panels)
+    g_nolegend <- g + ggplot2::theme(legend.position = "none")
+    gt <- GGally::ggmatrix_gtable(g_nolegend)
+    
+    # 4) Stack main grid + legend
+    gridExtra::grid.arrange(
+      gt, leg,
+      ncol = 1,
+      heights = grid::unit.c(unit(1, "null"),
+                             grobHeight(leg) + unit(4, "mm"))
+    )
+    return(invisible(NULL))
+  }
+  g
+}
 
-
-
-
-
-ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/July25Agg/ODDobjects/Train/EQ20170919MEX_68')
-#obs1_i = 1
-#obs2_i = 4
-N_postpred_samples = 100
-
-# Independent errors
 source('RCode/Model Variations/ODDobj_VarRF.R')
 
 AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_2025-07-31_093541.918622__July25Agg_NormalCDF_ESplus0.05MVR_RF_kappa0.5_range0.5')
+#AlgoResults <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/abcsmc_start_step_2025-10-11_174442.924329_Sept25_NormalCDF_ESplus0.1AVE_RFwithTot_range1')
 AlgoResults %<>% addAlgoParams()
-AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/July25Agg/'
+AlgoResults$input_folder <- 'IIDIPUS_Input_Alternatives/Sept25/'
 
-Omega = AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,7,AlgoResults$s_finish]* AlgoResults$Omega_sample_phys[,8,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
+Omega = AlgoResults$Omega_sample_phys[which.max(AlgoResults$Omega_sample_phys[,7,AlgoResults$s_finish] * AlgoResults$Omega_sample_phys[,8,AlgoResults$s_finish]),,AlgoResults$s_finish] %>% relist(skeleton=Model$skeleton)
 
-Omega$eps$local
-Omega$eps$hazard_mort
-Omega$RF_range=2
-Omega$RF_kappa=0.5
-sampled_out1 <- DispX(ODDy, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+#ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/July25Agg/ODDobjects/Train/EQ20170919MEX_68')
+#ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/July25Agg/ODDobjects/Test/EQ20150425NPL_31')
+#ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/Sept25/ODDobjects/Train/EQ20230908MAR_171')
+ODDy <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/Sept25/ODDobjects/Test/EQ20171112IRN_70')
+N_postpred_samples = 400
+
+rename_polygons = function(labs){
+  # Split into "Impact" and "Place" parts
+  impact <- sub("\\s*\\n.*$", "", labs)
+  place  <- sub("^.*\\n\\s*", "", labs)
+  
+  # Split place by commas to get Locality / Province / Country
+  parts <- strsplit(place, ",")
+  
+  # Country = last element; Locality = first element (or "Total" if only country)
+  country <- vapply(parts, function(p) trimws(tail(p, 1)), character(1))
+  local   <- vapply(parts, function(p) {
+    p <- trimws(p)
+    if (length(p) <= 1) "Total" else p[1]
+  }, character(1))
+  
+  # Build the final label
+  return(paste0(impact, ": ", country, "\n ", local))
+}
+
+Omega$range=2
+sampled_out_range2 <- DispX(ODDy, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
                         replace(which(names(AlgoParams)==c('Np')), N_postpred_samples), 
                       output='SampledAgg')
+impact_sample_flattened_range2=flattenImpactSample2(sampled_out_range2)
+impact_sample_flattened_range2$polygon_name = rename_polygons(paste0(toupper(substr(impact_sample_flattened_range2$impact, 1, 1)),
+                                                     substr(impact_sample_flattened_range2$impact, 2, nchar(impact_sample_flattened_range2$impact)), 
+                                                     '\n ', 
+                                                     unlist(lapply(impact_sample_flattened_range2$polygon, function(x) ODDy@polygons[[x]]$name))))
+impact_sample_flattened_range2$polygon_name[impact_sample_flattened_range2$polygon_name=="Mortality: Iran\n n.a. (03)" ] = 'Mortality: Iran\n Salas-e-Babajani'
+#impact_sample_flattened_range2$polygon_name <- gsub("\\n\\s*([^,\\n]+),\\s*", "\n \\1\n ", impact_sample_flattened_range2$polygon_name, perl = TRUE)
 
-impact_sample_flattened=flattenImpactSample2(sampled_out1)
-impact_sample_flattened$polygon_name = paste0(impact_sample_flattened$impact, impact_sample_flattened$polygon)
+Omega$range=1
+sampled_out_range1 <- DispX(ODDy, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+                        replace(which(names(AlgoParams)==c('Np')), N_postpred_samples), 
+                      output='SampledAgg')
+impact_sample_flattened_range1=flattenImpactSample2(sampled_out_range1)
+impact_sample_flattened_range1$polygon_name = rename_polygons(paste0(toupper(substr(impact_sample_flattened_range1$impact, 1, 1)),
+                                                                     substr(impact_sample_flattened_range1$impact, 2, nchar(impact_sample_flattened_range1$impact)), 
+                                                                     '\n ', 
+                                                                     unlist(lapply(impact_sample_flattened_range1$polygon, function(x) ODDy@polygons[[x]]$name))))
+impact_sample_flattened_range1$polygon_name[impact_sample_flattened_range1$polygon_name=="Mortality: Iran\n n.a. (03)" ] = 'Mortality: Iran\n Salas-e-Babajani'
+
+Omega$range=0.1
+sampled_out_range.1 <- DispX(ODDy, Omega %>% addTransfParams(), Model$center, AlgoParams %>% replace(which(names(AlgoParams)==c('m_CRPS')), 1) %>% 
+                               replace(which(names(AlgoParams)==c('Np')), N_postpred_samples), 
+                             output='SampledAgg')
+impact_sample_flattened_range.1 =flattenImpactSample2(sampled_out_range.1)
+impact_sample_flattened_range.1$polygon_name = rename_polygons(paste0(toupper(substr(impact_sample_flattened_range.1$impact, 1, 1)),
+                                                                      substr(impact_sample_flattened_range.1$impact, 2, nchar(impact_sample_flattened_range.1$impact)), 
+                                                                      '\n ', 
+                                                                      unlist(lapply(impact_sample_flattened_range.1$polygon, function(x) ODDy@polygons[[x]]$name))))
+impact_sample_flattened_range.1$polygon_name[impact_sample_flattened_range.1$polygon_name=="Mortality: Iran\n n.a. (03)" ] = 'Mortality: Iran\n Salas-e-Babajani'
+
 #impact_sample_flattened %<>% filter(impact=='mortality')
-pairplot_regions(impact_sample_flattened[1:min(10, nrow(impact_sample_flattened)),])#[1:10,])#[1:10,])
+
+# mortality_true = c('Wajima, Ishikawa' = 80, 'Suzu, Ishikawa' = 54, 'Shika, Ishikawa' = 17,
+#                    'Noto, Ishikawa' = 49, 'Nanao, Ishikawa' =  37,
+#                    'Hakui, Ishikawa' = 3, 'Anamizu, Ishikawa' = 22,
+#                    'Komatsu, Ishikawa'=1, 'Hakusan, Ishikawa' = 1,
+#                    'Kahoku, Ishikawa'=5,'Nakanoto, Ishikawa'=1)
+# 
+# names(mortality_true) = paste0(names(mortality_true), ', Japan')
+# 
+# observed_df <- data.frame(
+#   polygon_name = names(mortality_true),
+#   observed = as.vector(mortality_true),
+#   stringsAsFactors = FALSE
+# )
+# 
+# impact_mort = ODDy@impact %>% filter(impact=='mortality')
+# impact_mort$observed = NULL
+# 
+# 
+# impact_mort %<>% merge(observed_df, by='polygon_name', all.x=T)
+# impact_mort$observed[which(is.na(impact_mort$observed))] = 0
+# impact_mort = impact_mort[order(impact_mort$observed, decreasing=T),]
+# 
+# impact_mort %<>% filter(polygon_name %in% c("Nakanoto, Ishikawa, Japan","Nanao, Ishikawa, Japan", "Noto, Ishikawa, Japan", "Shika, Ishikawa, Japan", "Suzu, Ishikawa, Japan",
+#                                             "Anamizu, Ishikawa, Japan", "Hakui, Ishikawa, Japan" , "Wajima, Ishikawa, Japan", "Hakui, Ishikawa, Japan", "Hodatsushimizu, Ishikawa, Japan",
+#                                             "Takaoka, Toyama, Japan", "Imizu, Toyama, Japan", "Komatsu, Ishikawa, Japan", "Hakusan, Ishikawa, Japan", "Kahoku, Ishikawa, Japan", "Himi, Toyama, Japan"))
+# 
+# impact_mort_shortened_names = impact_mort
+# impact_mort_shortened_names$polygon_name <- sub(",.*", "", impact_mort_shortened_names$polygon_name)
+# impact_mort_shortened_names %<>% filter(polygon_name != 'Hodatsushimizu')
+# 
+# impact_sample_flattened_range2$observed = NULL
+# impact_sample_flattened_range.5$observed = NULL
+# impact_sample_flattened_range.1$observed = NULL
+# impact_sample_flattened_range2 %<>% merge(impact_mort_shortened_names[,c('polygon', 'impact', 'observed')], by=c('polygon', 'impact'))
+# impact_sample_flattened_range.5 %<>% merge(impact_mort_shortened_names[,c('polygon', 'impact', 'observed')], by=c('polygon', 'impact'))
+# impact_sample_flattened_range.1 %<>% merge(impact_mort_shortened_names[,c('polygon', 'impact', 'observed')], by=c('polygon', 'impact'))
 
 
+#pairplot_regions(impact_sample_flattened[1:min(10, nrow(impact_sample_flattened)),])#[1:10,])#[1:10,])
+
+
+#pairplot_regions(impact_sample_flattened_range2)
+
+# impact_sample_flattened_range2 %<>% filter(impact=='mortality') %>% order(ob)
+impact_sample_flattened_range2 = impact_sample_flattened_range2[1:8, ]
+impact_sample_flattened_range1 = impact_sample_flattened_range1[1:8, ]
+impact_sample_flattened_range.1 = impact_sample_flattened_range.1[1:8, ]
+
+
+
+g <- pairplot_regions_compare3(
+  impact_sample_flattened_range2,
+  impact_sample_flattened_range1,
+  impact_sample_flattened_range.1,
+  labels = c("Range = 2","Range = 1","Range = 0.1"),
+  cols   = c("Range = 2"="#440154","Range = 1"="#21908C","Range = 0.1"="#FDE725"),
+  legend_place = "bottom",   # <—
+  strip_size = 11,
+  legend_text_size = 11,
+  legend_height = 0.08       # adjust to taste
+)
+g
+#RF_RangeIran, 10 x 10
 #------------------------------------------------------------------------------------------
 #----------------------- Compare ES fit and ES + BD fit -----------------------------------
 #------------------------------------------------------------------------------------------
@@ -1249,6 +1865,28 @@ hist(ranks_mvr_og, col = "#c3b1c7",  # light purple fill
 mtext("(b)", side = 3, line = -1, adj = -0.2, font = 1, cex = 1.2)
 
 #RankComparison.pdf, 4 x 10
+
+
+source('RCode/ODDobj.R')
+source('RCode/Model.R')
+#AlgoResults_mvr <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-08-06_112257.598195__July25Agg_Normal_ESplus.05MVRrank_RFwithTot_range.5_kappa.5_Chain3')
+AlgoResults_AVE <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/HPC/mcmc_2025-09-22_112811.34862__Sept25_NormalCDF_ESplus.1AVErank_RFwithTot_range1_Chain1_backup')
+#AlgoResults_mvr$loss[12001]
+Omega_ave <- AlgoResults_AVE$Omega_sample_phys[,1501] %>% relist(skeleton=Model$skeleton)
+AlgoParams$input_folder <- "IIDIPUS_Input_Alternatives/Sept25/"
+AlgoResults_AVE$input_folder <- "IIDIPUS_Input_Alternatives/Sept25/"
+AlgoParams$Np <- 1
+AlgoParams$m_CRPS <- 100
+set.seed(123)
+AlgoParams$AllParallel = F
+for (i in 1:10){
+  impact_sample_mvr <- SampleImpact(dir, Model, Omega_ave %>% addTransfParams(), AlgoParams, dat='Train')
+  CalcDist(impact_sample_mvr, AlgoParams)
+  ranks_mvr2 = getRanks(impact_sample_mvr$poly, AlgoParams)
+  saveRDS(ranks_mvr2, paste0('/home/manderso/Documents/GitHub/ODDRIN/Ranks/MVRranks', i))
+}
+hist(ranks_mvr2)
+
 
 
 # hist(ranks_mst, col = "#c3b1c7",  # light purple fill

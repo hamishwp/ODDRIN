@@ -86,7 +86,10 @@ setMethod(f="initialize", signature="BD",
             BD_points <- vect(x = as.matrix(Damage[,c("Longitude","Latitude")]), type='points', 
                  atts = Damage[,data_var], crs=crs(ODD))
             
-            .Object@ptr <- BD_points@ptr
+            slotnames = slotNames(BD_points)
+            pointer_slot <- ifelse('ptr' %in% slotnames, 'ptr', ifelse('pnt' %in% slotnames, 'pnt', 'pntr'))
+
+            slot(.Object, pointer_slot) = slot(BD_points, pointer_slot)
             # .Object@data <- Damage@data
             # .Object@coords.nrs <-Damage@coords.nrs
             # .Object@coords <-Damage@coords
@@ -431,7 +434,7 @@ setMethod("BDX", "BD", function(BD,Omega,Model,Method=list(Np=20,cores=8), outpu
   BD_df$spatial_pixel_id <- as.numeric(factor(BD_df$spatial_pixel, levels = unique(BD_df$spatial_pixel)))
   eps_local <- array(0, dim=c(n_groups, Method$Np))
   for (g in 1:n_groups){
-    eps_local[g,] <- stochastic(Method$Np, Omega$eps_adj$local)
+    eps_local[g,] <- stochastic(Method$Np, Omega$eps_adj$local * Omega$eps_adj$hazard_bd)
   }
   
   BD_df$LP <- LP

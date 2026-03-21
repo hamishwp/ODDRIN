@@ -883,6 +883,105 @@ ODDRIN_hist <- function(sampled_full, impact_type = 'displacement'){
   
 }
 
+ODDRIN_hist2 <- function(sampled_full, impact_type = 'displacement'){
+  #impact_type_samples = paste0(impact_type, '.s')
+  
+  #plot_df <- as.data.frame(ODDy, xy=T, na.rm=F)
+  impact_order = c('displacement', 'mortality', 'buildDam')
+  i_impact = which(impact_order == impact_type)
+  tot_impact = colSums(sampled_full[,i_impact,])#as.matrix(plot_df[,grep(impact_type_samples, names(plot_df))]))
+  
+  if (impact_type == 'displacement'){
+    binned_preds = data.frame(
+      bin_lower = c(0, 10, 100, 1000, 10000, 100000, 1000000),
+      bin_upper = c(9, 99, 999, 9999, 99999, 999999, Inf),
+      ODDRIN_prob = NA)
+    binned_preds$label <- c(
+      "0 - 10",
+      "10 – 100",
+      "100 – 1000",
+      "1000 – 10,000",
+      "10,000 – 100,000",
+      "100,000 – 1,000,000",
+      "1,000,000+"
+    )
+  } else {
+    binned_preds = data.frame(
+      bin_lower = c(0, 1, 10, 100, 1000, 10000, 100000),
+      bin_upper = c(0, 9, 99, 999, 9999, 99999, Inf),
+      ODDRIN_prob = NA)
+    binned_preds$label <- c(
+      "0",
+      "1 – 10",
+      "10 – 100",
+      "100 – 1,000",
+      "1,000 – 10,000",
+      "10,000 – 100,000",
+      "100,000+"
+    )
+  }
+  
+  for (j in 1:nrow(binned_preds)){
+    oddrin_preds <- tot_impact
+    binned_preds$ODDRIN_prob[j] = mean((oddrin_preds >= binned_preds$bin_lower[j]) & (oddrin_preds <= binned_preds$bin_upper[j]))
+  }
+  #binned_preds$bin_upper[1] = 0
+  
+  if (impact_type == 'mortality'){
+    binned_preds$color <- cut(binned_preds$bin_lower, 
+                              breaks = c(-Inf, 1, 100, 1000, Inf), 
+                              labels = c("green", "yellow", "orange", "red"), 
+                              right = FALSE)
+  } else {
+    binned_preds$color <- cut(binned_preds$bin_lower, 
+                              breaks = c(-Inf, 10, 1000, 100000, Inf), 
+                              labels = c("green", "yellow", "orange", "red"), 
+                              right = FALSE)
+  }
+  
+  # Create the histogram
+  # hist_ODDRIN <- ggplot(binned_preds, aes(x = factor(paste(bin_lower, ' - ', bin_upper)), y = ODDRIN_prob, fill = color)) +
+  #   geom_bar(width=1,stat = "identity", color = "black") +  # Black border for clarity
+  #   scale_fill_identity() +  # Use pre-defined colors
+  #   labs(x = paste0(toupper(substr(impact_type, 1, 1)), substr(impact_type, 2, nchar(impact_type))), y = "Probability", title=paste('ODDRIN', impact_type)) +
+  #   theme_minimal() +
+  #   theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5),
+  #         panel.grid.major = element_blank(), 
+  #         panel.grid.minor = element_blank()) 
+  
+  binned_preds$percent <- (binned_preds$ODDRIN_prob / sum(binned_preds$ODDRIN_prob)) * 100
+  
+  hist_ODDRIN <- ggplot(
+    binned_preds,
+    aes(x = factor(label, levels = label), y = ODDRIN_prob, fill = color)
+  ) +
+    geom_bar(width = 1, stat = "identity", color = "black") +
+    geom_text(aes(label = paste0(round(percent, 1), "%")),
+              vjust = -0.5, size = 5, family = "Times New Roman") +
+    scale_fill_identity() +
+    labs(
+      x = paste0(toupper(substr(impact_type, 1, 1)), substr(impact_type, 2, nchar(impact_type))),
+      y = "Probability",
+      title = paste("ODDRIN", impact_type)
+    ) +
+    scale_y_continuous(expand=expansion(mult = c(0, 0.1))) +
+    theme_minimal() +
+    theme(
+      text = element_text(family = "Times New Roman", size=14),
+      #axis.text.x = element_text(angle = 0, hjust = 1),
+      plot.title = element_text(hjust = 0.5),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      panel.border   = element_rect(colour = "black", fill = NA, linewidth = 0.6)
+    ) +
+    coord_cartesian(clip = "off")
+  
+  return(hist_ODDRIN)
+  
+}
+
+
+
 
 ODDyAggWithImpact <- readODD('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_NewEvents/ODDAggobjects/EQ20230908MAR_-1_AggLevel5_WithImpact100_Mar25')
 plot_predictive_panel <- function(ODDyAggWithImpact, sampled_full){

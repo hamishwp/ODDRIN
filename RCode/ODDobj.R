@@ -391,6 +391,15 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   SincN<-paste0('p',seq(10,80,10), 'p', seq(20,90,10))
   Sinc<- data.frame() #ExtractCIndy(ODD,var = SincN)
   
+  ODD_df <- as.data.frame(ODD, na.rm=F)
+  
+  #ODD_df$ISO3C <- levels(ODD[['ISO3C']])[[1]]$VALUE[ODD_df$ISO3C]
+  
+  # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
+  nans_haz <- apply(ODD_df[,grep('hazMean', names(ODD_df)), drop=F], 1, function(x) all(is.na(x)))
+  
+  notnans<-which(!(is.na(ODD_df$Population) | is.na(ODD_df$ISO3C) | is.na(ODD_df$SHDI) | nans_haz))
+  
   #------------------------- GAUSSIAN PROCESS OVER ERRORS:
   
   # local_errors_all <- matrix(NA, nrow=ncell(ODD), ncol=Method$Np)
@@ -410,19 +419,27 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   
   #r <- rast(ODD)
   if(is.na(event_i)){
+    
     grid <- as.data.frame(xyFromCell(ODD, 1:ncell(ODD)))  # Extract grid coordinates
     names(grid) <- c("x", "y")  # Name the columns
-    vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 0.5)
+    vgm_model <- vgm(psill = 1, model = "Exp", range = 1)
     gstat_mod = gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
     
-    # r <- rast(ODD)
-    # r[['sim']] = as.matrix(predict(gstat_mod, newdata = grid, nsim = 1)[, 3])
+    # r <- ODD
+    # r[['sim']] = -3
+    # values(r[['sim']]) = as.numeric(as.matrix(predict(gstat_mod, newdata = grid, nsim = 1)[, 3]))
+    # plot(r[['sim']])
+    # 
+    
     # plot(r)
     # set.seed(1)
-    RF_local = as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
-    RF_mort = Omega$eps$local * Omega$eps$hazard_mort * RF_local
-    RF_disp = Omega$eps$local * Omega$eps$hazard_disp * ( Omega$eps$hazard_cor * RF_local + sqrt(1-Omega$eps$hazard_cor^2) * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)]))
-    RF_bd = Omega$eps$local * Omega$eps$hazard_bd * ( Omega$eps$hazard_cor * RF_local + sqrt(1-Omega$eps$hazard_cor^2) * as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)]))
+    Z_mort = as.matrix(predict(gstat_mod, newdata = grid[notnans,], nsim = Method$Np)[, 3:(2+Method$Np)])
+    Z_disp = as.matrix(predict(gstat_mod, newdata = grid[notnans,], nsim = Method$Np)[, 3:(2+Method$Np)])
+    Z_bd = as.matrix(predict(gstat_mod, newdata = grid[notnans,], nsim = Method$Np)[, 3:(2+Method$Np)])
+    RF_mort = Omega$eps$local * Omega$eps$hazard_mort * Z_mort
+    RF_disp = Omega$eps$local * Omega$eps$hazard_disp * ( Omega$eps$hazard_cor * Z_mort + sqrt(1-Omega$eps$hazard_cor^2) * Z_disp)
+    RF_bd = Omega$eps$local * Omega$eps$hazard_bd * ( Omega$eps$hazard_cor * Z_mort + sqrt(1-Omega$eps$hazard_cor^2) * (Omega$eps$hazard_cor/(1+Omega$eps$hazard_cor) * Z_disp + sqrt(1+2*Omega$eps$hazard_cor)/ (1+Omega$eps$hazard_cor) * Z_bd))
+    #RF_bd = Omega$eps$local * Omega$eps$hazard_bd * ( Omega$eps$hazard_cor * RF_local + sqrt(1-Omega$eps$hazard_cor^2) * as.matrix(predict(gstat_mod, newdata = grid[notnans,], nsim = Method$Np)[, 3:(2+Method$Np)]))
 
     #RF_local <- as.matrix(predict(gstat_mod, newdata = grid, nsim = Method$Np)[, 3:(2+Method$Np)])
     
@@ -434,11 +451,13 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   } else {
     #RF_local = Omega$u_local[[event_i]]
     
-    RF_local <- adrop(Omega$u_local[[event_i]][,,1, drop=F], drop=3)
-    RF_mort <- Omega$eps$local * Omega$eps$hazard_mort * RF_local
-    RF_disp = Omega$eps$local * Omega$eps$hazard_disp * ( Omega$eps$hazard_cor * RF_local + sqrt(1-Omega$eps$hazard_cor^2) * adrop(Omega$u_local[[event_i]][,,2, drop=F], drop=3))
-    RF_bd = Omega$eps$local * Omega$eps$hazard_bd * ( Omega$eps$hazard_cor * RF_local + sqrt(1-Omega$eps$hazard_cor^2) * adrop(Omega$u_local[[event_i]][,,3, drop=F], drop=3))
-  
+    Z_mort <- adrop(Omega$u_local[[event_i]][,,1, drop=F], drop=3)
+    Z_disp <- adrop(Omega$u_local[[event_i]][,,2, drop=F], drop=3)
+    Z_bd <- adrop(Omega$u_local[[event_i]][,,3, drop=F], drop=3)
+    RF_mort <- Omega$eps$local * Omega$eps$hazard_mort * Z_mort
+    RF_disp = Omega$eps$local * Omega$eps$hazard_disp * ( Omega$eps$hazard_cor * Z_mort + sqrt(1-Omega$eps$hazard_cor^2) * Z_disp)
+    RF_bd = Omega$eps$local * Omega$eps$hazard_bd * ( Omega$eps$hazard_cor * Z_mort + sqrt(1-Omega$eps$hazard_cor^2) * (Omega$eps$hazard_cor/(1+Omega$eps$hazard_cor) * Z_disp + sqrt(1+2*Omega$eps$hazard_cor)/ (1+Omega$eps$hazard_cor) * Z_bd))
+    
   }
   # RF_mort <- Omega$eps$local * RF_local
   # RF_disp <- Omega$eps$local * Omega$eps$hazard_disp / Omega$eps$hazard_mort * RF_local
@@ -457,15 +476,6 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   # ), c(1,3,2))
   
   #------------------------------------------------------
-  
-  ODD_df <- as.data.frame(ODD, na.rm=F)
-  
-  #ODD_df$ISO3C <- levels(ODD[['ISO3C']])[[1]]$VALUE[ODD_df$ISO3C]
- 
-  # Speed-up calculation (through accurate cpu-work distribution) to only values that are not NA
-  nans_haz <- apply(ODD_df[,grep('hazMean', names(ODD_df)), drop=F], 1, function(x) all(is.na(x)))
-  
-  notnans<-which(!(is.na(ODD_df$Population) | is.na(ODD_df$ISO3C) | is.na(ODD_df$SHDI) | nans_haz))
 
   # Calculate non-local linear predictor values
   LP<-GetLP(ODD_df,Omega,Params,Sinc,notnans, split_GNI=F)
@@ -486,7 +496,7 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   covar_matrix[upper.tri(covar_matrix)] = covar_matrix[lower.tri(covar_matrix)]
   
   
-  covar_matrix_local = covar_matrix * Omega$eps_adj$local
+  #covar_matrix_local = covar_matrix * Omega$eps_adj$local
   # covar_matrix_local[1,2] = covar_matrix_local[2,1]  = 1 * sqrt(covar_matrix_local[1,1] * covar_matrix_local[2,2])
   # covar_matrix_local[1,3] = covar_matrix_local[3,1]  =  1 * sqrt(covar_matrix_local[1,1] * covar_matrix_local[3,3])
   # covar_matrix_local[2,3] = covar_matrix_local[3,2]  =  1 * sqrt(covar_matrix_local[2,2] * covar_matrix_local[3,3])
@@ -500,177 +510,252 @@ setMethod("DispX", "ODD", function(ODD,Omega,center,
   if (is.na(event_i)){
     eps_event <- t(rmvnorm(Method$Np, rep(0, 3), sigma=covar_matrix))
   } else {
-    eps_event <-  chol(covar_matrix) %*% t(adrop(Omega$u[event_i,,, drop=F], drop=1))
+    eps_event <-  t(chol(covar_matrix)) %*% t(adrop(Omega$u[event_i,,, drop=F], drop=1))
   }
   #eps_event[,] <- 0
   
   #finish_time <-  Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
 
-  #Function to predict damage per gridpoint
-  CalcDam<-function(ij){
+  # Function to predict damage per gridpoint
+  # (slower than doing all grid points at once)
+  # CalcDam<-function(ij){
+  #   
+  #   index_notnans = match(ij, notnans)
+  #   eps_local_ij <- rbind(RF_mort[index_notnans,], RF_disp[index_notnans,], RF_bd[index_notnans,])
+  
+  #   locallinp<- LP[ij]
+  # 
+  #   lPopS <- rep(floor(ODD_df$Population[ij]), Method$Np)
+  #   
+  #   lPopDisp <- rep(0, Method$Np)
+  #   lPopMort <- rep(0, Method$Np)
+  #   tPop <-array(0,c(3, Method$Np)) 
+  #   tPop[3,]=lPopS
+  #   
+  # 
+  #   for(h_i in hrange_order){
+  #     
+  #     start_time <- Sys.time()
+  #     h <- hrange[h_i]
+  # 
+  #     if(is.na(ODD_df[ij,h])) next
+  #     
+  #     nonzero_pop <- which(lPopS != 0)
+  #     if (length(nonzero_pop)==0) next
+  # 
+  #     I_ij<-ODD_df[ij,h]
+  #     Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=1),Omega) + locallinp + event_lp[h_i], error=function(e) NA) #+ rep(eps_local[h_i,], each=8), error=function(e) NA)
+  #     
+  #     D_MortDisp <- D_MortDisp_calc(rep(Damage, length(nonzero_pop)), Omega, eps_event[1:2, nonzero_pop, drop=F] + eps_local_ij[1:2, nonzero_pop, drop=F]) #First row of D_MortDisp is D_Mort, second row is D_Disp
+  #     
+  #     D_Rem <- pmax(0, 1 - D_MortDisp[2,] - D_MortDisp[1,]) #probability of neither death nor displacement. Use pmax to avoid errors caused by numerical accuracy.
+  # 
+  #     Dam <- Fbdam(lPopS[nonzero_pop], D_MortDisp[2,], D_MortDisp[1,], D_Rem)
+  #     
+  #     lPopS[nonzero_pop] <- Dam[3,]
+  #     lPopDisp[nonzero_pop] <- lPopDisp[nonzero_pop] + Dam[1,]
+  #     lPopMort[nonzero_pop] <- lPopMort[nonzero_pop] + Dam[2,]
+  #     tPop[3,] <- lPopS
+  #     
+  #   }
+  #   
+  #   tPop[1,] <- lPopDisp
+  #   tPop[2,] <- lPopMort
+  #   
+  #   #ensure the total displaced, deceased or remaining does not exceed total population
+  #   tPop[tPop>ODD_df$Population[ij]] <- floor(ODD_df$Population[ij])
+  #   
+  #   #if no building destruction data:
+  #   if(!BD_data_present) return(list(samples=rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np))))#, 
+  # 
+  #   locallinp_buildings <- LP_buildings[ij]
+  #   
+  #   nUnaff = rep(ODD_df$nBuildings[ij], Method$Np)
+  #   nDam = rep(0, Method$Np)
+  #   
+  #   for (h_i in hrange_order){
+  #     h <- hrange[h_i]
+  #     if(is.na(ODD_df[ij,h])) next
+  #     if(all(nUnaff==0)) break #if no remaining buildings, skip modelling
+  # 
+  #     I_ij<-ODD_df[ij,h]
+  #     Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + event_lp[h_i], error=function(e) NA) #+ eps_local[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
+  # 
+  #     D_Dam <- D_Dam_calc(Damage, Omega, eps_event[3,] + eps_local_ij[3,])
+  #     
+  #     # Accumulate the number of buildings damaged/destroyed, but not the number of buildings remaining
+  #     nDam_new <- rbinom(Method$Np, nUnaff, D_Dam)
+  #     nUnaff <- nUnaff - nDam_new
+  #     nDam <- nDam + nDam_new
+  #   
+  #   }
+  # 
+  #   return(list(samples = rbind(tPop[1:2,,drop=FALSE], nDam[1:Method$Np])))
+  # }
+  
+  CalcDam_matrix <- function(indices) {
+    Np <- Method$Np
+    nI <- length(indices)
     
-    # elapsed_time <- c()
-    # start_time <- Sys.time()
-
-    #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochasticregen = finish_time-start_time); start_time <- Sys.time()
+    # state matrices [nI x Np]
+    Pop0   <- floor(ODD_df$Population[indices])
+    lPopS  <- matrix(Pop0, nI, Np)
+    lDisp  <- matrix(0, nI, Np)
+    lMort  <- matrix(0, nI, Np)
     
-    #eps_local_long <- rmvnorm(length(hrange)*Method$Np, rep(0,3), sigma=covar_matrix_local)
-    #eps_local_ij <- aperm(array(eps_local_long, dim=c(length(hrange), Method$Np, 3)), c(1,3,2))
-    #eps_local_ij[1,,] <- cbind(local_errors_all[ij,],local_errors_all[ij,],local_errors_all[ij,])
-    #eps_local_ij <- array(0, dim=c(length(hrange),3,Method$Np))
+    # local inputs
+    loc_pop <- LP[indices]
+    loc_bld <- if (exists("LP_buildings")) LP_buildings[indices] else NULL
     
-    #eps_local_ij <- RF_local[ij,]
-    eps_local_ij <- rbind(RF_mort[ij,], RF_disp[ij,], RF_bd[ij,])
+    # local eps stacked [3 x nI x Np]
+    eps_local <- array(0, dim = c(3, nI, Np))
+    eps_local[1,,] <- RF_mort
+    eps_local[2,,] <- RF_disp
+    eps_local[3,,] <- RF_bd
     
+    # mask NA hazards per site, precomputed
+    haz_cols = hrange[hrange_order]
+    H <- haz_cols
+    haz_mat <- as.matrix(ODD_df[indices, H, drop = FALSE])    # [nI x nH]
+    valid_h_per_site <- !is.na(haz_mat)
     
-    ##SLOWER:
-    # for (i in 1:Method$Np){
-    #   eps_local_ij[,,i] <- rmvnorm(length(hrange), rep(0,3), sigma=covar_matrix_local)
-    # }
-    # notnans_ij <- which(notnans==ij)
-    #eps_local_ij <- adrop(eps_local_transf[,,,notnans_ij, drop=F], drop=4)
-    
-    locallinp<- LP[ij] # LP$dGDP$linp[LP$dGDP$ind==LP$iGDP[ij]]*LP$Plinp[ij]*LP$linp[[iso3c]] 
-    
-    # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochasticreshape = finish_time-start_time); start_time <- Sys.time()
-    
-    # Sample population per income distribution (Assumes 8 percentiles):
-    # Population is split evenly between the income quantiles, with remainders randomly allocated between
-    lPopS <- rep(floor(ODD_df$Population[ij]), Method$Np) #+ rbinom(Method$Np,1, ODD_df$Population[ij] %% 1) 
-    #lPopS <- SplitSamplePop(Pop=ODD@data$Population[ij],Method$Np) #matrix(round(ODD@data$Population[ij]/length(locallinp)), nrow=length(locallinp), ncol = Method$Np)
-    #lPopS <- matrix(round(ODD@data$Population[ij]/ 8), nrow=8, ncol=Method$Np)
-    
-    # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
-    
-    
-    lPopDisp <- rep(0, Method$Np)
-    lPopMort <- rep(0, Method$Np)
-    tPop <-array(0,c(3, Method$Np)) #row 1 = tDisp, #row 2 = tMort, #row 3 = tRem
-    tPop[3,]=lPopS
-    
-    # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); 
-    
-    for(h_i in hrange_order){
+    # one hazard step updater (for Reduce)
+    step_fn <- function(state, h_idx) {
+      lPopS <- state$lPopS; lDisp <- state$lDisp; lMort <- state$lMort
       
-      #eps_local_ij[h_i,,] <- errors[ij,,] #array(NA, dim=c(1, 3, Method$Np))
-      #eps_local_ij[h_i,,] <- as.matrix(rbind(RF_local[ij,], RF_local[ij,], RF_local[ij,]))
+      I_vec <- haz_mat[, h_idx]                      # [nI]
+      active_sites <- which(valid_h_per_site[, h_idx] & rowSums(lPopS) > 0)
       
-      start_time <- Sys.time()
-      h <- hrange[h_i]
-
-      if(is.na(ODD_df[ij,h])) next
-      
-      nonzero_pop <- which(lPopS != 0)
-      if (length(nonzero_pop)==0) next
-      
-      
-      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
-      
-      ## Sample hazard Intensity 
-      ## Doesn't work very well as don't have the covariance of the errors, so must instead assume they are independent
-      ## So instead just use the mean value
-      # I_ij<-rnorm(n = Method$Np,
-      #             mean = ODD@data[ij,paste0("hazMean",h)],
-      #             sd = ODD@data[ij,paste0("hazSD",h)]/10)
-      I_ij<-ODD_df[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=1),Omega) + locallinp + event_lp[h_i], error=function(e) NA) #+ rep(eps_local[h_i,], each=8), error=function(e) NA)
-      
-      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, damcalc = finish_time-start_time); start_time <- Sys.time()
-      
-      #D_MortDisp <- D_MortDisp_calc(Damage, Omega, eps_event[1:2, nonzero_pop[,2], drop=F] + adrop(eps_local_ij[h_i,1:2,nonzero_pop[,2], drop=F], drop = 1)) #First row of D_MortDisp is D_Mort, second row is D_Disp
-      #D_MortDisp <- D_MortDisp_calc(Damage, Omega, sweep(eps_event[1:2, nonzero_pop[,2], drop=F], 2, eps_local_ij[nonzero_pop[,2], drop=F], "+")) #First row of D_MortDisp is D_Mort, second row is D_Disp
-      D_MortDisp <- D_MortDisp_calc(rep(Damage, length(nonzero_pop)), Omega, eps_event[1:2, nonzero_pop, drop=F] + eps_local_ij[1:2, nonzero_pop, drop=F]) #First row of D_MortDisp is D_Mort, second row is D_Disp
-      
-      
-      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, mortdisp = finish_time-start_time); start_time <- Sys.time()
-      
-      D_Rem <- pmax(0, 1 - D_MortDisp[2,] - D_MortDisp[1,]) #probability of neither death nor displacement. Use pmax to avoid errors caused by numerical accuracy.
-
-      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, d_rem = finish_time-start_time); start_time <- Sys.time()
-      
-      Dam <- Fbdam(lPopS[nonzero_pop], D_MortDisp[2,], D_MortDisp[1,], D_Rem)
-      
-      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, fbdam = finish_time-start_time); start_time <- Sys.time()
-      
-      lPopS[nonzero_pop] <- Dam[3,]
-      lPopDisp[nonzero_pop] <- lPopDisp[nonzero_pop] + Dam[1,]
-      lPopMort[nonzero_pop] <- lPopMort[nonzero_pop] + Dam[2,]
-      tPop[3,] <- lPopS
-      
-      # finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, sum_pops = finish_time-start_time); 
-      
-      # # This is a bit clearer than the above but slower:
-      # Accumulate the number of people displaced/deceased, but don't accumulate the remaining population
-      # tPop[3,ind]<-0
-      # for (s in 1:length(SincN)){ #Separate into income distributions (as each have 10% of population, order doesn't matter)
-      #   if(all(lPopS[s,]==0)) next
-      #   # Predict damage at coordinate {i,j} (vector with MC particles)
-      #   Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=sum(ind)),Omega) + locallinp[s] + eps_event[h_i,ind], error=function(e) NA)
-      #   if(any(is.na(Damage))) print(ij)
-      # 
-      #   #LOOSEEND: Include [ind] here
-      #   D_MortDisp <- D_MortDisp_calc(Damage, Omega) #First row of D_MortDisp is D_Mort, second row is D_Disp
-      #   D_Rem <- pmax(0, 1 - D_MortDisp[2,] - D_MortDisp[1,]) #probability of neither death nor displacement. Use pmax to avoid errors caused by numerical accuracy.
-      # 
-      #   tPop[,ind]<-tPop[,ind] + Fbdam(lPopS[s,ind],D_MortDisp[2,], D_MortDisp[1,], D_Rem)
-      # }
+      if (length(active_sites)) {
+        # damage driver per site
+        Damage <- fDamUnscaled(I_vec[active_sites], list(I0 = Params$I0, Np = 1L), Omega) +
+          loc_pop[active_sites] + event_lp[h_idx]
+        
+        # sims with positive remaining pop at those sites (mask per row)
+        has_pop <- lPopS[active_sites, , drop = FALSE] > 0
+        # loop-free per site by flattening active (site, sim) pairs
+        idx_mat <- which(has_pop, arr.ind = TRUE)      # rows in 1..length(active_sites), cols in 1..Np
+        if (nrow(idx_mat)) {
+          ai <- active_sites[idx_mat[,1]]
+          sj <- idx_mat[,2]
+          
+          # eps for the active pairs, shape (2 x n_active)
+          eps_pair <- rbind(eps_event[1, sj] + eps_local[cbind(1, ai, sj)],
+                            eps_event[2, sj] + eps_local[cbind(2, ai, sj)])
+          
+          # repeat Damage for each sim that is active
+          D_MortDisp <- D_MortDisp_calc(rep(Damage[idx_mat[,1]], 1), Omega, eps_pair)
+          D_Rem <- pmax(0, 1 - D_MortDisp[2, ] - D_MortDisp[1, ])
+          
+          # Fbdam per active pair
+          old_pop <- lPopS[cbind(ai, sj)]
+          Dam <- Fbdam(old_pop, D_MortDisp[2, ], D_MortDisp[1, ], D_Rem)
+          
+          # write back
+          lPopS[cbind(ai, sj)] <- Dam[3, ]
+          lDisp[cbind(ai, sj)] <- lDisp[cbind(ai, sj)] + Dam[1, ]
+          lMort[cbind(ai, sj)] <- lMort[cbind(ai, sj)] + Dam[2, ]
+        }
+      }
+      list(lPopS = lPopS, lDisp = lDisp, lMort = lMort)
     }
     
-    # start_time <- Sys.time()
+    # apply the hazard updates without an explicit for()
+    state0 <- list(lPopS = lPopS, lDisp = lDisp, lMort = lMort)
+    stateF <- Reduce(step_fn, seq_along(H), init = state0)
     
-    tPop[1,] <- lPopDisp
-    tPop[2,] <- lPopMort
+    # cap and pack
+    cap <- matrix(Pop0, nI, Np)
     
-    #ensure the total displaced, deceased or remaining does not exceed total population
-    tPop[tPop>ODD_df$Population[ij]] <- floor(ODD_df$Population[ij])
+    lDispF <- pmin(stateF$lDisp, cap)
+    lMortF <- pmin(stateF$lMort, cap)
     
-    # if (length(elapsed_time)==9) {return(elapsed_time)
-    # } else {(return(rep(0,9)))}
+    # pack as a 3 x nI x Np array (same ordering you used before)
+    tPop <- array(0, dim = c(nI, Np, 3))
+    tPop[,,1] <- lDispF
+    tPop[,,2] <- lMortF
     
-    #if no building destruction data:
-    if(!BD_data_present) return(list(samples=rbind(tPop[1:2,, drop=FALSE], rep(NA, Method$Np))))#, 
-
-    locallinp_buildings <- LP_buildings[ij]
-    
-    nUnaff = rep(ODD_df$nBuildings[ij], Method$Np)
-    nDam = rep(0, Method$Np)
-    
-    #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time); start_time <- Sys.time()
-    
-    for (h_i in hrange_order){
-      h <- hrange[h_i]
-      if(is.na(ODD_df[ij,h])) next
-      if(all(nUnaff==0)) break #if no remaining buildings, skip modelling
-
-      I_ij<-ODD_df[ij,h]
-      Damage <-tryCatch(fDamUnscaled(I_ij,list(I0=Params$I0, Np=Method$Np),Omega) + locallinp_buildings + event_lp[h_i], error=function(e) NA) #+ eps_local[h_i,], error=function(e) NA) #calculate unscaled damage (excluding GDP)
- 
-      D_Dam <- D_Dam_calc(Damage, Omega, eps_event[3,] + eps_local_ij[3,])
+    if (!BD_data_present) {
+      # If no building data, return NA matrix for buildings with same shape [nI x Np]
+      nDam <- matrix(NA_real_, nI, Np)
+    } else {
+      # initial states: unaff. buildings and cumulative damaged
+      nUnaff0 <- matrix(ODD_df$nBuildings[indices], nI, Np)
+      nDam0   <- matrix(0, nI, Np)
       
-      # Accumulate the number of buildings damaged/destroyed, but not the number of buildings remaining
-      nDam_new <- rbinom(Method$Np, nUnaff, D_Dam)
-      nUnaff <- nUnaff - nDam_new
-      nDam <- nDam + nDam_new
-    
+      step_bldg <- function(stateB, h_idx) {
+        nUnaff <- stateB$nUnaff
+        nDam   <- stateB$nDam
+        
+        # short-circuit if all gone
+        if (!any(nUnaff > 0)) return(list(nUnaff = nUnaff, nDam = nDam))
+        
+        I_vec <- haz_mat[, h_idx]   # [nI]
+        # sites that have a hazard value and at least one building remaining
+        active_sites <- which(valid_h_per_site[, h_idx] & rowSums(nUnaff) > 0)
+        
+        if (length(active_sites)) {
+          # site-level damage driver (scalar per site)
+          Damage_b_site <- fDamUnscaled(I_vec[active_sites], list(I0 = Params$I0, Np = 1L), Omega) +
+            loc_bld[active_sites] + event_lp[h_idx]
+          
+          # sims with remaining buildings at those sites
+          has_bld <- nUnaff[active_sites, , drop = FALSE] > 0
+          idx_mat <- which(has_bld, arr.ind = TRUE)  # rows in 1..length(active_sites), cols in 1..Np
+          
+          if (nrow(idx_mat)) {
+            ai <- active_sites[idx_mat[,1]]   # site indices in 1..nI
+            sj <- idx_mat[,2]                 # sim indices in 1..Np
+            
+            # elementwise eps for buildings (3rd row)
+            eps_b <- eps_event[3, sj] + eps_local[cbind(3, ai, sj)]
+            
+            # elementwise Damage (repeat per active pair)
+            Damage_b <- Damage_b_site[idx_mat[,1]]
+            
+            # per-pair damage probability (vector), clamp to [0,1]
+            p <- D_Dam_calc(Damage_b, Omega, eps_b)
+            p <- pmin(pmax(p, 0), 1)
+            
+            # draw damages (vectorized), then write back
+            n_old   <- nUnaff[cbind(ai, sj)]
+            n_new   <- rbinom(length(n_old), n_old, p)
+            
+            nUnaff[cbind(ai, sj)] <- n_old - n_new
+            nDam[cbind(ai, sj)]   <- nDam[cbind(ai, sj)] + n_new
+          }
+        }
+        
+        list(nUnaff = nUnaff, nDam = nDam)
+      }
+      
+      stateB0 <- list(nUnaff = nUnaff0, nDam = nDam0)
+      stateBF <- Reduce(step_bldg, seq_along(H), init = stateB0)
+      
+      nDam <- stateBF$nDam
     }
     
-    #finish_time <- Sys.time(); elapsed_time <- c(elapsed_time, stochastic_sample = finish_time-start_time);
+    tPop[,,3] = nDam
     
-    #return(elapsed_time)
-    
-    
-    return(list(samples = rbind(tPop[1:2,,drop=FALSE], nDam[1:Method$Np])))
+    return(tPop)
   }
   
-  Dam<-array(0,c(nrow(ODD_df),Method$Np,3)) # Dam[,,1] = Displacement, Dam[,,2] = Mortality, Dam[,,3] = Buildings Damaged
-  Dam_means<-array(0,c(nrow(ODD_df),3))
   
-  if(Method$NestedCores>1) { 
-    CalcDam_out <- mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$NestedCores)
-  } else  {CalcDam_out <- lapply(X = notnans,FUN = CalcDam)}
+  Dam<-array(0,c(nrow(ODD_df),Method$Np,3))
+  Dam[notnans,,] <- CalcDam_matrix(notnans)
   
-  Dam[notnans,,]<-aperm(simplify2array(lapply(CalcDam_out, function(x) x$samples)), perm=c(3,2,1))
+  # if(Method$NestedCores>1) { 
+  #   CalcDam_out <- mclapply(X = notnans,FUN = CalcDam,mc.cores = Method$NestedCores)
+  # } else  {CalcDam_out <- lapply(X = notnans,FUN = CalcDam)}
   
+  # start = Sys.time()
+  # CalcDam_out <- lapply(X = notnans,FUN = CalcDam_fast)
+  # print(Sys.time() - start)
+  # 
+  # start = Sys.time()
+  # CalcDam_out <- lapply(X = notnans,FUN = CalcDam)
+  # print(Sys.time() - start)
+
   if (output=='SampledFull'){
     return(Dam)
   } else if (output=='ODDyWithSampled'){

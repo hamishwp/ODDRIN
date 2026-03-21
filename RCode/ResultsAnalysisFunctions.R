@@ -90,6 +90,17 @@ library(zoo)
 addAlgoParams <- function(AlgoResults, s_finish=NULL){
   if(is.null(s_finish)){
     AlgoResults$s_finish <- which(is.na(AlgoResults$Omega_sample_phys[1,1,]))[1]-1
+    if (is.na(AlgoResults$s_finish)){
+      AlgoResults$s_finish = length(AlgoResults$Omega_sample_phys[1,1,])
+    }
+    # 
+    # #resample those with zero weight:
+    # zero_weights = which(AlgoResults$W[,AlgoResults$s_finish] == 0)
+    # nonzero_weights = which(AlgoResults$W[,AlgoResults$s_finish] != 0)
+    # replace_samples = sample(nonzero_weights, length(zero_weights), replace=T, prob=AlgoResults$W[nonzero_weights,AlgoResults$s_finish])
+    # AlgoResults$Omega_sample_phys[zero_weights,,AlgoResults$s_finish] = AlgoResults$Omega_sample_phys[,,AlgoResults$s_finish]
+    # AlgoResults$Omega_sample[zero_weights,,AlgoResults$s_finish] = AlgoResults$Omega_sample[,,AlgoResults$s_finish]
+    # 
     if(is.na(AlgoResults$s_finish)){
       acc = c()
       for (s in 2:length(AlgoResults$accrate_store)){
@@ -185,7 +196,8 @@ get_greek_titles = function(var_name){
   if (var_name == 'vuln_coeff.GNIc') return(expression(paste(beta[4], '  (GNIc)')))
   if (var_name == 'vuln_coeff.FirstHaz') return(expression(paste(beta[6], '  (FirstHaz)')))
   if (var_name == 'vuln_coeff.Night') return(expression(paste(beta[7], '  (Night)')))
-  if (var_name == 'vuln_coeff.FirstHaz.Night') return(expression(paste(beta[8], '  (FirstHaz x Night)')))
+  #if (var_name == 'vuln_coeff.FirstHaz.Night') return(expression(atop(beta[8], "(FirstHaz × Night)")))  #return(expression(paste(beta[8], '\n(FirstHaz x Night)')))
+  if (var_name == 'vuln_coeff.FirstHaz.Night') return(expression(paste(beta[8], " (FH × Night)")))
   if (var_name == 'theta.theta1') return('Dummy 1')
   if (var_name == 'check.check') return('Dummy 2')
   else return(var_name)
@@ -290,7 +302,7 @@ plot_correlated_posteriors_ggplot = function(
     }
     
     keep_iters <- start_iter:n_iter
-    keep_iters = intersect(keep_iters, which(mcmc_obj$HLP == 0))
+    #keep_iters = intersect(keep_iters, which(mcmc_obj$HLP == 0))
     # Subsample to match the posterior sample size
     keep_sub <- keep_iters[
       round(seq(1, length(keep_iters), length.out = nrow(post_samples)))]
@@ -333,7 +345,7 @@ plot_correlated_posteriors_ggplot = function(
       mcmc_list <- if (is.list(AlgoResultsMCMC)) AlgoResultsMCMC else list(AlgoResultsMCMC)
       mcmc_df_list <- lapply(mcmc_list, get_mcmc_samples, i = i, j = j, warmup = mcmc_warmup)
       df_mcmc <- bind_rows(mcmc_df_list)
-      df_mcmc = df_mcmc[seq(1,NROW(df_mcmc),5),]
+      df_mcmc = df_mcmc[seq(1,NROW(df_mcmc),6),]
       df_plot <- bind_rows(df_plot, df_mcmc)
     }
     
@@ -342,21 +354,39 @@ plot_correlated_posteriors_ggplot = function(
     df_post_only  <- df_plot %>% filter(source == "Posterior")
     df_mcmc_only  <- df_plot %>% filter(source == "MCMC")
     
+    if (!is.null(AlgoResultsMCMC)) {
+      legend_breaks <- c("Prior", "Posterior", "MCMC")
+      legend_labels <- c("Prior", "Posterior ABC-SMC", "Posterior ABC-MCMC")
+    } else {
+      legend_breaks <- c("Prior", "Posterior")
+      legend_labels <- c("Prior", "Posterior")
+    }
+    
     g <- ggplot() +
       geom_point(data = df_prior_only, aes(x = x, y = y, color = source), alpha = 0.6, size = 0.5) +
-      geom_point(data = df_post_only, aes(x = x, y = y, color = source), alpha = 0.6, size = 0.5) +
-      geom_point(data = df_mcmc_only, aes(x = x, y = y, color = source), alpha = 0.6, size = 0.5) +
-      scale_color_manual(values = c("Prior" = "#1FA187", "Posterior" = "#440154", "MCMC" = "red")) +
-      labs(
-        x = get_greek_titles(param_i),
-        y = get_greek_titles(param_j)
+      geom_point(data = df_post_only,  aes(x = x, y = y, color = source), alpha = 0.6, size = 0.5) +
+      geom_point(data = df_mcmc_only,  aes(x = x, y = y, color = source), alpha = 0.6, size = 0.5) +
+      scale_color_manual(
+        values = c("Prior" = "#1FA187", "Posterior" = "#440154", "MCMC" = "#FDE725"),
+        breaks = legend_breaks,
+        labels = legend_labels,
+        guide  = guide_legend(nrow = 1, override.aes = list(size = 2))
       ) +
+      labs(x = get_greek_titles(param_i), y = get_greek_titles(param_j)) +
       theme_minimal(base_family = "Liberation Serif") +
       theme(
-        legend.position = "none",
         plot.title = element_text(hjust = 0, size = 10),
-        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)
-      )
+        axis.title = element_text(size = 12),
+        axis.text  = element_text(size = 12),
+        legend.title = element_blank(),
+        axis.title.y = element_text(size = 12),
+        axis.text.y  = element_text(size = 12),
+        legend.position = "bottom",
+        legend.text     = element_text(size = 12),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
+      ) +
+      scale_x_continuous(expand = c(0, 0)) +
+      scale_y_continuous(expand = c(0, 0))
     
     if (!is.null(Omega)) {
       g <- g + geom_point(data = data.frame(x = unlist(Omega)[i], y = unlist(Omega)[j]),
@@ -384,7 +414,182 @@ plot_correlated_posteriors_ggplot = function(
   
   wrap_plots(plots, guides = "collect") + layout +
     plot_annotation(tag_levels = 'a', tag_prefix = "(", tag_suffix = ')') &
-    theme(plot.tag.position = c(0, 1), plot.tag = element_text(hjust = 0, size = 10))
+    theme(plot.tag.position = c(-0.02, 0.98), plot.tag = element_text(hjust = 0, size = 13),
+          legend.position = "bottom",
+          legend.box = "horizontal", legend.margin     = margin(0, 0, 0, 0))
+}
+
+plot_compare_two_mcmc_posteriors_ggplot <- function(
+    AlgoResults,
+    include_priors = TRUE,
+    Omega = NULL,
+    pairings = rbind(c(1,2), c(3,4), c(5,6), c(7,8), c(9,10), c(11,12)),
+    s_finish = NULL,
+    AlgoResultsMCMC_ES = NULL,   # Energy Score Only
+    AlgoResultsMCMC_RH = NULL,   # with Rank Histogram
+    mcmc_warmup = 0.8,
+    mcmc_warmup_es = 0.8,
+    subfig_title_adj = -0.4,
+    plots_ncol = NULL
+) {
+  
+  plots <- list()
+  AlgoResults %<>% addAlgoParams(s_finish)
+  
+  # Pull posterior samples (only for target length; we don't plot them here)
+  post_samples <- AlgoResults$Omega_sample_phys[
+    which(AlgoResults$W[, AlgoResults$s_finish] > 0), , AlgoResults$s_finish
+  ]
+  
+  # Priors (optional)
+  if (include_priors) {
+    prior_samples <- AlgoResults$Omega_sample_phys[, , 1]
+  }
+  
+  # Helper to process MCMC chains, subsampling to match post_samples rows
+  get_mcmc_samples <- function(mcmc_obj, i, j, warmup, target_n) {
+    MCMC_s_finish <- ifelse(any(is.infinite(mcmc_obj$loss)),
+                            which(is.infinite(mcmc_obj$loss))[1] - 1,
+                            length(mcmc_obj$loss))
+    n_iter <- MCMC_s_finish
+    
+    # Warmup handling (fraction or absolute)
+    if (length(warmup) == 1) {
+      if (warmup < 1) {
+        start_iter <- ceiling(n_iter * warmup) + 1
+      } else {
+        start_iter <- min(n_iter, warmup + 1)
+      }
+    } else {
+      start_iter <- ceiling(n_iter / 2)
+    }
+    
+    keep_iters <- start_iter:n_iter
+    if (length(keep_iters) == 0) return(data.frame(x = numeric(0), y = numeric(0)))
+    
+    # Subsample to ~ target_n draws
+    out_len <- min(length(keep_iters), target_n)
+    keep_sub <- keep_iters[round(seq(1, length(keep_iters), length.out = out_len))]
+    
+    data.frame(
+      x = mcmc_obj$Omega_sample_phys[i, keep_sub],
+      y = mcmc_obj$Omega_sample_phys[j, keep_sub]
+    )
+  }
+  
+  target_n <- nrow(post_samples)
+  
+  # Loop over parameter pairs
+  for (p in 1:NROW(pairings)) {
+    i <- pairings[p, 1]
+    j <- pairings[p, 2]
+    param_i <- names(unlist(Model$skeleton))[i]
+    param_j <- names(unlist(Model$skeleton))[j]
+    
+    # Build plotting data
+    df_plot <- list()
+    
+    if (include_priors) {
+      df_plot$prior <- data.frame(
+        x = prior_samples[, i],
+        y = prior_samples[, j],
+        source = "Prior"
+      )
+    }
+    
+    # MCMC: Energy Score Only (purple)
+    if (!is.null(AlgoResultsMCMC_ES)) {
+      mcmc_list_es <- if (is.list(AlgoResultsMCMC_ES)) AlgoResultsMCMC_ES else list(AlgoResultsMCMC_ES)
+      df_es <- dplyr::bind_rows(lapply(
+        mcmc_list_es,
+        get_mcmc_samples, i = i, j = j, warmup = mcmc_warmup_es, target_n = 450
+      ))
+      if (nrow(df_es)) df_plot$es <- transform(df_es, source = "Posterior (Energy Score Only)")
+    }
+    
+    # MCMC: with Rank Histogram (yellow)
+    if (!is.null(AlgoResultsMCMC_RH)) {
+      mcmc_list_rh <- if (is.list(AlgoResultsMCMC_RH)) AlgoResultsMCMC_RH else list(AlgoResultsMCMC_RH)
+      df_rh <- dplyr::bind_rows(lapply(
+        mcmc_list_rh,
+        get_mcmc_samples, i = i, j = j, warmup = mcmc_warmup, target_n = 300
+      ))
+      if (nrow(df_rh)) df_plot$rh <- transform(df_rh, source = "Posterior (Energy Score and Rank Histogram)")
+    }
+    
+    df_plot <- dplyr::bind_rows(df_plot)
+    
+    # Separate for plotting order (prior first, then ES, then RH)
+    df_prior <- dplyr::filter(df_plot, source == "Prior")
+    df_es    <- dplyr::filter(df_plot, source == "Posterior (Energy Score Only)")
+    df_rh    <- dplyr::filter(df_plot, source == "Posterior (Energy Score and Rank Histogram)")
+    
+    legend_breaks <- c("Prior", "Posterior (Energy Score Only)", "Posterior (Energy Score and Rank Histogram)")
+    legend_labels <- legend_breaks
+    
+    g <- ggplot() +
+      geom_point(data = df_prior, aes(x = x, y = y, color = source), alpha = 0.6, size = 0.5) +
+      geom_point(data = df_rh,    aes(x = x, y = y, color = source), alpha = 0.6, size = 0.5) +
+      geom_point(data = df_es,    aes(x = x, y = y, color = source), alpha = 0.6, size = 0.5) +
+      scale_color_manual(
+        values = c(
+          "Prior"                              = "#1FA187",  # green
+          "Posterior (Energy Score Only)"      = "#FDE725",  # purple
+          "Posterior (Energy Score and Rank Histogram)"    = "#440154"   # yellow
+        ),
+        breaks = legend_breaks,
+        labels = legend_labels,
+        guide  = guide_legend(nrow = 1, override.aes = list(size = 2))
+      ) +
+      labs(x = get_greek_titles(param_i), y = get_greek_titles(param_j)) +
+      theme_minimal(base_family = "Liberation Serif") +
+      theme(
+        plot.title   = element_text(hjust = 0, size = 10),
+        axis.title   = element_text(size = 12),
+        axis.text    = element_text(size = 12),
+        legend.title = element_blank(),
+        legend.text  = element_text(size = 12),
+        legend.position = "bottom",
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
+      ) +
+      scale_x_continuous(expand = c(0, 0)) +
+      scale_y_continuous(expand = c(0, 0))
+    
+    if (!is.null(Omega)) {
+      g <- g + geom_point(
+        data = data.frame(x = unlist(Omega)[i], y = unlist(Omega)[j]),
+        aes(x = x, y = y), shape = 4, size = 3, stroke = 1.5, color = "red"
+      )
+    }
+    
+    plots[[p]] <- g
+  }
+  
+  # Layout
+  if (!is.null(plots_ncol)) {
+    layout <- patchwork::plot_layout(ncol = plots_ncol)
+  } else {
+    n <- NROW(pairings)
+    layout <- if (n >= 9) {
+      patchwork::plot_layout(ncol = 5)
+    } else if (n > 7) {
+      patchwork::plot_layout(ncol = 4)
+    } else if (n == 6){
+      patchwork::plot_layout(ncol = 6)
+    } else {
+      patchwork::plot_layout(ncol = 5)
+    }
+  }
+  
+  patchwork::wrap_plots(plots, guides = "collect") + layout +
+    patchwork::plot_annotation(tag_levels = 'a', tag_prefix = "(", tag_suffix = ')') &
+    theme(
+      plot.tag.position = c(-0.02, 0.98),
+      plot.tag = element_text(hjust = 0, size = 13),
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      legend.margin = margin(0, 0, 0, 0)
+    )
 }
 # 
 # plot_correlated_posteriors_ggplot = function(AlgoResults, include_priors=T, Omega=NULL,
@@ -489,66 +694,98 @@ plot_correlated_posteriors_ggplot = function(
 plot_vuln_posteriors = function(AlgoResults, include_priors=T, Omega=NULL,
                                       pairings=rbind(c(1,2), c(3,4), c(5,6), c(7,8), c(9,10), c(11,12)), s_finish=NULL){
   
+  library(ggplot2)
+  library(patchwork)
+  library(grid)
+  
   AlgoResults %<>% addAlgoParams(s_finish)
-  post_samples <- AlgoResults$Omega_sample_phys[,,AlgoResults$s_finish]
+  post_samples <- AlgoResults$Omega_sample_phys[
+    which(AlgoResults$W[, AlgoResults$s_finish] > 0), , AlgoResults$s_finish]
   if (include_priors) prior_samples <- AlgoResults$Omega_sample_phys[,,1]
   
   vuln_var <- grep('vuln', names(unlist(Model$skeleton)))
-
   vuln_var <- vuln_var[c(4,1,2,3,5,6,7,8)]
-  plot_list <- list()
   
-  # Define subfigure labels (a), (b), (c), ...
+  plot_list <- vector("list", length(vuln_var))
+  
+  # subfigure labels handled by patchwork
   subfig_labels <- letters[1:8]
   
-  # Loop through the variables and generate each plot
   for (i in seq_along(vuln_var)) {
     var <- vuln_var[i]
+    name_i <- names(unlist(Model$skeleton))[var]
     
+    p_H_given_y <- mean(post_samples[, var] > 0)
+    if (exists("prior_samples")) {
+      p_H <- mean(prior_samples[, var] > 0)
+      message(sprintf("Bayes factor for %s : %.3f",
+                      name_i,
+                      p_H_given_y * (1 - p_H) / ((1 - p_H_given_y) * p_H)))
+    }
+    message(sprintf("Post Weight Positive %s : %.3f", name_i, p_H_given_y))
     
-    p_H_given_y = sum(post_samples[,var]>0)/length(post_samples[,var])
-    p_H = sum(prior_samples[,var]>0)/length(prior_samples[,var])
-    print(paste('Post Weight Positive', names(unlist(Model$skeleton))[var], ':', round(p_H_given_y, 3)))
-    print(paste('Bayes factor for', names(unlist(Model$skeleton))[var], ':', round(p_H_given_y * (1-p_H)/((1-p_H_given_y)*p_H), 3)))
+    post_median <- median(post_samples[, var])
     
-    post_median = median(post_samples[,var])
+    # ---- force evaluation here ----
+    df_post <- data.frame(x = post_samples[, var])
     
-    # Create each plot and store it in the plot_list
-    plot <- ggplot() +
-      # Add the histogram from the posterior samples
-      geom_histogram(aes(x = post_samples[, var], y = ..density..), 
-                     bins = 30, fill = "#440154", color='#440154', lwd=0.5, alpha=0.4) +
-      geom_density(aes(x = prior_samples[, var]), color = "#1FA187", size = 0.7) +
-      geom_vline(xintercept = 0, color = "#1FA187", linetype = "dashed", size = 0.7) +
-      geom_vline(xintercept = post_median, color = "#440154", linetype = "dashed", size = 0.7) +
-      scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
-      labs(x = get_greek_titles(names(unlist(Model$skeleton))[var])) +
-      xlim(c(-1, 1)) +
-      theme_minimal() +
+    # Laplace prior curve
+    laplace_b  <- 0.2
+    laplace_mu <- 0
+    x_min <- -1; x_max <- 1
+    df_lap <- data.frame(x = seq(x_min, x_max, length.out = 600))
+    df_lap$y <- (1 / (2 * laplace_b)) * exp(-abs(df_lap$x - laplace_mu) / laplace_b)
+    
+    p <- ggplot() +
+      geom_area(data = df_lap, aes(x = x, y = y, fill = "Prior"), alpha = 0.35, show.legend = TRUE) +
+      geom_line(data = df_lap, aes(x = x, y = y), color = "#1FA187", linewidth = 0.7, show.legend = FALSE) +
+      geom_histogram(
+        data = df_post,
+        aes(x = x, y = after_stat(density), fill = "Posterior"),
+        bins = 30, color = "#440154", linewidth = 0.5, alpha = 0.35, show.legend = TRUE
+      ) +
+      geom_vline(xintercept = 0,           color = "#1FA187", linetype = "dashed", linewidth = 0.7) +
+      geom_vline(xintercept = post_median, color = "#440154", linetype = "dashed", linewidth = 0.7) +
+      scale_y_continuous(expand = c(0, 0)) +
+      scale_x_continuous(limits = c(x_min, x_max), expand = c(0, 0)) +
+      labs(x = get_greek_titles(name_i), y = "Density") +
+      scale_fill_manual(
+        name   = NULL,
+        breaks = c("Prior", "Posterior"),
+        values = c("Prior" = "#1FA187", "Posterior" = "#440154"),
+        guide  = guide_legend(nrow = 1, override.aes = list(alpha = 0.5))
+      ) +
+      theme_minimal(base_family = "Liberation Serif") +
       theme(
-        axis.title.y = element_blank(),  # Change y-axis title font
-        axis.text.x = element_text(family = "Times New Roman", size = 12),   # Change x-axis text font
-        axis.text.y = element_blank(),  # Remove y-axis text (numbers)
-        axis.ticks.y = element_blank(), # Remove y-axis ticks
-        axis.title.x = element_text(family = "Times New Roman", size = 12),  # Change x-axis title font
-        plot.title = element_text(family = "Times New Roman", size = 14),
-        panel.border = element_rect(color = "black", fill = NA, size = 0.5),
-        plot.margin = unit(c(0, 20, 0, 15), "pt")
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12),
+        axis.text.x  = element_text(size = 12),
+        axis.text.y  = element_text(size = 12),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+        plot.title   = element_text(hjust = 0, size = 10),
+        plot.margin  = grid::unit(c(0, 20, 0, 15), "pt")
       )
     
-    # Add subfigure label to each plot
-    plot_with_label <- arrangeGrob(plot, #padding = unit(c(0, 20), "pt"),
-                                   top = textGrob(paste0("(", subfig_labels[i], ")"),
-                                                  x = unit(0.0, "npc"), y = unit(1, "npc"), just = c("left", "top"),
-                                                  gp = gpar(fontsize = 14, fontfamily = "Times New Roman"))
-    )
-    
-    # Store the labeled plot in the list
-    plot_list[[i]] <- plot_with_label
+    plot_list[[i]] <- p
   }
   
-  # Arrange all 8 plots in a 2x4 grid
-  grid.arrange(grobs = plot_list, ncol = 4, nrow = 2)
+  # Arrange 2x4 with a single legend and per-panel tags
+  plot_list[1:4] <- lapply(plot_list[1:4], function(p) p + theme(plot.margin = unit(c(0, 20, 10, 15), "pt")))
+  
+  final_plot <- wrap_plots(plot_list, ncol = 4, nrow = 2, guides = "collect") +
+    plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")") &
+    theme(
+      legend.position   = "bottom",
+      legend.box        = "horizontal",
+      legend.box.margin = margin(0, 0, 0, 0),
+      legend.margin     = margin(0, 0, 0, 0),
+      legend.text       = element_text(size = 12),
+      # move the (a) … tags down slightly
+      plot.tag.position = c(-0.03, 0.97),              # ← adjust 0.96 as needed
+      plot.tag          = element_text(hjust = 0, size = 13)
+    )
+  
+  final_plot
   
 
 }
@@ -1204,6 +1441,8 @@ plot_df_postpredictive <- function(df_poly_jitter, impact_type, label_points=F){
   print(paste('R squared log', R_squared_log))
 
   if (impact_type == 'mortality'){
+    lims <- range(c(0, (df_poly_jitter %>% filter(impact == impact_type))$observed, (df_poly_jitter %>% filter(impact == impact_type))[paste0('sampled.', M_upper)]), na.rm = TRUE)
+    
     plot <- ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=get(paste0('sampled.', M_median)), 
                                                                                ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)), label=file_name)) + 
       #ggplot(df_poly_jitter %>% filter(impact==impact_type), mapping=aes(x=observed, y=means_sampled, ymin=get(paste0('sampled.', M_lower)), ymax=get(paste0('sampled.', M_upper)))) + 
@@ -1212,15 +1451,18 @@ plot_df_postpredictive <- function(df_poly_jitter, impact_type, label_points=F){
       scale_x_continuous(
         trans = scales::pseudo_log_trans(sigma = 1, base = 10),
         breaks = c(0, 10, 100, 1000, 10000, 100000),
-        labels = scales::comma_format(),
-        minor_breaks = NULL
+        labels = expression(phantom(1) * 0^phantom(0),phantom(1) * 10^phantom(1),10^2,10^3, 10^4, 10^5),
+        minor_breaks = NULL,
+        expand = expansion(add=c(0.04,0.2))
       ) +
       scale_y_continuous(
         trans = scales::pseudo_log_trans(sigma = 1, base = 10),
         breaks = c(0, 10, 100, 1000, 10000, 100000),
-        labels = scales::comma_format(),
-        minor_breaks = NULL
+        labels = expression(phantom(1) * 0^phantom(0),phantom(1) * 10^phantom(1),10^2,10^3, 10^4, 10^5),
+        minor_breaks = NULL,
+        expand = expansion(add=c(0.04,0.2))
       ) +
+      coord_equal(xlim = lims, ylim = lims) +
       # scale_x_continuous(trans='log10', 
       #                    breaks = scales::trans_breaks("log10", function(x) 10^x, labels = scales::trans_format("log10")), 
       #                    labels = scales::comma) + 
@@ -1233,12 +1475,15 @@ plot_df_postpredictive <- function(df_poly_jitter, impact_type, label_points=F){
       #scale_y_continuous(trans=scales::pseudo_log_trans(sigma=5,base = 10), breaks = c(0,10,100,1000, 10000, 100000), labels= scales::comma_format(),  minor_breaks =NULL) + 
       #geom_pointrange(aes(col=train_flag)) + 
       geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
-      ylab(paste('Sampled', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + xlab(paste('Observed', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + scale_color_manual(values = c('red', 'blue')) + 
+      ylab(paste('Predicted', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + xlab(paste('Observed', ifelse(impact_type=='buildDam', 'building damage', impact_type))) + scale_color_manual(values = c('red', 'blue')) + 
       theme_bw() +
       theme(axis.title = element_text(family = "Liberation Serif", size=12),  
             legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
-            legend.title = element_text(family = "Liberation Serif", size=12)) 
+            legend.title = element_text(family = "Liberation Serif", size=12),
+            panel.border = element_rect(color = "black", fill = NA, size = 0.5)) 
   } else {
+    
+    lims <- range(c(0, (df_poly_jitter %>% filter(impact == impact_type))$observed, (df_poly_jitter %>% filter(impact == impact_type))[paste0('sampled.', M_upper)]), na.rm = TRUE)
     
     plot <- ggplot(df_poly_jitter %>% filter(impact == impact_type),
                    mapping = aes(x = observed, 
@@ -1252,27 +1497,30 @@ plot_df_postpredictive <- function(df_poly_jitter, impact_type, label_points=F){
       scale_x_continuous(
         trans = scales::pseudo_log_trans(sigma = 100, base = 10),
         breaks = c(0, 1000, 10000, 100000, 1000000, 10000000),
-        labels = scales::comma_format(),
-        minor_breaks = NULL
+        labels = expression(phantom(1) * 0^phantom(0),10^3, 10^4,10^5, 10^6, 10^7),
+        minor_breaks = NULL,
+        expand = expansion(add=c(0.04,0.2))
       ) +
       
       scale_y_continuous(
         trans = scales::pseudo_log_trans(sigma = 100, base = 10),
         breaks = c(0, 1000, 10000, 100000, 1000000, 10000000),
-        labels = scales::comma_format(),
-        minor_breaks = NULL
+        labels = expression(phantom(1) * 0^phantom(0),10^3,10^4,10^5, 10^6, 10^7),
+        minor_breaks = NULL,
+        expand = expansion(add=c(0.04,0.2))
       ) +
-      
+      coord_equal(xlim = lims, ylim = lims) +
       geom_abline(slope = 1, intercept = 0) + 
       theme(aspect.ratio = 1) + 
-      ylab(paste('Sampled', ifelse(impact_type == 'buildDam', 'building damage', impact_type))) + 
+      ylab(paste('Predicted', ifelse(impact_type == 'buildDam', 'building damage', impact_type))) + 
       xlab(paste('Observed', ifelse(impact_type == 'buildDam', 'building damage', impact_type))) + 
       scale_color_manual(values = c('red', 'blue')) + 
       theme_bw() +
       theme(
         axis.title = element_text(family = "Liberation Serif", size = 12),  
         legend.text = element_text(family = "Liberation Serif", size = 11),
-        legend.title = element_text(family = "Liberation Serif", size = 12)
+        legend.title = element_text(family = "Liberation Serif", size = 12),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5)
       )
     # plot <- ggplot() + 
     #   #geom_errorbar() + 
@@ -1320,10 +1568,10 @@ plot_df_postpredictive_compare <- function(df_poly1, df_poly2, impact_type){
   df_poly2[,grep('sampled', names(df_poly2))] <- t(apply(df_poly2[,grep('sampled', names(df_poly2))],1,sort))
   
   M <- length(grep('sampled', names(df_poly1)))
-  M_lower <- round(quantile(1:M, 0.05))
+  M_lower <- round(quantile(1:M, 0.025))
   M_lower <- ifelse(M_lower==0, 1, M_lower)
   M_median <- round(quantile(1:M, 0.5))
-  M_upper <- round(quantile(1:M, 0.95))
+  M_upper <- round(quantile(1:M, 0.975))
   df_poly1$means_sampled <- apply(df_poly1[,grep("sampled",names(df_poly1),value = T)], 1, median)
   df_poly2$means_sampled <- apply(df_poly2[,grep("sampled",names(df_poly2),value = T)], 1, median)
   
@@ -1376,7 +1624,7 @@ plot_df_postpredictive_compare <- function(df_poly1, df_poly2, impact_type){
     scale_y_continuous(trans=scales::pseudo_log_trans(sigma=2,base = 10), breaks = c(0,10,100,1000, 10000, 100000), labels= scales::comma_format(),  minor_breaks =NULL, expand=expansion(mult=c(0, 0.05))) + 
     #geom_pointrange(aes(col=train_flag)) + 
     geom_abline(slope=1, intercept=0) + theme(aspect.ratio=1) + 
-    ylab(paste('Sampled', impact_type)) + xlab(paste('Observed', impact_type)) + scale_color_manual(values = c('black', 'red')) + theme_bw()  + labs(color='Median and 90% Credible Interval:   ') +
+    ylab(paste('Predicted', impact_type)) + xlab(paste('Observed', impact_type)) + scale_color_manual(values = c('black', 'red')) + theme_bw()  + labs(color='') +#labs(color='Median and 95% Credible Interval:   ') +
     theme(axis.title = element_text(family = "Liberation Serif", size=12),  
           legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
           legend.title = element_text(family = "Liberation Serif", size=12)) #, 
@@ -1627,7 +1875,34 @@ c(157, 'green', 'GRC', '2021-03-04'),
 c(160, 'orange', 'IRN', '2021-04-18'),
 c(163, 'green', 'TJK', '2021-07-10'),
 c(166, 'orange', 'IRN', '2022-07-02'),
-c(170, 'red', 'AFG', '2015-10-26')
+c(170, 'red', 'AFG', '2015-10-26'),
+c(70, 'red', 'IRN', '2017-11-12'),
+c(68, 'orange', 'MEX', '2017-09-19'),
+c(140, 'orange', 'CYM', '2020-01-28'),
+c(5, 'green', 'COL', '2013-02-09'),
+c(8, 'orange', 'CHN', '2013-04-20'),
+c(164, 'red', 'HTI', '2021-08-14'),
+c(124, 'orange', 'PHL', '2019-10-16'),
+c(167, 'orange', 'PHL', '2022-07-27'),
+c(112, 'green', 'JPN', '2019-06-18'),
+c(153, 'orange', 'ARG', '2021-01-18'),
+c(131, 'green', 'LAO', '2019-11-21'),
+c(98, 'orange', 'IRN', '2018-11-25'),
+c(74, 'green', 'IRN', '2017-12-01'),
+c(65, 'red', 'PHL', '2017-07-06'),
+c(138, 'orange', 'CHN', '2020-01-19'),
+c(20, 'green', 'NIC', '2014-04-10'),
+c(88, 'green', 'JPN', '2018-06-18'),
+c(17, 'green', 'IRN', '2013-11-28'),
+c(34, 'green', 'IDN', '2015-11-04'),
+c(50, 'orange', 'PER', '2016-12-01'),
+c(46, 'green', 'CHN', '2016-10-17'),
+c(128, 'null', 'FRA', '2019-11-11'),
+c(91, 'green', 'VUT', '2018-08-22'),
+c(116, 'green', 'PHL', '2019-07-09'),
+c(97, 'green', 'HTI', '2018-10-06'),
+c(156, 'green', 'IRN', '2021-02-17'),
+c(53, 'green', 'ECU', '2016-12-19')
 )
 
 gdacs_df = data.frame(gdacs_df)
@@ -1677,7 +1952,10 @@ pager_compare <- function(df_poly_jitter, impact_type){
     cum_prob_pager <- 0
     cum_obs_oddrin <- 0
     cum_obs_pager <- 0
-    if (length(HAZy$hazard_info$alertfull[[which.max.mmi]]$bins) != 7) warning(paste('Check alert bins for event id:',df_poly_jitter$event_id[i]))
+    if (length(HAZy$hazard_info$alertfull[[which.max.mmi]]$bins) != 7){
+      warning(paste('Check alert bins for event id:',df_poly_jitter$event_id[i]))
+      #print(HAZy$hazard_info$alertfull[[which.max.mmi]]$bins)
+    } 
     for (j in 1:7){
       oddrin_preds <- df_poly_jitter[i,grep('sampled.', names(df_poly_jitter))]
       oddrin_prob = mean((oddrin_preds >= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$min) & (oddrin_preds <= HAZy$hazard_info$alertfull[[which.max.mmi]]$bins[[j]]$max))
@@ -1733,8 +2011,10 @@ pager_compare <- function(df_poly_jitter, impact_type){
   
   mean(df_poly_jitter$oddrin_rps)
   mean(df_poly_jitter$pager_rps)
-  sum(df_poly_jitter$oddrin_rps[order( df_poly_jitter$oddrin_rps - df_poly_jitter$pager_rps, decreasing=T)][1:57])
-  sum(df_poly_jitter$pager_rps[order(df_poly_jitter$oddrin_rps - df_poly_jitter$pager_rps , decreasing=T)][1:57])
+  
+  
+  sum(df_poly_jitter$oddrin_rps[order( df_poly_jitter$oddrin_rps - df_poly_jitter$pager_rps, decreasing=T)][1:50])
+  sum(df_poly_jitter$pager_rps[order(df_poly_jitter$oddrin_rps - df_poly_jitter$pager_rps , decreasing=T)][1:50])
   
   sum(df_poly_jitter$oddrin_rps[order( df_poly_jitter$oddrin_rps - df_poly_jitter$pager_rps, decreasing=T)][1:57])
   sum(df_poly_jitter$pager_rps[order(df_poly_jitter$oddrin_rps - df_poly_jitter$pager_rps , decreasing=T)][1:57])
@@ -1888,7 +2168,8 @@ add_covar <- function(df_poly, covars='EQFreq', dat='all'){
     df_poly[[covar]] <- NA
   }
   df_poly$file_name = NA
-  
+  df_poly$lat = NA
+  df_poly$lon = NA
   for(i in 1:NROW(df_poly)){
     file_match <- grep(paste0("_", df_poly$event_id[i], "\\b"),  ufiles, value = TRUE)
     if (length(file_match) > 1) stop('Multiple ODD files for event with the same ID.')
@@ -1904,6 +2185,8 @@ add_covar <- function(df_poly, covars='EQFreq', dat='all'){
     }
     haz_max = apply(values(ODDy[grep("hazMean",names(ODDy),value = T), drop=F]),1,max, na.rm=T)
     poly_haz_restricted = which(haz_max - max(haz_max)> -1)
+    df_poly$lon[i] = xyFromCell(ODDy, ncell(ODDy)/2+1)[1]
+    df_poly$lat[i] = xyFromCell(ODDy, ncell(ODDy)/2+1)[2]
     for (covar in covars){
       
       if (covar == 'hazMean'){
@@ -1913,6 +2196,15 @@ add_covar <- function(df_poly, covars='EQFreq', dat='all'){
         df_poly[['Pop8.5']][i] = sum(ODDy$Population[apply(values(ODDy[grep("hazMean",names(ODDy),value = T), drop=F])>8.5,1, any)], na.rm=T)
       } else if (covar == 'shakeSD'){
         df_poly[['shakeSD']][i] = max(values(ODDy[grep("hazSD",names(ODDy),value = T)]), na.rm=T)
+        
+        means <- stack(ODDy[[grep("^hazMean\\d+$", names(ODDy), value = TRUE)]])
+        sds   <- stack(ODDy[[sub("^hazMean", "hazSD", grep("^hazMean\\d+$", names(ODDy), value = TRUE))]])
+        
+        M <- getValues(means)
+        M[is.na(M)] <- -Inf
+        max_id = which(M==max(M), arr.ind=T)[1,]
+        
+        df_poly[['shakeSD_epicentre']][i] = values(sds)[max_id[1], max_id[2]]
       } else if (covar == 'region'){
         iso3_epi = as.character(
           ODDy$ISO3C[which(values(!is.na(ODDy$ISO3C)))]$ISO3C[
@@ -2246,6 +2538,7 @@ plot_covar_vs_error = function(df_poly, covar='EQFreq', dat='all', s_finish=NULL
   }
   
   df_poly %<>% add_hazard_info()
+
   df_poly %<>% add_covar(covars=c('hazMean', 'EQFreq', 'Vs30', 'SHDI', 'PDens', 'region', 'shakeSD'), dat=dat)
   
   df_poly$time_numeric = as.numeric(format(as.POSIXct(df_poly$time, format = "%H:%M:%S"), "%H")) + as.numeric(format(as.POSIXct(df_poly$time, format = "%H:%M:%S"), "%M") )/60
@@ -3271,4 +3564,310 @@ plot_joint <- function(event_ids=c(16, 23, 31, 67, 68, 70, 89, 94, 124, 125, 135
       }
     }
   }
+}
+
+
+mcmc_trace <- function(..., var_plot = 7:10, xlim = c(4000, 8000), ncol=4, Omega = NULL) {
+  
+  chains <- list(...)
+  num_chains <- length(chains)
+  
+  if (num_chains < 1) {
+    stop("At least one chain must be provided.")
+  }
+  
+  # Define subfigure labels (a), (b), (c), ...
+  subfig_labels <- letters[1:20]
+  plot_list <- list()
+  
+  for (i in seq_along(var_plot)) {
+    var <- var_plot[i]
+    
+    # Create base data frame with x values
+    post_samples <- data.frame(x = (xlim[1]:xlim[2]) - xlim[1])
+    
+    # Loop through each chain and add its samples to the data frame
+    for (j in seq_along(chains)) {
+      chain_name <- paste0("Chain", j)
+      post_samples[[chain_name]] <- chains[[j]]$Omega_sample_phys[var, xlim[1]:xlim[2]]
+    }
+    
+    # Convert to long format
+    post_samples_long <- post_samples %>%
+      pivot_longer(cols = -x, names_to = "Parameter", values_to = "Value")
+    
+    
+    if (length(grep('vuln_coeff.', names(unlist(Model$skeleton))[var])>0)){
+      y_lb = -1
+      y_ub = 1
+    } else {
+      y_lb = Model$par_lb[var]
+      y_ub = Model$par_ub[var]
+    }
+    
+    # Plot the lines
+    plot <- ggplot(data = post_samples_long, aes(x = x, y = Value, color = Parameter)) +
+      labs(y = get_greek_titles(names(unlist(Model$skeleton))[var]),
+           x = 'Iteration') +
+      scale_x_continuous(breaks=c(0, 10000, 20000), labels = expression(phantom(1) * 0^phantom(0),1 %*% 10^4,2 %*% 10^4)) +
+      scale_y_continuous(limits = c(y_lb, y_ub), expand = c(0.01, 0.01)) +
+      geom_line(alpha = 0.8) +
+      theme_minimal() +
+      scale_color_viridis(discrete = TRUE) +
+      theme(
+        axis.ticks.x = element_line(color = "black", size = 0.5),
+        axis.title.y = element_text(family = "Times New Roman", size = 12),
+        #axis.text.x = element_text(family = "Times New Roman", size = 12),
+        axis.text.y = element_text(family = "Times New Roman", size = 12),
+        axis.ticks.y = element_blank(),
+        axis.title.x = element_text(family = "Times New Roman", size = 12),
+        plot.title = element_text(family = "Times New Roman", size = 14),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+        plot.margin = unit(c(5, 20, 5, 15), "pt"),
+        legend.position = "none"
+      )
+    
+    if (!is.null(Omega)){
+      plot = plot + geom_abline(slope=0,intercept = unlist(Omega)[var], col='red')
+    }
+    
+    # Add subfigure label
+    plot_with_label <- cowplot::ggdraw(plot) +
+      cowplot::draw_label(
+        paste0("(", subfig_labels[i], ")"),
+        x = 0.03, y = 0.985,              # inside the panel; adjust as needed
+        hjust = 0, vjust = 1,
+        fontfamily = "Times New Roman", size = 14
+      )
+    
+    plot_list[[i]] <- plot_with_label
+  }
+  
+  # Arrange plots in a 1-row grid
+  grid.arrange(grobs = plot_list, ncol = ncol)
+}
+
+#mcmc_trace(EucDist1, EucDist2, EucDist3, var_plot=c(7:10), xlim=c(1,10000), ncol=2)
+
+make_param_hist_overlay_linear <- function(
+    ESonly1, ESonly2,
+    mcmc_sim1, mcmc_sim2, mcmc_sim3,
+    i = 11,
+    xlim_esonly = 8001:12000,
+    xlim_mcmc   = 10001:12000,
+    nbins = 60
+) {
+  stopifnot(requireNamespace("ggplot2", quietly = TRUE),
+            requireNamespace("dplyr", quietly = TRUE))
+  
+  es_vals <- c(ESonly1$Omega_sample_phys[i, xlim_esonly],
+               ESonly2$Omega_sample_phys[i, xlim_esonly])
+  mcmc_vals <- c(mcmc_sim1$Omega_sample_phys[i, xlim_mcmc],
+                 mcmc_sim2$Omega_sample_phys[i, xlim_mcmc],
+                 mcmc_sim3$Omega_sample_phys[i, xlim_mcmc])
+  
+  df_SimImpact <- data.frame(observed = as.numeric(es_vals),   source = "ESonly")
+  df_Impact    <- data.frame(observed = as.numeric(mcmc_vals), source = "MCMC")
+  
+  df_SimImpact <- dplyr::filter(df_SimImpact, is.finite(observed))
+  df_Impact    <- dplyr::filter(df_Impact,    is.finite(observed))
+  
+  # Breaks with outer edges at 0 and 1
+  breaks <- seq(0, 1, length.out = nbins + 1)
+  
+  ggplot2::ggplot() +
+    ggplot2::geom_histogram(
+      data = df_SimImpact,
+      ggplot2::aes(x = observed, y = after_stat(density), fill = source, colour = source),
+      breaks = breaks, alpha = 0.4, lwd = 0.4, position = "identity"
+    ) +
+    ggplot2::geom_histogram(
+      data = df_Impact,
+      ggplot2::aes(x = observed, y = after_stat(density), fill = source, colour = source),
+      breaks = breaks, alpha = 0.4, lwd = 0.4, position = "identity"
+    ) +
+    ggplot2::scale_fill_manual(
+      values = c("ESonly" = "#1FA187", "MCMC" = "#440154"),
+      breaks = c("ESonly", "MCMC"),
+      labels = c("Posterior without rank histogram", "Posterior with rank histogram"),
+      name = NULL
+    ) +
+    ggplot2::scale_colour_manual(
+      values = c("ESonly" = "#1FA187", "MCMC" = "#440154"),
+      breaks = c("ESonly", "MCMC"),
+      labels = c("Posterior without rank histogram", "Posterior with rank histogram"),
+      name = NULL
+    ) +
+    ggplot2::guides(colour = "none", fill = ggplot2::guide_legend(nrow = 2)) +
+    ggplot2::scale_x_continuous(limits = c(0, 1), expand = ggplot2::expansion(mult = c(0, 0))) +
+    ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.05))) +
+    ggplot2::theme_bw() +
+    ggplot2::ylab("Density") +
+    ggplot2::xlab(expression(rho)) +
+    ggplot2::theme(
+      axis.title       = ggplot2::element_text(family = "Liberation Serif", size = 12),
+      legend.text      = ggplot2::element_text(family = "Liberation Serif", size = 13),
+      legend.title     = ggplot2::element_text(family = "Liberation Serif", size = 12),
+      axis.text     = ggplot2::element_text(family = "Liberation Serif", size = 11),
+      panel.grid.minor = ggplot2::element_blank(),
+      legend.position       = c(0.02, 0.98),
+      legend.justification  = c(0, 1),
+      legend.background     = ggplot2::element_rect(fill = ggplot2::alpha("white", 0.7), , colour = "black", linewidth = 0.3),
+      legend.key.size       = ggplot2::unit(10, "pt"),
+      legend.box.margin     = ggplot2::margin(2, 2, 2, 2),
+      plot.margin  = grid::unit(c(r=20, 10, 10, 10), "pt")
+    ) +
+    ggplot2::geom_vline(xintercept = 0.6, col = "red", lwd = 1.3)
+}
+
+ReturnRankHist <- function(impact_sample_poly, AlgoParams, corr_noise = NA, corr_noise2 = NA){
+  
+  observed <- impact_sample_poly[[1]]$observed
+  
+  dist_poly <- array(NA, dim=c(AlgoParams$Np,8))
+  impact_type <- impact_sample_poly[[1]]$impact
+  impact_weightings <- unlist(AlgoParams$impact_weights[impact_type])
+  event_id <- impact_sample_poly[[1]]$event_id
+  grouped_events <- split(seq_along(event_id), event_id)
+  
+  for(n in 1:AlgoParams$Np){
+    
+    samples_allocated <- ((n-1)*AlgoParams$m_CRPS+1):(n*AlgoParams$m_CRPS)
+    samples_combined <- sapply(impact_sample_poly[samples_allocated], function(x){x$sampled}) #doesn't work if samples_allocated is length 1
+    
+    dist_poly[n,1] <- 0
+    
+    es_store <- c()
+    mmds_store <- c()
+    mmds_store_nobd <- c()
+    pre_ranks_bd <- c()
+    pre_ranks_mmds <- c()
+    pre_ranks_mvr <- c()
+    pre_ranks_ave <- c()
+    pre_ranks_bd_mortdisp <- c()
+    pre_ranks_mmds_mortdisp <- c()
+    pre_ranks_mvr_mortdisp <- c()
+    #pre_ranks_average <- c() #can also assess quantiles for uniformity based on the average pre-rank function
+    #pre_ranks_mst <- c() #can also assess quantiles for uniformity based on the minimum spanning tree pre-rank function
+    for (i in 1:length(grouped_events)){
+      #For each event, compute the energy score of the observed data vs the 'prediction' (simulated data)
+      #Each impact type is weighted differently, simply multiplying the observation and the simulations by this weight performs the weighting
+      obs <- log(observed[grouped_events[[i]]]+AlgoParams$log_offset) *impact_weightings[grouped_events[[i]]]
+      sims <- log(samples_combined[grouped_events[[i]],, drop=F]+AlgoParams$log_offset) * impact_weightings[grouped_events[[i]]]
+      
+      obs_mortdisp <- log(observed[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]+AlgoParams$log_offset) *impact_weightings[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]
+      sims_mortdisp <- log(samples_combined[intersect(grouped_events[[i]], which(impact_type!='buildDam')),,drop=F]+AlgoParams$log_offset) * impact_weightings[intersect(grouped_events[[i]], which(impact_type!='buildDam'))]
+      #obs_unweighted <- log(observed[grouped_events[[i]]]+AlgoParams$log_offset)# * impact_weightings[grouped_events[[i]]]
+      #sims_unweighted <- log(samples_combined[grouped_events[[i]],,drop=F]+AlgoParams$log_offset)# * impact_weightings[grouped_events[[i]]]
+      
+      #nrow(sims_rh)
+      #pairs(rbind(t(sims_rh), obs_rh), col=c(rep('black',ncol(sims_rh)), 'red'))
+      #mort_obs1 = which(impact_type[grouped_events[[i]]] == 'mortality')[1]
+      #disp_obs1 = which(impact_type[grouped_events[[i]]] == 'displacement')[1]
+      # 
+      # pairs(rbind(t(sims_rh), obs_rh), col=c(rep('black',ncol(sims_rh)), 'red'))
+      # get_banddepth_rank_single(cbind(obs_rh[2:3], sims_rh[2:3,]))
+      # 
+      # mat = cbind(obs_rh[c(2,4)], sims_rh[c(2,4),])
+      # vss=c()
+      # for (j in 1:ncol(mat)){
+      #   vss = c(vss, mmds_sample(mat[,j], mat[,-j]))
+      # }
+      # plot(vss)
+      # vss[1]
+      # xx = data.frame(x = mat[1,], y=mat[2,], col=vss)
+      # ggplot(xx, aes(x=x, y=y, col=col))+geom_point()
+      # if (length(obs_rh)>5) stop()
+      #if(get_banddepth_rank_single(cbind(obs_rh, sims_rh)) < 2) stop()
+      
+      if (length(grouped_events[[i]])==1){
+        #crps is the univariate case of the energy score, so use when dimension is 1. 
+        es_store<- c(es_store, crps_sample(obs, sims))
+        mmds_store<-c(mmds_store, 0)
+        
+        rank = rank(c(obs,sims), ties.method='random')[1]
+        pre_ranks_bd <- c(pre_ranks_bd, rank)
+        pre_ranks_mmds <- c(pre_ranks_mmds, rank)
+        pre_ranks_mvr <- c(pre_ranks_mvr, rank)
+        pre_ranks_bd_mortdisp <- c(pre_ranks_bd_mortdisp,rank)
+        pre_ranks_mmds_mortdisp <- c(pre_ranks_mmds_mortdisp,rank)
+        pre_ranks_mvr_mortdisp <- c(pre_ranks_mvr_mortdisp,rank)
+        pre_ranks_ave <- c(pre_ranks_ave, rank)
+        
+        next
+      } 
+      
+      # if (nrow(sims_rh) > 1){
+      #   plot(t(sims_rh[1:2,]))
+      #   points(t(obs_rh[1:2]), col='red', pch=19)
+      # }
+      
+      es_store <- c(es_store, es_sample(obs, sims))
+      mmds_store <- c(mmds_store, mmds_sample(obs, sims))
+      
+      if (length(obs_mortdisp)==1){
+        obs_sims_mat = cbind(obs,sims)
+        obs_sims_mat_mortdisp = c(obs_mortdisp,sims_mortdisp)
+        rank = rank(obs_sims_mat_mortdisp, ties.method='random')[1]
+        
+        pre_ranks_bd <- c(pre_ranks_bd, get_banddepth_rank_single(obs_sims_mat))
+        pre_ranks_mmds <- c(pre_ranks_mmds, get_mmds_rank_single(obs_sims_mat))
+        pre_ranks_mvr <- c(pre_ranks_mvr, get_mvr_rank_single(obs_sims_mat))
+        pre_ranks_ave <- c(pre_ranks_ave, get_average_rank_single(obs_sims_mat))
+        
+        pre_ranks_bd_mortdisp <- c(pre_ranks_bd_mortdisp,rank)
+        pre_ranks_mmds_mortdisp <- c(pre_ranks_mmds_mortdisp,rank)
+        pre_ranks_mvr_mortdisp <- c(pre_ranks_mvr_mortdisp,rank)
+      } else {
+        obs_sims_mat = cbind(obs,sims)
+        obs_sims_mat_mortdisp = cbind(obs_mortdisp,sims_mortdisp)
+        
+        pre_ranks_bd <- c(pre_ranks_bd, get_banddepth_rank_single(obs_sims_mat))#, noise=corr_noise[i,]))
+        pre_ranks_bd_mortdisp <- c(pre_ranks_bd_mortdisp, get_banddepth_rank_single(obs_sims_mat_mortdisp))
+        
+        pre_ranks_mmds <- c(pre_ranks_mmds, get_mmds_rank_single(obs_sims_mat))
+        pre_ranks_mmds_mortdisp <- c(pre_ranks_mmds_mortdisp, get_mmds_rank_single(obs_sims_mat_mortdisp))
+        
+        pre_ranks_mvr <- c(pre_ranks_mvr, get_mvr_rank_single(obs_sims_mat))#, noise=corr_noise[i,]))
+        pre_ranks_mvr_mortdisp <- c(pre_ranks_mvr_mortdisp, get_mvr_rank_single(obs_sims_mat_mortdisp))
+        
+        pre_ranks_ave <- c(pre_ranks_ave, get_average_rank_single(obs_sims_mat))
+      }
+      
+      
+    }
+    
+    ranks_bd_std <- (pre_ranks_bd-runif(length(pre_ranks_bd),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_bd_mortdisp_std <- (pre_ranks_bd_mortdisp -runif(length(pre_ranks_bd_mortdisp),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_mmds_std <- (pre_ranks_mmds-runif(length(pre_ranks_mmds),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_mmds_mortdisp_std <- (pre_ranks_mmds_mortdisp-runif(length(pre_ranks_mmds_mortdisp),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_mvr_std <- (pre_ranks_mvr-runif(length(pre_ranks_mvr),0,1))/(AlgoParams$m_CRPS + 1)
+    ranks_mvr_mortdisp_std <- (pre_ranks_mvr_mortdisp-runif(length(pre_ranks_mvr_mortdisp),0,1))/(AlgoParams$m_CRPS + 1)
+    
+    ranks_ave_std <- (pre_ranks_ave-runif(length(pre_ranks_ave),0,1))/(AlgoParams$m_CRPS + 1)
+    return(ranks_ave_std)
+  }
+}
+
+plot_ranks <- function(ranks){
+  nbins  <- 10
+  breaks <- seq(0, 1, length.out = nbins + 1)
+  
+  p1 <- ggplot(data.frame(ranks = ranks), aes(x = ranks)) +
+    geom_histogram(fill = "#1FA187", color = "#1FA187", breaks = breaks, closed = "right", alpha=0.4, lwd = 0.4) +
+    labs(x = "Example Ranks", y = "Frequency") +
+    scale_x_continuous(limits = c(0, 1), expand = expansion(mult = c(0, 0))) +
+    scale_y_continuous( expand = expansion(mult = c(0, 0.05))) +
+    theme_bw() +
+    theme(
+      text = element_text(family = "Times"),
+      plot.title = element_blank(),
+      plot.margin = margin(t = 5.5, r = 11, b = 5.5, l = 11),
+      axis.title       = ggplot2::element_text(family = "Liberation Serif", size = 12),
+      legend.text      = ggplot2::element_text(family = "Liberation Serif", size = 11),
+      legend.title     = ggplot2::element_text(family = "Liberation Serif", size = 12),
+      axis.text     = ggplot2::element_text(family = "Liberation Serif", size = 11),
+    )
+  
+  return(p1)
 }

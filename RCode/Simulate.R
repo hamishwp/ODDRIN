@@ -97,11 +97,15 @@ setMethod(f="initialize", signature="ODDSim",
                 if (n_col_groups==18){ n_col_groups=6; n_row_groups=3}
                 if (n_col_groups==20){ n_col_groups=5; n_row_groups=4}
               } else {
-                n_col_groups <- round(runif(1,3,15))#round(rweibull(1,0.3,0.15)+1) # round(runif(1,2, 15))
-                n_row_groups <- round(runif(1,3,15)) #n_col_groups#round(rweibull(1,0.5,1.2)+1) # round(runif(1,3, 15))
+                n_col_groups <- round(runif(1,3,12))#round(rweibull(1,0.3,0.15)+1) # round(runif(1,2, 15))
+                n_row_groups <- round(runif(1,3,12)) #n_col_groups#round(rweibull(1,0.5,1.2)+1) # round(runif(1,3, 15))
                 while ((n_col_groups*n_row_groups) > 170){
                   n_col_groups <- round(runif(1,3,15)) #round(rweibull(1,0.3,0.15)+1) # round(runif(1,2, 15))
                   n_row_groups <- round(runif(1,3,15)) #n_col_groups#round(rweibull(1,0.5,1.2)+1) #round(runif(1,3, 15))
+                }
+                if (n_col_groups*n_row_groups > 100 & any(.Object@hazinfo$max_mmi > 8.5)){ # had some issues with a couple events with >= 50 polygons with observed mortalities over 50, which we don't really observe in the real dataset
+                  n_col_groups = 1
+                  n_row_groups = 1
                 }
               }
               n_polygons <- n_col_groups * n_row_groups
@@ -278,24 +282,37 @@ setMethod(f="initialize", signature="ODDSim",
             .Object@polygons <- polygons_list
             
             #Add linear predictor data
-            #need to tidy this up, not very reflective of real data to have this much variation within such a small region!
             ulist <- unique(GDPSim)
             #AveSchYrs_vals <- runif(length(ulist), 3, 18)
             #LifeExp_vals <- runif(length(ulist), 30, 85)
-            GNIc_vals <- exp(runif(length(ulist), 6, 12))
-            # Vs30_vals <- runif(length(ulist), 98, 2197)
+            #GNIc_vals <- exp(runif(length(ulist), 6, 12))
+            #Vs30_vals <- runif(length(ulist), 98, 2197)
             # EQFreq_vals <- runif(length(ulist), 1, 10)
-            SHDI_vals <- runif(length(ulist), 0.1, 0.9)
+            #SHDI_vals <- runif(length(ulist), 0.1, 0.9)
+            
+            #Generate SHDI and GNIc with correlation
+            rho <- 0.5
+            # 1) Correlated uniforms via Gaussian copula
+            Z  <- mvtnorm::rmvnorm(length(ulist), mean = c(0, 0), sigma = matrix(c(1, rho, rho, 1), 2, 2))  # correlated normals
+            U1 <- pnorm(Z[,1])
+            U2 <- pnorm(Z[,2])
+            
+            # 2) Map to desired marginals
+            #    log(GNIc) ~ Uniform(6,12)  ==>  GNIc = exp(6 + 6*U1)
+            #    SHDI      ~ Uniform(0.1,0.9)
+            GNIc_vals <- exp(6 + (12 - 6) * U1)
+            SHDI_vals <- 0.1 + (0.9 - 0.1) * U2
             
             .Object[['GNIc']] <- .Object[['Population']]
             .Object[['SHDI']] <- .Object[['Population']]
             for(i in 1:length(ulist)){
               #.Object@data$AveSchYrs[GDPSim %in% ulist[i]] <- AveSchYrs_vals[1] + rbeta(1, 1,2) * (AveSchYrs_vals[i] - AveSchYrs_vals[1]) #cluster the values towards the first
               #.Object@data$LifeExp[GDPSim %in% ulist[i]] <- LifeExp_vals[1] + rbeta(1, 1,2) * (LifeExp_vals[i] - LifeExp_vals[1])
-              values(.Object[['GNIc']])[GDPSim %in% ulist[i]] <- GNIc_vals[1] + rbeta(1, 1,2) * (GNIc_vals[i] - GNIc_vals[1])
+              w   <- rbeta(1, 1, 2) # pooling weight
+              values(.Object[['GNIc']])[GDPSim %in% ulist[i]] <- GNIc_vals[1] + w * (GNIc_vals[i] - GNIc_vals[1]) #shrink differences over the same event
               # .Object@data$Vs30[GDPSim %in% ulist[i]] <- Vs30_vals[1] + rbeta(1, 1,5) * (Vs30_vals[i] - Vs30_vals[1])
               # .Object@data$EQFreq[GDPSim %in% ulist[i]] <- EQFreq_vals[1] + rbeta(1, 1,5) * (EQFreq_vals[i] - EQFreq_vals[1])
-              values(.Object[['SHDI']])[GDPSim %in% ulist[i]] <- SHDI_vals[1] + rbeta(1, 1,2) * (SHDI_vals[i] - SHDI_vals[1])
+              values(.Object[['SHDI']])[GDPSim %in% ulist[i]] <- SHDI_vals[1] + w * (SHDI_vals[i] - SHDI_vals[1]) #shrink differences over the same event
             }
             .Object[['PDens']] <- .Object[['Population']] 
             .Object[['EQFreq']] <- EQFreqSim
@@ -432,7 +449,7 @@ simulatePopulation <- function(r){
   # - The population is simulated according to a Gaussian process with a spherical semi-variogram,
   #   and is then scaled onto [0, maxPopDens] using the cumulative weibull distribution.
   
-  maxPopDens = runif(1, 5000, 50000)
+  maxPopDens = runif(1, 5000, 100000)
   Field = as.data.frame(xyFromCell(r, 1:ncell(r)))
   names(Field)=c('Longitude','Latitude')
   Pop_modelling=gstat(formula=Population~1, 
@@ -449,6 +466,7 @@ simulatePopulation <- function(r){
   minval = min(PopSim[,3])
   maxval = max(PopSim[,3])
   PopSim[,3] = pweibull( (PopSim[,3]-minval)/(maxval-minval),5,2) /pweibull(1,5,2)* maxPopDens
+  PopSim[,3] 
   #PopSim %<>% acast(Longitude~Latitude, value.var='sim1')
   return(PopSim$sim1)
 }
@@ -730,6 +748,42 @@ simulateDataSet <- function(nEvents, Omega, Model, dir, outliers = FALSE, I0=4.3
   }
   return(Model$center)
 }
+# 
+# moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput11')
+# 
+# df_postpredictive_sampled_true <- create_df_postpredictive(AlgoResults, single_particle=T,
+#                                                            Omega = list(Lambda1 = list(nu=7.5, kappa=0.6),
+#                                                                         Lambda2 = list(nu=12.3, kappa=1.4),#Lambda2 = list(nu=10.6, kappa=0.95),
+#                                                                         Lambda3 = list(nu=7.9, kappa=0.68),
+#                                                                         eps=list(local=0.4, hazard_mort=0.4, hazard_disp=0.55, hazard_bd=0.5, hazard_cor=0.6),
+#                                                                         vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15)),
+#                                                            M=100, output='SampledTotal')
+# 
+# plot_df_postpredictive(df_postpredictive_sampled_true, 'mortality')
+# 
+# sampled_best_realdat <- readRDS('IIDIPUS_Results/fit_MVR_August6')
+# 
+# df_plot <- bind_rows(
+#   df_postpredictive_sampled_true %>%
+#     filter(impact == "mortality") %>%
+#     transmute(val = log10(observed+10), source = "postpredictive"),
+#   sampled_best_realdat %>%
+#     filter(impact == "mortality") %>%
+#     transmute(val = log10(observed+10), source = "realdat")
+# )
+# 
+# ggplot(df_plot, aes(val, fill = source)) +
+#   geom_histogram(alpha = 0.5, position = "identity", bins = 30) +
+#   labs(x = "log10(observed)", y = "count", title = "Overlayed histograms") +
+#   theme_minimal()
+
+
+
+
+
+
+
+
 
 remakeBDSim <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/', folder_out='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput4/'){
   
@@ -1222,7 +1276,115 @@ simulated_data_plot <- function(){
     plot(ODDy$displacementAggRegion, main = "Disp. Region", font.main = 1, cex.main = 1)
     mtext("(i)", side = 3, line = 2.45, adj = -0.05, cex = 1)
     
-    #SimEventExample.pdf, 8.5 x 7
+    
+    
+    ODDy_df <- as.data.frame(ODDy)
+    coords  <- as.data.frame(crds(ODDy, na.rm = FALSE))
+    names(coords) <- c("x", "y")
+    ODDy_df$x <- coords$x
+    ODDy_df$y <- coords$y
+    
+    # Helper to make a single raster plot (legend off to keep spacing tight)
+    library(scales)   # for label_scientific
+    library(grid)     # for unit()
+    
+    make_panel <- function(var, title, scale_continuous=T) {
+      if (scale_continuous){
+        p <- ggplot(ODDy_df, aes(x = x, y = y, fill = .data[[var]])) +
+          geom_raster() +
+          labs(title = title, x = NULL, y = NULL, fill = NULL) +
+          coord_fixed(expand = FALSE) +
+          theme(
+            text = element_text(family = "Times New Roman"),
+            axis.text = element_text(size = 11, color="black"),
+            panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4),
+            panel.background = element_blank(),
+            plot.title = element_text(size = 12.5, hjust = 0),
+            plot.margin = margin(1, 50, 20, 1),
+            
+            legend.position = c(1.07, 0.5),              # (x, y) in NPC
+            legend.justification = c(0, 0.5), 
+            #legend.direction = "horizontal",
+            legend.margin = margin(0, 0, 0, 0),
+            legend.box.margin = margin(0, 5, 0, 0),
+            legend.spacing = unit(0, "pt"),
+            legend.key.height = unit(10, "pt"),
+            legend.key.width  = unit(6, "pt"),
+            legend.text = element_text(size = 11),
+            legend.title = element_blank()
+          ) +
+          guides(fill = guide_colorbar(
+            title = title,
+            #direction = "horizontal",
+            barheight = unit(130, "pt"),
+            barwidth  = unit(6,  "pt"),
+            ticks = TRUE
+          ))
+        p = p + scale_fill_viridis_c(na.value = "white",
+                           labels = scales::label_comma())
+      } else {
+        p <- ggplot(ODDy_df, aes(x = x, y = y, fill = as.factor(.data[[var]]))) +
+          geom_raster() +
+          labs(title = title, x = NULL, y = NULL, fill = title) +  # set legend title here
+          coord_fixed(expand = FALSE) +
+          theme(
+            text = element_text(family = "Times New Roman"),
+            axis.text = element_text(size = 11, color = "black"),
+            panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4),
+            panel.background = element_blank(),
+            plot.title = element_text(size = 12.5, hjust = 0),
+            plot.margin = margin(1, 50, 20, 1),
+            
+            legend.position = c(1.07, 0.5),
+            legend.justification = c(0, 0.5),
+            legend.box.margin = margin(0, 5, 0, 0),
+            legend.margin = margin(0, 0, 0, 0),
+            legend.spacing = unit(0, "pt"),
+            legend.key.height = unit(12, "pt"),
+            legend.key.width  = unit(10, "pt"),
+            legend.text  = element_text(size = 11),
+            legend.title = element_blank()
+          ) +
+          # DISCRETE scale + legend guide
+          scale_fill_viridis_d(na.value = "white", drop = FALSE, direction = 1) +
+          guides(
+            fill = guide_legend(
+              title.position = "top",
+              ncol = 1,
+              byrow = TRUE,
+              override.aes = list(alpha = 1)  # ensure solid swatches
+            )
+          )
+      }
+      
+      return(p)
+      
+    }
+    
+    # Build the nine panels
+    p1 <- make_panel("Population",  "Population")
+    p2 <- make_panel("nBuildings",  "Building Count")
+    p3 <- make_panel("hazMean1",    "Hazard 1 MMI")
+    p4 <- make_panel("SHDI",        "SHDI")
+    p5 <- make_panel("GNIc",        "GNIc")
+    p6 <- make_panel("EQFreq",      "EQFreq")
+    p7 <- make_panel("Vs30",        "Vs30")
+    p8 <- make_panel("mortalityAggRegion",       "Mortality Region", scale_continuous=F)
+    p9 <- make_panel("displacementAggRegion",       "Displacement Region", scale_continuous=F)
+    
+    # Arrange in a tight 3x3 grid
+    dev.off()
+    # windows(8, 8); quartz(8, 8); x11(8, 8)  # optionally open a fresh square device
+    plot_grid(p1, p2, p3,
+              p4, p5, p6,
+              p7, p8, p9,
+              ncol = 3, align = "hv", 
+              labels=c('(a)', '(b)', '(c)', '(d)', '(e)', '(f)', '(g)', '(h)', '(i)'),
+              label_fontfamily = "Times New Roman",
+              label_fontface = "plain", 
+              label_size = 12.5, label_x = 0, label_y = 1.02)
+    
+    #SimEventExample.pdf, 9 x 7.4
     
     # plot(ODDy$buildDamAggRegion, main = "BuildDam agg. region", font.main = 1, cex.main = 1)
     # mtext("(m)", side = 3, line = 2.45, adj = -0.05, cex = 1)

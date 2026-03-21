@@ -30,14 +30,37 @@ source('RCode/Simulate.R')
 
 #Choose true Omega for Simulated Data
 
+# Omega <- Omega_true <-  list(Lambda1 = list(nu=7.5, kappa=0.6),
+#                                     Lambda2 = list(nu=11.4, kappa=0.775),
+#                                     Lambda3 = list(nu=7.9, kappa=0.68),
+#                                     eps=list(local=1.2, hazard_mort=0.4, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.1),
+#                                     vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+
 Omega <- Omega_true <-  list(Lambda1 = list(nu=7.5, kappa=0.6),
-                                    Lambda2 = list(nu=11.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
-                                    Lambda3 = list(nu=7.9, kappa=0.68),
-                                    #Lambda4 = list(nu=9.9, kappa=1.6),
-                                    #theta= list(theta1=0.6),
-                                    eps=list(local=1.2, hazard_mort=0.4, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.1),
-                                    #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
-                                    vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+                             Lambda2 = list(nu=12.3, kappa=1.4),#Lambda2 = list(nu=10.6, kappa=0.95),
+                             Lambda3 = list(nu=7.9, kappa=0.68),
+                             eps=list(local=0.3, hazard_mort=0.4, hazard_disp=0.55, hazard_bd=0.5, hazard_cor=0.6),
+                             vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+
+AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13/'
+impact_sim = SampleImpact(dir, Model, proposed=Omega %>% addTransfParams(), AlgoParams, dat='Train')
+dist = CalcDist(impact_sim, AlgoParams)
+dist
+
+# 
+# AlgoParams$input_folder = 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13/'
+# N_rep = 5
+# results_store =array(0, dim=c(2, N_rep, 3))
+# for (j in 1:3){
+#   Omega$eps$hazard_cor = c(0.05, 0.6, 0.95)[j]
+#   for (i in 1:5){
+#     print(paste(j,i))
+#     impact_sim = SampleImpact(dir, Model, proposed=Omega %>% addTransfParams(), AlgoParams, dat='Train')
+#     dist = CalcDist(impact_sim, AlgoParams)
+#     results_store[,i,j] = dist[c(1,2)]
+#   }
+# }
+
 
 Model$HighLevelPriors(Omega %>% addTransfParams(), Model)
 
@@ -121,10 +144,8 @@ saveRDS(samples, paste0(dir, 'IIDIPUS_Results/HLPriorSamples'))
 diag(cov(samples))
 
 
-
-
 set.seed(1)
-simulateDataSet(167, Omega, Model, dir, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/')
+simulateDataSet(170, Omega, Model, dir, folder_write='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13_BDCorrected/')
 
 
 AlgoParams$smc_steps <- 2
@@ -300,12 +321,12 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput'
   ufiles<-list.files(path=ODD_folderall,pattern=Model$haz,recursive = T,ignore.case = T)
   i <- 1
   
-  # total_mortalities <- c()
-  # for (file in ufiles){
-  #   ODD <- readODD(paste0(ODD_folderall, file))
-  #   total_mortalities <- c(total_mortalities, max(values(ODD[[grep('hazMean', names(ODD))]])[values(!is.na(ODD$Population) & ODD$Population > 0),], na.rm=t))
-  # }
-  # ufiles <- ufiles[order(total_mortalities, decreasing=T)] # sort by date
+  total_mortalities <- c()
+  for (file in ufiles){
+    ODD <- readODD(paste0(ODD_folderall, file))
+    total_mortalities <- c(total_mortalities, sum((ODD@impact %>% filter(impact=='mortality'))$observed))#max(values(ODD[[grep('hazMean', names(ODD))]])[values(!is.na(ODD$Population) & ODD$Population > 0),], na.rm=t))
+  }
+  ufiles <- ufiles[order(total_mortalities, decreasing=T)] 
   # 
   # for (i in 1:length(ufiles)){
   #   file <- ufiles[i]
@@ -340,10 +361,10 @@ moveTestData <- function(folder_in='IIDIPUS_Input_Alternatives/IIDIPUS_SimInput'
   
 }
 
-moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9')
+moveTestData('IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13')
 
 # Collect mortality, building damage, and displacement data for simulated data:
-ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/", recursive=T))
+ODDsim_paths <-na.omit(list.files(path="IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13/ODDobjects/", recursive=T))
 df_SimImpact <- data.frame(observed=numeric(),
                            impact=character(),
                            polygon=integer(),
@@ -353,7 +374,7 @@ df_SimImpact <- data.frame(observed=numeric(),
 nHazSim <- c()
 maxIntSim <- c()
 for(i in 1:length(ODDsim_paths)){
-  ODDSim <- readODD(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/",ODDsim_paths[i]))
+  ODDSim <- readODD(paste0("IIDIPUS_Input_Alternatives/IIDIPUS_SimInput13/ODDobjects/",ODDsim_paths[i]))
   if (length(ODDSim@impact$impact)>0){
     nHazSim <- c(nHazSim, length(grep('hazMean', names(ODDSim))))
     maxIntSim <- c(maxIntSim, max(values(ODDSim[[grep('hazMean', names(ODDSim))]]),  na.rm=T))
@@ -370,10 +391,19 @@ for(i in 1:length(ODDsim_paths)){
 }
 ggplot(df_SimImpact %>% filter(impact=='mortality'), aes(x=I_max, y=observed)) + geom_point()
 
+# df_SimImpact %>%
+#   filter(impact == "mortality") %>%
+#   count(event, name = "n_obs")
+
+#1FA187df_SimImpact %>% filter(event==68) %>% filter(impact=='mortality') %>% pull('observed') %>% hist()
+
+df_SimImpact %>% filter(impact=='mortality') %>% group_by(event) %>% transmute(n_obs=n())
+
+
 # Collect mortality, building damage, and displacement data for real data:
 #ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_NonFinal/IIDIPUS_Input_July12/ODDobjects/'
 
-ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/IIDIPUS_Input_RealAgg5/ODDobjects/'
+ODDpath <- '/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Input_Alternatives/Sept25/ODDobjects/'
 ODDpaths <-na.omit(list.files(path=ODDpath, recursive=T))
 df_Impact <- data.frame(observed=numeric(), impact=character(),
                         polygon=integer(), exposure=numeric(), event=integer(), I_max=numeric())
@@ -387,18 +417,19 @@ maxIntReal <- c()
 map_data_df <- data.frame(lon=numeric(), lat=numeric(), max_mmi=numeric())
 
 for(i in 1:length(ODDpaths)){
-  ODD <- readRDS(paste0(ODDpath,ODDpaths[i]))
-  loc_mmi <- c(ODD@coords[which(ODD@data[,grep('hazMean',names(ODD@data))]==max(ODD@data[,grep('hazMean', names(ODD@data))], na.rm=T), arr.ind=T)[1],],max(ODD@data[,grep('hazMean', names(ODD@data))], na.rm=T))
+  ODD <- readODD(paste0(ODDpath,ODDpaths[i]))
+  coords = xyFromCell(ODD, 1:ncell(ODD))
+  loc_mmi <- c(coords[which(values(ODD[[grep('hazMean',names(ODD))]]==max(values(ODD[[grep('hazMean',names(ODD))]]), na.rm=T)), arr.ind=T)[1],],max(values(ODD[[grep('hazMean',names(ODD))]]), na.rm=T))
   names(loc_mmi) <- c('lon', 'lat', 'max_mmi')
   map_data_df[nrow(map_data_df)+1,] = loc_mmi
   #iso3 <- c(iso3, unique(ODD$ISO3C))
   if (length(ODD@impact$impact)>0){
-    nHazReal <- c(nHazReal, length(grep('hazMean', names(ODD@data))))
-    maxIntReal <- c(maxIntReal, max(ODD@data[, grep('hazMean', colnames(ODD@data))],  na.rm=T))
+    nHazReal <- c(nHazReal, length(grep('hazMean', names(ODD))))
+    maxIntReal <- c(maxIntReal, max(values(ODD[[grep('hazMean', names(ODD))]]),  na.rm=T))
     for (j in 1:NROW(ODD@impact)){
       df_Impact %<>% add_row(observed=ODD@impact$observed[j], impact=ODD@impact$impact[j], polygon=ODD@impact$polygon[j],
-                             exposure=ifelse(impact=='buildDam', sum(ODD@data[ODD@polygons[[ODD@impact$polygon[j]]]$indexes,'nBuildings']), sum(ODD@data[ODD@polygons[[ODD@impact$polygon[j]]]$indexes,'Population'])),
-                              event=i, I_max=max(ODD@data[ODD@polygons[[ODD@impact$polygon[j]]]$indexes, grep('hazMean', colnames(ODD@data))],  na.rm=T))
+                             exposure=ifelse(ODD@impact$impact[j]=='buildDam' & 'nBuildings' %in% names(ODD), sum(values(ODD['nBuildings'])[ODD@polygons[[ODD@impact$polygon[j]]]$indexes]), sum(values(ODD['Population'])[ODD@polygons[[ODD@impact$polygon[j]]]$indexes])),
+                              event=i, I_max=max(values(ODD[[grep('hazMean', names(ODD))]])[ODD@polygons[[ODD@impact$polygon[j]]]$indexes],  na.rm=T))
       # EQFreq_min <- c(EQFreq_min, min(ODD$EQFreq[ODD@polygons[[ODD@impact$polygon[j]]]$indexes], na.rm=T))
       # EQFreq_max <- c(EQFreq_max, max(ODD$EQFreq[ODD@polygons[[ODD@impact$polygon[j]]]$indexes], na.rm=T))
     }
@@ -412,9 +443,10 @@ ggplot() +
   scale_color_gradientn(colors = c("darkgreen", 'chartreuse3', "gold", 'orange', "red")) +
   labs(x = "Longitude", y = "Latitude", col = "Max MMI") +
   theme_minimal() +
-  theme(axis.title = element_text(family = "Liberation Serif", size=12),  
-  legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
-  legend.title = element_text(family = "Liberation Serif", size=12))
+  theme(axis.title = element_text(family = "Liberation Serif", size=12.5, ),  
+  legend.text = element_text(family = "Liberation Serif", size=12.5),    # Legend text
+  legend.title = element_text(family = "Liberation Serif", size=12.5),
+  panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)) + scale_x_continuous(expand=c(0,0)) + scale_y_continuous(expand=c(0,0))
 #event_map.pdf, 3.8 x 8
 
 ggplot(df_Impact %>% filter(impact=='mortality'), aes(x=I_max, y=observed)) + geom_point()
@@ -427,8 +459,8 @@ plot_true_vs_simulated_obsvals <- function(impact_type){
   p <- ggplot()  + 
     scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 3, 10, 30, 100, 300, 1000), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
     scale_x_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 10, 100, 1000, 10000, 100000, 1000000), labels=function(x) {ifelse(x==0, "0", ifelse(x==10, "10",parse(text=gsub("[+]", "", gsub("1e", "10^", scientific_format()(x))))))}, expand = expand_scale(mult = c(0,0.1))) +
-    geom_histogram(data=df_SimImpact %>% filter(impact==impact_type), aes(x=observed,y=after_stat(count)), alpha=0.4, col="blue", lwd=0.2, fill="blue") +
-    geom_histogram(data=df_Impact %>% filter(impact==impact_type), aes(x=observed,y=after_stat(count)), alpha=0.4, col='red', lwd=0.2, fill='red') +
+    geom_histogram(data=df_SimImpact %>% filter(impact==impact_type), aes(x=observed,y=after_stat(count)), alpha=0.4, col="#1FA187", lwd=0.2, fill="#1FA187") +
+    geom_histogram(data=df_Impact %>% filter(impact==impact_type), aes(x=observed,y=after_stat(count)), alpha=0.4, col='#440154', lwd=0.2, fill='#440154') +
     theme_bw() + ylab('Count') + xlab('Oberved') +
     theme(axis.title = element_text(family = "Liberation Serif", size=12),  
           legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
@@ -444,12 +476,15 @@ plot_true_vs_simulated_obscount <- function(impact_type){
     #breaks <- seq(2.5, max_val + 5 + (5-max_val %%5), 5)
     
     p <- ggplot() +
+      #scale_x_continuous(breaks=c(0,1,2,3,4,5,10,30,100,300,1000), trans="log1p", expand=c(0,0)) +
+      #scale_x_log10(breaks=c(0, 1, 10, 100)) +
       scale_x_continuous(expand = expand_scale(add = c(2.5,7.5))) + 
-      scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 1, 3, 10, 30, 100, 300), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
-      geom_histogram(data=df_sim_tally, aes(x=n, y=after_stat(count),fill='Simulated Data', col='Simulated Data'), binwidth=4, center=3,alpha=0.3, col='blue', lwd=0.2) + 
-      geom_histogram(data=df_real_tally, aes(x=n, y=after_stat(count),fill='Real Data', col='Real Data'), binwidth=4, center=3, alpha=0.3, col='red', lwd=0.2) +
+      #scale_y_log10()+
+      scale_y_continuous(trans=scales::pseudo_log_trans(sigma=0.15, base = 2), breaks = c(0, 1, 10, 100, 1000), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
+      geom_histogram(data=df_sim_tally, aes(x=n, y=after_stat(count),fill='Simulated Data', col='Simulated Data'), binwidth=4, center=3,alpha=0.3, col='#1FA187', lwd=0.2) + 
+      geom_histogram(data=df_real_tally, aes(x=n, y=after_stat(count),fill='Real Data', col='Real Data'), binwidth=4, center=3, alpha=0.3, col='#440154', lwd=0.2) +
       ylab('Count') + xlab('Number of Observations per event') + theme_bw() +
-      scale_fill_manual(values = c("Real Data" = "red", "Simulated Data" = "blue"))+ labs(fill = "") +
+      scale_fill_manual(values = c("Real Data" = "#440154", "Simulated Data" = "#1FA187"))+ labs(fill = "") +
       guides(fill = guide_legend(override.aes = list(color = NULL))) +
       theme(axis.title = element_text(family = "Liberation Serif", size=12),  
             legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
@@ -459,11 +494,11 @@ plot_true_vs_simulated_obscount <- function(impact_type){
   } else {
     p <- ggplot() +
       scale_x_continuous(expand = expand_scale(mult = c(0,0.1))) + 
-      scale_y_continuous(trans=scales::pseudo_log_trans(base = 10), breaks = c(0, 1, 3, 10, 30, 100, 300), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
-      geom_histogram(data=df_sim_tally, aes(x=n, y=after_stat(count),fill='Simulated Data', col='Simulated Data'), binwidth=1, center=0,alpha=0.3, col='blue', lwd=0.2) + 
-      geom_histogram(data=df_real_tally, aes(x=n, y=after_stat(count),fill='Real Data', col='Real Data'), binwidth=1, center=0, alpha=0.3, col='red', lwd=0.2) +
+      scale_y_continuous(trans=scales::pseudo_log_trans(sigma=0.15, base = 2), breaks = c(0, 1, 10, 100, 1000), labels = label_comma(), expand = expand_scale(mult = c(0,0.1)))  + 
+      geom_histogram(data=df_sim_tally, aes(x=n, y=after_stat(count),fill='Simulated Data', col='Simulated Data'), binwidth=1, center=0,alpha=0.3, col='#1FA187', lwd=0.2) + 
+      geom_histogram(data=df_real_tally, aes(x=n, y=after_stat(count),fill='Real Data', col='Real Data'), binwidth=1, center=0, alpha=0.3, col='#440154', lwd=0.2) +
       ylab('Count') + xlab('Number of Observations per event') + theme_bw() +
-      scale_fill_manual(values = c("Real Data" = "red", "Simulated Data" = "blue"))+ labs(fill = "") +
+      scale_fill_manual(values = c("Real Data" = "#440154", "Simulated Data" = "#1FA187"))+ labs(fill = "") +
       guides(fill = guide_legend(override.aes = list(color = NULL))) +
       theme(axis.title = element_text(family = "Liberation Serif", size=12),  
             legend.text = element_text(family = "Liberation Serif", size=11),    # Legend text
@@ -473,12 +508,12 @@ plot_true_vs_simulated_obscount <- function(impact_type){
   p
   return(p)
 }
-p_mort_obsvals <- plot_true_vs_simulated_obsvals('mortality') + xlab('Observed Mortality') 
-p_disp_obsvals <- plot_true_vs_simulated_obsvals('displacement') + xlab('Observed Displacement')
-p_bd_obsvals <- plot_true_vs_simulated_obsvals('buildDam') + xlab('Observed Building Damage')
-p_mort_obscount <- plot_true_vs_simulated_obscount('mortality') + xlab('Number of Mortality Observations in Event') + scale_x_continuous(breaks=c(1,40,80, 120, 160), labels=c(1,40,80,120,160),expand = expand_scale(add=c(1, 0), mult = c(0,0.1)))
-p_disp_obscount <- plot_true_vs_simulated_obscount('displacement') + xlab('Number of Displacement Observations in Event') + scale_x_continuous(breaks=0:7, labels=0:7, expand = expand_scale(mult = c(0,0.1)))
-p_bd_obscount <- plot_true_vs_simulated_obscount('buildDam') + xlab('Number of Building Damage Observations in Event')
+p_mort_obsvals <- plot_true_vs_simulated_obsvals('mortality') + xlab('Observed mortality')+ ylab('Frequency')
+p_disp_obsvals <- plot_true_vs_simulated_obsvals('displacement') + xlab('Observed displacement')+ ylab('Frequency')
+p_bd_obsvals <- plot_true_vs_simulated_obsvals('buildDam') + xlab('Observed building damage')+ ylab('Frequency')
+p_mort_obscount <- plot_true_vs_simulated_obscount('mortality') + xlab('Number of mortality\nobservations per event')+ ylab('Frequency') + scale_x_continuous(breaks=c(1,40,80, 120, 160), labels=c(1,40,80,120,160),expand = expand_scale(add=c(1, 0), mult = c(0,0.1)))
+p_disp_obscount <- plot_true_vs_simulated_obscount('displacement') + xlab('Number of displacement\nobservations per event')+ ylab('Frequency') + scale_x_continuous(breaks=0:9, labels=0:9, expand = expand_scale(mult = c(0,0.1)))
+p_bd_obscount <- plot_true_vs_simulated_obscount('buildDam') + xlab('Number of building damage\nobservations per event')+ ylab('Frequency')
 legend <- get_plot_component(p_mort_obscount +
                                theme(legend.position="bottom"), 'guide-box', return_all=T)[[3]]
 
@@ -492,12 +527,12 @@ p_2 <- plot_grid( plot_grid( p_mort_obscount + theme(legend.position="none"),
 
 plot_grid(p_1, p_2, ncol=1)
 
-plot_grid(legend,plot_grid(p_mort_obsvals, p_disp_obsvals, p_bd_obsvals,
+plot_grid(plot_grid(p_mort_obsvals, p_disp_obsvals, p_bd_obsvals,
           p_mort_obscount + theme(legend.position="none"),
           p_disp_obscount + theme(legend.position="none"), 
-          p_bd_obscount + theme(legend.position="none"), align = 'vh'), ncol = 1, rel_heights=c(0.075,1))
+          p_bd_obscount + theme(legend.position="none"), align = 'vh'), legend, ncol = 1, rel_heights=c(1, 0.075))
 
-#SimVsObs.pdf, 7 x 12 inches
+#SimVsObs.pdf, 8 x 5 inches
 
 
 files <-  paste0(dir, "IIDIPUS_Input_Alternatives/IIDIPUS_SimInput/ODDobjects/")
@@ -754,13 +789,19 @@ testing <- function(){
 
 #### MOST RIGOROUS AS OF 21 JULY #######
 
+# Omega <- Omega_true <-  list(Lambda1 = list(nu=7.5, kappa=0.6),
+#                              Lambda2 = list(nu=11.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
+#                              Lambda3 = list(nu=7.9, kappa=0.68),
+#                              #Lambda4 = list(nu=9.9, kappa=1.6),
+#                              #theta= list(theta1=0.6),
+#                              eps=list(local=1.2, hazard_mort=0.4, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.1),
+#                              #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+#                              vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
+
 Omega <- Omega_true <-  list(Lambda1 = list(nu=7.5, kappa=0.6),
-                             Lambda2 = list(nu=11.4, kappa=0.775), #list(nu=10.65, kappa=1.5), #
+                             Lambda2 = list(nu=12.3, kappa=1.4),#Lambda2 = list(nu=10.6, kappa=0.95),
                              Lambda3 = list(nu=7.9, kappa=0.68),
-                             #Lambda4 = list(nu=9.9, kappa=1.6),
-                             #theta= list(theta1=0.6),
-                             eps=list(local=1.2, hazard_mort=0.4, hazard_disp=0.65, hazard_bd=0.5, hazard_cor=0.1),
-                             #eps = list(local=1.3, hazard_mort=0.8383464, hazard_disp=1, hazard_bd=0.9, hazard_cor=0.55),
+                             eps=list(local=0.3, hazard_mort=0.4, hazard_disp=0.55, hazard_bd=0.5, hazard_cor=0.6),
                              vuln_coeff = list(PDens=0, SHDI=-0.15, GNIc=-0.03, Vs30=-0.03, EQFreq=-0.05, FirstHaz=0.05, Night=0, FirstHaz.Night=0.15))
 
 source(paste0(dir, 'RCode/Unfinished/Model_allRanks.R'))
@@ -779,10 +820,10 @@ testing2 <- function(){
                                          paste0("gen_", hazard_cors)))
   
   # Load and order training files
-  ufiles <- na.omit(list.files(path = paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/'),
+  ufiles <- na.omit(list.files(path = paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput11/ODDobjects/'),
                                pattern = Model$haz, recursive = TRUE, ignore.case = TRUE))
   ufiles <- grep('^Train/', ufiles, value = TRUE)
-  x <- file.info(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/', ufiles))
+  x <- file.info(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput11/ODDobjects/', ufiles))
   ufiles <- na.omit(ufiles[match(length(ufiles):1, rank(x$size))])
   event_ids_all <- as.numeric(sub(".*_(\\d+)$", "\\1", ufiles))
   
@@ -796,7 +837,7 @@ testing2 <- function(){
       Omega$eps$hazard_cor <- gen_hz
       
       for (file in ufiles) {
-        ODD <- readODD(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput9/ODDobjects/', file))
+        ODD <- readODD(paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput11/ODDobjects/', file))
         #ODD$Population = ifelse(values(ODD$Population) >7500 & values(ODD$hazMean1)> 8, 15000, 0)
         #ODD$Population = values(ODD$Population) * exp(values(ODD$Population)/max(values(ODD$Population)))/exp(1)
         
@@ -841,7 +882,7 @@ testing2 <- function(){
         
         ODD@impact$observed = merged_df$sampled
         
-        saveODD(ODD, paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput10/ODDobjects/', file))
+        saveODD(ODD, paste0(dir, 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput12/ODDobjects/', file))
       }
       
       for (test_idx in seq_along(hazard_cors)) {
@@ -849,7 +890,7 @@ testing2 <- function(){
         cat("Testing with hazard_cor =", test_hz, "on gen =", gen_hz, "\n")
         
           Omega$eps$hazard_cor <- test_hz
-          AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput10/'
+          AlgoParams$input_folder <- 'IIDIPUS_Input_Alternatives/IIDIPUS_SimInput12/'
           AlgoParams$Np <- 1
           AlgoParams$m_CRPS <- 100
           AlgoParams$cores <- 2
@@ -869,11 +910,13 @@ testing2 <- function(){
 
 
 # results_array <- readRDS('/home/manderso/Documents/GitHub/ODDRIN/IIDIPUS_Results/CalcDist_4D_matrix2025-07-23.rds')
+# hazard_cors <- c(0.05, 0.5, 0.95)
 par(mfrow=c(2,2), mar = c(4, 4, 2, 1), family="Times")
 method_colors <- c('#440154', '#FDE725FF', '#1FA187')
 method_labels <- c('Method 1', 'Method 2', 'Method 3')
 
-titles <- c('Energy Score', '(a) Multivariate Rank', '(b) MST Rank','MVR MortDisp', '(c) BD Rank', 'BD MortDisp', '(d) Average Rank', 'Ave Rank MortDisp', 'MST rank mortdisp')
+titles <- c('Energy Score', 'Multivariate Rank', 'MST Rank','MVR MortDisp', 'BD Rank', 'BD MortDisp', 'Average Rank', 'Ave Rank MortDisp', 'MST rank mortdisp')
+labels = c('', '(a)', '(b)', '', '(c)', '', '(d)', '', '')
 
 for (i in c(2,3,5, 7)) {
   box_data <- list()
@@ -900,7 +943,9 @@ for (i in c(2,3,5, 7)) {
                 ylim = ylims,
                 ylab = "",
                 cex.axis = 1)
-  mtext(titles[i], side = 3, line = 0.5, adj = 0, cex = 0.9, font = 1)
+  mtext(titles[i], side = 3, line = 0.5, adj = 0, cex = 1.05, font = 1)
+  mtext(labels[i], side = 3, line = 0.5, adj = -0.105, cex = 1.05, font = 1)
+  
   
   # Tick labels for each box
   tick_labels <- rep(hazard_cors, times = 3)

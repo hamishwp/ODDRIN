@@ -231,7 +231,7 @@ GetUSGS<-function(USGSid=NULL,bbox,sdate,fdate=NULL,titlz="tmp",I0=4.5,minmag=5)
     if(is.null(hazsdf)) return(NULL)
     bbox = ext(hazsdf)[c(1,3,2,4)] #hazsdf@bbox<-ext(hazsdf)[c(1,3,2,4)]#hazsdf@bbox
     USGS<-SearchUSGSbbox(expandBbox(bbox,f = 200,scaling = F),
-                         hazsdf@eventdate-7,hazsdf@eventdate+14,minmag)  
+                         hazsdf@eventdate-5,hazsdf@eventdate+21,minmag)  
     sdate<-fdate<-hazsdf@eventdate
     lenny<-length(USGS$features)
     # Check that the original USGS id shakemap is contained inside the USGS extracted files

@@ -51,7 +51,8 @@ AlgoParams<-list(#Data:
                  rho_local = 0.95, # correlation between subsequent local error terms
                  lambda_rate = 0.9, #parameter of adaptive scaling and shaping algorithm
                  alpha_star = 0.234, #parameter of adaptive scaling and shaping algorithm
-                 v_0 = 15 #parameter of adaptive scaling and shaping algorithm
+                 v_0 = 15, #parameter of adaptive scaling and shaping algorithm
+                 lambda_min = 1
 )
 		 
 if(is.null(AlgoParams$AllParallel)){
@@ -807,8 +808,8 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
   
   # parameters of the adaptive MCMC algorithm:
   c = 2.38^2 / n_x
-  A = pnorm(AlgoParams$a/2)
-  delta = (1-1/n_x)*(sqrt(2*pi)*exp((A^2)/2)/(2*A)) + 1/(n_x*AlgoParams$a*(1-AlgoParams$a))
+  A <- -qnorm(AlgoParams$a/2)
+  delta <- (1 - 1/n_x) * (sqrt(2*pi) * exp(A^2/2) / (2*A)) + 1/(n_x * AlgoParams$a * (1 - AlgoParams$a))
   
   iter_func = function(s){
     return(floor(s/2))
@@ -845,11 +846,16 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
   res_all <- res(ODD)
   
   ext_all <- list()
+  notnans_list <- list()
   for (filer in ufiles){
     ODD<-readODD(paste0(folderin,filer))
     event_i = which(ufiles==filer)
     
     ext_all[[event_i]] = ext(ODD)
+    
+    ODD_df <- as.data.frame(ODD, na.rm=F)
+    nans_haz <- apply(ODD_df[,grep('hazMean', names(ODD_df)), drop=F], 1, function(x) all(is.na(x)))
+    notnans_list[[event_i]] = which(!(is.na(ODD_df$Population) | is.na(ODD_df$ISO3C) | is.na(ODD_df$SHDI) | nans_haz))
   }
   
   if(unfinished==F){ 
@@ -864,16 +870,17 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
       event_i <- which(ufiles == filer)
       
       ext_i <- ext_all[[event_i]]
+      notnans = notnans_list[[event_i]]
       r <- rast(crs = crs_all, extent = ext_i, resolution = res_all)
       grid <- as.data.frame(crds(r))
       names(grid) <- c("x", "y")  # Name the columns
       
-      vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 0.5)
+      vgm_model <- vgm(psill = 1, model = "Exp", range = 1)
       gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
       
       RF_local <- array(
-          as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
-          dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+          as.matrix(predict(gstat_mod, newdata = grid[notnans,], nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+          dim = c(length(notnans), AlgoParams$Np * AlgoParams$m_CRPS, 3)
       )
       
       return(list(event_i = event_i, RF_local = RF_local))
@@ -935,17 +942,18 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
       perturbate_random_field <- function(event_i) {
         # Create raster grid
         r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
+        notnans = notnans_list[[event_i]]
         grid <- as.data.frame(crds(r))
         names(grid) <- c("x", "y")
         
         # Define variogram model
-        vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 0.5)
+        vgm_model <- vgm(psill = 1, model = "Exp", range = 1)
         gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
         
         # Generate random field perturbation
         RF_local <- suppressMessages(array(
-          as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
-          dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+          as.matrix(predict(gstat_mod, newdata = grid[notnans,], nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+          dim = c(length(notnans), AlgoParams$Np * AlgoParams$m_CRPS, 3)
         ))
         
         RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
@@ -973,7 +981,7 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
       #calculate the acceptance probability:
       #print(modifyAcc(Omega_prop, Omega_sample_s[n,], Model))
       min_loss <- min(AlgoParams$learning_rate * loss_prop, AlgoParams$learning_rate * AlgoResults$loss[1])
-      AlgoResults$accprob_store[2] <- min(1, exp(-AlgoParams$learning_rate * loss_prop + min_loss)/exp(-AlgoParams$learning_rate * AlgoResults$loss[1] + min_loss) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[,1], Model, AlgoResults$lambda_store[1] * AlgoResults$Sigma_store[,,1]))
+      AlgoResults$accprob_store[2] <- min(1, exp(-AlgoParams$learning_rate * loss_prop + min_loss)/exp(-AlgoParams$learning_rate * AlgoResults$loss[1] + min_loss) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[,1], Model, c * AlgoResults$lambda_store[1] * AlgoResults$Sigma_store[,,1]))
       
       u <- runif(1)
       if(u < AlgoResults$accprob_store[2]){
@@ -998,12 +1006,19 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
     }
     
     #Store parameters for adaptive MCMC method:
-    AlgoResults$mu_store[,2] = (AlgoResults$Omega_sample[,2] +  AlgoResults$Omega_sample[,1])/2
-    AlgoResults$Sigma_store[,,2] = 1 / (AlgoParams$v_0 + n_x + 3) * 
-      ((AlgoResults$mu_store[,2] %*% t(AlgoResults$mu_store[,2]) + AlgoResults$mu_store[,1] %*% t(AlgoResults$mu_store[,1])) - 
-         2*AlgoResults$mu_store[,2] %*% t(AlgoResults$mu_store[,2]) +
-         (AlgoParams$v_0 + n_x + 1)* AlgoResults$Sigma_store[,,1] )
-    AlgoResults$lambda_store[2] = max(AlgoParams$lambda_min, AlgoResults$lambda_store[1] * exp(delta / (2) * (AlgoResults$accprob_store[2]-AlgoParams$a)))
+    AlgoResults$mu_store[,2]    <- 0.5 * (AlgoResults$Omega_sample[,1] + AlgoResults$Omega_sample[,2])
+    AlgoResults$Sigma_store[,,2] <- 1 / (AlgoParams$v_0 + n_x + 3) * (
+      AlgoResults$Omega_sample[,1] %*% t(AlgoResults$Omega_sample[,1]) + AlgoResults$Omega_sample[,2] %*% t(AlgoResults$Omega_sample[,2]) - 2 * AlgoResults$mu_store[,2] %*% t(AlgoResults$mu_store[,2]) +
+        (AlgoParams$v_0 + n_x + 1) * AlgoResults$Sigma_store[,,1]
+    )
+    AlgoResults$lambda_store[2] <- max(AlgoParams$lambda_min, AlgoResults$lambda_store[1] * exp(delta / (AlgoResults$s_restart + 2) * (AlgoResults$accprob_store[2] - AlgoParams$a)))
+                                       
+    # AlgoResults$mu_store[,2] = (AlgoResults$Omega_sample[,2] +  AlgoResults$Omega_sample[,1])/2
+    # AlgoResults$Sigma_store[,,2] = 1 / (AlgoParams$v_0 + n_x + 3) * 
+    #   ((AlgoResults$mu_store[,2] %*% t(AlgoResults$mu_store[,2]) + AlgoResults$mu_store[,1] %*% t(AlgoResults$mu_store[,1])) - 
+    #      2*AlgoResults$mu_store[,2] %*% t(AlgoResults$mu_store[,2]) +
+    #      (AlgoParams$v_0 + n_x + 1)* AlgoResults$Sigma_store[,,1] )
+    #AlgoResults$lambda_store[2] = max(AlgoParams$lambda_min, AlgoResults$lambda_store[1] * exp(delta / (2) * (AlgoResults$accprob_store[2]-AlgoParams$a)))
     
     saveRDS(AlgoResults, paste0(dir,"IIDIPUS_Results/mcmc_",tag))  
     
@@ -1053,15 +1068,16 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
         r <- rast(crs = crs_all, extent = ext_all[[event_i]], resolution = res_all)
         grid <- as.data.frame(crds(r))
         names(grid) <- c("x", "y")
+        notnans = notnans_list[[event_i]]
         
         # Define variogram model
-        vgm_model <- vgm(psill = 1, model = "Mat", range = 0.5, kappa = 0.5)
+        vgm_model <- vgm(psill = 1, model = "Exp", range = 1)
         gstat_mod <- gstat(formula = z ~ 1, locations = ~x + y, dummy = TRUE, beta = 0, model = vgm_model, nmax = 3)
         
         # Generate random field perturbation
         RF_local <- suppressMessages(array(
-          as.matrix(predict(gstat_mod, newdata = grid, nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
-          dim = c(ncell(r), AlgoParams$Np * AlgoParams$m_CRPS, 3)
+          as.matrix(predict(gstat_mod, newdata = grid[notnans,], nsim = AlgoParams$Np * AlgoParams$m_CRPS * 3)[, 3:(2 + AlgoParams$Np * AlgoParams$m_CRPS * 3)]),
+          dim = c(length(notnans), AlgoParams$Np * AlgoParams$m_CRPS, 3)
         ))
         
         RF_perturbed <- AlgoParams$rho_local * AlgoResults$RF_current[[event_i]] + sqrt(1 - AlgoParams$rho_local^2) * RF_local
@@ -1087,7 +1103,9 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
       #calculate the acceptance probability:
       #print(modifyAcc(Omega_prop, Omega_sample_s[n,], Model))
       min_loss <- min(AlgoParams$learning_rate * loss_prop, AlgoParams$learning_rate * AlgoResults$loss[s-1])
-      AlgoResults$accprob_store[s] <- min(1, exp(-AlgoParams$learning_rate * loss_prop + min_loss)/exp(-AlgoParams$learning_rate * AlgoResults$loss[s-1] + min_loss) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[,s-1], Model, AlgoResults$lambda_store[s] * AlgoResults$Sigma_store[,,s]))
+      AlgoResults$accprob_store[s] <- min(1, exp(-AlgoParams$learning_rate * loss_prop + min_loss) / exp(-AlgoParams$learning_rate * AlgoResults$loss[s-1] + min_loss) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[,s-1], Model, c * AlgoResults$lambda_store[s-1] * AlgoResults$Sigma_store[,,s-1]))
+      
+      #AlgoResults$accprob_store[s] <- min(1, exp(-AlgoParams$learning_rate * loss_prop + min_loss)/exp(-AlgoParams$learning_rate * AlgoResults$loss[s-1] + min_loss) * modifyAcc(Omega_prop, AlgoResults$Omega_sample[,s-1], Model, AlgoResults$lambda_store[s] * AlgoResults$Sigma_store[,,s]))
       
       u <- runif(1)
       if(u < AlgoResults$accprob_store[s]){
@@ -1097,7 +1115,7 @@ AMCMC <- function(dir, AlgoParams, Model, iVals, unfinished=F, oldtag=NULL, tag_
         AlgoResults$Omega_sample_phys[,s] = unlist(Omega_prop_phys)
         AlgoResults$loss[s] = loss_prop
         AlgoResults$es_score[s] = loss_all_prop[1]
-        AlgoResults$rh_score[s] = loss_all_prop[3]
+        AlgoResults$rh_score[s] = loss_all_prop[2]
         AlgoResults$u[,,,ifelse(s %% 3==0, 3, s%%3)] = proposed$u
         AlgoResults$u_selected[,s] =  c(proposed$u[1,1,1],proposed$u[2,2,2],proposed$u[3,3,3])
         AlgoResults$RF_current = RF_prop

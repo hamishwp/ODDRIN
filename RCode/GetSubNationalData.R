@@ -90,11 +90,13 @@ combineDamagedDestroyedBuildings <- function(SubNatData){
        SubNatData$buildDam[i] = SubNatData$buildDamDest[i]
        SubNatData$buildDamInferred[i] = SubNatData$buildDamDestInferred[i]
        SubNatData$buildDam_qualifier[i] = SubNatData$buildDamDest_qualifier[i]
+       SubNatData$buildDam_MAR[i] = SubNatData$buildDamDest_MAR[i]
      } else if (!is.na(SubNatData$buildDam[i])){
          #otherwise sum over buildDam and buildDest
          SubNatData$buildDam[i]=sum(SubNatData$buildDam[i], SubNatData$buildDest[i], na.rm=T)
          SubNatData$buildDamInferred[i] = any(SubNatData$buildDamInferred[i], ifelse(is.na(SubNatData$buildDestInferred[i]), F, SubNatData$buildDestInferred[i]))
          SubNatData$buildDam_qualifier[i] = SubNatData$buildDam_qualifier[i]
+         SubNatData$buildDam_MAR[i] = any(SubNatData$buildDam_MAR[i], SubNatData$buildDest_MAR[i])
       }
   }
   return(SubNatData)
@@ -821,7 +823,7 @@ additional_poly_check <- function(ODDy, i, folder_write, SubNatEvent, print_to_x
   return(ODDy)
 }
 
-GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder_write='IIDIPUS_Input_Alternatives/July25/'){
+GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder_write='IIDIPUS_Input_Alternatives/Aug25/'){
   # Works through EQ_Subnational.xlsx and, for each event, either updates the existing ODD object or, if
   # no corresponding existing ODD object can be found, creates a new ODD object.
   
@@ -836,14 +838,14 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
   
   # Per event, extract hazard & building damage objects (HAZARD & BD, resp.)
   path<-data.frame()
-  options(timeout = 500)
+  options(timeout = 1000)
   
-  ufiles<-na.omit(list.files(path=paste0(dir,'IIDIPUS_Input_Alternatives/Apr25/ODDobjects/'),pattern=Model$haz,recursive = T,ignore.case = T))
+  #ufiles<-na.omit(list.files(path=paste0(dir,'IIDIPUS_Input_Alternatives/Apr25/ODDobjects/'),pattern=Model$haz,recursive = T,ignore.case = T))
   #for (i in 128:129){
-  for (i in c( 169,170)){
+  for (i in 1:171){
     
     print(i)
-    #if (i==126) next
+    if (i==126) next
     # Subset displacement and disaster database objects to not all NA
     SubNatDataByEvent[[i]] <- SubNatDataByEvent[[i]][rowSums(is.na(SubNatDataByEvent[[i]][,-1])) != ncol(SubNatDataByEvent[[i]])-1, ]
     miniDam<-SubNatDataByEvent[[i]]
@@ -875,7 +877,7 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     
     # lhazSDF <- GetDisaster(miniDamSimplified, bbox = c(160, -11.8, 163, -9.7))
     lhazSDF<-tryCatch(GetDisaster(miniDamSimplified,bbox=bbox, EQparams = EQparams),error=function(e) NULL)
-    if(is.null(lhazSDF)) {
+    if(is.null(lhazSDF)){
       #stop()
       file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
       writeLines(paste("Index:", i, "Event Name:", SubNatDataByEvent[[i]]$event_name[1], "Event Date:", SubNatDataByEvent[[i]]$sdate[1], ', lhazSDF not found.'), file_conn)
@@ -883,16 +885,9 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
       next
     }
     
-    namer<-paste0(ODDy@hazard,
-                  str_remove_all(as.character.Date(min(ODDy@hazdates)),"-"),
-                  unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) !='TOT')][1],
-                  "_",i)
-    HAZARDpath<-paste0(dir,folder_write, "HAZARDobjects/",namer)
-    saveHAZ(lhazSDF,HAZARDpath)
-    rm(lhazSDF)
 
     # Create the ODD object:
-    ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified, agg_level=1),error=function(e) NULL)
+    ODDy<-tryCatch(new("ODD",lhazSDF=lhazSDF,DamageData=miniDamSimplified, agg_level=5),error=function(e) NULL)
     if(is.null(ODDy)) {
       #stop()
       file_conn <- file(paste0(dir, folder_write, 'ODD_creation_notes'), open = "a")
@@ -946,9 +941,9 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     ODDpath<-paste0(dir, folder_write, "ODDobjects/",namer)
     saveODD(ODDy,ODDpath)
     
-    #additional_poly_check(ODDy, i, folder_write, print_to_xl=T)
+    additional_poly_check(ODDy, i, folder_write, print_to_xl=T)
     
-    next
+    
     # Building damage subset
     miniDam<-Damage%>%filter(iso3%in%unique(miniDamSimplified$iso3) & 
                                sdate<mindate & sdate>maxdate)
@@ -972,6 +967,150 @@ GetDataAll <- function(dir, haz="EQ", subnat_file= 'EQ_SubNational.xlsx', folder
     # Save some RAM
     rm(ODDy)
   }
+  
+  log_issue <- function(i, msg, err=NULL, dir="", folder_write="") {
+    log_file <- file.path(dir, folder_write, "ODD_creation_notes")
+    ts <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+    line <- paste0("[", ts, "] i=", i, " — ", msg,
+                   if (!is.null(err)) paste0(" | error: ", err) else "", "\n")
+    cat(line, file = log_file, append = TRUE)
+  }
+  
+  #for (i in 114:171) {
+  for (i in c(23,68, 89, 143, 164, 170, 171)){
+    print(i)
+    if (i == 126) next
+    
+    # One big guard so the loop never dies:
+    tryCatch({
+      
+      # -------- your original code (unchanged) --------
+      # Subset displacement and disaster database objects to not all NA
+      SubNatDataByEvent[[i]] <- SubNatDataByEvent[[i]][rowSums(is.na(SubNatDataByEvent[[i]][,-1])) != ncol(SubNatDataByEvent[[i]])-1, ]
+      miniDam <- SubNatDataByEvent[[i]]
+      
+      miniDamSimplified <- data.frame(
+        iso3 = unique(trimws(unlist(strsplit(miniDam$source_listed_iso3, ";")))),
+        sdate = data.table::fifelse(is.na(miniDam$GetDisaster_sdate[1]), miniDam$sdate[1]-5, miniDam$GetDisaster_sdate[1]),
+        fdate = data.table::fifelse(is.na(miniDam$GetDisaster_fdate[1]), miniDam$fdate[1]+21, miniDam$GetDisaster_fdate[1]),
+        eventid = i,
+        hazard = miniDam$hazard[which(!is.na(miniDam$sdate))[1]]
+      )
+      
+      sdate <- miniDamSimplified$sdate[1]
+      maxdate <- miniDamSimplified$sdate[1] - 5
+      if (is.na(miniDamSimplified$fdate[1])) mindate <- miniDamSimplified$sdate[1] + 3 else mindate <- miniDamSimplified$fdate[1] + 3
+      
+      if (!is.na(SubNatDataByEvent[[i]]$GetDisasterArgs_bbox[1])) {
+        bbox <- eval(parse(text = SubNatDataByEvent[[i]]$GetDisasterArgs_bbox[1]))
+      } else {
+        bbox <- countriesbbox(unique(miniDamSimplified$iso3))
+        bbox[1] <- ifelse((bbox[1]-5) < (-180), 180 - (-180-(bbox[1]-5)), bbox[1]-5)
+        bbox[2] <- max(bbox[2]-5, -90)
+        bbox[3] <- ifelse((bbox[3]+5) > 180, -180 + (bbox[3]+5-180), bbox[3] + 5)
+        bbox[4] <- min(bbox[4]+5, 90)
+      }
+      
+      if (!is.na(SubNatDataByEvent[[i]]$GetDisasterArgs_EQ_Params[1])) {
+        EQparams <- eval(parse(text = SubNatDataByEvent[[i]]$GetDisasterArgs_EQ_Params[1]))
+      } else {
+        EQparams <- list(I0 = 4.3, minmag = 5)
+      }
+      
+      # Fetch hazard
+      lhazSDF <- tryCatch(
+        GetDisaster(miniDamSimplified, bbox = bbox, EQparams = EQparams),
+        error = function(e) {
+          log_issue(i, "lhazSDF not found", conditionMessage(e), dir, folder_write)
+          return(NULL)
+        }
+      )
+      if (is.null(lhazSDF)) next
+      
+      # Create ODD
+      ODDy <- tryCatch(
+        new("ODD", lhazSDF = lhazSDF, DamageData = miniDamSimplified, agg_level = 5),
+        error = function(e) {
+          log_issue(i, "ODD object not created", conditionMessage(e), dir, folder_write)
+          return(NULL)
+        }
+      )
+      if (is.null(ODDy)) next
+      
+      # Building counts
+      ODDy_build <- tryCatch(
+        getBingBuildingsGlobal(ODDy, i, file.path(dir, folder_write, "Building_count_notes")),
+        error = function(e) {
+          log_issue(i, "Building counts not added", conditionMessage(e), dir, folder_write)
+          return(NULL)
+        }
+      )
+      if (!is.null(ODDy_build)) {
+        ODDy <- ODDy_build
+        rm(ODDy_build)
+      }
+      
+      iso3_ODDy <- unique(ODDy$ISO3C)$ISO3C
+      
+      # Unique hazard event name and save hazard
+      namer <- paste0(
+        ODDy@hazard,
+        stringr::str_remove_all(as.character.Date(min(ODDy@hazdates)), "-"),
+        unique(miniDamSimplified$iso3)[which(unique(miniDamSimplified$iso3) != "TOT")][1],
+        "_", i
+      )
+      HAZARDpath <- file.path(dir, folder_write, "HAZARDobjects", namer)
+      saveHAZ(lhazSDF, HAZARDpath)
+      rm(lhazSDF)
+      
+      # Update with impact
+      ODDy_with_impact <- tryCatch(
+        updateODDSubNat(dir, ODDy, miniDam$sdate[1], miniDam$fdate[1], i, folder_write),
+        error = function(e) {
+          log_issue(i, "impact not added", conditionMessage(e), dir, folder_write)
+          return(NULL)
+        }
+      )
+      if (is.null(ODDy_with_impact)) next
+      ODDy <- ODDy_with_impact
+      rm(ODDy_with_impact)
+      
+      # Save ODD object
+      ODDpath <- file.path(dir, folder_write, "ODDobjects", namer)
+      saveODD(ODDy, ODDpath)
+      
+      additional_poly_check(ODDy, i, folder_write, print_to_xl = TRUE)
+      
+      # Building damage subset
+      miniDam <- Damage %>% dplyr::filter(iso3 %in% unique(miniDamSimplified$iso3) &
+                                            sdate < mindate & sdate > maxdate)
+      
+      if (nrow(miniDam) > 0) {
+        BDpath <- file.path(dir, folder_write, "BDobjects", namer)
+        BDy <- tryCatch(
+          new("BD", Damage = miniDam, ODD = ODDy),
+          error = function(e) {
+            log_issue(i, "BD object creation failed", conditionMessage(e), dir, folder_write)
+            return(NULL)
+          }
+        )
+        if (!is.null(BDy)) {
+          saveBD(BDy, BDpath)
+          rm(BDy)
+        }
+      }
+      
+      # Save some RAM
+      rm(ODDy)
+      
+      # -------- end of your original code --------
+      
+    }, error = function(e) {
+      # Fallback: catch anything not handled above, log & continue
+      log_issue(i, "Iteration failed unexpectedly", conditionMessage(e), dir, folder_write)
+      # continue to next i
+    }) # tryCatch
+  } # for
   return(path)
 }
 
